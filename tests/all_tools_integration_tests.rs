@@ -289,9 +289,11 @@ async fn test_cargo_tool() -> Result<()> {
     assert!(result.contains("cargo"));
 
     // Test cargo check in the ahma_mcp project directory
+    // Use the crate's manifest dir as a stable project root in CI
+    let project_root = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".into());
     let output = std::process::Command::new("cargo")
         .args(["check", "--quiet"])
-        .current_dir("/Users/paul/github/ahma_mcp")
+        .current_dir(project_root)
         .output()?;
 
     // Should succeed (or at least not fail catastrophically)

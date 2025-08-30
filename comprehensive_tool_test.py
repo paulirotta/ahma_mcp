@@ -8,13 +8,19 @@ import time
 import threading
 import tempfile
 import os
+from pathlib import Path
 
 def test_tool_execution(tool_name, args=None):
     """Test executing a specific tool through the MCP server"""
     
     # Start the server process
+    # Resolve project root dynamically: prefer CARGO_MANIFEST_DIR, else script parent
+    project_root = os.environ.get("CARGO_MANIFEST_DIR") or str(Path(__file__).resolve().parent)
+    server_bin = str(Path(project_root) / "target" / "release" / "ahma_mcp")
+    tools_dir = str(Path(project_root) / "tools")
+
     proc = subprocess.Popen(
-        ['/Users/paul/github/ahma_mcp/target/release/ahma_mcp', '--tools-dir', '/Users/paul/github/ahma_mcp/tools'],
+        [server_bin, '--tools-dir', tools_dir],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

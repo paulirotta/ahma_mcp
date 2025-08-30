@@ -34,7 +34,7 @@ help = "Use 'echo --help' to see options"
     fs::write(tools_dir.join("echo.toml"), echo_config).await?;
 
     // Test loading the configuration
-    let config = Config::load_from_file(&tools_dir.join("echo.toml"))?;
+    let config = Config::load_from_file(tools_dir.join("echo.toml"))?;
     assert_eq!(config.tool_name, "echo");
     assert_eq!(config.get_command(), "echo");
     assert!(config.is_enabled());
@@ -163,7 +163,8 @@ async fn test_tool_execution() -> Result<()> {
 async fn test_tools_directory_loading() -> Result<()> {
     // Change to the project root where tools/ directory exists
     let original_dir = std::env::current_dir()?;
-    std::env::set_current_dir("/Users/paul/github/ahma_mcp")?;
+    let project_root = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".into());
+    std::env::set_current_dir(&project_root)?;
 
     let mut adapter = Adapter::new(true)?;
 
@@ -174,7 +175,7 @@ async fn test_tools_directory_loading() -> Result<()> {
             println!("✅ Loaded {} tools from tools directory", schemas.len());
 
             // Should have loaded at least some tools
-            if schemas.len() > 0 {
+            if !schemas.is_empty() {
                 println!("✅ Tools directory loading test passed");
             } else {
                 println!("⚠️ No tools loaded from directory");
