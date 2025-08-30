@@ -1,0 +1,67 @@
+# Grep Tool Configuration for Ahma MCP
+# This configuration adapts the `grep` command for AI assistant use
+# When ahma_mcp starts, it will automatically discover grep's capabilities
+# by parsing `grep --help` output and update this file with discovered commands
+
+tool_name = "grep"
+command = "grep"
+enabled = true
+timeout_seconds = 120
+verbose = false
+
+# AI guidance hints - customize these to improve AI interactions
+[hints]
+# Primary hint shown when AI considers using grep
+primary = "Search for patterns in text files or command output. Use grep to find specific text, filter content, or locate files containing certain patterns."
+
+# Usage examples for common operations
+usage = """
+Common grep commands:
+- grep "pattern" file.txt - Search for pattern in file
+- grep -i "pattern" file.txt - Case-insensitive search
+- grep -r "pattern" directory/ - Recursive search in directory
+- grep -n "pattern" file.txt - Show line numbers with matches
+- grep -v "pattern" file.txt - Show lines that DON'T match (invert)
+- grep -c "pattern" file.txt - Count matching lines
+- grep -l "pattern" *.txt - List files that contain pattern
+- grep -A 3 -B 3 "pattern" file.txt - Show 3 lines after and before matches
+- grep "^pattern" file.txt - Match lines starting with pattern
+- grep "pattern$" file.txt - Match lines ending with pattern
+"""
+
+# What the AI should think about during operations
+wait_hint = "While grep searches, consider: search scope (single file vs. recursive), case sensitivity, whether you need context lines, or if you're looking for exact matches vs. patterns."
+
+# Parameter-specific hints for better AI understanding
+[hints.parameters]
+ignore_case = "Use -i for case-insensitive matching"
+recursive = "Use -r or -R to search recursively through directories"
+line_number = "Use -n to show line numbers where matches occur"
+invert_match = "Use -v to show lines that do NOT contain the pattern"
+count = "Use -c to count the number of matching lines"
+files_with_matches = "Use -l to list only filenames that contain matches"
+word_regexp = "Use -w to match whole words only"
+fixed_strings = "Use -F to treat pattern as literal string (not regex)"
+extended_regexp = "Use -E for extended regular expressions"
+context = "Use -A (after), -B (before), or -C (around) to show context lines"
+
+# Override configurations for specific scenarios
+# Uncomment and customize as needed:
+
+# [overrides.recursive_search]
+# timeout_seconds = 300  # Recursive searches may take longer
+# hints.primary = "Search recursively through directory trees"
+# hints.usage = "grep -r 'pattern' /path/to/search - be mindful of large directories"
+# hints.wait_hint = "Large recursive searches may take time - consider narrowing scope or using file type filters"
+
+# [overrides.regex_search]
+# hints.primary = "Search using regular expression patterns"
+# hints.usage = "grep -E for extended regex, grep '^pattern$' for exact line matches"
+# hints.parameters.extended_regexp = "Use complex patterns with |, +, ?, {}, [], ()"
+
+# Example of advanced usage patterns:
+# [hints.examples]
+# find_functions = "Find function definitions: grep -n '^function\\|^def ' *.py"
+# find_errors = "Search log files: grep -i 'error\\|fail\\|exception' *.log"
+# exclude_patterns = "Exclude files: grep -r --exclude='*.log' 'pattern' ."
+# find_todos = "Find TODO comments: grep -rn 'TODO\\|FIXME\\|XXX' src/"
