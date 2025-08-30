@@ -19,6 +19,9 @@ pub struct Config {
     /// Override configurations for specific subcommands
     pub overrides: Option<HashMap<String, CommandOverride>>,
 
+    /// Whether the entire tool should run synchronously by default (overridden by CLI flag or per-command overrides)
+    pub synchronous: Option<bool>,
+
     /// Whether this tool should be available by default
     pub enabled: Option<bool>,
 
@@ -159,6 +162,7 @@ impl Default for Config {
             command: None,
             hints: None,
             overrides: None,
+            synchronous: Some(false),
             enabled: Some(true),
             timeout_seconds: Some(300),
             verbose: Some(false),

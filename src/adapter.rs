@@ -81,8 +81,17 @@ impl Adapter {
         let mut cmd_args = vec![command.to_string()];
         cmd_args.extend(args);
 
-        // Execute the command
-        if self.synchronous_mode {
+        // Determine sync/async based on global mode, tool-level default, and per-command override
+        let mut run_sync = self.synchronous_mode || config.synchronous.unwrap_or(false);
+        // If first arg after command is a subcommand, check override
+        if let Some(subcmd) = cmd_args.get(1)
+            && let Some(override_cfg) = config.get_command_override(subcmd)
+            && let Some(sync) = override_cfg.synchronous
+        {
+            run_sync = sync;
+        }
+
+        if run_sync {
             self.execute_sync_in_dir(&cmd_args, working_directory.as_deref())
                 .await
         } else {
@@ -211,6 +220,34 @@ impl Adapter {
         let structure = self
             .cli_parser
             .parse_help_output(command_name, &help_output)?;
+
+        let mut structure = structure;
+
+        // Special handling for cargo: also parse `cargo --list` to discover installed subcommands
+        if command_name == "cargo"
+            && let Ok(output) = std::process::Command::new(command_name)
+                .arg("--list")
+                .output()
+            && output.status.success()
+        {
+            let list_text = String::from_utf8_lossy(&output.stdout);
+            let mut names = std::collections::HashSet::new();
+            for sc in &structure.subcommands {
+                names.insert(sc.name.clone());
+            }
+            for line in list_text.lines() {
+                // cargo --list often prints entries like:
+                //    build                Compile the current package
+                //    test                 Run the tests
+                if let Ok(Some(mut sc)) = self.cli_parser.parse_subcommand_line(line)
+                    && !names.contains(&sc.name)
+                {
+                    sc.description = sc.description.trim().to_string();
+                    structure.subcommands.push(sc.clone());
+                    names.insert(sc.name);
+                }
+            }
+        }
 
         self.cli_structures.insert(tool_name.to_string(), structure);
         self.configs.insert(tool_name.to_string(), config);

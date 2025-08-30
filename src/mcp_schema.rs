@@ -46,17 +46,30 @@ impl McpSchemaGenerator {
         });
         required.push("working_directory".to_string());
 
-        // Add async control parameters
-        properties["enable_async_notification"] = json!({
-            "type": "boolean",
-            "description": "Enable async callback notifications for operation progress",
-            "default": false
-        });
+        // Decide whether to expose async parameters
+        let mut expose_async = !config.synchronous.unwrap_or(false);
+        if expose_async {
+            // If all overrides explicitly set synchronous=true, hide async
+            if let Some(ov) = &config.overrides {
+                let all_sync = ov.values().all(|o| o.synchronous.unwrap_or(false));
+                if all_sync {
+                    expose_async = false;
+                }
+            }
+        }
 
-        properties["operation_id"] = json!({
-            "type": "string",
-            "description": "Optional operation ID to assign (if omitted, one is generated)"
-        });
+        if expose_async {
+            properties["enable_async_notification"] = json!({
+                "type": "boolean",
+                "description": "Enable async callback notifications for operation progress",
+                "default": false
+            });
+
+            properties["operation_id"] = json!({
+                "type": "string",
+                "description": "Optional operation ID to assign (if omitted, one is generated)"
+            });
+        }
 
         // Add timeout parameter from config
         properties["timeout_seconds"] = json!({
@@ -262,6 +275,7 @@ mod tests {
             command: Some("git".to_string()),
             hints: Some(hints),
             overrides: None,
+            synchronous: Some(false),
             enabled: Some(true),
             timeout_seconds: Some(300),
             verbose: Some(false),
@@ -439,6 +453,7 @@ mod tests {
         let structure2 = CliStructure::new("disabled_tool".to_string());
         let config2 = Config {
             enabled: Some(false),
+            synchronous: Some(false),
             ..Default::default()
         };
 

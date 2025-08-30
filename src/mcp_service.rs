@@ -62,14 +62,6 @@ impl AhmaMcpService {
 
     /// Convert CLI options to MCP tool schema
     fn cli_options_to_schema(options: &[CliOption]) -> Arc<JsonObject> {
-        if options.is_empty() {
-            // Return empty object schema when no options
-            let mut schema = Map::new();
-            schema.insert("type".to_string(), json!("object"));
-            schema.insert("properties".to_string(), json!({}));
-            return Arc::new(schema);
-        }
-
         let mut properties = Map::new();
         let mut required = Vec::new();
 
@@ -102,6 +94,43 @@ impl AhmaMcpService {
 
             properties.insert(property_name, json!(property));
         }
+
+        // Always include working_directory and args for execution
+        properties.insert(
+            "working_directory".to_string(),
+            json!({
+                "type": "string",
+                "description": "Absolute path to the directory to run the command in (required)"
+            }),
+        );
+        required.push("working_directory".to_string());
+
+        properties.insert(
+            "args".to_string(),
+            json!({
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Additional raw arguments to pass after flags (advanced). Example: [\"-R\", \"-a\", \"-1\"] for ls recursive"
+            }),
+        );
+
+        // Async-related optional fields to encourage non-blocking usage when supported by the adapter
+        properties.insert(
+            "enable_async_notification".to_string(),
+            json!({
+                "type": "boolean",
+                "description": "Prefer async execution with progress notifications for long-running commands (build/test/bench)",
+                "default": false
+            }),
+        );
+
+        properties.insert(
+            "operation_id".to_string(),
+            json!({
+                "type": "string",
+                "description": "Optional custom operation ID when async notifications are enabled"
+            }),
+        );
 
         // Create the schema object
         let mut schema = Map::new();
@@ -196,6 +225,17 @@ impl AhmaMcpService {
             }
         }
 
+        // Require working_directory for safe async behavior and isolation
+        if working_dir.is_none() {
+            return Err(McpError::invalid_params(
+                "missing_working_directory",
+                Some(json!({
+                    "message": "All tools require 'working_directory' for execution",
+                    "hint": "Pass input: { working_directory: <abs path> }"
+                })),
+            ));
+        }
+
         // Execute the command using the adapter
         match self
             .adapter
@@ -225,7 +265,10 @@ impl ServerHandler for AhmaMcpService {
                 name: "ahma_mcp".to_string(),
                 version: "0.1.0".to_string(),
             },
-            instructions: Some("Universal MCP adapter for CLI tools. This server dynamically exposes command-line tools as MCP tools based on TOML configurations.".to_string()),
+            instructions: Some(
+                "Ahma MCP: dynamic CLI tools over MCP.\n\n- Tools are exposed as '<tool>_<subcommand>' or '<tool>_run' if the tool has no subcommands (e.g., 'ls_run').\n- All tools require 'working_directory' (absolute path).\n- Pass flags as booleans (e.g., 'R': true) or via 'args': [\"-R\"]. You can also provide extra positional 'args'.\n- For long-running commands (build/test/bench), set 'enable_async_notification': true to avoid blocking and receive progress.\n\nExamples:\n- List recursively with ls: call 'ls_run' with { working_directory: '/abs/path', args: [\"-R\", \"-a\", \"-1\"] }\n- Run cargo build: call 'cargo_build' with { working_directory: '/abs/path', release: true, enable_async_notification: true }\n\nUse list_tools to discover available tools and their input schema."
+                    .to_string(),
+            ),
         }
     }
 
@@ -241,14 +284,29 @@ impl ServerHandler for AhmaMcpService {
             info!("Processing tool: {}", tool_name);
 
             // Get base command info
-            let base_description = format!("{} command-line tool", config.tool_name);
+            let mut base_description = format!("{} command-line tool", config.tool_name);
+            // Append usage hint if available
+            if let Some(hints) = &config.hints
+                && let Some(usage) = &hints.usage
+            {
+                base_description = format!("{} | Usage: {}", base_description, usage.trim());
+            }
 
             // Create a tool for each subcommand in the CLI structure
             if !cli_structure.subcommands.is_empty() {
                 for subcommand in &cli_structure.subcommands {
                     let tool_id = format!("{}_{}", tool_name, subcommand.name);
 
-                    let description = format!("{}: {}", base_description, subcommand.description);
+                    let mut description =
+                        format!("{}: {}", base_description, subcommand.description);
+                    // Encourage async for long-running subcommands
+                    let name_l = subcommand.name.to_lowercase();
+                    if ["build", "test", "bench", "run", "doc", "clippy", "nextest"]
+                        .iter()
+                        .any(|k| name_l.contains(k))
+                    {
+                        description.push_str(" | Tip: set 'enable_async_notification': true for non-blocking execution.");
+                    }
 
                     let input_schema = Self::cli_options_to_schema(&subcommand.options);
 

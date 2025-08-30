@@ -155,10 +155,14 @@ impl CliParser {
                     }
                 }
                 _ => {
-                    // Try to parse as option if it looks like one
-                    if line.trim_start().starts_with('-')
+                    // Some CLIs (like cargo) list subcommands without an explicit header.
+                    // Try to parse subcommand lines opportunistically.
+                    if let Some(subcommand) = self.parse_subcommand_line(raw_line)? {
+                        structure.subcommands.push(subcommand);
+                    } else if line.trim_start().starts_with('-')
                         && let Some(option) = self.parse_option_line(raw_line)?
                     {
+                        // Fallback: parse as option if it looks like one
                         structure.global_options.push(option);
 
                         // Check for help and version flags

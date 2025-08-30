@@ -99,6 +99,7 @@ async fn test_adapter_tool_management() -> Result<()> {
         verbose: Some(false),
         hints: None,
         overrides: None,
+        synchronous: Some(false),
     };
 
     // Test adding a tool (this tests CLI parsing integration)
@@ -132,6 +133,7 @@ async fn test_tool_execution() -> Result<()> {
         verbose: Some(false),
         hints: None,
         overrides: None,
+        synchronous: Some(false),
     };
 
     match adapter.add_tool("echo", config).await {

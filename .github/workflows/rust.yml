@@ -38,6 +38,7 @@ on:
 env:
   RUSTUP_MAX_RETRIES: 10
   CARGO_TERM_COLOR: always
+  CARGO_PAGER: cat
   CARGO_INCREMENTAL: 0
   CARGO_PROFILE_TEST_DEBUG: 0
   CARGO_NET_RETRY: 10
@@ -55,6 +56,15 @@ jobs:
           fetch-depth: 2
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Configure deterministic tooling env
+        run: |
+          git config --global core.pager cat
+          echo "PAGER=cat" >> $GITHUB_ENV
+          echo "LC_ALL=C" >> $GITHUB_ENV
+          echo "LANG=C" >> $GITHUB_ENV
 
       - name: Get current day number
         id: day-number
@@ -82,7 +92,10 @@ jobs:
             sccache-nextest-${{ runner.os }}-
 
       - name: Setup Cargo Binstall
-        uses: cargo-bins/cargo-binstall@main
+        uses: cargo-bins/cargo-binstall
+
+      - name: Add Cargo Bin to PATH
+        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install sccache
         run: |
@@ -95,13 +108,22 @@ jobs:
           echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
           sccache --show-stats
 
-      - name: Add Cargo Bin to PATH
-        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
       - uses: taiki-e/install-action@nextest
+
+      - name: Ensure cargo-nextest is installed (fallback)
+        run: |
+          if ! command -v cargo-nextest &> /dev/null; then
+            echo "cargo-nextest not found, installing..."
+            cargo binstall cargo-nextest --no-confirm || cargo install cargo-nextest --locked
+          else
+            echo "cargo-nextest already installed"
+          fi
 
       - name: Cargo Nextest
         run: |
+          echo "--- cargo --version" && cargo --version
+          echo "--- cargo --help (first 40 lines)" && cargo --help | head -n 40 || true
+          echo "--- cargo --list (first 40 lines)" && cargo --list | head -n 40 || true
           cargo nextest run --locked
 
       - name: Show sccache stats
@@ -117,6 +139,15 @@ jobs:
           fetch-depth: 2
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Configure deterministic tooling env
+        run: |
+          git config --global core.pager cat
+          echo "PAGER=cat" >> $GITHUB_ENV
+          echo "LC_ALL=C" >> $GITHUB_ENV
+          echo "LANG=C" >> $GITHUB_ENV
 
       - name: Get current day number
         id: day-number
@@ -143,7 +174,11 @@ jobs:
           restore-keys: |
             sccache-build-${{ runner.os }}-
 
-      - uses: cargo-bins/cargo-binstall@main
+      - name: Setup Cargo Binstall
+        uses: cargo-bins/cargo-binstall
+
+      - name: Add Cargo Bin to PATH
+        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install sccache
         run: |
