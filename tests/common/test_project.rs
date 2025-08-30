@@ -115,13 +115,13 @@ Cargo.lock
 
     // Create initial commit
     Command::new("git")
-        .args(&["add", "."])
+        .args(["add", "."])
         .current_dir(project_path)
         .output()
         .await?;
 
     Command::new("git")
-        .args(&["commit", "-m", "Initial commit"])
+        .args(["commit", "-m", "Initial commit"])
         .current_dir(project_path)
         .output()
         .await?;

@@ -198,7 +198,7 @@ For more information on a specific subcommand, try 'mytool <subcommand> --help'
 
     // Check for specific options
     let has_verbose = structure.global_options.iter().any(|opt| {
-        opt.long.as_ref().map_or(false, |l| l.contains("verbose")) || opt.short == Some('v')
+        opt.long.as_ref().is_some_and(|l| l.contains("verbose")) || opt.short == Some('v')
     });
     assert!(has_verbose, "Should have found verbose option");
 

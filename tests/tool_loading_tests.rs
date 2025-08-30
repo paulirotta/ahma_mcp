@@ -205,7 +205,7 @@ hints.primary = "HTTP POST request"
     tokio::fs::write(tools_dir.join("curl.toml"), config_with_overrides).await?;
 
     // Load and verify the configuration
-    let config = Config::load_from_file(&tools_dir.join("curl.toml"))?;
+    let config = Config::load_from_file(tools_dir.join("curl.toml"))?;
 
     // Verify base config
     assert_eq!(config.timeout_seconds, Some(30));
