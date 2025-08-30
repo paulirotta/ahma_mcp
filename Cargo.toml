@@ -1,20 +1,28 @@
 [package]
 name = "ahma_mcp"
 version = "0.1.0"
-edition = "2024"
-authors = ["Paul Irotta <paul.irotta@gmail.com>"]
+edition = "2024" # AI, do not change
+authors = ["Paul Houghton <paulirotta@gmail.com>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 
 [dependencies]
 anyhow = "1.0.99"
 async-trait = "0.1.89"
+chrono = { version = "0.4.41", features = ["serde"] }
+clap = { version = "4.5.46", features = ["derive"] }
 directories = "6.0.0"
 rmcp = "0.6.1"
 serde = "1.0.219"
+serde_json = "1.0.143"
 thiserror = "2.0.16"
-tokio = "1.47.1"
+tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread", "process"] }
 tokio-util = "0.7.16"
+toml = "0.9.5"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
-tracing-subscriber = "0.3.20"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+uuid = { version = "1.18.0", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tempfile = "3.21.0"
