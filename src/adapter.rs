@@ -119,7 +119,11 @@ impl Adapter {
                     .to_string();
 
                 let config = Config::load_from_file(&path)?;
-                self.add_tool(&tool_name, config).await?;
+
+                // Only add the tool if it's enabled
+                if config.is_enabled() {
+                    self.add_tool(&tool_name, config).await?;
+                }
             }
         }
 
@@ -197,3 +201,4 @@ impl Adapter {
         crate::tool_hints::preview("operation", operation_type)
     }
 }
+// TODO: Add performance benchmarks for tool discovery

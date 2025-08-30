@@ -13,6 +13,52 @@ Ahma MCP is a Model Context Protocol server that dynamically adapts any command-
 
 AI can now use any command line interface (CLI) tool efficiently, queuing multiple commands and thinking productively while one or more tools execute in the background.
 
+### Evolution from async_cargo_mcp
+
+Ahma MCP is the next-generation successor to `async_cargo_mcp`, providing:
+
+- **Universal CLI Adaptation**: Works with any command-line tool, not just Cargo
+- **Dynamic Discovery**: Automatically parses help output to generate tool schemas
+- **Multi-Tool Support**: Single server handles multiple CLI tools simultaneously
+- **Enhanced Configuration**: Rich TOML-based configuration with AI hints
+- **Better Performance**: Optimized MCP protocol implementation
+- **Comprehensive Testing**: 76+ tests ensuring reliability
+
+_Note: `async_cargo_mcp` is now deprecated in favor of this universal approach._
+
+## Quick Start
+
+**Just want to get started?** Here's the fastest path:
+
+```bash
+# 1. Clone and build
+git clone https://github.com/paulirotta/ahma_mcp.git
+cd ahma_mcp
+cargo build --release
+
+# 2. Test it works
+cargo test
+
+# 3. Add to VS Code mcp.json (replace with your actual path):
+# ~/.config/Code/User/mcp.json (Linux)
+# ~/Library/Application Support/Code/User/mcp.json (macOS)
+echo '{
+  "servers": {
+    "ahma_mcp": {
+      "type": "stdio",
+      "cwd": "'$(pwd)'",
+      "command": "'$(pwd)'/target/release/ahma_mcp",
+      "args": ["--tools-dir", "'$(pwd)'/tools"]
+    }
+  },
+  "inputs": []
+}' > mcp_config_example.json
+
+# 4. Copy the contents of mcp_config_example.json to your VS Code mcp.json
+# 5. Restart VS Code
+# 6. Start chatting: "Use ahma_mcp to check git status"
+```
+
 ## Key Features
 
 - **Dynamic Tool Adaptation**: Automatically creates an MCP tool schema by inspecting a command-line tool's help documentation. No pre-configuration needed.
@@ -24,7 +70,15 @@ AI can now use any command line interface (CLI) tool efficiently, queuing multip
 
 ## Getting Started
 
-1.  **Installation**:
+### Prerequisites
+
+- **Rust 1.70+**: Install from [rustup.rs](https://rustup.rs/)
+- **VS Code**: With MCP support (GitHub Copilot extension recommended)
+- **Git**: For cloning the repository
+
+### Installation
+
+1.  **Clone and build the repository**:
 
     ```bash
     git clone https://github.com/paulirotta/ahma_mcp.git
@@ -32,54 +86,243 @@ AI can now use any command line interface (CLI) tool efficiently, queuing multip
     cargo build --release
     ```
 
-2.  **Configuration**:
-    Create a `tools/<tool_name>.toml` file. For example, to adapt `cargo`:
-
-    ```toml
-    # tools/cargo.toml
-    command = "cargo"
-    ```
-
-3.  **Run the Server**:
+2.  **Verify installation**:
     ```bash
-    ./target/release/ahma_mcp --tools-dir tools
+    ./target/release/ahma_mcp --help
     ```
 
-## IDE Integration (VSCode with GitHub Copilot)
+### Tool Configuration
 
-1.  Enable MCP in VSCode settings (`settings.json`):
+Ahma MCP comes with several pre-configured tools in the `tools/` directory:
 
-    ```json
-    {
-      "chat.mcp.enabled": true
+- `git.toml` - Git version control (22 subcommands)
+- `cargo.toml` - Rust package manager (11 subcommands)
+- `ls.toml` - File listing
+- `cat.toml` - File viewing
+- `grep.toml` - Text searching
+- `sed.toml` - Stream editing
+- `echo.toml` - Text output
+
+To add your own tools, create a `tools/<tool_name>.toml` file:
+
+```toml
+# tools/my_tool.toml
+tool_name = "my_tool"
+command = "my_tool"
+enabled = true
+timeout_seconds = 300
+
+[hints]
+primary = "Brief description of what this tool does"
+usage = "Common usage examples: my_tool --option value"
+```
+
+### Testing the Installation
+
+Run the test suite to verify everything works:
+
+```bash
+cargo test
+```
+
+You should see output like:
+
+```
+test result: ok. 76 passed; 0 failed; 0 ignored; 0 measured
+```
+
+## VS Code MCP Integration
+
+### Step 1: Enable MCP in VS Code
+
+Add to your VS Code settings (`Ctrl/Cmd+,` → search "settings.json"):
+
+```json
+{
+  "chat.mcp.enabled": true
+}
+```
+
+### Step 2: Configure the MCP Server
+
+Create or edit your global MCP configuration file:
+
+**Location:**
+
+- **macOS**: `~/Library/Application Support/Code/User/mcp.json`
+- **Linux**: `~/.config/Code/User/mcp.json`
+- **Windows**: `%APPDATA%\Code\User\mcp.json`
+
+**Configuration content** (replace `/path/to/your/clone` with your actual path):
+
+```jsonc
+{
+  "servers": {
+    "ahma_mcp": {
+      "type": "stdio",
+      "cwd": "/path/to/your/clone/ahma_mcp",
+      "command": "/path/to/your/clone/ahma_mcp/target/release/ahma_mcp",
+      "args": ["--tools-dir", "/path/to/your/clone/ahma_mcp/tools"]
     }
-    ```
+  },
+  "inputs": []
+}
+```
 
-2.  Add the server configuration using `Ctrl/Cmd+Shift+P` → "MCP: Add Server":
+**Cross-platform examples:**
 
-    ```json
-    {
-      "servers": {
-        "ahma_mcp": {
-          "type": "stdio",
-          "cwd": "${workspaceFolder}",
-          "command": "cargo",
-          "args": [
-            "run",
-            "--release",
-            "--bin",
-            "ahma_mcp",
-            "--",
-            "--tools-dir",
-            "tools"
-          ]
-        }
-      },
-      "inputs": []
+**macOS/Linux:**
+
+```jsonc
+{
+  "servers": {
+    "ahma_mcp": {
+      "type": "stdio",
+      "cwd": "/home/username/projects/ahma_mcp",
+      "command": "/home/username/projects/ahma_mcp/target/release/ahma_mcp",
+      "args": ["--tools-dir", "/home/username/projects/ahma_mcp/tools"]
     }
-    ```
+  },
+  "inputs": []
+}
+```
 
-3.  Restart VSCode to activate the server.
+**Windows (PowerShell-style paths):**
+
+```jsonc
+{
+  "servers": {
+    "ahma_mcp": {
+      "type": "stdio",
+      "cwd": "C:\\Users\\username\\projects\\ahma_mcp",
+      "command": "C:\\Users\\username\\projects\\ahma_mcp\\target\\release\\ahma_mcp.exe",
+      "args": ["--tools-dir", "C:\\Users\\username\\projects\\ahma_mcp\\tools"]
+    }
+  },
+  "inputs": []
+}
+```
+
+### Step 3: Restart VS Code
+
+After saving the `mcp.json` file, restart VS Code completely to activate the MCP server.
+
+### Step 4: Verify Connection
+
+1. Open VS Code and start a chat with GitHub Copilot
+2. You should see "ahma_mcp" listed in the available MCP servers
+3. Test with a simple command like: "Use ahma_mcp to check git status"
+
+### Available Tools
+
+Once connected, you'll have access to ~38 dynamically generated MCP tools:
+
+**Git Operations:**
+
+- `mcp_ahma_mcp_git_status` - Check working tree status
+- `mcp_ahma_mcp_git_add` - Stage changes
+- `mcp_ahma_mcp_git_commit` - Create commits
+- `mcp_ahma_mcp_git_push` - Upload changes
+- `mcp_ahma_mcp_git_pull` - Download changes
+- And 17+ more git subcommands
+
+**Cargo Operations:**
+
+- `mcp_ahma_mcp_cargo_build` - Build projects
+- `mcp_ahma_mcp_cargo_test` - Run tests
+- `mcp_ahma_mcp_cargo_add` - Add dependencies
+- And 8+ more cargo subcommands
+
+**File Operations:**
+
+- `mcp_ahma_mcp_ls_run` - List files
+- `mcp_ahma_mcp_cat_run` - View file contents
+- `mcp_ahma_mcp_grep_run` - Search text patterns
+- `mcp_ahma_mcp_sed_run` - Edit text streams
+- `mcp_ahma_mcp_echo_run` - Output text
+
+### Troubleshooting
+
+**MCP tools not working?**
+
+1. Verify the binary path exists: `ls -la /path/to/your/ahma_mcp/target/release/ahma_mcp`
+2. Check the tools directory path: `ls -la /path/to/your/ahma_mcp/tools/`
+3. Restart VS Code completely
+4. Check VS Code Developer Tools (Help → Toggle Developer Tools) for MCP errors
+
+**"execution_failed" errors?**
+
+- Ensure all paths in `mcp.json` are absolute (no `~` or relative paths)
+- Use the direct binary path, not `cargo run`
+- Verify file permissions: `chmod +x /path/to/your/ahma_mcp/target/release/ahma_mcp`
+
+**Performance issues?**
+
+- Always use the pre-built binary path (not `cargo run`)
+- Use absolute paths to avoid lookup delays
+- Ensure `cargo build --release` has been run
+
+## Creating Custom Tool Configurations
+
+Want to add your own CLI tools? Create a TOML configuration file in the `tools/` directory:
+
+### Basic Configuration
+
+```toml
+# tools/docker.toml
+tool_name = "docker"
+command = "docker"
+enabled = true
+timeout_seconds = 300
+```
+
+### Advanced Configuration with Hints
+
+```toml
+# tools/npm.toml
+tool_name = "npm"
+command = "npm"
+enabled = true
+timeout_seconds = 600
+verbose = false
+
+[hints]
+primary = "Node.js package manager for JavaScript/TypeScript projects"
+usage = "npm install, npm run build, npm test, npm publish"
+wait_hint = "Consider reviewing package.json or planning next development steps"
+build = "Review dependencies and build output for optimization opportunities"
+test = "Analyze test results and consider additional test coverage"
+default = "Use this time to plan next steps or review code"
+
+[hints.custom]
+install = "Installing dependencies - review package.json for security and updates"
+audit = "Security audit running - prepare to address vulnerabilities"
+publish = "Publishing package - verify version and changelog"
+
+[hints.parameters]
+"--save-dev" = "Add to development dependencies only"
+"--global" = "Install package globally for system-wide access"
+
+[overrides.test]
+timeout_seconds = 900
+synchronous = false
+hint = "Tests running - review test output patterns and coverage"
+default_args = ["--verbose"]
+```
+
+### Configuration Options
+
+- **`tool_name`**: Name of the tool (required)
+- **`command`**: Actual command to execute (defaults to `tool_name`)
+- **`enabled`**: Whether to load this tool (default: `true`)
+- **`timeout_seconds`**: Default timeout for operations (default: 300)
+- **`verbose`**: Enable verbose logging (default: `false`)
+- **`hints`**: AI guidance for different operations
+- **`overrides`**: Subcommand-specific settings
+- **`[hints.custom]`**: Custom hints for specific subcommands
+- **`[hints.parameters]`**: Descriptions for command-line parameters
+
+After adding new tool configurations, restart VS Code to load them.
 
 ## License
 
