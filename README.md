@@ -16,14 +16,15 @@ AI can now use any command line interface (CLI) tool efficiently, queuing multip
 ### Evolution from async_cargo_mcp
 
 Ahma MCP is the next-generation successor to `async_cargo_mcp`, providing:
+
 - **Universal CLI Adaptation**: Works with any command-line tool, not just Cargo
-- **Dynamic Discovery**: Automatically parses help output to generate tool schemas  
+- **Dynamic Discovery**: Automatically parses help output to generate tool schemas
 - **Multi-Tool Support**: Single server handles multiple CLI tools simultaneously
 - **Enhanced Configuration**: Rich TOML-based configuration with AI hints
 - **Better Performance**: Optimized MCP protocol implementation
 - **Comprehensive Testing**: 76+ tests ensuring reliability
 
-*Note: `async_cargo_mcp` is now deprecated in favor of this universal approach.*
+_Note: `async_cargo_mcp` is now deprecated in favor of this universal approach._
 
 ## Quick Start
 
@@ -93,8 +94,9 @@ echo '{
 ### Tool Configuration
 
 Ahma MCP comes with several pre-configured tools in the `tools/` directory:
+
 - `git.toml` - Git version control (22 subcommands)
-- `cargo.toml` - Rust package manager (11 subcommands)  
+- `cargo.toml` - Rust package manager (11 subcommands)
 - `ls.toml` - File listing
 - `cat.toml` - File viewing
 - `grep.toml` - Text searching
@@ -124,6 +126,7 @@ cargo test
 ```
 
 You should see output like:
+
 ```
 test result: ok. 76 passed; 0 failed; 0 ignored; 0 measured
 ```
@@ -145,6 +148,7 @@ Add to your VS Code settings (`Ctrl/Cmd+,` → search "settings.json"):
 Create or edit your global MCP configuration file:
 
 **Location:**
+
 - **macOS**: `~/Library/Application Support/Code/User/mcp.json`
 - **Linux**: `~/.config/Code/User/mcp.json`
 - **Windows**: `%APPDATA%\Code\User\mcp.json`
@@ -153,56 +157,49 @@ Create or edit your global MCP configuration file:
 
 ```jsonc
 {
-    "servers": {
-        "ahma_mcp": {
-            "type": "stdio",
-            "cwd": "/path/to/your/clone/ahma_mcp",
-            "command": "/path/to/your/clone/ahma_mcp/target/release/ahma_mcp",
-            "args": [
-                "--tools-dir",
-                "/path/to/your/clone/ahma_mcp/tools"
-            ]
-        }
-    },
-    "inputs": []
+  "servers": {
+    "ahma_mcp": {
+      "type": "stdio",
+      "cwd": "/path/to/your/clone/ahma_mcp",
+      "command": "/path/to/your/clone/ahma_mcp/target/release/ahma_mcp",
+      "args": ["--tools-dir", "/path/to/your/clone/ahma_mcp/tools"]
+    }
+  },
+  "inputs": []
 }
 ```
 
 **Cross-platform examples:**
 
 **macOS/Linux:**
+
 ```jsonc
 {
-    "servers": {
-        "ahma_mcp": {
-            "type": "stdio", 
-            "cwd": "/home/username/projects/ahma_mcp",
-            "command": "/home/username/projects/ahma_mcp/target/release/ahma_mcp",
-            "args": [
-                "--tools-dir",
-                "/home/username/projects/ahma_mcp/tools"
-            ]
-        }
-    },
-    "inputs": []
+  "servers": {
+    "ahma_mcp": {
+      "type": "stdio",
+      "cwd": "/home/username/projects/ahma_mcp",
+      "command": "/home/username/projects/ahma_mcp/target/release/ahma_mcp",
+      "args": ["--tools-dir", "/home/username/projects/ahma_mcp/tools"]
+    }
+  },
+  "inputs": []
 }
 ```
 
 **Windows (PowerShell-style paths):**
+
 ```jsonc
 {
-    "servers": {
-        "ahma_mcp": {
-            "type": "stdio",
-            "cwd": "C:\\Users\\username\\projects\\ahma_mcp", 
-            "command": "C:\\Users\\username\\projects\\ahma_mcp\\target\\release\\ahma_mcp.exe",
-            "args": [
-                "--tools-dir",
-                "C:\\Users\\username\\projects\\ahma_mcp\\tools"
-            ]
-        }
-    },
-    "inputs": []
+  "servers": {
+    "ahma_mcp": {
+      "type": "stdio",
+      "cwd": "C:\\Users\\username\\projects\\ahma_mcp",
+      "command": "C:\\Users\\username\\projects\\ahma_mcp\\target\\release\\ahma_mcp.exe",
+      "args": ["--tools-dir", "C:\\Users\\username\\projects\\ahma_mcp\\tools"]
+    }
+  },
+  "inputs": []
 }
 ```
 
@@ -221,6 +218,7 @@ After saving the `mcp.json` file, restart VS Code completely to activate the MCP
 Once connected, you'll have access to ~38 dynamically generated MCP tools:
 
 **Git Operations:**
+
 - `mcp_ahma_mcp_git_status` - Check working tree status
 - `mcp_ahma_mcp_git_add` - Stage changes
 - `mcp_ahma_mcp_git_commit` - Create commits
@@ -229,12 +227,14 @@ Once connected, you'll have access to ~38 dynamically generated MCP tools:
 - And 17+ more git subcommands
 
 **Cargo Operations:**
+
 - `mcp_ahma_mcp_cargo_build` - Build projects
 - `mcp_ahma_mcp_cargo_test` - Run tests
 - `mcp_ahma_mcp_cargo_add` - Add dependencies
 - And 8+ more cargo subcommands
 
 **File Operations:**
+
 - `mcp_ahma_mcp_ls_run` - List files
 - `mcp_ahma_mcp_cat_run` - View file contents
 - `mcp_ahma_mcp_grep_run` - Search text patterns
@@ -244,17 +244,20 @@ Once connected, you'll have access to ~38 dynamically generated MCP tools:
 ### Troubleshooting
 
 **MCP tools not working?**
+
 1. Verify the binary path exists: `ls -la /path/to/your/ahma_mcp/target/release/ahma_mcp`
 2. Check the tools directory path: `ls -la /path/to/your/ahma_mcp/tools/`
 3. Restart VS Code completely
 4. Check VS Code Developer Tools (Help → Toggle Developer Tools) for MCP errors
 
 **"execution_failed" errors?**
+
 - Ensure all paths in `mcp.json` are absolute (no `~` or relative paths)
 - Use the direct binary path, not `cargo run`
 - Verify file permissions: `chmod +x /path/to/your/ahma_mcp/target/release/ahma_mcp`
 
 **Performance issues?**
+
 - Always use the pre-built binary path (not `cargo run`)
 - Use absolute paths to avoid lookup delays
 - Ensure `cargo build --release` has been run
