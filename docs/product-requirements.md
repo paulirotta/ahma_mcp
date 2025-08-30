@@ -51,3 +51,8 @@ This document outlines the high-level requirements for `ahma_mcp`, a universal a
 - **R7.1**: The architecture shall be modular and extensible to support future adaptation of web APIs and other tool types.
 - **R7.2**: The system shall provide clear interfaces for adding new discovery mechanisms and output parsers.
 - **R7.3**: Tool hint generation shall be pluggable to allow for domain-specific customization.
+
+## 8. Cargo Command Parity (with async_cargo_mcp)
+
+- Core: build, run, test, check, clean, doc, add, remove, update, fetch, install, search, tree, version, rustc, metadata.
+- Optional (if installed): clippy, nextest, fmt, audit, upgrade, bump_version, bench.

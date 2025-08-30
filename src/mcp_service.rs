@@ -144,14 +144,29 @@ impl AhmaMcpService {
             McpError::invalid_params("unknown_tool", Some(json!({"tool": base_tool})))
         })?;
 
-        // Convert arguments to command-line args
+        // Convert arguments to command-line args and extract working directory
         let mut cmd_args = vec![command.clone()];
+        let mut working_dir: Option<String> = None;
 
         if let Value::Object(args_map) = arguments {
+            // Pull out working_directory and args first, then convert the rest into flags
+            if let Some(Value::String(dir)) = args_map.get("working_directory") {
+                working_dir = Some(dir.clone());
+            }
+            if let Some(Value::Array(raw_args)) = args_map.get("args") {
+                for v in raw_args {
+                    if let Some(s) = v.as_str() {
+                        cmd_args.push(s.to_string());
+                    }
+                }
+            }
+
             for (key, value) in args_map {
+                if key == "working_directory" || key == "args" {
+                    continue;
+                }
                 match value {
                     Value::Bool(true) => {
-                        // Add boolean flag
                         if key.len() == 1 {
                             cmd_args.push(format!("-{}", key));
                         } else {
@@ -159,7 +174,6 @@ impl AhmaMcpService {
                         }
                     }
                     Value::String(s) => {
-                        // Add key-value pair
                         if key.len() == 1 {
                             cmd_args.push(format!("-{}", key));
                         } else {
@@ -176,7 +190,6 @@ impl AhmaMcpService {
                         cmd_args.push(n.to_string());
                     }
                     _ => {
-                        // Skip other types for now
                         debug!("Skipping argument {}: {:?} (unsupported type)", key, value);
                     }
                 }
@@ -184,7 +197,11 @@ impl AhmaMcpService {
         }
 
         // Execute the command using the adapter
-        match self.adapter.execute_tool(base_tool, cmd_args).await {
+        match self
+            .adapter
+            .execute_tool_in_dir(base_tool, cmd_args, working_dir)
+            .await
+        {
             Ok(result) => Ok(CallToolResult::success(vec![Content::text(result)])),
             Err(e) => {
                 error!("Tool execution failed: {}", e);

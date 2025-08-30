@@ -132,3 +132,10 @@ The system will use the following logic to avoid overwriting user changes:
 - Build a release binary for use with VS Code MCP: `cargo build --release`.
 - Use absolute paths for `cwd`, `command`, and `args` in your `mcp.json`.
 - The shell pool is configurable via `ShellPoolConfig`; defaults aim for good latency with low resource use.
+
+## 7. Cargo Command Parity
+
+The server aims to expose (subject to `cargo --help` output on the host):
+
+- Core: build, run, test, check, clean, doc, add, remove, update, fetch, install, search, tree, version, rustc, metadata.
+- Optional (if installed): clippy, nextest, fmt, audit, upgrade, bump_version, bench.

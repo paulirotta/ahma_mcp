@@ -9,6 +9,8 @@ use crate::cli_parser::{CliParser, CliStructure};
 use crate::config::Config;
 use crate::mcp_schema::McpSchemaGenerator;
 use crate::operation_monitor::{MonitorConfig, OperationMonitor};
+use crate::shell_pool::{ShellCommand, ShellPoolConfig, ShellPoolManager};
+use uuid::Uuid;
 
 /// The main adapter that handles dynamic CLI tool adaptation.
 #[derive(Debug)]
@@ -27,11 +29,17 @@ pub struct Adapter {
     synchronous_mode: bool,
     /// Command timeout in seconds
     timeout_secs: u64,
+    /// Pre-warmed shell pool manager for async execution
+    shell_pool: Arc<ShellPoolManager>,
 }
 
 impl Adapter {
     /// Create a new adapter instance.
     pub fn new(synchronous_mode: bool) -> Result<Self> {
+        // Initialize shell pool manager and start background tasks
+        let shell_pool = Arc::new(ShellPoolManager::new(ShellPoolConfig::default()));
+        shell_pool.clone().start_background_tasks();
+
         Ok(Adapter {
             cli_structures: HashMap::new(),
             configs: HashMap::new(),
@@ -40,6 +48,7 @@ impl Adapter {
             cli_parser: CliParser::new()?,
             synchronous_mode,
             timeout_secs: 300,
+            shell_pool,
         })
     }
 
@@ -52,6 +61,16 @@ impl Adapter {
 
     /// Execute a tool with the given arguments
     pub async fn execute_tool(&self, tool_name: &str, args: Vec<String>) -> Result<String> {
+        self.execute_tool_in_dir(tool_name, args, None).await
+    }
+
+    /// Execute a tool with the given arguments in an optional working directory
+    pub async fn execute_tool_in_dir(
+        &self,
+        tool_name: &str,
+        args: Vec<String>,
+        working_directory: Option<String>,
+    ) -> Result<String> {
         let config = self
             .configs
             .get(tool_name)
@@ -64,17 +83,32 @@ impl Adapter {
 
         // Execute the command
         if self.synchronous_mode {
-            self.execute_sync(&cmd_args).await
+            self.execute_sync_in_dir(&cmd_args, working_directory.as_deref())
+                .await
         } else {
-            self.execute_async(&cmd_args).await
+            self.execute_async_in_dir(&cmd_args, working_directory.as_deref())
+                .await
         }
     }
 
     /// Execute command synchronously
     async fn execute_sync(&self, args: &[String]) -> Result<String> {
+        self.execute_sync_in_dir(args, None).await
+    }
+
+    /// Execute command synchronously with optional working directory
+    async fn execute_sync_in_dir(
+        &self,
+        args: &[String],
+        working_directory: Option<&str>,
+    ) -> Result<String> {
         let mut cmd = Command::new(&args[0]);
         if args.len() > 1 {
             cmd.args(&args[1..]);
+        }
+
+        if let Some(dir) = working_directory {
+            cmd.current_dir(dir);
         }
 
         let output = tokio::time::timeout(
@@ -95,9 +129,46 @@ impl Adapter {
 
     /// Execute command asynchronously (placeholder for now)
     async fn execute_async(&self, args: &[String]) -> Result<String> {
-        // For now, just execute synchronously
-        // In the future, this would use the operation monitor and shell pool
-        self.execute_sync(args).await
+        self.execute_async_in_dir(args, None).await
+    }
+
+    /// Execute command asynchronously using pre-warmed shell when possible
+    async fn execute_async_in_dir(
+        &self,
+        args: &[String],
+        working_directory: Option<&str>,
+    ) -> Result<String> {
+        // If we have a working directory and shell pooling is enabled, use it
+        if let Some(dir) = working_directory {
+            if let Some(mut shell) = self.shell_pool.get_shell(dir).await {
+                let cmd = ShellCommand {
+                    id: Uuid::new_v4().to_string(),
+                    command: args.to_vec(),
+                    working_dir: dir.to_string(),
+                    timeout_ms: self.timeout_secs * 1000,
+                };
+
+                let resp = shell.execute_command(cmd).await;
+                // Return shell to pool regardless of outcome
+                self.shell_pool.return_shell(shell).await;
+
+                match resp {
+                    Ok(r) if r.exit_code == 0 => Ok(r.stdout),
+                    Ok(r) => Err(anyhow::anyhow!(
+                        "Command failed (code {}): {}",
+                        r.exit_code,
+                        r.stderr
+                    )),
+                    Err(e) => Err(anyhow::anyhow!("Shell execution error: {}", e)),
+                }
+            } else {
+                // Fallback to sync in specified directory if pool unavailable
+                self.execute_sync_in_dir(args, Some(dir)).await
+            }
+        } else {
+            // No working directory provided; fallback to sync
+            self.execute_sync(args).await
+        }
     }
 
     /// Initialize the adapter with tools from the tools directory.

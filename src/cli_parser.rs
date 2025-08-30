@@ -80,8 +80,14 @@ impl CliParser {
     pub fn new() -> Result<Self> {
         Ok(CliParser {
             // Matches subcommands in help output - requires at least 3 spaces before command
-            // and must have description after whitespace
-            subcommand_regex: Regex::new(r"^\s{3,}([a-zA-Z0-9-_]+)\s+(.+)")?,
+            // and must have description after whitespace. Accept optional aliases separated by commas
+            // Example matches:
+            //   "    build, b    Compile the current package" -> name: build, desc: Compile the current package
+            //   "    test       Run tests" -> name: test, desc: Run tests
+            //   "    long-name, ln   Description" -> name: long-name, desc: Description
+            subcommand_regex: Regex::new(
+                r"^\s{2,}([A-Za-z0-9][A-Za-z0-9_-]*)\s*(?:,\s*[A-Za-z0-9][A-Za-z0-9_-]*)*(?:\s{2,}|\t+)(.+)",
+            )?,
         })
     }
 
@@ -518,6 +524,16 @@ See 'git help <command>' for more information on a specific command.
                 "   long-command-name    Does something with a long name",
                 "long-command-name",
                 "Does something with a long name",
+            ),
+            (
+                "    build, b    Compile the current package",
+                "build",
+                "Compile the current package",
+            ),
+            (
+                "    run, r      Run a binary or example of the local package",
+                "run",
+                "Run a binary or example of the local package",
             ),
         ];
 

@@ -231,8 +231,20 @@ Once connected, you'll have access to ~38 dynamically generated MCP tools:
 
 - `mcp_ahma_mcp_cargo_build` - Build projects
 - `mcp_ahma_mcp_cargo_test` - Run tests
+- `mcp_ahma_mcp_cargo_run` - Run binaries
+- `mcp_ahma_mcp_cargo_check` - Check without building
+- `mcp_ahma_mcp_cargo_doc` - Build docs
 - `mcp_ahma_mcp_cargo_add` - Add dependencies
-- And 8+ more cargo subcommands
+- `mcp_ahma_mcp_cargo_remove` - Remove dependencies
+- `mcp_ahma_mcp_cargo_update` - Update dependencies
+- `mcp_ahma_mcp_cargo_fetch` - Fetch dependencies
+- `mcp_ahma_mcp_cargo_install` - Install binaries
+- `mcp_ahma_mcp_cargo_search` - Search crates
+- `mcp_ahma_mcp_cargo_tree` - Dependency tree
+- `mcp_ahma_mcp_cargo_version` - Cargo version
+- `mcp_ahma_mcp_cargo_rustc` - Custom rustc
+- `mcp_ahma_mcp_cargo_metadata` - Package metadata
+- Optional if installed: `clippy`, `nextest`, `fmt`, `audit`, `upgrade`, `bump_version`, `bench`
 
 **File Operations:**
 
