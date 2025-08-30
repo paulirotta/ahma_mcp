@@ -32,6 +32,15 @@ pub struct Config {
 /// AI guidance hints for different phases of tool execution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolHints {
+    /// Primary hint shown when AI considers using the tool
+    pub primary: Option<String>,
+
+    /// Usage examples and common operations
+    pub usage: Option<String>,
+
+    /// What the AI should think about during long operations
+    pub wait_hint: Option<String>,
+
     /// Suggestions for what to think about during build operations
     pub build: Option<String>,
 
@@ -43,6 +52,9 @@ pub struct ToolHints {
 
     /// Custom hints for specific subcommands
     pub custom: Option<HashMap<String, String>>,
+
+    /// Parameter-specific hints for better AI understanding
+    pub parameters: Option<HashMap<String, String>>,
 }
 
 /// Override configuration for specific subcommands.
@@ -54,8 +66,11 @@ pub struct CommandOverride {
     /// Whether this command should run synchronously by default
     pub synchronous: Option<bool>,
 
-    /// Custom hint for this specific command
+    /// Custom hint for this specific command  
     pub hint: Option<String>,
+
+    /// AI guidance hints for this subcommand
+    pub hints: Option<ToolHints>,
 
     /// Additional arguments to always include
     pub default_args: Option<Vec<String>>,
@@ -117,6 +132,11 @@ impl Config {
                     cmd if cmd.contains("test") => return hints.test.as_deref(),
                     _ => {}
                 }
+            }
+
+            // Check for primary hint
+            if let Some(primary) = &hints.primary {
+                return Some(primary);
             }
 
             // Finally fallback to default hint

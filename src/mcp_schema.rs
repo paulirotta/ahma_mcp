@@ -242,10 +242,14 @@ mod tests {
 
     fn create_test_config() -> Config {
         let mut hints = ToolHints {
+            primary: Some("Git version control system".to_string()),
+            usage: Some("git status, git add, git commit".to_string()),
+            wait_hint: None,
             build: None,
             test: None,
             default: Some("Consider reviewing code while git operations run".to_string()),
             custom: Some(HashMap::new()),
+            parameters: Some(HashMap::new()),
         };
 
         hints.custom.as_mut().unwrap().insert(

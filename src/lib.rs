@@ -21,3 +21,10 @@ pub mod tool_hints;
 // Test utilities (conditionally compiled)
 #[cfg(test)]
 pub mod test;
+
+// Re-export main types for easier use
+pub use adapter::Adapter;
+pub use cli_parser::{CliParser, CliStructure};
+pub use config::Config;
+pub use mcp_schema::McpSchemaGenerator;
+pub use mcp_service::AhmaMcpService;
