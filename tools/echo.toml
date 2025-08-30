@@ -1,0 +1,12 @@
+# Echo Tool Configuration
+tool_name = "echo"
+command = "echo"
+enabled = true
+timeout_seconds = 30
+
+[hints]
+primary = "Use echo to display text output"
+usage = "echo <text> - display text to stdout"
+
+[hints.parameters]
+text = "The text to display"

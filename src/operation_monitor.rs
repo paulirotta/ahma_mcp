@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 /// Represents the current state of an operation
@@ -131,7 +131,7 @@ pub struct MonitorConfig {
 impl Default for MonitorConfig {
     fn default() -> Self {
         Self {
-            default_timeout: Duration::from_secs(300), // 5 minutes
+            default_timeout: Duration::from_secs(300),  // 5 minutes
             cleanup_interval: Duration::from_secs(600), // 10 minutes
             max_history_size: 1000,
         }
@@ -184,7 +184,10 @@ impl OperationMonitor {
         let mut operations = self.operations.write().await;
         if let Some(operation) = operations.get_mut(operation_id) {
             operation.start();
-            tracing::debug!("Started operation {operation_id}: {}", operation.description);
+            tracing::debug!(
+                "Started operation {operation_id}: {}",
+                operation.description
+            );
             Ok(())
         } else {
             Err(format!("Operation not found: {operation_id}"))

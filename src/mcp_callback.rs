@@ -64,9 +64,7 @@ impl CallbackSender for McpCallbackSender {
                 }
             }
             ProgressUpdate::Output {
-                line,
-                is_stderr,
-                ..
+                line, is_stderr, ..
             } => {
                 ProgressNotificationParam {
                     progress_token: progress_token.clone(),

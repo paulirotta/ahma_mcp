@@ -6,6 +6,7 @@ pub mod cli_parser;
 pub mod config;
 pub mod constants;
 pub mod mcp_schema;
+pub mod mcp_service;
 pub mod utils;
 
 // Modules copied from async_cargo_mcp

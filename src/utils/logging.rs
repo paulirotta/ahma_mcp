@@ -3,7 +3,7 @@
 use anyhow::Result;
 use directories::ProjectDirs;
 use std::sync::Once;
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 static INIT: Once = Once::new();
 

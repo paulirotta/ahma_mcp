@@ -1,0 +1,60 @@
+# Cargo Tool Configuration for Ahma MCP
+# This configuration adapts the `cargo` command for AI assistant use
+# When ahma_mcp starts, it will automatically discover cargo's capabilities 
+# by parsing `cargo --help` output and update this file with discovered commands
+
+tool_name = "cargo"
+command = "cargo" 
+enabled = true
+timeout_seconds = 300
+verbose = false
+
+# AI guidance hints - customize these to improve AI interactions
+[hints]
+# Primary hint shown when AI considers using cargo
+primary = "Cargo is Rust's build tool and package manager. Use it for building, testing, running, and managing Rust projects."
+
+# Usage examples for common operations
+usage = """
+Common cargo commands:
+- cargo build [--release] - Build the project
+- cargo test [test_name] - Run tests  
+- cargo run [--bin name] -- [args] - Run binary with arguments
+- cargo add <crate> - Add dependency to Cargo.toml
+- cargo check - Check code without building
+- cargo clippy - Run linter
+- cargo fmt - Format code
+"""
+
+# What the AI should think about during long operations
+wait_hint = "While cargo is running, consider: reviewing test results, planning next development steps, analyzing dependencies, or documenting findings."
+
+# Parameter-specific hints for better AI understanding
+[hints.parameters]
+release = "Use --release for optimized production builds (slower compile, faster runtime)"
+target = "Specify target architecture for cross-compilation"
+features = "Enable specific crate features defined in Cargo.toml"
+workspace = "Apply command to all packages in workspace"
+
+# Override configurations for specific subcommands
+# Uncomment and customize as needed:
+
+# [overrides.test]
+# timeout_seconds = 600  # Tests might need more time
+# hints.primary = "Run project tests to verify functionality"
+# hints.wait_hint = "While tests run, review test coverage, plan additional test cases, or analyze failure patterns"
+
+# [overrides.build]
+# timeout_seconds = 300
+# hints.primary = "Compile the project and dependencies"
+# hints.parameters.release = "Enable optimizations for production builds"
+
+# [overrides.add]
+# timeout_seconds = 60
+# hints.primary = "Add a new dependency to the project"
+# hints.usage = "cargo add <crate_name> [--features feat1,feat2] [--dev] [--build]"
+
+# Example of command-specific parameter overrides:
+# [overrides.run.parameters]
+# bin = "Specify which binary to run when multiple exist"
+# args = "Arguments to pass to the running binary (use -- to separate)"

@@ -1,5 +1,10 @@
 # Ahma MCP
 
+[![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/rust.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/rust.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+[![Rust](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org/)
+
 `ahma_mcp` is a fast and ferocious tool for adapting existing command-line tools and web services for AI consumption. AI calls the tool, gets rapid confirmation and can continue to plan and analyze, getting a callback when the tool completes. Mutiple concurrent tool calls can be active with optional mutex blocking by `ahma_mcp` if needed. "Ahma" is Finnish for "wolverine."
 
 ## Overview
@@ -37,7 +42,7 @@ AI can now use any command line interface (CLI) tool efficiently, queuing multip
 
 3.  **Run the Server**:
     ```bash
-    ./target/release/ahma_mcp --config tools/cargo.toml
+    ./target/release/ahma_mcp --tools-dir tools
     ```
 
 ## IDE Integration (VSCode with GitHub Copilot)
@@ -65,8 +70,8 @@ AI can now use any command line interface (CLI) tool efficiently, queuing multip
             "--bin",
             "ahma_mcp",
             "--",
-            "--config",
-            "tools/cargo.toml"
+            "--tools-dir",
+            "tools"
           ]
         }
       },

@@ -1,0 +1,32 @@
+{
+    "servers": {
+        "ahma_mcp": {
+            "type": "stdio",
+            "cwd": "${workspaceFolder}",
+            "command": "cargo",
+            "args": [
+                "run",
+                "--bin",
+                "ahma_mcp",
+                "--",
+                "--tools-dir",
+                "tools"
+            ],
+            "dev": {
+                "command": "cargo",
+                "args": [
+                    "watch",
+                    "-x",
+                    "cargo check && cargo run --release --bin ahma_mcp -- --tools-dir tools"
+                ],
+                "watch": [ // `cargo install cargo-watch` to enable
+                    "src/**/*.rs",
+                    "tools/*.toml",
+                    "Cargo.toml",
+                    "Cargo.lock"
+                ]
+            }
+        }
+    },
+    "inputs": []
+}

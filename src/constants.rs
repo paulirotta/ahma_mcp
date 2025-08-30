@@ -4,8 +4,7 @@
 pub const ASYNC_ADDENDUM: &str = "Always use ahma_mcp MCP tools; do not run cargo in a terminal. For operations >1s, set enable_async_notification=true and call mcp_async_cargo_m_wait with specific operation_ids to collect results.";
 
 /// Standardized addendum for synchronous or fast tools where async guidance is not emphasized.
-pub const SYNC_ADDENDUM: &str =
-    "Always use ahma_mcp MCP tools; do not run cargo in a terminal.";
+pub const SYNC_ADDENDUM: &str = "Always use ahma_mcp MCP tools; do not run cargo in a terminal.";
 
 /// Template for standardized tool-hint content displayed when async operations are started.
 /// Placeholders:

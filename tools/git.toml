@@ -1,0 +1,69 @@
+# Git Tool Configuration for Ahma MCP  
+# This configuration adapts the `git` command for AI assistant use
+# When ahma_mcp starts, it will automatically discover git's capabilities
+# by parsing `git --help` output and update this file with discovered commands
+
+tool_name = "git"
+command = "git"
+enabled = true
+timeout_seconds = 120
+verbose = false
+
+# AI guidance hints - customize these to improve AI interactions
+[hints]
+# Primary hint shown when AI considers using git
+primary = "Git is a distributed version control system. Use it to track changes, manage branches, collaborate with others, and maintain project history."
+
+# Usage examples for common operations  
+usage = """
+Common git commands:
+- git status - Show working tree status
+- git add <files> - Stage files for commit
+- git commit -m "message" - Create a commit with message
+- git push [origin branch] - Upload local changes to remote
+- git pull [origin branch] - Download and merge remote changes  
+- git log [--oneline] - View commit history
+- git diff [files] - Show changes between commits/working tree
+- git branch [-a] - List branches (-a for all)
+- git checkout <branch> - Switch to branch
+- git merge <branch> - Merge branch into current
+"""
+
+# What the AI should think about during long operations
+wait_hint = "While git is running, consider: reviewing commit messages, planning merge strategies, analyzing branch structure, or documenting changes."
+
+# Parameter-specific hints for better AI understanding  
+[hints.parameters]
+message = "Provide clear, descriptive commit messages following project conventions"
+branch = "Specify branch name for operations like checkout, merge, or push"
+all = "Include all tracked files (git add -A or git commit -a)"
+force = "Force operation - use with caution as it can overwrite changes"
+
+# Override configurations for specific subcommands
+# Uncomment and customize as needed:
+
+# [overrides.clone]
+# timeout_seconds = 300  # Cloning large repos takes time
+# hints.primary = "Clone a git repository to local machine"
+# hints.wait_hint = "While cloning, review the repository documentation, plan development workflow, or prepare local environment"
+
+# [overrides.push]
+# timeout_seconds = 180
+# hints.primary = "Upload local commits to remote repository"  
+# hints.parameters.force = "Force push overwrites remote history - use only when necessary and safe"
+
+# [overrides.pull]
+# timeout_seconds = 120
+# hints.primary = "Fetch and merge changes from remote repository"
+# hints.wait_hint = "After pulling, review incoming changes and resolve any merge conflicts"
+
+# [overrides.log]
+# timeout_seconds = 30
+# hints.primary = "Display commit history and changes"
+# hints.parameters.oneline = "Show condensed one-line format for easier scanning"
+# hints.parameters.graph = "Display branch and merge history graphically"
+
+# Example of branch-specific operations:
+# [overrides.checkout]
+# hints.primary = "Switch branches or restore working tree files"
+# hints.parameters.b = "Create and switch to new branch (-b flag)"

@@ -2,21 +2,22 @@
 
 **Version:** 1.0
 **Date:** August 30, 2025
-**Status:** In Design
+**Status:** In Development
 
 ## 1. Introduction
 
-`ahma_mcp` is a universal, high-performance Model Context Protocol (MCP) server designed to adapt any command-line tool for asynchronous and concurrent use by AI agents. Its core principle is dynamic adaptation: it learns a tool's interface at runtime, eliminating the need for tool-specific, hardcoded logic.
+`ahma_mcp` is a universal, high-performance Model Context Protocol (MCP) server designed to dynamically adapt any command-line tool for asynchronous and concurrent use by AI agents. Its core innovation is runtime introspection: it discovers a tool's complete interface at startup, eliminating the need for tool-specific, hardcoded logic.
 
-This approach allows `ahma_mcp` to provide a consistent, powerful, and asynchronous bridge between AI and a virtually unlimited ecosystem of command-line utilities.
+This approach provides a consistent, powerful, and asynchronous bridge between AI and the virtually unlimited ecosystem of command-line utilities, enabling AI agents to work productively with any CLI tool without manual integration work.
 
 ### 1.1. Key Capabilities
 
-- **Dynamic Tool Adaptation**: At startup, `ahma_mcp` parses the `--help` output of a target tool to dynamically generate a comprehensive and accurate MCP tool schema.
-- **Unified Tool Interface**: It exposes a single MCP tool for each adapted command-line application (e.g., one `cargo` tool, not separate `cargo-build`, `cargo-test` tools). Subcommands and flags are parameters within this unified tool.
-- **Asynchronous First**: All operations are asynchronous by default, enabling the AI to initiate multiple long-running tasks and continue working without blocking.
-- **Intelligent AI Guidance**: The system provides automatically generated "tool hints" to encourage the AI to think concurrently instead of passively waiting for results. These hints are customizable.
-- **Self-Updating Configuration**: `ahma_mcp` maintains the user's TOML configuration file, keeping it current with commented-out examples of discovered commands and options.
+- **Dynamic Tool Introspection**: At startup, `ahma_mcp` automatically parses the `--help` output of target tools to generate comprehensive and accurate MCP tool schemas.
+- **Unified Tool Interface**: Exposes a single, intelligent MCP tool per adapted CLI application (e.g., one `cargo` tool instead of separate `cargo-build`, `cargo-test` tools), with subcommands and options as structured parameters.
+- **Asynchronous-First Architecture**: All operations default to asynchronous execution, enabling AI to initiate multiple long-running tasks and continue productive work without blocking.
+- **Intelligent AI Guidance**: Provides automatically generated, context-aware "tool hints" that guide AI agents toward concurrent thinking patterns instead of passive waiting.
+- **Self-Maintaining Configuration**: Automatically maintains user TOML configuration files with live examples of discovered commands and options, providing always-current customization templates.
+- **High-Performance Execution**: Uses a pre-warmed shell pool architecture for minimal command startup latency and optimal concurrent operation handling.
 
 ## 2. Architecture
 
