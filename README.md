@@ -28,36 +28,37 @@ _Note: `async_cargo_mcp` is now deprecated in favor of this universal approach._
 
 ## Quick Start
 
-**Just want to get started?** Here's the fastest path:
+The fastest way to try ahma_mcp with VS Code MCP support.
 
 ```bash
-# 1. Clone and build
+# 1) Clone and build the release binary
 git clone https://github.com/paulirotta/ahma_mcp.git
 cd ahma_mcp
 cargo build --release
 
-# 2. Test it works
+# 2) Run tests (optional but recommended)
 cargo test
 
-# 3. Add to VS Code mcp.json (replace with your actual path):
-# ~/.config/Code/User/mcp.json (Linux)
-# ~/Library/Application Support/Code/User/mcp.json (macOS)
-echo '{
+# 3) Create a minimal MCP config adjacent to the repo for copy/paste
+cat > mcp_config_example.json << 'JSON'
+{
   "servers": {
     "ahma_mcp": {
       "type": "stdio",
-      "cwd": "'$(pwd)'",
-      "command": "'$(pwd)'/target/release/ahma_mcp",
-      "args": ["--tools-dir", "'$(pwd)'/tools"]
+      "cwd": "/absolute/path/to/ahma_mcp",
+      "command": "/absolute/path/to/ahma_mcp/target/release/ahma_mcp",
+      "args": ["--tools-dir", "/absolute/path/to/ahma_mcp/tools"]
     }
   },
   "inputs": []
-}' > mcp_config_example.json
+}
+JSON
 
-# 4. Copy the contents of mcp_config_example.json to your VS Code mcp.json
-# 5. Restart VS Code
-# 6. Start chatting: "Use ahma_mcp to check git status"
+# 4) Open the file and replace /absolute/path/to/ahma_mcp with your path
+open mcp_config_example.json
 ```
+
+Then copy the contents into your VS Code MCP configuration file (per-OS locations below), restart VS Code, and you’re ready.
 
 ## Key Features
 
@@ -153,16 +154,16 @@ Create or edit your global MCP configuration file:
 - **Linux**: `~/.config/Code/User/mcp.json`
 - **Windows**: `%APPDATA%\Code\User\mcp.json`
 
-**Configuration content** (replace `/path/to/your/clone` with your actual path):
+**Configuration content** (replace `/absolute/path/to/ahma_mcp`):
 
 ```jsonc
 {
   "servers": {
     "ahma_mcp": {
       "type": "stdio",
-      "cwd": "/path/to/your/clone/ahma_mcp",
-      "command": "/path/to/your/clone/ahma_mcp/target/release/ahma_mcp",
-      "args": ["--tools-dir", "/path/to/your/clone/ahma_mcp/tools"]
+      "cwd": "/absolute/path/to/ahma_mcp",
+      "command": "/absolute/path/to/ahma_mcp/target/release/ahma_mcp",
+      "args": ["--tools-dir", "/absolute/path/to/ahma_mcp/tools"]
     }
   },
   "inputs": []
@@ -187,7 +188,7 @@ Create or edit your global MCP configuration file:
 }
 ```
 
-**Windows (PowerShell-style paths):**
+**Windows:**
 
 ```jsonc
 {
@@ -252,15 +253,20 @@ Once connected, you'll have access to ~38 dynamically generated MCP tools:
 
 **"execution_failed" errors?**
 
-- Ensure all paths in `mcp.json` are absolute (no `~` or relative paths)
+- Ensure all paths in `mcp.json` are absolute (no `~` or environment variables)
 - Use the direct binary path, not `cargo run`
 - Verify file permissions: `chmod +x /path/to/your/ahma_mcp/target/release/ahma_mcp`
+- If you updated the repo, rebuild the release binary: `cargo build --release`
 
 **Performance issues?**
 
 - Always use the pre-built binary path (not `cargo run`)
 - Use absolute paths to avoid lookup delays
 - Ensure `cargo build --release` has been run
+
+### Performance: Pre-warmed shell pool
+
+Ahma MCP includes an experimental pre-warmed shell pool inspired by `async_cargo_mcp` to reduce command startup latency. It keeps a small pool of ready shells per working directory and reuses them for subsequent operations. See `ShellPoolConfig` in `src/shell_pool.rs`.
 
 ## Creating Custom Tool Configurations
 

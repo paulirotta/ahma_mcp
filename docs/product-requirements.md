@@ -41,6 +41,7 @@ This document outlines the high-level requirements for `ahma_mcp`, a universal a
 ## 6. Performance and Reliability
 
 - **R6.1**: The system shall use a high-performance shell pool architecture to minimize command startup latency.
+- **R6.5**: Provide clear documentation and examples for configuring VS Code MCP with absolute paths and using a pre-built release binary.
 - **R6.2**: Operations shall be isolated to prevent interference between concurrent commands.
 - **R6.3**: The system shall provide comprehensive error handling and recovery mechanisms.
 - **R6.4**: Resource usage shall be optimized to handle multiple concurrent operations efficiently.
