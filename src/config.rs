@@ -338,3 +338,4 @@ enabled = definitely_not_a_boolean
         );
     }
 }
+// TODO: Implement configuration validation

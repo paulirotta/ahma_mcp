@@ -1,4 +1,4 @@
-//! The main library for the Ahma MCP server.
+// TODO: Add comprehensive documentation for public APIs//! The main library for the Ahma MCP server.
 
 // New core modules
 pub mod adapter;

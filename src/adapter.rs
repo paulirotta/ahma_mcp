@@ -201,3 +201,4 @@ impl Adapter {
         crate::tool_hints::preview("operation", operation_type)
     }
 }
+// TODO: Add performance benchmarks for tool discovery
