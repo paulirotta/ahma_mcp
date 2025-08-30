@@ -1,9 +1,7 @@
-#![allow(dead_code)]
 /// Test utilities for ahma_mcp testing
 use std::path::Path;
 
 /// Check if output contains any of the expected patterns
-#[allow(dead_code)]
 pub fn contains_any(output: &str, patterns: &[&str]) -> bool {
     patterns.iter().any(|pattern| output.contains(pattern))
 }
