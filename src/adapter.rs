@@ -1,3 +1,65 @@
+//! # CLI Tool Adapter
+//!
+//! This module serves as the core adaptation layer between the MCP server and the underlying
+//! command-line interface (CLI) tools. Its primary responsibility is to dynamically discover,
+//! parse, and execute CLI tools based on TOML configuration files.
+//!
+//! ## Core Components
+//!
+//! - **`Adapter`**: The central struct that manages all tool configurations, parsed CLI
+//!   structures, and execution logic. It holds the `ShellPoolManager` for efficient
+//!   asynchronous command execution.
+//!
+//! - **`Config`**: Represents the configuration for a single tool, loaded from a TOML file
+//!   in the `tools/` directory. It defines the command to execute, whether it should run
+//!   synchronously by default, and any per-subcommand overrides.
+//!
+//! - **`CliParser`**: A utility responsible for parsing the `--help` output of a command
+//!   to understand its structure, including its subcommands and options. This is crucial
+//!   for generating accurate MCP schemas.
+//!
+//! - **`McpSchemaGenerator`**: Takes the parsed `CliStructure` and `Config` for a tool
+//!   and generates a JSON schema that conforms to the MCP specification. This schema is
+//!   what the client (e.g., an AI agent) uses to understand how to use the tool.
+//!
+//! ## Execution Flow
+//!
+//! 1. **Initialization**:
+//!    - The `Adapter` is created, initializing a `ShellPoolManager` for async operations.
+//!    - `adapter.initialize()` is called, which scans the `tools/` directory for `.toml` files.
+//!    - For each enabled tool, `adapter.add_tool()` is invoked.
+//!
+//! 2. **Tool Addition (`add_tool`)**:
+//!    - The tool's `--help` output is fetched and parsed by `CliParser` to create a `CliStructure`.
+//!    - For special cases like `cargo`, `cargo --list` is also parsed to discover dynamically
+//!      available subcommands (e.g., from installed extensions).
+//!    - The `Config` and `CliStructure` are stored in the `Adapter`.
+//!
+//! 3. **Schema Generation (`get_tool_schemas`)**:
+//!    - The `Adapter` iterates through its registered tools.
+//!    - For each tool, `McpSchemaGenerator` creates a JSON schema from the stored `CliStructure`
+//!      and `Config`. These schemas are sent to the client upon connection.
+//!
+//! 4. **Execution (`execute_tool_in_dir`)**:
+//!    - A tool execution request is received with a tool name, arguments, and a working directory.
+//!    - The `Adapter` determines whether to run the command synchronously or asynchronously based
+//!      on a hierarchy of settings: global mode -> tool default -> subcommand override.
+//!    - **Async Path**: If a working directory is provided and the shell pool is enabled, a
+//!      pre-warmed shell is requested from the `ShellPoolManager`. The command is sent to the
+//!      shell for execution, and the shell is returned to the pool afterward.
+//!    - **Sync Path**: If no working directory is given, or if the async path is not available/configured,
+//!      the command is executed as a standard `tokio::process::Command`.
+//!
+//! ## Key Design Decisions
+//!
+//! - **Configuration over Code**: Tools are defined entirely by TOML files, allowing new tools
+//!   to be added or modified without changing the server's Rust code.
+//! - **Dynamic Discovery**: The server automatically discovers and adapts to the tools available
+//!   on the system, making it highly portable and flexible.
+//! - **Performance-Oriented Async**: The integration with `ShellPoolManager` ensures that
+//!   asynchronous operations are executed with minimal overhead, which is critical for a
+//!   responsive user experience.
+
 use anyhow::{Context, Result};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -9,6 +71,8 @@ use crate::cli_parser::{CliParser, CliStructure};
 use crate::config::Config;
 use crate::mcp_schema::McpSchemaGenerator;
 use crate::operation_monitor::{MonitorConfig, OperationMonitor};
+use crate::shell_pool::{ShellCommand, ShellPoolConfig, ShellPoolManager};
+use uuid::Uuid;
 
 /// The main adapter that handles dynamic CLI tool adaptation.
 #[derive(Debug)]
@@ -27,11 +91,17 @@ pub struct Adapter {
     synchronous_mode: bool,
     /// Command timeout in seconds
     timeout_secs: u64,
+    /// Pre-warmed shell pool manager for async execution
+    shell_pool: Arc<ShellPoolManager>,
 }
 
 impl Adapter {
     /// Create a new adapter instance.
     pub fn new(synchronous_mode: bool) -> Result<Self> {
+        // Initialize shell pool manager and start background tasks
+        let shell_pool = Arc::new(ShellPoolManager::new(ShellPoolConfig::default()));
+        shell_pool.clone().start_background_tasks();
+
         Ok(Adapter {
             cli_structures: HashMap::new(),
             configs: HashMap::new(),
@@ -40,6 +110,7 @@ impl Adapter {
             cli_parser: CliParser::new()?,
             synchronous_mode,
             timeout_secs: 300,
+            shell_pool,
         })
     }
 
@@ -52,6 +123,16 @@ impl Adapter {
 
     /// Execute a tool with the given arguments
     pub async fn execute_tool(&self, tool_name: &str, args: Vec<String>) -> Result<String> {
+        self.execute_tool_in_dir(tool_name, args, None).await
+    }
+
+    /// Execute a tool with the given arguments in an optional working directory
+    pub async fn execute_tool_in_dir(
+        &self,
+        tool_name: &str,
+        args: Vec<String>,
+        working_directory: Option<String>,
+    ) -> Result<String> {
         let config = self
             .configs
             .get(tool_name)
@@ -62,19 +143,43 @@ impl Adapter {
         let mut cmd_args = vec![command.to_string()];
         cmd_args.extend(args);
 
-        // Execute the command
-        if self.synchronous_mode {
-            self.execute_sync(&cmd_args).await
+        // Determine sync/async based on global mode, tool-level default, and per-command override
+        let mut run_sync = self.synchronous_mode || config.synchronous.unwrap_or(false);
+        // If first arg after command is a subcommand, check override
+        if let Some(subcmd) = cmd_args.get(1)
+            && let Some(override_cfg) = config.get_command_override(subcmd)
+            && let Some(sync) = override_cfg.synchronous
+        {
+            run_sync = sync;
+        }
+
+        if run_sync {
+            self.execute_sync_in_dir(&cmd_args, working_directory.as_deref())
+                .await
         } else {
-            self.execute_async(&cmd_args).await
+            self.execute_async_in_dir(&cmd_args, working_directory.as_deref())
+                .await
         }
     }
 
     /// Execute command synchronously
     async fn execute_sync(&self, args: &[String]) -> Result<String> {
+        self.execute_sync_in_dir(args, None).await
+    }
+
+    /// Execute command synchronously with optional working directory
+    async fn execute_sync_in_dir(
+        &self,
+        args: &[String],
+        working_directory: Option<&str>,
+    ) -> Result<String> {
         let mut cmd = Command::new(&args[0]);
         if args.len() > 1 {
             cmd.args(&args[1..]);
+        }
+
+        if let Some(dir) = working_directory {
+            cmd.current_dir(dir);
         }
 
         let output = tokio::time::timeout(
@@ -93,11 +198,43 @@ impl Adapter {
         }
     }
 
-    /// Execute command asynchronously (placeholder for now)
-    async fn execute_async(&self, args: &[String]) -> Result<String> {
-        // For now, just execute synchronously
-        // In the future, this would use the operation monitor and shell pool
-        self.execute_sync(args).await
+    /// Execute command asynchronously using pre-warmed shell when possible
+    async fn execute_async_in_dir(
+        &self,
+        args: &[String],
+        working_directory: Option<&str>,
+    ) -> Result<String> {
+        // If we have a working directory and shell pooling is enabled, use it
+        if let Some(dir) = working_directory {
+            if let Some(mut shell) = self.shell_pool.get_shell(dir).await {
+                let cmd = ShellCommand {
+                    id: Uuid::new_v4().to_string(),
+                    command: args.to_vec(),
+                    working_dir: dir.to_string(),
+                    timeout_ms: self.timeout_secs * 1000,
+                };
+
+                let resp = shell.execute_command(cmd).await;
+                // Return shell to pool regardless of outcome
+                self.shell_pool.return_shell(shell).await;
+
+                match resp {
+                    Ok(r) if r.exit_code == 0 => Ok(r.stdout),
+                    Ok(r) => Err(anyhow::anyhow!(
+                        "Command failed (code {}): {}",
+                        r.exit_code,
+                        r.stderr
+                    )),
+                    Err(e) => Err(anyhow::anyhow!("Shell execution error: {}", e)),
+                }
+            } else {
+                // Fallback to sync in specified directory if pool unavailable
+                self.execute_sync_in_dir(args, Some(dir)).await
+            }
+        } else {
+            // No working directory provided; fallback to sync
+            self.execute_sync(args).await
+        }
     }
 
     /// Initialize the adapter with tools from the tools directory.
@@ -141,10 +278,45 @@ impl Adapter {
             .cli_parser
             .parse_help_output(command_name, &help_output)?;
 
+        let mut structure = structure;
+
+        // Special handling for cargo: also parse `cargo --list` to discover installed subcommands
+        if command_name == "cargo"
+            && let Ok(output) = std::process::Command::new(command_name)
+                .arg("--list")
+                .output()
+            && output.status.success()
+        {
+            let list_text = String::from_utf8_lossy(&output.stdout);
+            let mut names = std::collections::HashSet::new();
+            for sc in &structure.subcommands {
+                names.insert(sc.name.clone());
+            }
+            for line in list_text.lines() {
+                // cargo --list often prints entries like:
+                //    build                Compile the current package
+                //    test                 Run the tests
+                if let Ok(Some(mut sc)) = self.cli_parser.parse_subcommand_line(line)
+                    && !names.contains(&sc.name)
+                {
+                    sc.description = sc.description.trim().to_string();
+                    structure.subcommands.push(sc.clone());
+                    names.insert(sc.name);
+                }
+            }
+        }
+
         self.cli_structures.insert(tool_name.to_string(), structure);
         self.configs.insert(tool_name.to_string(), config);
 
         Ok(())
+    }
+
+    /// Register a tool with pre-parsed configuration and CLI structure.
+    /// This avoids re-parsing help output when the structure is already available.
+    pub fn register_tool(&mut self, tool_name: &str, config: Config, structure: CliStructure) {
+        self.cli_structures.insert(tool_name.to_string(), structure);
+        self.configs.insert(tool_name.to_string(), config);
     }
 
     /// Get all available tool schemas for MCP.

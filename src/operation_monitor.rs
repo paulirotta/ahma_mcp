@@ -1,15 +1,68 @@
-//! Operation monitoring and management system
+//! # Asynchronous Operation Monitoring and Management
 //!
-//! This module provides comprehensive monitoring, timeout handling, and cancellation
-//! support for long-running operations. It enables tracking of operation state,
-//! automatic cleanup, and detailed logging for debugging.
+//! This module provides a robust system for tracking, managing, and monitoring the
+//! lifecycle of long-running, asynchronous operations. It is a crucial component for
+//! any application that needs to handle tasks that don't complete instantaneously,
+//! providing features like state tracking, timeout handling, cancellation, and history
+//! management.
+//!
+//! ## Core Components
+//!
+//! - **`OperationMonitor`**: The central manager that holds a collection of all known
+//!   operations. It provides methods to register, start, and complete operations. It also
+//!   spawns a background task to periodically clean up old, completed operations to
+//!   prevent memory leaks.
+//!
+//! - **`OperationInfo`**: A struct that represents a single operation. It contains all
+//!   the metadata associated with the task, including its unique ID, command, description,
+//!   state, start/end times, and a `CancellationToken` for graceful termination.
+//!
+//! - **`OperationState`**: An enum (`Pending`, `Running`, `Completed`, `Failed`, etc.) that
+//!   represents the current status of an operation in its lifecycle.
+//!
+//! - **`MonitorConfig`**: A configuration struct for setting parameters like the default
+//!   operation timeout, the interval for the cleanup task, and the maximum number of
+//!   completed operations to retain in history.
+//!
+//! ## Key Functionality
+//!
+//! - **Lifecycle Management**: The monitor provides a clear and structured way to manage
+//!   the lifecycle of an operation, from registration (`register_operation`) through to
+//!   completion (`complete_operation`).
+//!
+//! - **`execute_with_monitoring`**: This is the primary entry point for running a monitored
+//!   operation. It's a higher-order function that wraps the execution of an async task.
+//!   It handles:
+//!   1.  Registering the new operation.
+//!   2.  Setting up a timeout for the operation.
+//!   3.  Passing a `CancellationToken` to the operation so it can be cancelled.
+//!   4.  Integrating with the `callback_system` to send `ProgressUpdate` notifications
+//!       at the start and end of the operation.
+//!   5.  Updating the operation's final state (e.g., `Completed`, `Failed`, `TimedOut`).
+//!
+//! - **Cancellation**: Each operation is associated with a `CancellationToken`. The monitor
+//!   can trigger cancellation (e.g., on timeout), and the operation's logic can listen
+//!   for this token to perform a graceful shutdown.
+//!
+//! - **Automatic Cleanup**: The monitor runs a background `tokio` task that periodically
+//!   prunes the history of completed operations, ensuring that the memory footprint
+//!   remains bounded over time.
+//!
+//! ## Purpose in the System
+//!
+//! In a server that handles many asynchronous tasks (like `ahma_mcp`), the `OperationMonitor`
+//! is essential. It provides the necessary infrastructure to keep track of what's running,
+//! prevent runaway processes via timeouts, and provide status information to clients.
+//! By integrating tightly with the `callback_system`, it ensures that clients are kept
+//! informed about the progress and final outcome of their requests.
 
 use crate::callback_system::{CallbackSender, ProgressUpdate};
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
-use tokio::time::timeout;
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use tokio::{sync::RwLock, time::timeout};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 use uuid::Uuid;

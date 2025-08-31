@@ -1,4 +1,39 @@
-//! Logging initialization for the server.
+//! # Logging Initialization
+//!
+//! This module provides a centralized function for initializing the application's
+//! logging infrastructure. It uses the `tracing` ecosystem to provide structured,
+//! configurable logging.
+//!
+//! ## Core Functionality
+//!
+//! - **`init_logging()`**: This is the main function of the module. It is designed to
+//!   be called once at the start of the application's lifecycle. It uses a `std::sync::Once`
+//!   to ensure that the initialization logic is executed only a single time, even if
+//!   the function is called multiple times.
+//!
+//! ## Logging Configuration
+//!
+//! The function sets up a multi-layered logging system:
+//!
+//! 1.  **Environment Filter (`EnvFilter`)**: It configures the logging verbosity based on
+//!     the `RUST_LOG` environment variable. If `RUST_LOG` is not set, it defaults to a
+//!     sensible configuration: `info` for most crates, but `debug` for the `ahma_mcp`
+//!     crate itself.
+//!
+//! 2.  **File Logging**: It attempts to create a daily rolling log file in the appropriate
+//!     user-specific cache directory (determined by the `directories` crate). This is
+//!     the preferred logging target, as it preserves log history without cluttering the
+//!     console. It uses `tracing_appender` to handle the file rotation and non-blocking
+//!     I/O.
+//!
+//! 3.  **Stderr Fallback**: If the project's cache directory cannot be determined (e.g.,
+//!     in a sandboxed or unusual environment), the logger gracefully falls back to writing
+//!     logs to `stderr`.
+//!
+//! ## Usage
+//!
+//! To enable logging, simply call `ahma_mcp::utils::logging::init_logging()` at the
+//! beginning of the `main` function.
 
 use anyhow::Result;
 use directories::ProjectDirs;

@@ -1,3 +1,49 @@
+//! # MCP Schema Generator
+//!
+//! This module is responsible for generating MCP (Machine-Checked Protocol) compliant
+//! JSON schemas from the internal `CliStructure` and `Config` representations of a tool.
+//! These schemas are what the AI client consumes to understand how to call the tools,
+//! what parameters are available, and which are required.
+//!
+//! ## Core Components
+//!
+//! - **`McpSchemaGenerator`**: The main struct that orchestrates the schema generation process.
+//!
+//! ## Schema Generation Logic (`generate_tool_schema`)
+//!
+//! 1.  **Basic Information**: Sets the tool's `name` and `description`.
+//!
+//! 2.  **Subcommand Handling**: If the `CliStructure` contains subcommands, it creates an `enum`
+//!     parameter named `subcommand`, making it a required field. This forces the client to
+//!     choose a valid subcommand.
+//!
+//! 3.  **Global Options**: Iterates through the `global_options` of the `CliStructure`. Each
+//!     `CliOption` is converted into a JSON schema property using `option_to_parameter`.
+//!     -   Flags (e.g., `--verbose`) become boolean parameters.
+//!     -   Options that take a value (e.g., `-C <path>`) become string parameters.
+//!     -   `--help` and `--version` flags are deliberately excluded as they are not useful
+//!         in an MCP context.
+//!
+//! 4.  **Common Parameters**: Adds a set of standard parameters to every tool's schema:
+//!     -   `working_directory`: A required string for specifying the execution context.
+//!     -   `enable_async_notification`: A boolean to control async progress updates.
+//!     -   `operation_id`: An optional string to assign a custom ID to an operation.
+//!     -   `timeout_seconds`: An integer for setting a command timeout.
+//!     -   `args`: An array of strings for passing raw, untyped arguments, providing an
+//!         escape hatch for complex or unsupported CLI features.
+//!
+//! 5.  **Async Parameter Exposure**: The `enable_async_notification` and `operation_id`
+//!     parameters are only exposed if the tool is configured to run asynchronously. This
+//!     is determined by checking the `synchronous` flag in the tool's `Config` and its
+//!     `overrides`.
+//!
+//! ## Purpose in the System
+//!
+//! The `McpSchemaGenerator` is the critical link between the server's internal understanding
+//! of a tool and the client's ability to use it. By dynamically generating these schemas,
+//! the server can expose a rich and varied set of tools in a standardized way, enabling
+//! robust and predictable interaction with the AI agent.
+
 use crate::cli_parser::{CliOption, CliStructure};
 use crate::config::Config;
 use anyhow::Result;
@@ -46,17 +92,30 @@ impl McpSchemaGenerator {
         });
         required.push("working_directory".to_string());
 
-        // Add async control parameters
-        properties["enable_async_notification"] = json!({
-            "type": "boolean",
-            "description": "Enable async callback notifications for operation progress",
-            "default": false
-        });
+        // Decide whether to expose async parameters
+        let mut expose_async = !config.synchronous.unwrap_or(false);
+        if expose_async {
+            // If all overrides explicitly set synchronous=true, hide async
+            if let Some(ov) = &config.overrides {
+                let all_sync = ov.values().all(|o| o.synchronous.unwrap_or(false));
+                if all_sync {
+                    expose_async = false;
+                }
+            }
+        }
 
-        properties["operation_id"] = json!({
-            "type": "string",
-            "description": "Optional operation ID to assign (if omitted, one is generated)"
-        });
+        if expose_async {
+            properties["enable_async_notification"] = json!({
+                "type": "boolean",
+                "description": "Enable async callback notifications for operation progress",
+                "default": false
+            });
+
+            properties["operation_id"] = json!({
+                "type": "string",
+                "description": "Optional operation ID to assign (if omitted, one is generated)"
+            });
+        }
 
         // Add timeout parameter from config
         properties["timeout_seconds"] = json!({
@@ -262,6 +321,7 @@ mod tests {
             command: Some("git".to_string()),
             hints: Some(hints),
             overrides: None,
+            synchronous: Some(false),
             enabled: Some(true),
             timeout_seconds: Some(300),
             verbose: Some(false),
@@ -439,6 +499,7 @@ mod tests {
         let structure2 = CliStructure::new("disabled_tool".to_string());
         let config2 = Config {
             enabled: Some(false),
+            synchronous: Some(false),
             ..Default::default()
         };
 

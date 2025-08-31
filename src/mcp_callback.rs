@@ -1,7 +1,46 @@
-//! MCP Callback Sender Implementation
+//! # MCP Callback Sender Implementation
 //!
-//! This module provides McpCallbackSender, which integrates the callback system
-//! with the rmcp framework to send progress notifications back to the AI client.
+//! This module provides the `McpCallbackSender`, a concrete implementation of the
+//! `CallbackSender` trait that integrates with the `rmcp` framework. Its purpose is to
+//! translate the internal `ProgressUpdate` enum into MCP-compliant `ProgressNotificationParam`
+//! messages and send them to the connected AI client.
+//!
+//! ## Core Components
+//!
+//! - **`McpCallbackSender`**: A struct that holds a reference to the `rmcp` `Peer` and the
+//!   `operation_id` for the current task. The `Peer` is used to send notifications back
+//!   to the client.
+//!
+//! ## How It Works
+//!
+//! 1. **Instantiation**: An `McpCallbackSender` is created with a `Peer` object (representing
+//!    the connection to the client) and the unique `operation_id` for the task that will be
+//!    monitored.
+//!
+//! 2. **`send_progress` Implementation**: This is the core of the module. The `async` method
+//!    takes a `ProgressUpdate` and performs a `match` on its variant.
+//!
+//! 3. **Translation**: Each `ProgressUpdate` variant is translated into a corresponding
+//!    `ProgressNotificationParam`. This involves mapping the internal state (like `Started`,
+//!    `Progress`, `Completed`) to the fields expected by the MCP specification (like
+//!    `progress`, `total`, and `message`). For example:
+//!    - `ProgressUpdate::Started` sets the progress to 0%.
+//!    - `ProgressUpdate::Progress` maps the percentage directly.
+//!    - `ProgressUpdate::Completed` or `Failed` sets the progress to 100% to signify the
+//!      end of the operation.
+//!    - `ProgressUpdate::FinalResult` formats a comprehensive summary message for the client.
+//!
+//! 4. **Notification**: The constructed `ProgressNotificationParam` is sent to the client
+//!    using `self.peer.notify_progress().await`. Any errors in sending the notification
+//!    are wrapped in a `CallbackError`.
+//!
+//! ## Purpose in the System
+//!
+//! The `McpCallbackSender` acts as the bridge between the server's internal, abstract
+//! progress monitoring system (`callback_system`) and the external, standardized MCP
+//! communication protocol. This separation of concerns allows the core application logic
+//! to remain agnostic of the specific protocol being used to communicate with the client,
+//! making the system more modular and easier to maintain.
 
 use crate::callback_system::{CallbackError, CallbackSender, ProgressUpdate};
 use async_trait::async_trait;

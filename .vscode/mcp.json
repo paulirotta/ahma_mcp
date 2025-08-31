@@ -12,10 +12,20 @@
                 "command": "cargo",
                 "args": [
                     "watch",
+                    "-w",
+                    "src",
+                    "-w",
+                    "tools",
+                    "-w",
+                    "Cargo.toml",
+                    "-w",
+                    "Cargo.lock",
                     "-x",
-                    "cargo check && cargo run --release --bin ahma_mcp -- --tools-dir tools"
+                    "check",
+                    "-x",
+                    "run --release --bin ahma_mcp -- --tools-dir tools"
                 ],
-                "watch": [ // `cargo install cargo-watch` to enable
+                "watch": [
                     "src/**/*.rs",
                     "tools/*.toml",
                     "Cargo.toml",

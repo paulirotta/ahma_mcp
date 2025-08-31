@@ -1,19 +1,59 @@
-//! Pre-warmed shell pool for instant cargo commands
+//! # Pre-warmed Shell Pool for High-Performance Command Execution
 //!
-//! This module provides a pool of pre-warmed bash shells that can execute cargo commands
-//! with minimal startup latency. The pool maintains separate shell collections per working
-//! directory to ensure proper isolation while maximizing performance.
+//! This module provides a sophisticated pooling mechanism for shell processes, designed to
+//! minimize latency when executing external commands, particularly `cargo` operations.
+//!
+//! ## Core Concepts
+//!
+//! * **`PrewarmedShell`**: A single, long-lived shell process (e.g., `bash`) that is kept
+//!   alive and ready to accept commands. It communicates over its `stdin` and `stdout`
+//!   using a simple JSON-based protocol.
+//!
+//! * **`ShellPool`**: A collection of `PrewarmedShell` instances, all configured for the
+//!   same working directory. This allows multiple commands to be executed in parallel
+//!   for a given directory.
+//!
+//! * **`ShellPoolManager`**: The central manager that oversees all `ShellPool`s. It creates,
+//!   manages, and garbage-collects pools as needed, ensuring that resources are used
+//!   efficiently. It also enforces global limits on the total number of active shells.
+//!
+//! ## Features
+//!
+//! * **Low Latency**: By reusing existing shell processes, the overhead of process creation
+//!   is eliminated, leading to significantly faster command execution.
+//! * **Working Directory Isolation**: Shells are pooled on a per-directory basis, ensuring
+//!   that commands run in the correct context without interfering with each other.
+//! * **Resource Management**: The manager enforces a cap on the total number of concurrent
+//!   shells and automatically cleans up idle pools and shells to prevent resource leaks.
+//! * **Health Checking**: Shells are periodically checked for responsiveness, and unhealthy
+//!   processes are automatically culled and replaced.
+//! * **Asynchronous API**: The entire system is built on `tokio`, providing a fully
+//!   non-blocking interface suitable for high-concurrency applications.
+//!
+//! ## Usage
+//!
+//! 1. Create a `ShellPoolManager` with a desired `ShellPoolConfig`.
+//! 2. Start the background monitoring tasks using `manager.start_background_tasks()`.
+//! 3. When a command needs to be executed, request a shell from the manager using
+//!    `manager.get_shell(working_dir).await`.
+//! 4. If a shell is available, execute the command using `shell.execute_command(...)`.
+//! 5. Return the shell to the manager using `manager.return_shell(shell).await` so it can
+//!    be reused.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::process::Stdio;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{Child, Command};
-use tokio::sync::{Mutex, RwLock};
-use tokio::time::timeout;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    process::Stdio,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    process::{Child, Command},
+    sync::{Mutex, RwLock},
+    time::timeout,
+};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 

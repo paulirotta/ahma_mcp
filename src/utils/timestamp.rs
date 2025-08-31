@@ -1,3 +1,36 @@
+//! # Timestamp and Duration Utilities
+//!
+//! This module provides a collection of helper functions for working with time,
+//! specifically for formatting timestamps and calculating durations. It uses the
+//! `chrono` crate for handling time zones and formatting, and the standard library's
+//! `std::time` for monotonic time measurements.
+//!
+//! ## Core Functions
+//!
+//! - **`format_current_time()`**: A convenience function that gets the current system
+//!   time and formats it into a human-readable `H:MM:SS` string using the local time zone.
+//!
+//! - **`format_time(time: SystemTime)`**: Takes a `SystemTime` object and formats it
+//!   into the `H:MM:SS` string format. This is the underlying logic used by
+//!   `format_current_time`.
+//!
+//! - **`duration_as_rounded_seconds(start: Instant, end: Instant)`**: Calculates the
+//!   duration between two `Instant`s and returns the result as a whole number of
+//!   seconds, effectively rounding down. `Instant` is used here because it's a
+//!   monotonic clock, making it ideal for measuring elapsed time without being
+//!   affected by system time changes.
+//!
+//! - **`duration_since_as_rounded_seconds(start: Instant)`**: A helper that calculates
+//!   the duration from a given `start` `Instant` to the current moment (`Instant::now()`),
+//!   returning the result in whole seconds.
+//!
+//! ## Usage
+//!
+//! These utilities are used throughout the application for tasks such as:
+//! - Adding timestamps to log messages.
+//! - Calculating the total execution time of an operation for reporting.
+//! - Displaying the current time in user-facing messages.
+
 use chrono::{DateTime, Local};
 use std::time::{Instant, SystemTime};
 

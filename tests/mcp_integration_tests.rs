@@ -1,11 +1,10 @@
 //! Advanced integration tests for ahma_mcp MCP tool loading and configuration
 //! Tests the actual tool loading, configuration parsing, and schema generation
 
+use ahma_mcp::{adapter::Adapter, cli_parser::CliParser, config::Config};
 use anyhow::Result;
 use tempfile::TempDir;
 use tokio::fs;
-
-use ahma_mcp::{adapter::Adapter, cli_parser::CliParser, config::Config};
 
 /// Test MCP tool loading and configuration
 #[tokio::test]
@@ -99,6 +98,7 @@ async fn test_adapter_tool_management() -> Result<()> {
         verbose: Some(false),
         hints: None,
         overrides: None,
+        synchronous: Some(false),
     };
 
     // Test adding a tool (this tests CLI parsing integration)
@@ -132,6 +132,7 @@ async fn test_tool_execution() -> Result<()> {
         verbose: Some(false),
         hints: None,
         overrides: None,
+        synchronous: Some(false),
     };
 
     match adapter.add_tool("echo", config).await {

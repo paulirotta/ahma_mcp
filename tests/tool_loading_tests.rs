@@ -5,10 +5,10 @@
 
 use ahma_mcp::{Adapter, Config};
 use anyhow::Result;
-
-mod common;
 use common::test_project::{TestProjectOptions, create_test_project};
 use common::test_utils::{dir_exists, file_exists};
+
+mod common;
 
 /// Test that the adapter can be created with basic configuration
 #[tokio::test]

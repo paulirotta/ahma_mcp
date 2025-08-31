@@ -41,6 +41,7 @@ This document outlines the high-level requirements for `ahma_mcp`, a universal a
 ## 6. Performance and Reliability
 
 - **R6.1**: The system shall use a high-performance shell pool architecture to minimize command startup latency.
+- **R6.5**: Provide clear documentation and examples for configuring VS Code MCP with absolute paths and using a pre-built release binary.
 - **R6.2**: Operations shall be isolated to prevent interference between concurrent commands.
 - **R6.3**: The system shall provide comprehensive error handling and recovery mechanisms.
 - **R6.4**: Resource usage shall be optimized to handle multiple concurrent operations efficiently.
@@ -50,3 +51,8 @@ This document outlines the high-level requirements for `ahma_mcp`, a universal a
 - **R7.1**: The architecture shall be modular and extensible to support future adaptation of web APIs and other tool types.
 - **R7.2**: The system shall provide clear interfaces for adding new discovery mechanisms and output parsers.
 - **R7.3**: Tool hint generation shall be pluggable to allow for domain-specific customization.
+
+## 8. Cargo Command Parity (with async_cargo_mcp)
+
+- Core: build, run, test, check, clean, doc, add, remove, update, fetch, install, search, tree, version, rustc, metadata.
+- Optional (if installed): clippy, nextest, fmt, audit, upgrade, bump_version, bench.

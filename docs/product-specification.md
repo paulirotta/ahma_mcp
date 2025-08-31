@@ -18,6 +18,7 @@ This approach provides a consistent, powerful, and asynchronous bridge between A
 - **Intelligent AI Guidance**: Provides automatically generated, context-aware "tool hints" that guide AI agents toward concurrent thinking patterns instead of passive waiting.
 - **Self-Maintaining Configuration**: Automatically maintains user TOML configuration files with live examples of discovered commands and options, providing always-current customization templates.
 - **High-Performance Execution**: Uses a pre-warmed shell pool architecture for minimal command startup latency and optimal concurrent operation handling.
+  - Implementation note: A configurable ShellPoolManager maintains per-directory pools with health checks and idle cleanup (see `src/shell_pool.rs`).
 
 ## 2. Architecture
 
@@ -125,3 +126,16 @@ The system will use the following logic to avoid overwriting user changes:
 - **Web Tool Adaptation**: Extend the dynamic adaptation concept to web APIs by parsing OpenAPI/Swagger specifications.
 - **Interactive Tool Support**: Develop a mechanism for handling interactive commands that prompt for user input.
 - **Visual Operation Tracker**: A VS Code extension to provide a UI for monitoring active background operations.
+
+## 6. Developer Setup Notes
+
+- Build a release binary for use with VS Code MCP: `cargo build --release`.
+- Use absolute paths for `cwd`, `command`, and `args` in your `mcp.json`.
+- The shell pool is configurable via `ShellPoolConfig`; defaults aim for good latency with low resource use.
+
+## 7. Cargo Command Parity
+
+The server aims to expose (subject to `cargo --help` output on the host):
+
+- Core: build, run, test, check, clean, doc, add, remove, update, fetch, install, search, tree, version, rustc, metadata.
+- Optional (if installed): clippy, nextest, fmt, audit, upgrade, bump_version, bench.

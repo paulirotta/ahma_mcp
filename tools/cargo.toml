@@ -8,6 +8,7 @@ command = "cargo"
 enabled = true
 timeout_seconds = 300
 verbose = false
+synchronous = false # default behavior: async via shell pool; can be overridden per subcommand
 
 # AI guidance hints - customize these to improve AI interactions
 [hints]
@@ -39,15 +40,47 @@ workspace = "Apply command to all packages in workspace"
 # Override configurations for specific subcommands
 # Uncomment and customize as needed:
 
-# [overrides.test]
-# timeout_seconds = 600  # Tests might need more time
-# hints.primary = "Run project tests to verify functionality"
-# hints.wait_hint = "While tests run, review test coverage, plan additional test cases, or analyze failure patterns"
+[overrides.add]
+synchronous = true
+[overrides.remove]
+synchronous = true
+[overrides.update]
+synchronous = true
+[overrides.tree]
+synchronous = true
+[overrides.version]
+synchronous = true
+[overrides.metadata]
+synchronous = true
+[overrides.upgrade]
+synchronous = true
+[overrides.bump_version]
+synchronous = true
+[overrides.doc]
+synchronous = false
+[overrides.build]
+timeout_seconds = 300
+synchronous = false
+[overrides.test]
+timeout_seconds = 600
+synchronous = false
+[overrides.run]
+synchronous = false
+[overrides.bench]
+synchronous = false
+[overrides.fetch]
+synchronous = false
+[overrides.install]
+synchronous = false
+[overrides.rustc]
+synchronous = false
 
-# [overrides.build]
-# timeout_seconds = 300
-# hints.primary = "Compile the project and dependencies"
-# hints.parameters.release = "Enable optimizations for production builds"
+[overrides.test.hints]
+primary = "Run project tests to verify functionality"
+wait_hint = "While tests run, review test coverage, plan additional test cases, or analyze failure patterns"
+
+[overrides.build.hints]
+primary = "Compile the project and dependencies"
 
 # [overrides.add]
 # timeout_seconds = 60
@@ -55,6 +88,6 @@ workspace = "Apply command to all packages in workspace"
 # hints.usage = "cargo add <crate_name> [--features feat1,feat2] [--dev] [--build]"
 
 # Example of command-specific parameter overrides:
-# [overrides.run.parameters]
-# bin = "Specify which binary to run when multiple exist"
-# args = "Arguments to pass to the running binary (use -- to separate)"
+[overrides.run.parameters]
+bin = "Specify which binary to run when multiple exist"
+args = "Arguments to pass to the running binary (use -- to separate)"

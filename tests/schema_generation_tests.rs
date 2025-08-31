@@ -6,10 +6,10 @@
 use ahma_mcp::cli_parser::{CliOption, CliStructure, CliSubcommand};
 use ahma_mcp::{Adapter, Config, McpSchemaGenerator};
 use anyhow::Result;
+use common::test_project::{TestProjectOptions, create_test_project};
 use serde_json::json;
 
 mod common;
-use common::test_project::{TestProjectOptions, create_test_project};
 
 /// Test basic schema generation for a tool without subcommands
 #[tokio::test]
