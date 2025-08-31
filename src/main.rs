@@ -40,14 +40,17 @@
 //! 7. `service.start_server()` is awaited, running the server indefinitely until it
 //!    is shut down.
 
+use ahma_mcp::{
+    adapter::{Adapter, ExecutionMode},
+    config::Config,
+    mcp_service::AhmaMcpService,
+};
 use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{debug, error, info, instrument};
 use tracing_subscriber::EnvFilter;
-
-use ahma_mcp::{adapter::Adapter, config::Config, mcp_service::AhmaMcpService};
 
 /// Ahma MCP Server: A generic, config-driven adapter for CLI tools.
 #[derive(Parser, Debug)]
@@ -145,16 +148,29 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     // Initialize adapter
     let adapter = Adapter::with_timeout(cli.synchronous, cli.timeout)?;
 
-    // Parse tool name to get base command and subcommand
+    // Load the specific tool's config to check for sync override
     let parts: Vec<&str> = tool_name.split('_').collect();
     if parts.len() < 2 {
         anyhow::bail!("Invalid tool name format. Expected 'tool_subcommand'.");
     }
     let base_tool = parts[0];
-    let subcommand = parts[1..].join("_");
+    let subcommand_name = parts[1..].join("_");
+
+    let config = Config::load_tool_config(base_tool)?;
+    let subcommand_config = config
+        .subcommand
+        .iter()
+        .find(|sc| sc.name == subcommand_name)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Subcommand '{}' not found for tool '{}'",
+                subcommand_name,
+                base_tool
+            )
+        })?;
 
     // Construct arguments
-    let mut cmd_args = vec![subcommand];
+    let mut cmd_args = vec![subcommand_name.clone()];
     let mut raw_args = Vec::new();
     let mut working_directory: Option<String> = None;
 
@@ -178,18 +194,35 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
             .map(|p| p.to_string_lossy().into_owned())
     });
 
+    // CLI mode is always synchronous in its behavior, but we respect the config
+    // to decide *how* it runs. However, for the user, it's a blocking call.
+    let exec_mode = if cli.synchronous || subcommand_config.synchronous.unwrap_or(false) {
+        ExecutionMode::Synchronous
+    } else {
+        // In CLI mode, even "async" commands should be awaited.
+        // We can treat it as synchronous from the user's perspective.
+        ExecutionMode::Synchronous
+    };
+
     // Execute the tool
     let result = adapter
         .execute_tool_in_dir(
             base_tool,
             cmd_args.iter().map(|s| s.to_string()).collect(),
             final_working_dir,
+            exec_mode,
+            None, // No hints in CLI mode
         )
         .await;
 
     match result {
         Ok(output) => {
-            println!("{}", output);
+            // Extract and print the text content from the result
+            for content in output.content {
+                if let rmcp::model::RawContent::Text(text) = content.raw {
+                    println!("{}", text.text);
+                }
+            }
             Ok(())
         }
         Err(e) => {

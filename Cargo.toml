@@ -5,6 +5,7 @@ edition = "2024" # AI, do not change
 authors = ["Paul Houghton <paulirotta@gmail.com>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
+resolver = "3"
 
 [dependencies]
 anyhow = "1.0.99"

@@ -73,6 +73,10 @@ pub struct Subcommand {
     /// A list of options (flags) that the subcommand accepts.
     #[serde(default)]
     pub options: Vec<CliOption>,
+
+    /// If true, this subcommand will always run synchronously.
+    #[serde(default)]
+    pub synchronous: Option<bool>,
 }
 
 /// Defines a single command-line option for a subcommand.
