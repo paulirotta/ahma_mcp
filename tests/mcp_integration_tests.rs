@@ -76,6 +76,7 @@ fn create_test_configs() -> Vec<(String, Config)> {
                 type_: "string".to_string(),
                 description: "Message to echo".to_string(),
             }],
+            args: vec![],
             synchronous: Some(true), // Explicitly synchronous for testing
         }],
         hints: None,

@@ -89,7 +89,7 @@ impl Adapter {
     pub async fn execute_tool_in_dir(
         &self,
         command: &str,
-        args: Vec<String>,
+        mut args: Vec<String>,
         working_directory: Option<String>,
         mode: ExecutionMode,
         hints: Option<HashMap<String, String>>,
@@ -104,7 +104,7 @@ impl Adapter {
                 .await?;
             Ok(CallToolResult::success(vec![Content::text(result)]))
         } else {
-            self.execute_async_in_dir(command, &args, working_directory.as_deref(), hints)
+            self.execute_async_in_dir(command, &mut args, working_directory.as_deref(), hints)
                 .await
         }
     }
@@ -144,7 +144,7 @@ impl Adapter {
     async fn execute_async_in_dir(
         &self,
         command: &str,
-        args: &[String],
+        args: &mut Vec<String>,
         working_directory: Option<&str>,
         hints: Option<HashMap<String, String>>,
     ) -> Result<CallToolResult> {
@@ -153,13 +153,12 @@ impl Adapter {
         // If we have a working directory and shell pooling is enabled, use it.
         if let Some(dir) = working_directory {
             if let Some(mut shell) = self.shell_pool.get_shell(dir).await {
+                let mut command_parts = vec![command.to_string()];
+                command_parts.append(args);
+
                 let shell_cmd = ShellCommand {
                     id: op_id.clone(),
-                    command: [command]
-                        .iter()
-                        .map(|s| s.to_string())
-                        .chain(args.iter().cloned())
-                        .collect(),
+                    command: command_parts,
                     working_dir: dir.to_string(),
                     timeout_ms: self.timeout_secs * 1000,
                 };

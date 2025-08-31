@@ -168,10 +168,10 @@ impl AhmaMcpService {
 
     /// A unified argument parser to convert MCP JSON arguments into a command-line vector.
     fn parse_arguments(
-        subcommand: &str,
+        subcommand_config: &crate::config::Subcommand,
         arguments: Value,
     ) -> Result<(Vec<String>, Option<String>), McpError> {
-        let mut cmd_args = vec![subcommand.to_string()];
+        let mut cmd_args = vec![subcommand_config.name.clone()];
         let working_dir: Option<String>;
 
         if let Value::Object(mut args_map) = arguments {
@@ -180,12 +180,16 @@ impl AhmaMcpService {
                 .remove("working_directory")
                 .and_then(|v| v.as_str().map(String::from));
 
-            // Extract raw `args` next
-            let mut raw_args = Vec::new();
+            // Extract and append predefined raw `args` from config
+            if !subcommand_config.args.is_empty() {
+                cmd_args.extend(subcommand_config.args.clone());
+            }
+
+            // Extract raw `args` from the call next
             if let Some(Value::Array(args_vec)) = args_map.remove("args") {
                 for v in args_vec {
                     if let Some(s) = v.as_str() {
-                        raw_args.push(s.to_string());
+                        cmd_args.push(s.to_string());
                     }
                 }
             }
@@ -227,9 +231,6 @@ impl AhmaMcpService {
                     }
                 }
             }
-
-            // Append raw args at the end
-            cmd_args.extend(raw_args);
         } else {
             return Err(McpError::invalid_params(
                 "invalid_arguments_object",
@@ -370,7 +371,7 @@ impl ServerHandler for AhmaMcpService {
             })?;
 
         let (cmd_args, working_dir) = Self::parse_arguments(
-            &subcommand_name,
+            subcommand_config,
             Value::Object(arguments.unwrap_or_default()),
         )?;
 

@@ -13,8 +13,6 @@ pub struct TestProjectOptions {
     pub prefix: Option<String>,
     /// Whether to create a Cargo project structure
     pub with_cargo: bool,
-    /// Whether to create a git repository
-    pub with_git: bool,
     /// Whether to create test files for sed operations
     pub with_text_files: bool,
     /// Whether to include tool configuration files
@@ -41,10 +39,6 @@ pub async fn create_test_project(opts: TestProjectOptions) -> Result<TempDir> {
     // Create directory structure based on options
     if opts.with_cargo {
         create_cargo_structure(project_path).await?;
-    }
-
-    if opts.with_git {
-        create_git_structure(project_path).await?;
     }
 
     if opts.with_text_files {
@@ -91,44 +85,6 @@ mod tests {
     Ok(())
 }
 
-/// Initialize a git repository in the project
-async fn create_git_structure(project_path: &Path) -> Result<()> {
-    use tokio::process::Command;
-
-    // Initialize git repo
-    let output = Command::new("git")
-        .arg("init")
-        .current_dir(project_path)
-        .output()
-        .await?;
-
-    if !output.status.success() {
-        return Err(anyhow::anyhow!("Failed to init git repository"));
-    }
-
-    // Create .gitignore
-    let gitignore = r#"target/
-Cargo.lock
-.DS_Store
-"#;
-    fs::write(project_path.join(".gitignore"), gitignore).await?;
-
-    // Create initial commit
-    Command::new("git")
-        .args(["add", "."])
-        .current_dir(project_path)
-        .output()
-        .await?;
-
-    Command::new("git")
-        .args(["commit", "-m", "Initial commit"])
-        .current_dir(project_path)
-        .output()
-        .await?;
-
-    Ok(())
-}
-
 /// Create text files for sed operations testing
 async fn create_text_files(project_path: &Path) -> Result<()> {
     let sample_text = r#"This is line 1
@@ -165,18 +121,6 @@ primary = "HTTP client for making requests"
 usage = "curl https://example.com"
 "#;
     fs::write(tools_dir.join("curl.toml"), curl_config).await?;
-
-    // Create a basic git config (git should be available on most systems)
-    let git_config = r#"tool_name = "git"
-command = "git"
-enabled = true
-timeout_seconds = 30
-
-[hints]
-primary = "Git version control system"
-usage = "git status, git add, git commit"
-"#;
-    fs::write(tools_dir.join("git.toml"), git_config).await?;
     Ok(())
 }
 
@@ -193,19 +137,9 @@ pub async fn create_cargo_project() -> Result<TempDir> {
     .await
 }
 
-pub async fn create_git_project() -> Result<TempDir> {
-    create_test_project(TestProjectOptions {
-        with_git: true,
-        with_text_files: true,
-        ..Default::default()
-    })
-    .await
-}
-
 pub async fn create_full_test_project() -> Result<TempDir> {
     create_test_project(TestProjectOptions {
         with_cargo: true,
-        with_git: true,
         with_text_files: true,
         with_tool_configs: true,
         ..Default::default()
