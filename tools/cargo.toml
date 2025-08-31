@@ -1,93 +1,93 @@
 # Cargo Tool Configuration for Ahma MCP
-# This configuration adapts the `cargo` command for AI assistant use
-# When ahma_mcp starts, it will automatically discover cargo's capabilities 
-# by parsing `cargo --help` output and update this file with discovered commands
-
-tool_name = "cargo"
-command = "cargo" 
+command = "cargo"
 enabled = true
-timeout_seconds = 300
-verbose = false
-synchronous = false # default behavior: async via shell pool; can be overridden per subcommand
 
-# AI guidance hints - customize these to improve AI interactions
+# Common cargo subcommands
+[[subcommand]]
+name = "build"
+description = "Build the project"
+[[subcommand.options]]
+name = "release"
+type = "boolean"
+description = "Build with optimizations enabled"
+[[subcommand.options]]
+name = "features"
+type = "string"
+description = "Space-separated list of features to enable"
+[[subcommand.options]]
+name = "workspace"
+type = "boolean"
+description = "Build all packages in the workspace"
+
+[[subcommand]]
+name = "test"
+description = "Run tests"
+[[subcommand.options]]
+name = "release"
+type = "boolean" 
+description = "Run tests with optimizations"
+[[subcommand.options]]
+name = "workspace"
+type = "boolean"
+description = "Run tests for all packages in workspace"
+
+[[subcommand]]
+name = "check"
+description = "Check code without building"
+[[subcommand.options]]
+name = "release"
+type = "boolean"
+description = "Check with release profile"
+[[subcommand.options]]
+name = "workspace"
+type = "boolean"
+description = "Check all packages in workspace"
+
+[[subcommand]]
+name = "clippy"
+description = "Run Clippy linter"
+[[subcommand.options]]
+name = "fix"
+type = "boolean"
+description = "Automatically fix warnings"
+[[subcommand.options]]
+name = "allow-dirty"
+type = "boolean"
+description = "Allow fixing when working directory is dirty"
+
+[[subcommand]]
+name = "fmt" 
+description = "Format code using rustfmt"
+[[subcommand.options]]
+name = "check"
+type = "boolean"
+description = "Check if files are formatted without changing them"
+
+[[subcommand]]
+name = "run"
+description = "Run the project"
+[[subcommand.options]]
+name = "release"
+type = "boolean"
+description = "Run with optimizations"
+[[subcommand.options]]
+name = "bin"
+type = "string"
+description = "Name of the binary to run"
+
+[[subcommand]]
+name = "doc"
+description = "Generate documentation"
+[[subcommand.options]]
+name = "no-deps"
+type = "boolean"
+description = "Don't build documentation for dependencies"
+[[subcommand.options]]
+name = "open"
+type = "boolean"
+description = "Open documentation in browser"
+
+# AI guidance hints
 [hints]
-# Primary hint shown when AI considers using cargo
-primary = "Cargo is Rust's build tool and package manager. Use it for building, testing, running, and managing Rust projects."
-
-# Usage examples for common operations
-usage = """
-Common cargo commands:
-- cargo build [--release] - Build the project
-- cargo test [test_name] - Run tests  
-- cargo run [--bin name] -- [args] - Run binary with arguments
-- cargo add <crate> - Add dependency to Cargo.toml
-- cargo check - Check code without building
-- cargo clippy - Run linter
-- cargo fmt - Format code
-"""
-
-# What the AI should think about during long operations
-wait_hint = "While cargo is running, consider: reviewing test results, planning next development steps, analyzing dependencies, or documenting findings."
-
-# Parameter-specific hints for better AI understanding
-[hints.parameters]
-release = "Use --release for optimized production builds (slower compile, faster runtime)"
-target = "Specify target architecture for cross-compilation"
-features = "Enable specific crate features defined in Cargo.toml"
-workspace = "Apply command to all packages in workspace"
-
-# Override configurations for specific subcommands
-# Uncomment and customize as needed:
-
-[overrides.add]
-synchronous = true
-[overrides.remove]
-synchronous = true
-[overrides.update]
-synchronous = true
-[overrides.tree]
-synchronous = true
-[overrides.version]
-synchronous = true
-[overrides.metadata]
-synchronous = true
-[overrides.upgrade]
-synchronous = true
-[overrides.bump_version]
-synchronous = true
-[overrides.doc]
-synchronous = false
-[overrides.build]
-timeout_seconds = 300
-synchronous = false
-[overrides.test]
-timeout_seconds = 600
-synchronous = false
-[overrides.run]
-synchronous = false
-[overrides.bench]
-synchronous = false
-[overrides.fetch]
-synchronous = false
-[overrides.install]
-synchronous = false
-[overrides.rustc]
-synchronous = false
-
-[overrides.test.hints]
-primary = "Run project tests to verify functionality"
-wait_hint = "While tests run, review test coverage, plan additional test cases, or analyze failure patterns"
-
-[overrides.build.hints]
-primary = "Compile the project and dependencies"
-
-# [overrides.add]
-# timeout_seconds = 60
-# hints.primary = "Add a new dependency to the project"
-# hints.usage = "cargo add <crate_name> [--features feat1,feat2] [--dev] [--build]"
-
-# Example of command-specific parameter overrides:
-[overrides.run.parameters]
-bin = "Specify which binary to run when multiple exist"
-args = "Arguments to pass to the running binary (use -- to separate)"
+primary = "Cargo is Rust's build tool and package manager"
+usage = "Common commands: build, test, run, check, clippy, fmt"

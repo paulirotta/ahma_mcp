@@ -1,6 +1,21 @@
 pub mod test_project;
 pub mod test_utils;
 
+use ahma_mcp::adapter::Adapter;
+use anyhow::Result;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+/// Get the workspace directory for tests
+pub fn get_workspace_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+}
+
+/// Create a test config for integration tests
+pub fn create_test_config(_workspace_dir: &PathBuf) -> Result<Arc<Adapter>> {
+    Adapter::with_timeout(false, 30).map(Arc::new)
+}
+
 /// Strip ANSI escape sequences so tests are robust across local vs CI where
 /// colored output (stderr merge) may contain escape codes that break simple
 /// substring assertions.

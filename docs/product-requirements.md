@@ -1,4 +1,4 @@
-# Product Requirements for Ahma MCP
+# Product Requiremen- **R3.3**: Based on the discovered information, the system shall dynamically generate a dedicated MCP tool for each discovered subcommand (e.g., `cargo_build`, `cargo_test`). This provides a clear and direct interface for the AI client.s for Ahma MCP
 
 This document outlines the high-level requirements for `ahma_mcp`, a universal adapter for command-line tools to be used with AI via the Model Context Protocol (MCP).
 

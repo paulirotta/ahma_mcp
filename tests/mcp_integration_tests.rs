@@ -1,194 +1,160 @@
-//! Advanced integration tests for ahma_mcp MCP tool loading and configuration
-//! Tests the actual tool loading, configuration parsing, and schema generation
+//! Integration tests for the ahma_mcp service.
+mod common;
 
-use ahma_mcp::{adapter::Adapter, cli_parser::CliParser, config::Config};
+use ahma_mcp::config::Config;
+use ahma_mcp::mcp_service::AhmaMcpService;
 use anyhow::Result;
-use tempfile::TempDir;
-use tokio::fs;
+use common::{create_test_config, get_workspace_dir};
+use rmcp::model::{CallToolRequestParam, NumberOrString};
+use rmcp::service::{RequestContext, RoleServer, Service};
+use rmcp::{ErrorData as RmcpError, ServerHandler, model as m, service};
+use serde_json::Map;
+use std::borrow::Cow;
+use std::future::Future;
+use tokio::io::duplex;
+use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
-/// Test MCP tool loading and configuration
-#[tokio::test]
-async fn test_tool_configuration_loading() -> Result<()> {
-    // Create a temporary directory with tool configurations
-    let temp_dir = TempDir::new()?;
-    let tools_dir = temp_dir.path().join("tools");
-    fs::create_dir_all(&tools_dir).await?;
+// A dummy service that does nothing, just to get a Peer instance.
+#[derive(Clone)]
+struct DummyService;
 
-    // Create a test tool configuration
-    let echo_config = r#"
-tool_name = "echo"
-command = "echo"
-enabled = true
-timeout_seconds = 30
-
-[hints]
-primary = "Simple command to output text"
-usage = "echo 'Hello World'"
-default = "Use echo to output text and test command execution"
-
-[hints.custom]
-help = "Use 'echo --help' to see options"
-"#;
-
-    fs::write(tools_dir.join("echo.toml"), echo_config).await?;
-
-    // Test loading the configuration
-    let config = Config::load_from_file(tools_dir.join("echo.toml"))?;
-    assert_eq!(config.tool_name, "echo");
-    assert_eq!(config.get_command(), "echo");
-    assert!(config.is_enabled());
-    assert_eq!(config.get_timeout_seconds(), 30);
-
-    // Test hints
-    assert!(config.get_hint(None).is_some());
-    assert!(config.get_hint(Some("help")).is_some());
-
-    println!("✅ Tool configuration loading test passed");
-    Ok(())
-}
-
-/// Test CLI parsing for actual tools
-#[tokio::test]
-async fn test_cli_parsing_real_tools() -> Result<()> {
-    let parser = CliParser::new()?;
-
-    // Test parsing echo (should work on all systems)
-    match parser.get_help_output("echo") {
-        Ok(help_output) => {
-            let structure = parser.parse_help_output("echo", &help_output)?;
-            assert_eq!(structure.tool_name, "echo");
-            println!("✅ Echo CLI parsing test passed");
-        }
-        Err(e) => {
-            println!("⚠️ Echo not available for parsing test: {}", e);
-        }
+impl Service<RoleServer> for DummyService {
+    async fn handle_request(
+        &self,
+        _request: m::ClientRequest,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<m::ServerResult, RmcpError> {
+        unimplemented!()
     }
 
-    // Test parsing git if available
-    match parser.get_help_output("git") {
-        Ok(help_output) => {
-            let structure = parser.parse_help_output("git", &help_output)?;
-            assert_eq!(structure.tool_name, "git");
-            // Git should have subcommands
-            assert!(
-                !structure.subcommands.is_empty(),
-                "Git should have subcommands"
-            );
-            println!("✅ Git CLI parsing test passed");
-        }
-        Err(e) => {
-            println!("⚠️ Git not available for parsing test: {}", e);
-        }
+    async fn handle_notification(
+        &self,
+        _notification: m::ClientNotification,
+        _context: rmcp::service::NotificationContext<RoleServer>,
+    ) -> Result<(), RmcpError> {
+        Ok(())
     }
 
-    Ok(())
+    fn get_info(&self) -> <RoleServer as rmcp::service::ServiceRole>::Info {
+        unimplemented!()
+    }
 }
 
-/// Test adapter initialization and tool addition
-#[tokio::test]
-async fn test_adapter_tool_management() -> Result<()> {
-    let mut adapter = Adapter::new(true)?; // Synchronous mode for testing
+fn dummy_peer() -> (rmcp::service::Peer<RoleServer>, tokio::task::JoinHandle<()>) {
+    let (_client_transport, server_transport) = duplex(1024);
 
-    // Create a simple config for testing
-    let config = Config {
-        tool_name: "echo".to_string(),
-        command: Some("echo".to_string()),
-        enabled: Some(true),
-        timeout_seconds: Some(30),
-        verbose: Some(false),
+    let running_service = service::serve_directly(DummyService, server_transport, None);
+    let peer = running_service.peer().clone();
+
+    let handle = tokio::spawn(async move {
+        let _ = running_service.waiting().await;
+    });
+
+    (peer, handle)
+}
+
+fn dummy_request_context() -> (RequestContext<RoleServer>, tokio::task::JoinHandle<()>) {
+    let (peer, handle) = dummy_peer();
+    let request_context = RequestContext {
+        id: NumberOrString::String(Uuid::new_v4().to_string().into()),
+        peer,
+        ct: CancellationToken::new(),
+        meta: Default::default(),
+        extensions: Default::default(),
+    };
+    (request_context, handle)
+}
+
+fn create_test_configs() -> Vec<(String, Config)> {
+    let echo_config = Config {
+        command: "echo".to_string(),
+        subcommand: vec![ahma_mcp::config::Subcommand {
+            name: "text".to_string(),
+            description: "Echo text to output".to_string(),
+            options: vec![ahma_mcp::config::CliOption {
+                name: "message".to_string(),
+                type_: "string".to_string(),
+                description: "Message to echo".to_string(),
+            }],
+        }],
         hints: None,
-        overrides: None,
-        synchronous: Some(false),
+        enabled: Some(true),
     };
 
-    // Test adding a tool (this tests CLI parsing integration)
-    match adapter.add_tool("echo", config).await {
-        Ok(()) => {
-            println!("✅ Tool addition test passed");
-        }
-        Err(e) => {
-            println!("⚠️ Tool addition failed (echo may not be available): {}", e);
-        }
-    }
+    vec![("echo".to_string(), echo_config)]
+}
 
-    // Test getting tool schemas
-    let schemas = adapter.get_tool_schemas()?;
-    println!("Generated {} tool schemas", schemas.len());
+#[tokio::test]
+async fn test_service_creation() -> Result<()> {
+    let _workspace_dir = get_workspace_dir();
+    let adapter = create_test_config(&_workspace_dir)?;
+    let configs = create_test_configs();
+
+    let _service = AhmaMcpService::new(adapter, configs).await?;
+
+    // Just verify it was created successfully
+    assert!(true, "Service creation should succeed");
 
     Ok(())
 }
 
-/// Test tool execution through adapter
 #[tokio::test]
-async fn test_tool_execution() -> Result<()> {
-    let mut adapter = Adapter::new(true)?; // Synchronous mode
+async fn test_list_tools() -> Result<()> {
+    let _workspace_dir = get_workspace_dir();
+    let adapter = create_test_config(&_workspace_dir)?;
+    let configs = create_test_configs();
 
-    // Add echo tool
-    let config = Config {
-        tool_name: "echo".to_string(),
-        command: Some("echo".to_string()),
-        enabled: Some(true),
-        timeout_seconds: Some(30),
-        verbose: Some(false),
-        hints: None,
-        overrides: None,
-        synchronous: Some(false),
+    let service = AhmaMcpService::new(adapter, configs).await?;
+    let (request_context, handle) = dummy_request_context();
+
+    let result = service.list_tools(None, request_context).await?;
+
+    handle.abort();
+
+    // Should have echo_text tool
+    assert_eq!(result.tools.len(), 1);
+    let tool_names: Vec<_> = result.tools.iter().map(|t| t.name.as_ref()).collect();
+    assert!(tool_names.contains(&"echo_text"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_call_tool_basic() -> Result<()> {
+    let workspace_dir = get_workspace_dir();
+    let adapter = create_test_config(&workspace_dir)?;
+    let configs = create_test_configs();
+
+    let service = AhmaMcpService::new(adapter, configs).await?;
+    let (request_context, handle) = dummy_request_context();
+
+    let mut params = Map::new();
+    params.insert(
+        "working_directory".to_string(),
+        serde_json::Value::String(workspace_dir.to_string_lossy().to_string()),
+    );
+    params.insert(
+        "message".to_string(),
+        serde_json::Value::String("Hello from test".to_string()),
+    );
+
+    let call_param = CallToolRequestParam {
+        name: Cow::Borrowed("echo_text"),
+        arguments: Some(params),
     };
 
-    match adapter.add_tool("echo", config).await {
-        Ok(()) => {
-            // Test executing the tool
-            match adapter
-                .execute_tool("echo", vec!["Hello from adapter!".to_string()])
-                .await
-            {
-                Ok(output) => {
-                    assert!(output.contains("Hello from adapter!"));
-                    println!("✅ Tool execution test passed");
-                }
-                Err(e) => {
-                    println!("⚠️ Tool execution failed: {}", e);
-                }
-            }
-        }
-        Err(e) => {
-            println!("⚠️ Tool addition failed: {}", e);
-        }
+    let result = service.call_tool(call_param, request_context).await?;
+
+    handle.abort();
+
+    // The result should contain our echo message
+    assert!(!result.content.is_empty());
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text()
+    {
+        assert!(text_content.text.contains("Hello from test"));
     }
-
-    Ok(())
-}
-
-/// Test loading tools from tools directory like the real server does
-#[tokio::test]
-async fn test_tools_directory_loading() -> Result<()> {
-    // Change to the project root where tools/ directory exists
-    let original_dir = std::env::current_dir()?;
-    let project_root = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".into());
-    std::env::set_current_dir(&project_root)?;
-
-    let mut adapter = Adapter::new(true)?;
-
-    // This should load all tools from the tools/ directory
-    match adapter.initialize().await {
-        Ok(()) => {
-            let schemas = adapter.get_tool_schemas()?;
-            println!("✅ Loaded {} tools from tools directory", schemas.len());
-
-            // Should have loaded at least some tools
-            if !schemas.is_empty() {
-                println!("✅ Tools directory loading test passed");
-            } else {
-                println!("⚠️ No tools loaded from directory");
-            }
-        }
-        Err(e) => {
-            println!("⚠️ Tools directory loading failed: {}", e);
-        }
-    }
-
-    // Restore original directory
-    std::env::set_current_dir(original_dir)?;
 
     Ok(())
 }
