@@ -1,4 +1,44 @@
-//! The main entry point for the Ahma MCP server.
+//! # Ahma MCP Server Executable
+//!
+//! This is the main entry point for the `ahma_mcp` server application. It is responsible
+//! for parsing command-line arguments, initializing the logging and configuration,
+//! loading all the tool definitions, and starting the MCP server.
+//!
+//! ## Responsibilities
+//!
+//! - **Command-Line Argument Parsing**: Uses the `clap` crate to define and parse CLI
+//!   arguments, such as the path to the tools directory, a flag to force synchronous
+//!   operation, and the default command timeout.
+//!
+//! - **Logging Initialization**: Sets up the `tracing_subscriber` to provide structured
+//!   logging. The log level can be controlled via the `--debug` flag.
+//!
+//! - **Tool Loading and Parsing**:
+//!   1. Scans the specified `tools` directory for `.toml` configuration files.
+//!   2. For each file, it loads the `Config` struct.
+//!   3. It then uses the `CliParser` to execute the tool's `--help` command and parse
+//!      the output into a `CliStructure`.
+//!   4. Any failures during loading or parsing are logged as errors.
+//!
+//! - **Service Initialization**:
+//!   1. Creates an `Adapter` instance, which will manage all tool execution.
+//!   2. Initializes the `AhmaMcpService` with the adapter and the collection of loaded
+//!      tool configurations and structures.
+//!
+//! - **Server Startup**: Calls `start_server()` on the `AhmaMcpService` instance, which
+//!   binds to the appropriate address and begins listening for MCP client connections.
+//!
+//! ## Execution Flow
+//!
+//! 1. `main()` is invoked.
+//! 2. `Cli::parse()` reads and validates command-line arguments.
+//! 3. `tracing_subscriber` is configured.
+//! 4. An `Adapter` is created.
+//! 5. The `tools` directory is scanned, and each `.toml` file is processed to build a
+//!    collection of `(tool_name, config, cli_structure)` tuples.
+//! 6. `AhmaMcpService::new()` is called to create the service instance.
+//! 7. `service.start_server()` is awaited, running the server indefinitely until it
+//!    is shut down.
 
 use anyhow::Result;
 use clap::Parser;

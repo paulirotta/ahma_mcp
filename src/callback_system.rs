@@ -1,8 +1,62 @@
-//! Asynchronous callback system for monitoring operation progress
+//! # Asynchronous Callback System for Operation Monitoring
 //!
-//! This module provides a flexible callback architecture for tracking the progress of
-//! long-running operations. It enables real-time progress updates, output streaming,
-//! and completion notifications through various callback mechanisms.
+//! This module defines a flexible, asynchronous callback system designed for monitoring
+//! the progress of long-running operations. It provides a structured way to report
+//! status updates, stream output, and handle completion or failure notifications.
+//!
+//! ## Core Components
+//!
+//! * **`ProgressUpdate`**: An enum that represents all possible states and outputs of an
+//!   operation. It includes variants for start, progress, output lines (stdout/stderr),
+//!   completion, failure, and cancellation. This standardized structure allows consumers
+//!   to easily parse and react to operation events.
+//!
+//! * **`CallbackSender`**: An `async_trait` that defines the contract for sending
+//!   `ProgressUpdate`s. This abstraction allows for different callback implementations
+//!   (e.g., sending updates over a channel, logging to the console, or pushing to a
+//!   WebSocket) without changing the core operation logic.
+//!
+//! * **`CallbackError`**: An enum for errors that can occur during the callback process,
+//!   such as a disconnected receiver or a timeout.
+//!
+//! ## Implementations
+//!
+//! The module provides several concrete implementations of `CallbackSender`:
+//!
+//! * **`ChannelCallbackSender`**: The primary implementation for concurrent applications.
+//!   It sends progress updates through a `tokio::sync::mpsc` channel, allowing a separate
+//!   task to listen for and process these updates in a non-blocking manner. It also
+//!   integrates with `tokio_util::sync::CancellationToken` to support cancellation.
+//!
+//! * **`NoOpCallbackSender`**: A "dummy" implementation that does nothing. It is useful
+//!   in contexts where progress reporting is not needed, avoiding the overhead of
+//!   setting up channels or other communication mechanisms.
+//!
+//! * **`LoggingCallbackSender`**: A simple implementation that logs every progress update
+//!   using the `tracing` crate. This is useful for debugging and for operations where
+//!   detailed, real-time console output is desired.
+//!
+//! ## Usage Pattern
+//!
+//! 1. **Creation**: Before starting an operation, create a `CallbackSender` instance.
+//!    The `channel_callback` utility function is often used to get both the sender
+//!    and the receiver part of a channel.
+//!
+//! 2. **Execution**: Pass the `CallbackSender` (usually as a `Box<dyn CallbackSender>`)
+//!    to the function that performs the long-running operation.
+//!
+//! 3. **Reporting**: Inside the operation, periodically call `callback.send_progress(...)`
+//!    with the appropriate `ProgressUpdate` variant to report status. The operation
+//!    should also check `callback.should_cancel().await` to gracefully terminate if a
+//!    cancellation request is received.
+//!
+//! 4. **Listening**: A separate task (e.g., an MCP service handler) listens on the
+//!    receiver end of the channel, processing each `ProgressUpdate` as it arrives and
+//!    forwarding the information to the client.
+//!
+//! This decoupled architecture ensures that the core business logic of an operation is
+//! separate from the details of how its progress is reported, enhancing modularity and
+//! testability.
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};

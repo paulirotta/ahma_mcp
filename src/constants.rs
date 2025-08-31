@@ -1,4 +1,39 @@
-//! Centralized constants for LLM-facing strings, guidance, and templates.
+//! # Standardized Constants and Templates
+//!
+//! This module serves as a centralized repository for constants, particularly for strings
+//! and templates that are presented to the AI agent. Centralizing these helps ensure
+//! consistency in the guidance and instructions provided to the agent across different
+//! parts of the application.
+//!
+//! ## Key Constants
+//!
+//! - **`ASYNC_ADDENDUM`**: A standard piece of text appended to the description of any tool
+//!   that supports asynchronous execution. It instructs the agent on the correct protocol
+//!   for handling async operations, emphasizing the use of `wait` and `operation_ids`.
+//!
+//! - **`SYNC_ADDENDUM`**: A simpler addendum for tools that are synchronous or very fast,
+//!   reminding the agent to use the provided MCP tools instead of raw shell commands.
+//!
+//! ## Guidance Templates
+//!
+//! These templates are used to generate dynamic, context-aware hints for the AI agent to
+//! improve its performance and efficiency.
+//!
+//! - **`TOOL_HINT_TEMPLATE`**: A detailed message displayed when an asynchronous operation
+//!   is initiated. It guides the agent on how to effectively multitask while waiting for
+//!   the operation to complete, promoting non-blocking workflows.
+//!
+//! - **`CONCURRENCY_HINT_TEMPLATE`**: A hint triggered when the agent appears to be waiting
+//!   prematurely for an operation to finish, encouraging it to perform other tasks in
+//!   parallel to improve efficiency.
+//!
+//! - **`STATUS_POLLING_HINT_TEMPLATE`**: A message that detects when the agent is repeatedly
+//!   checking the status of an operation. It suggests a more efficient pattern, such as
+//!   using `wait` with notifications, to avoid unnecessary polling.
+//!
+//! By using these standardized templates, the system can provide consistent, high-quality
+//! feedback to the agent, helping it learn and adopt best practices for interacting with
+//! the asynchronous tool server.
 
 /// Standardized addendum for async-capable tools' descriptions used in documentation and help text.
 pub const ASYNC_ADDENDUM: &str = "Always use ahma_mcp MCP tools; do not run cargo in a terminal. For operations >1s, set enable_async_notification=true and call mcp_async_cargo_m_wait with specific operation_ids to collect results.";

@@ -1,3 +1,46 @@
+//! # Command-Line Interface (CLI) Parser
+//!
+//! This module is responsible for parsing the `--help` output of command-line tools to
+//! dynamically understand their structure. It uses regular expressions and section-based
+//! parsing to extract information about global options, subcommands, and their respective
+//! descriptions.
+//!
+//! ## Core Components
+//!
+//! - **`CliParser`**: The main struct that contains the parsing logic. It is configured with
+//!   regex patterns to identify and extract CLI elements from text.
+//!
+//! - **`CliStructure`**: The primary output of the parser. It's a structured representation
+//!   of a tool's interface, containing its name, global options, and a list of subcommands.
+//!
+//! - **`CliOption`** and **`CliSubcommand`**: Data structures that represent individual
+//!   options (like `--verbose` or `-v`) and subcommands (like `git commit`).
+//!
+//! ## How It Works
+//!
+//! 1. **Fetching Help Output**: The `get_help_output` function executes the target command
+//!    with a `--help` (or `-h`) flag to get its help text.
+//!
+//! 2. **Section-Based Parsing**: The `parse_help_output` method iterates through the lines
+//!    of the help text, identifying sections like "OPTIONS:", "SUBCOMMANDS:", or "COMMANDS:".
+//!
+//! 3. **Regex Matching**: Within each section, it applies specific regex patterns to parse
+//!    individual lines into `CliOption` or `CliSubcommand` structs. The regex is designed
+//!    to handle various common formats for documenting options and commands, including
+//!    aliases (e.g., `build, b`).
+//!
+//! 4. **Opportunistic Parsing**: For tools that don't use standard section headers (like `cargo`),
+//!    the parser attempts to identify subcommands and options opportunistically based on line
+//!    formatting.
+//!
+//! ## Purpose in the System
+//!
+//! The `CliParser` is a critical component of the `Adapter`. By converting unstructured help
+//! text into a `CliStructure`, it enables the `McpSchemaGenerator` to create accurate,
+//! machine-readable JSON schemas for any CLI tool defined in the `tools/` directory. This
+//! dynamic adaptation is what allows the server to be extended with new tools without
+//! requiring any changes to the Rust code.
+
 use anyhow::{Context, Result};
 use regex::Regex;
 use std::process::Command;

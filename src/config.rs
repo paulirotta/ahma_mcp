@@ -1,3 +1,43 @@
+//! # Tool Configuration Management
+//!
+//! This module defines the data structures and logic for managing the configuration of
+//! command-line tools. All tool configurations are loaded from `.toml` files located in
+//! the `tools/` directory. This approach allows for easy extension and modification of
+//! supported tools without altering the core server code.
+//!
+//! ## Core Data Structures
+//!
+//! - **`Config`**: The main struct representing the complete configuration for a single
+//!   tool. It includes the tool's name, the actual command to execute, and whether the
+//!   tool is enabled. It also contains nested structures for more granular control.
+//!
+//! - **`ToolHints`**: A collection of strings intended to provide guidance to an AI agent
+//!   on how to use the tool effectively. It includes hints for specific operations like
+//!   `build` and `test`, as well as custom hints for any subcommand.
+//!
+//! - **`CommandOverride`**: Allows for overriding default behaviors for specific subcommands.
+//!   For example, a `test` subcommand could be given a longer timeout or be forced to run
+//!   asynchronously, even if the tool's default is synchronous.
+//!
+//! ## Configuration Loading
+//!
+//! - The `load_from_file` function reads a specified TOML file and deserializes it into a
+//!   `Config` struct.
+//! - The `load_tool_config` helper function simplifies loading by constructing the path
+//!   to a tool's configuration file within the `tools/` directory.
+//!
+//! ## Key Features
+//!
+//! - **Declarative Tool Definition**: Tools are defined entirely through TOML, making the
+//!   system highly modular and easy to maintain.
+//! - **Hierarchical Configuration**: Settings can be applied globally (in `Config`), per
+//!   operation type (in `ToolHints`), or per specific subcommand (in `CommandOverride`),
+//!   providing a flexible and powerful configuration cascade.
+//! - **AI Guidance**: The `ToolHints` system is a key feature for improving the performance
+//!   of AI agents using the tools, providing them with contextual advice.
+//! - **Dynamic Behavior**: The server's behavior, such as whether a command runs
+//!   synchronously or asynchronously, can be controlled directly from the configuration files.
+
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

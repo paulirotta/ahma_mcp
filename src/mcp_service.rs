@@ -1,3 +1,56 @@
+//! # Ahma MCP Service Implementation
+//!
+//! This module contains the core implementation of the `ahma_mcp` server. The
+//! `AhmaMcpService` struct implements the `rmcp::ServerHandler` trait, making it the
+//! central point for handling all incoming MCP requests from a client.
+//!
+//! ## Core Components
+//!
+//! - **`AhmaMcpService`**: The main struct that holds the application's state, including
+//!   the `Adapter` for tool execution and a map of all loaded tool configurations
+//!   (`tools_config`).
+//!
+//! ## Key `ServerHandler` Trait Implementations
+//!
+//! - **`get_info()`**: Provides the client with initial information about the server,
+//!   including its name, version, and, most importantly, a set of `instructions`. These
+//!   instructions are crucial for guiding the AI agent on how to interact with this
+//!   specific server, explaining the tool naming convention (`<tool>_<subcommand>`),
+//!   the requirement for a `working_directory`, and how to use asynchronous execution.
+//!
+//! - **`list_tools()`**: This is the heart of the dynamic tool discovery mechanism. It
+//!   iterates through the `tools_config` map and generates a `Tool` definition for each
+//!   subcommand of each configured CLI tool.
+//!   - It constructs a unique `name` for each tool-subcommand pair (e.g., `cargo_build`).
+//!   - It generates a descriptive `description`, often enriching it with usage hints from
+//!     the configuration and special tips for potentially long-running commands.
+//!   - It calls `cli_options_to_schema` to generate the `input_schema` for the tool,
+//!     which defines the parameters the client can pass.
+//!
+//! - **`call_tool()`**: This method handles the execution of a tool.
+//!   - It parses the tool name (e.g., `cargo_build`) to identify the base tool (`cargo`)
+//!     and the command to run (`build`).
+//!   - It meticulously translates the incoming JSON `arguments` into a vector of
+//!     command-line arguments, handling boolean flags and valued options.
+//!   - It extracts the mandatory `working_directory` and any raw `args`.
+//!   - It then delegates the actual execution to `self.adapter.execute_tool_in_dir()`.
+//!   - Finally, it wraps the `Ok` result in a `CallToolResult::success` or maps the `Err`
+//!     to an appropriate `McpError`.
+//!
+//! ## Schema Generation (`cli_options_to_schema`)
+//!
+//! This helper function is responsible for creating the `input_schema` for a given tool.
+//! It converts a slice of `CliOption`s into a JSON schema `object`, defining the `type`
+//! and `description` for each parameter. Crucially, it also injects the common parameters
+//! required by the `ahma_mcp` server, such as `working_directory`, `args`, and the
+//! async-related flags, ensuring that every tool exposed by the server has a consistent
+//! interface for these core features.
+//!
+//! ## Server Startup
+//!
+//! The `start_server()` method provides a convenient way to launch the service, wiring it
+//! up to a standard I/O transport (`stdio`) and running it until completion.
+
 use crate::{
     adapter::Adapter,
     cli_parser::{CliOption, CliStructure},

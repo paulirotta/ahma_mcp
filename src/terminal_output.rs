@@ -1,7 +1,43 @@
-//! Terminal output formatting and display utilities
+//! # Terminal Output Formatting Utilities
 //!
-//! This module provides utilities for formatting command output for terminal display,
-//! including proper formatting, coloring, and JSON pretty-printing.
+//! This module provides a set of utilities for formatting and displaying command output
+//! in a human-readable format on the terminal. A key design principle here is that all
+//! human-readable output is written to `stderr`, while `stdout` is reserved exclusively
+//! for the machine-readable MCP (Machine-Checked Protocol) JSON transport. This separation
+//! is crucial for ensuring that the server can communicate with an MCP client correctly
+//! while still providing useful diagnostic information to a human operator observing
+//! the server's console.
+//!
+//! ## Core Components
+//!
+//! * **`TerminalOutput`**: A utility struct that encapsulates the formatting logic.
+//!
+//! ## Key Functions
+//!
+//! * **`display_result`**: Takes the details of a single operation (ID, command, description,
+//!   and content) and formats them into a structured, easy-to-read block on `stderr`.
+//!   It includes a header with the operation ID and metadata about the command.
+//!
+//! * **`display_wait_results`**: Specifically designed to display the results of a `wait`
+//!   command, which can return the output of multiple operations at once. It formats
+//!   each result individually and separates them with a clear visual divider.
+//!
+//! * **`format_content`**: This is the core formatting logic. It first attempts to parse
+//!   the input content as JSON. If successful, it pretty-prints the JSON with indentation,
+//!   making it much easier to read. If the content is not valid JSON, it performs basic
+//!   string cleanup, such as converting escaped newlines (`\\n`) and tabs (`\\t`) into
+//!   actual control characters.
+//!
+//! * **`should_display`**: A simple helper to check if a given string contains any
+//!   non-whitespace content, preventing the display of empty or meaningless output.
+//!
+//! ## Design Philosophy
+//!
+//! The strict separation of `stdout` (for machines) and `stderr` (for humans) is a
+//! fundamental design choice. It allows the `ahma_mcp` server to be used both as a
+//! backend for an automated AI agent (which only cares about the JSON on `stdout`) and
+//! as a standalone tool that can be debugged and monitored by a human developer (who
+//! can watch the formatted output on `stderr`).
 
 use serde_json::Value;
 use std::io::{self, Write};

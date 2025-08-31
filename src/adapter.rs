@@ -1,3 +1,65 @@
+//! # CLI Tool Adapter
+//!
+//! This module serves as the core adaptation layer between the MCP server and the underlying
+//! command-line interface (CLI) tools. Its primary responsibility is to dynamically discover,
+//! parse, and execute CLI tools based on TOML configuration files.
+//!
+//! ## Core Components
+//!
+//! - **`Adapter`**: The central struct that manages all tool configurations, parsed CLI
+//!   structures, and execution logic. It holds the `ShellPoolManager` for efficient
+//!   asynchronous command execution.
+//!
+//! - **`Config`**: Represents the configuration for a single tool, loaded from a TOML file
+//!   in the `tools/` directory. It defines the command to execute, whether it should run
+//!   synchronously by default, and any per-subcommand overrides.
+//!
+//! - **`CliParser`**: A utility responsible for parsing the `--help` output of a command
+//!   to understand its structure, including its subcommands and options. This is crucial
+//!   for generating accurate MCP schemas.
+//!
+//! - **`McpSchemaGenerator`**: Takes the parsed `CliStructure` and `Config` for a tool
+//!   and generates a JSON schema that conforms to the MCP specification. This schema is
+//!   what the client (e.g., an AI agent) uses to understand how to use the tool.
+//!
+//! ## Execution Flow
+//!
+//! 1. **Initialization**:
+//!    - The `Adapter` is created, initializing a `ShellPoolManager` for async operations.
+//!    - `adapter.initialize()` is called, which scans the `tools/` directory for `.toml` files.
+//!    - For each enabled tool, `adapter.add_tool()` is invoked.
+//!
+//! 2. **Tool Addition (`add_tool`)**:
+//!    - The tool's `--help` output is fetched and parsed by `CliParser` to create a `CliStructure`.
+//!    - For special cases like `cargo`, `cargo --list` is also parsed to discover dynamically
+//!      available subcommands (e.g., from installed extensions).
+//!    - The `Config` and `CliStructure` are stored in the `Adapter`.
+//!
+//! 3. **Schema Generation (`get_tool_schemas`)**:
+//!    - The `Adapter` iterates through its registered tools.
+//!    - For each tool, `McpSchemaGenerator` creates a JSON schema from the stored `CliStructure`
+//!      and `Config`. These schemas are sent to the client upon connection.
+//!
+//! 4. **Execution (`execute_tool_in_dir`)**:
+//!    - A tool execution request is received with a tool name, arguments, and a working directory.
+//!    - The `Adapter` determines whether to run the command synchronously or asynchronously based
+//!      on a hierarchy of settings: global mode -> tool default -> subcommand override.
+//!    - **Async Path**: If a working directory is provided and the shell pool is enabled, a
+//!      pre-warmed shell is requested from the `ShellPoolManager`. The command is sent to the
+//!      shell for execution, and the shell is returned to the pool afterward.
+//!    - **Sync Path**: If no working directory is given, or if the async path is not available/configured,
+//!      the command is executed as a standard `tokio::process::Command`.
+//!
+//! ## Key Design Decisions
+//!
+//! - **Configuration over Code**: Tools are defined entirely by TOML files, allowing new tools
+//!   to be added or modified without changing the server's Rust code.
+//! - **Dynamic Discovery**: The server automatically discovers and adapts to the tools available
+//!   on the system, making it highly portable and flexible.
+//! - **Performance-Oriented Async**: The integration with `ShellPoolManager` ensures that
+//!   asynchronous operations are executed with minimal overhead, which is critical for a
+//!   responsive user experience.
+
 use anyhow::{Context, Result};
 use serde_json::Value;
 use std::collections::HashMap;
