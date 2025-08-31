@@ -159,6 +159,13 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     let mut iter = cli.tool_args.into_iter().peekable();
 
     while let Some(arg) = iter.next() {
+        if arg == "--" {
+            // Treat the rest as positional args verbatim
+            for rest in iter {
+                raw_args.push(Value::String(rest));
+            }
+            break;
+        }
         if let Some(key) = arg.strip_prefix("--") {
             if let Some(next_arg) = iter.peek() {
                 if !next_arg.starts_with('-') {
@@ -188,7 +195,7 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     }
 
     // Directly execute via Adapter to avoid MCP conversion layers
-    let args_vec = if let Some(Value::Array(vals)) = arguments.remove("args") {
+    let mut args_vec = if let Some(Value::Array(vals)) = arguments.remove("args") {
         vals.into_iter()
             .filter_map(|v| v.as_str().map(|s| s.to_string()))
             .collect::<Vec<_>>()
@@ -199,6 +206,39 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     let working_directory = arguments
         .remove("working_directory")
         .and_then(|v| v.as_str().map(|s| s.to_string()));
+
+    // Convert remaining key/value pairs in `arguments` into CLI flags
+    let mut flags_vec: Vec<String> = Vec::new();
+    for (k, v) in arguments.into_iter() {
+        match v {
+            Value::Bool(true) => {
+                flags_vec.push(format!("--{}", k));
+            }
+            Value::String(s) => {
+                flags_vec.push(format!("--{}", k));
+                flags_vec.push(s);
+            }
+            Value::Array(arr) => {
+                // Support multi-value flags: --key v1 --key v2
+                for item in arr {
+                    if let Some(s) = item.as_str() {
+                        flags_vec.push(format!("--{}", k));
+                        flags_vec.push(s.to_string());
+                    }
+                }
+            }
+            _ => {
+                // Ignore unsupported types in CLI mode
+            }
+        }
+    }
+    // Prepend flags so options appear before positional args (e.g., git push)
+    if !flags_vec.is_empty() {
+        let mut combined = Vec::with_capacity(flags_vec.len() + args_vec.len());
+        combined.extend(flags_vec);
+        combined.extend(args_vec);
+        args_vec = combined;
+    }
 
     let base_tool = tool_name.split('_').next().unwrap_or("");
     // Insert subcommands if present (e.g., cargo_nextest_run -> ["nextest", "run"], cargo_build -> ["build"]).
