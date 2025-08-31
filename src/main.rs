@@ -40,14 +40,17 @@
 //! 7. `service.start_server()` is awaited, running the server indefinitely until it
 //!    is shut down.
 
+use ahma_mcp::{
+    adapter::{Adapter, ExecutionMode},
+    config::Config,
+    mcp_service::AhmaMcpService,
+};
 use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{debug, error, info, instrument};
 use tracing_subscriber::EnvFilter;
-
-use ahma_mcp::{adapter::Adapter, config::Config, mcp_service::AhmaMcpService};
 
 /// Ahma MCP Server: A generic, config-driven adapter for CLI tools.
 #[derive(Parser, Debug)]
@@ -145,32 +148,89 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     // Initialize adapter
     let adapter = Adapter::with_timeout(cli.synchronous, cli.timeout)?;
 
-    // Parse tool name to get base command and subcommand
+    // Load the specific tool's config to check for sync override
     let parts: Vec<&str> = tool_name.split('_').collect();
     if parts.len() < 2 {
         anyhow::bail!("Invalid tool name format. Expected 'tool_subcommand'.");
     }
     let base_tool = parts[0];
-    let subcommand = parts[1..].join("_");
+    let subcommand_name = parts[1..].join("_");
 
-    // Construct arguments
-    let mut cmd_args = vec![subcommand];
+    let config = Config::load_tool_config(base_tool)?;
+    let subcommand_config = config
+        .subcommand
+        .iter()
+        .find(|sc| sc.name == subcommand_name)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Subcommand '{}' not found for tool '{}'",
+                subcommand_name,
+                base_tool
+            )
+        })?;
+
+    // Construct arguments - start with subcommand name, then add config args, then runtime args
     let mut raw_args = Vec::new();
-    let mut working_directory: Option<String> = None;
 
-    let mut iter = cli.tool_args.into_iter();
-    while let Some(arg) = iter.next() {
-        if arg == "--" {
-            raw_args.extend(iter);
-            break;
+    // Only add subcommand name if it's different from the base tool name
+    // This handles cases like ls_ls where command="ls" and subcommand="ls"
+    if subcommand_name != base_tool {
+        raw_args.push(subcommand_name.clone());
+    }
+
+    // Add predefined args from subcommand config
+    raw_args.extend(subcommand_config.args.clone());
+
+    let mut working_directory: Option<String> = None;
+    let mut tool_args_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+
+    // Check for environment variable for programmatic execution
+    if let Ok(env_args) = std::env::var("AHMA_MCP_ARGS") {
+        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(&env_args)
+            && let Some(map) = json_val.as_object()
+        {
+            tool_args_map = map.clone();
         }
-        if arg == "--working-directory" {
-            working_directory = iter.next();
-        } else {
-            raw_args.push(arg);
+    } else {
+        // Manual parsing for CLI invocation
+        let mut iter = cli.tool_args.into_iter();
+        while let Some(arg) = iter.next() {
+            if arg == "--" {
+                raw_args.extend(iter.map(|s| s.to_string()));
+                break;
+            }
+            if arg.starts_with("--") {
+                let key = arg.trim_start_matches("--").to_string();
+                if let Some(val) = iter.next() {
+                    if key == "working-directory" {
+                        working_directory = Some(val);
+                    } else {
+                        tool_args_map.insert(key, serde_json::Value::String(val));
+                    }
+                } else {
+                    tool_args_map.insert(key, serde_json::Value::Bool(true));
+                }
+            } else {
+                raw_args.push(arg);
+            }
         }
     }
-    cmd_args.extend(raw_args.iter().map(|s| s.to_string()));
+
+    if working_directory.is_none()
+        && let Some(wd) = tool_args_map
+            .get("working_directory")
+            .and_then(|v| v.as_str())
+    {
+        working_directory = Some(wd.to_string());
+    }
+
+    if let Some(args_from_map) = tool_args_map.get("args").and_then(|v| v.as_array()) {
+        raw_args.extend(
+            args_from_map
+                .iter()
+                .filter_map(|v| v.as_str().map(String::from)),
+        );
+    }
 
     let final_working_dir = working_directory.or_else(|| {
         std::env::current_dir()
@@ -178,18 +238,35 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
             .map(|p| p.to_string_lossy().into_owned())
     });
 
+    // CLI mode is always synchronous in its behavior, but we respect the config
+    // to decide *how* it runs. However, for the user, it's a blocking call.
+    let exec_mode = if cli.synchronous || subcommand_config.synchronous.unwrap_or(false) {
+        ExecutionMode::Synchronous
+    } else {
+        // In CLI mode, even "async" commands should be awaited.
+        // We can treat it as synchronous from the user's perspective.
+        ExecutionMode::Synchronous
+    };
+
     // Execute the tool
     let result = adapter
         .execute_tool_in_dir(
             base_tool,
-            cmd_args.iter().map(|s| s.to_string()).collect(),
+            raw_args,
             final_working_dir,
+            exec_mode,
+            None, // No hints in CLI mode
         )
         .await;
 
     match result {
         Ok(output) => {
-            println!("{}", output);
+            // Extract and print the text content from the result
+            for content in output.content {
+                if let rmcp::model::RawContent::Text(text) = content.raw {
+                    println!("{}", text.text);
+                }
+            }
             Ok(())
         }
         Err(e) => {

@@ -10,7 +10,6 @@ use rmcp::service::{RequestContext, RoleServer, Service};
 use rmcp::{ErrorData as RmcpError, ServerHandler, model as m, service};
 use serde_json::Map;
 use std::borrow::Cow;
-use std::future::Future;
 use tokio::io::duplex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -77,6 +76,8 @@ fn create_test_configs() -> Vec<(String, Config)> {
                 type_: "string".to_string(),
                 description: "Message to echo".to_string(),
             }],
+            args: vec![],
+            synchronous: Some(true), // Explicitly synchronous for testing
         }],
         hints: None,
         enabled: Some(true),

@@ -73,6 +73,14 @@ pub struct Subcommand {
     /// A list of options (flags) that the subcommand accepts.
     #[serde(default)]
     pub options: Vec<CliOption>,
+
+    /// An optional list of raw string arguments to be passed to the command.
+    #[serde(default)]
+    pub args: Vec<String>,
+
+    /// If true, this subcommand will always run synchronously.
+    #[serde(default)]
+    pub synchronous: Option<bool>,
 }
 
 /// Defines a single command-line option for a subcommand.

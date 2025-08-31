@@ -1,60 +1,24 @@
 # LS Tool Configuration for Ahma MCP
-# This configuration adapts the `ls` command for AI assistant use
-# When ahma_mcp starts, it will automatically discover ls's capabilities
-# by parsing `ls --help` output and update this file with discovered commands
-
-tool_name = "ls"
-command = "ls" 
+command = "ls"
 enabled = true
-timeout_seconds = 30
-verbose = false
 
-# AI guidance hints - customize these to improve AI interactions
+[[subcommand]]
+name = "ls"
+description = "List directory contents and file information"
+[[subcommand.options]]
+name = "all"
+type = "boolean"
+description = "Show hidden files and directories"
+[[subcommand.options]]
+name = "long"
+type = "boolean"
+description = "Use long listing format"
+[[subcommand.options]]
+name = "human_readable"
+type = "boolean"
+description = "Show file sizes in human-readable format"
+
+# AI guidance hints
 [hints]
-# Primary hint shown when AI considers using ls
-primary = "List directory contents and file information. Use ls to explore file systems, check file permissions, sizes, and timestamps."
-
-# Usage examples for common operations
-usage = """
-Common ls commands:
-- ls - List files in current directory
-- ls -la - List all files with detailed info (permissions, size, date)
-- ls -lh - List with human-readable file sizes
-- ls -lt - List sorted by modification time (newest first)
-- ls -lr - List in reverse order
-- ls -R - List recursively through subdirectories
-- ls *.rs - List files matching pattern (e.g., Rust files)
-- ls -d */ - List only directories
-"""
-
-# What the AI should think about during operations
-wait_hint = "While ls runs, consider: what information you're looking for, whether you need detailed file info, or if you should explore subdirectories."
-
-# Parameter-specific hints for better AI understanding
-[hints.parameters]
-all = "Show hidden files and directories with -a flag"
-long = "Use -l for detailed listing (permissions, owner, size, date)"
-human_readable = "Use -h with -l to show file sizes in human-readable format (KB, MB, GB)"
-recursive = "Use -R to list directory contents recursively"
-time = "Use -t to sort by modification time, -u for access time, -c for change time"
-reverse = "Use -r to reverse the sort order"
-size = "Use -S to sort by file size (largest first)"
-
-# Override configurations for specific scenarios
-# Uncomment and customize as needed:
-
-# [overrides.detailed]
-# timeout_seconds = 45
-# hints.primary = "Show detailed file information including permissions, ownership, and timestamps"
-# hints.usage = "ls -la for all files with details, ls -lh for human-readable sizes"
-
-# [overrides.recursive]
-# timeout_seconds = 120  # Recursive operations may take longer
-# hints.primary = "List directory contents recursively through all subdirectories"
-# hints.wait_hint = "While recursively listing, consider: directory depth, number of files, and whether to filter results"
-
-# Example of use-case specific guidance:
-# [hints.examples]
-# find_large_files = "Find large files: ls -lhS | head -10"
-# recent_changes = "See recent changes: ls -lt | head -10" 
-# hidden_files = "Show hidden config files: ls -la | grep '^\\\.'"
+primary = "List directory contents and file information"
+usage = "Common options: -l (long format), -a (all files), -h (human readable)"

@@ -52,7 +52,7 @@
 //! up to a standard I/O transport (`stdio`) and running it until completion.
 
 use crate::{
-    adapter::Adapter,
+    adapter::{Adapter, ExecutionMode},
     config::{CliOption, Config},
 };
 use anyhow::Result;
@@ -168,10 +168,10 @@ impl AhmaMcpService {
 
     /// A unified argument parser to convert MCP JSON arguments into a command-line vector.
     fn parse_arguments(
-        subcommand: &str,
+        subcommand_config: &crate::config::Subcommand,
         arguments: Value,
     ) -> Result<(Vec<String>, Option<String>), McpError> {
-        let mut cmd_args = vec![subcommand.to_string()];
+        let mut cmd_args = vec![subcommand_config.name.clone()];
         let working_dir: Option<String>;
 
         if let Value::Object(mut args_map) = arguments {
@@ -180,12 +180,16 @@ impl AhmaMcpService {
                 .remove("working_directory")
                 .and_then(|v| v.as_str().map(String::from));
 
-            // Extract raw `args` next
-            let mut raw_args = Vec::new();
+            // Extract and append predefined raw `args` from config
+            if !subcommand_config.args.is_empty() {
+                cmd_args.extend(subcommand_config.args.clone());
+            }
+
+            // Extract raw `args` from the call next
             if let Some(Value::Array(args_vec)) = args_map.remove("args") {
                 for v in args_vec {
                     if let Some(s) = v.as_str() {
-                        raw_args.push(s.to_string());
+                        cmd_args.push(s.to_string());
                     }
                 }
             }
@@ -227,9 +231,6 @@ impl AhmaMcpService {
                     }
                 }
             }
-
-            // Append raw args at the end
-            cmd_args.extend(raw_args);
         } else {
             return Err(McpError::invalid_params(
                 "invalid_arguments_object",
@@ -350,16 +351,29 @@ impl ServerHandler for AhmaMcpService {
         }
 
         let base_tool = parts[0];
-        let subcommand = parts[1..].join("_");
+        let subcommand_name = parts[1..].join("_");
 
-        // Find the config for the base tool
+        // Find the config for the base tool and the specific subcommand
         let configs = self.tools_config.read().await;
         let config = configs.get(base_tool).ok_or_else(|| {
             McpError::invalid_params("unknown_tool", Some(json!({"tool": base_tool})))
         })?;
 
-        let (cmd_args, working_dir) =
-            Self::parse_arguments(&subcommand, Value::Object(arguments.unwrap_or_default()))?;
+        let subcommand_config = config
+            .subcommand
+            .iter()
+            .find(|sc| sc.name == subcommand_name)
+            .ok_or_else(|| {
+                McpError::invalid_params(
+                    "unknown_subcommand",
+                    Some(json!({"tool": base_tool, "subcommand": subcommand_name})),
+                )
+            })?;
+
+        let (cmd_args, working_dir) = Self::parse_arguments(
+            subcommand_config,
+            Value::Object(arguments.unwrap_or_default()),
+        )?;
 
         let working_dir = working_dir.ok_or_else(|| {
             McpError::invalid_params(
@@ -370,13 +384,16 @@ impl ServerHandler for AhmaMcpService {
             )
         })?;
 
-        // Execute via the adapter. The adapter expects the base command (e.g., "cargo")
-        // and a list of arguments that follow it (e.g., ["build", "--release"]).
-        // `parse_arguments` has already prepared `cmd_args` in this exact format.
+        // Determine execution mode: Subcommand config overrides global config.
+        let exec_mode = if subcommand_config.synchronous.unwrap_or(false) {
+            ExecutionMode::Synchronous
+        } else {
+            ExecutionMode::Asynchronous
+        };
 
         debug!(
-            "Executing command: {} with args: {:?} in directory: {}",
-            &config.command, cmd_args, working_dir
+            "Executing command: {} with args: {:?} in directory: {} (mode: {:?})",
+            &config.command, cmd_args, working_dir, exec_mode
         );
 
         // Clone values for error reporting before they're potentially moved
@@ -385,12 +402,18 @@ impl ServerHandler for AhmaMcpService {
 
         match self
             .adapter
-            .execute_tool_in_dir(&config.command, cmd_args, Some(working_dir))
+            .execute_tool_in_dir(
+                &config.command,
+                cmd_args,
+                Some(working_dir),
+                exec_mode,
+                config.hints.clone(),
+            )
             .await
         {
             Ok(result) => {
                 info!("Tool '{}' executed successfully", name);
-                Ok(CallToolResult::success(vec![Content::text(result)]))
+                Ok(result)
             }
             Err(e) => {
                 // Provide detailed error information instead of generic failure
