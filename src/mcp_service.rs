@@ -53,8 +53,7 @@
 
 use crate::{
     adapter::Adapter,
-    cli_parser::{CliOption, CliStructure},
-    config::Config,
+    config::{CliOption, Config},
 };
 use anyhow::Result;
 use rmcp::{
@@ -73,18 +72,16 @@ type JsonObject = Map<String, Value>;
 #[derive(Debug)]
 pub struct AhmaMcpService {
     adapter: Arc<Adapter>,
-    tools_config: Arc<RwLock<HashMap<String, (Config, CliStructure)>>>,
+    /// Map of tool base names (e.g., "cargo") to their full configuration.
+    tools_config: Arc<RwLock<HashMap<String, Config>>>,
 }
 
 impl AhmaMcpService {
-    /// Create a new MCP service with the given adapter and initial tools
-    pub async fn new(
-        adapter: Arc<Adapter>,
-        tools: Vec<(String, Config, CliStructure)>,
-    ) -> Result<Self> {
+    /// Create a new MCP service with the given adapter and initial tools.
+    pub async fn new(adapter: Arc<Adapter>, configs: Vec<(String, Config)>) -> Result<Self> {
         let mut tools_config = HashMap::new();
-        for (name, config, cli_structure) in tools {
-            tools_config.insert(name, (config, cli_structure));
+        for (name, config) in configs {
+            tools_config.insert(name, config);
         }
 
         Ok(Self {
@@ -93,65 +90,42 @@ impl AhmaMcpService {
         })
     }
 
-    /// Add or update a tool configuration
-    pub async fn update_tool(&self, name: String, config: Config, cli_structure: CliStructure) {
-        let mut tools = self.tools_config.write().await;
-        tools.insert(name, (config, cli_structure));
+    /// Convert our `CliOption` model to a JSON schema property.
+    fn cli_option_to_json_schema(option: &CliOption) -> (String, Value) {
+        let mut property = Map::new();
+        let json_type = match option.type_.as_str() {
+            "boolean" => "boolean",
+            "integer" => "integer",
+            "array" => "array",
+            _ => "string", // Default to string for "string" and any other value
+        };
+        property.insert("type".to_string(), json!(json_type));
+        property.insert("description".to_string(), json!(&option.description));
+
+        if json_type == "array" {
+            property.insert("items".to_string(), json!({"type": "string"}));
+        }
+
+        (option.name.clone(), json!(property))
     }
 
-    /// Remove a tool
-    pub async fn remove_tool(&self, name: &str) {
-        let mut tools = self.tools_config.write().await;
-        tools.remove(name);
-    }
-
-    /// List all available tools
-    pub async fn list_tools(&self) -> Vec<String> {
-        let tools = self.tools_config.read().await;
-        tools.keys().cloned().collect()
-    }
-
-    /// Convert CLI options to MCP tool schema
-    fn cli_options_to_schema(options: &[CliOption]) -> Arc<JsonObject> {
+    /// Generate the MCP input schema for a given set of `CliOption`s.
+    fn build_input_schema(options: &[CliOption]) -> Arc<JsonObject> {
         let mut properties = Map::new();
         let mut required = Vec::new();
 
+        // Add tool-specific options
         for option in options {
-            let mut property = Map::new();
-
-            // Set type based on option characteristics
-            if option.takes_value {
-                property.insert("type".to_string(), json!("string"));
-            } else {
-                property.insert("type".to_string(), json!("boolean"));
-            }
-
-            // Add description
-            property.insert("description".to_string(), json!(&option.description));
-
-            // Use the long form if available, otherwise use short form
-            let property_name = if let Some(long) = &option.long {
-                long.clone()
-            } else if let Some(short) = option.short {
-                short.to_string()
-            } else {
-                continue; // Skip options without names
-            };
-
-            // If it's required (heuristic: no default value and described as required)
-            if option.description.contains("required") || option.description.contains("mandatory") {
-                required.push(property_name.clone());
-            }
-
-            properties.insert(property_name, json!(property));
+            let (name, schema) = Self::cli_option_to_json_schema(option);
+            properties.insert(name, schema);
         }
 
-        // Always include working_directory and args for execution
+        // Add common ahma_mcp parameters
         properties.insert(
             "working_directory".to_string(),
             json!({
                 "type": "string",
-                "description": "Absolute path to the directory to run the command in (required)"
+                "description": "Absolute path to the directory where the command will run (required)."
             }),
         );
         required.push("working_directory".to_string());
@@ -161,16 +135,15 @@ impl AhmaMcpService {
             json!({
                 "type": "array",
                 "items": { "type": "string" },
-                "description": "Additional raw arguments to pass after flags (advanced). Example: [\"-R\", \"-a\", \"-1\"] for ls recursive"
+                "description": "Additional raw arguments to pass to the command (e.g., for positional args or complex flags)."
             }),
         );
 
-        // Async-related optional fields to encourage non-blocking usage when supported by the adapter
         properties.insert(
             "enable_async_notification".to_string(),
             json!({
                 "type": "boolean",
-                "description": "Prefer async execution with progress notifications for long-running commands (build/test/bench)",
+                "description": "Set to true for non-blocking execution of long-running commands (e.g., build, test).",
                 "default": false
             }),
         );
@@ -179,132 +152,94 @@ impl AhmaMcpService {
             "operation_id".to_string(),
             json!({
                 "type": "string",
-                "description": "Optional custom operation ID when async notifications are enabled"
+                "description": "Optional custom ID for an asynchronous operation."
             }),
         );
 
-        // Create the schema object
         let mut schema = Map::new();
         schema.insert("type".to_string(), json!("object"));
         schema.insert("properties".to_string(), json!(properties));
-
         if !required.is_empty() {
             schema.insert("required".to_string(), json!(required));
         }
 
         Arc::new(schema)
     }
-}
 
-impl AhmaMcpService {
-    /// Dynamic tool execution - this will be called by MCP for any tool
-    pub async fn execute_tool(
-        &self,
-        tool_name: &str,
+    /// A unified argument parser to convert MCP JSON arguments into a command-line vector.
+    fn parse_arguments(
+        subcommand: &str,
         arguments: Value,
-        _ctx: Option<RequestContext<RoleServer>>,
-    ) -> Result<CallToolResult, McpError> {
-        debug!("Executing tool: {} with args: {:?}", tool_name, arguments);
-
-        // Parse tool name and command
-        let parts: Vec<&str> = tool_name.split('_').collect();
-        if parts.len() < 2 {
-            return Err(McpError::invalid_params(
-                "invalid_tool_name",
-                Some(json!({"tool_name": tool_name, "expected_format": "toolname_command"})),
-            ));
-        }
-
-        let base_tool = parts[0];
-        let command_to_run = parts[1..].join("_");
-
-        // Look up the tool configuration
-        let tools = self.tools_config.read().await;
-        let (config, cli_structure) = tools.get(base_tool).ok_or_else(|| {
-            McpError::invalid_params("unknown_tool", Some(json!({"tool": base_tool})))
-        })?;
-
-        // Convert arguments to command-line args and extract working directory
-        let mut cmd_args = if command_to_run == "run" && cli_structure.subcommands.is_empty() {
-            vec![]
-        } else {
-            vec![command_to_run.clone()]
-        };
-        let mut working_dir: Option<String> = None;
+    ) -> Result<(Vec<String>, Option<String>), McpError> {
+        let mut cmd_args = vec![subcommand.to_string()];
+        let working_dir: Option<String>;
 
         if let Value::Object(mut args_map) = arguments {
-            // Pull out working_directory and args first, then convert the rest into flags
-            if let Some(Value::String(dir)) = args_map.remove("working_directory") {
-                working_dir = Some(dir);
-            }
-            if let Some(Value::Array(raw_args)) = args_map.remove("args") {
-                for v in raw_args {
+            // Extract working_directory first
+            working_dir = args_map
+                .remove("working_directory")
+                .and_then(|v| v.as_str().map(String::from));
+
+            // Extract raw `args` next
+            let mut raw_args = Vec::new();
+            if let Some(Value::Array(args_vec)) = args_map.remove("args") {
+                for v in args_vec {
                     if let Some(s) = v.as_str() {
-                        cmd_args.push(s.to_string());
+                        raw_args.push(s.to_string());
                     }
                 }
             }
 
+            // Process remaining keys as flags
             for (key, value) in args_map {
+                // Skip async control flags
+                if key == "enable_async_notification" || key == "operation_id" {
+                    continue;
+                }
+
+                let flag = if key.len() == 1 {
+                    format!("-{}", key)
+                } else {
+                    format!("--{}", key)
+                };
+
                 match value {
-                    Value::Bool(true) => {
-                        if key.len() == 1 {
-                            cmd_args.push(format!("-{}", key));
-                        } else {
-                            cmd_args.push(format!("--{}", key));
-                        }
-                    }
+                    Value::Bool(true) => cmd_args.push(flag),
                     Value::String(s) => {
-                        if key.len() == 1 {
-                            cmd_args.push(format!("-{}", key));
-                        } else {
-                            cmd_args.push(format!("--{}", key));
-                        }
+                        cmd_args.push(flag);
                         cmd_args.push(s);
                     }
                     Value::Number(n) => {
-                        if key.len() == 1 {
-                            cmd_args.push(format!("-{}", key));
-                        } else {
-                            cmd_args.push(format!("--{}", key));
-                        }
+                        cmd_args.push(flag);
                         cmd_args.push(n.to_string());
                     }
+                    Value::Array(arr) => {
+                        for item in arr {
+                            if let Some(s) = item.as_str() {
+                                cmd_args.push(flag.clone());
+                                cmd_args.push(s.to_string());
+                            }
+                        }
+                    }
+                    // Ignore false booleans, nulls, and objects
                     _ => {
-                        debug!("Skipping argument {}: {:?} (unsupported type)", key, value);
+                        debug!("Skipping argument '{:?}': unsupported type or value", key);
                     }
                 }
             }
-        }
 
-        // Require working_directory for safe async behavior and isolation
-        if working_dir.is_none() {
+            // Append raw args at the end
+            cmd_args.extend(raw_args);
+        } else {
             return Err(McpError::invalid_params(
-                "missing_working_directory",
+                "invalid_arguments_object",
                 Some(json!({
-                    "message": "All tools require 'working_directory' for execution",
-                    "hint": "Pass input: { working_directory: <abs path> }"
+                    "message": "Tool arguments must be a JSON object.",
                 })),
             ));
         }
 
-        // Execute the command using the adapter
-        let command_to_execute = config.command.as_deref().unwrap_or(base_tool);
-
-        match self
-            .adapter
-            .execute_tool_in_dir(command_to_execute, cmd_args, working_dir)
-            .await
-        {
-            Ok(result) => Ok(CallToolResult::success(vec![Content::text(result)])),
-            Err(e) => {
-                error!("Tool execution failed: {}", e);
-                Err(McpError::internal_error(
-                    "execution_failed",
-                    Some(json!({"error": e.to_string()})),
-                ))
-            }
-        }
+        Ok((cmd_args, working_dir))
     }
 }
 
@@ -312,15 +247,17 @@ impl ServerHandler for AhmaMcpService {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             protocol_version: ProtocolVersion::V_2024_11_05,
-            capabilities: ServerCapabilities::builder()
-                .enable_tools()
-                .build(),
+            capabilities: ServerCapabilities::builder().enable_tools().build(),
             server_info: Implementation {
                 name: "ahma_mcp".to_string(),
-                version: "0.1.0".to_string(),
+                version: "1.0.0".to_string(),
             },
             instructions: Some(
-                "Ahma MCP: dynamic CLI tools over MCP.\n\n- Tools are exposed as '<tool>_<subcommand>' or '<tool>_run' if the tool has no subcommands (e.g., 'ls_run').\n- All tools require 'working_directory' (absolute path).\n- Pass flags as booleans (e.g., 'R': true) or via 'args': [\"-R\"]. You can also provide extra positional 'args'.\n- For long-running commands (build/test/bench), set 'enable_async_notification': true to avoid blocking and receive progress.\n\nExamples:\n- List recursively with ls: call 'ls_run' with { working_directory: '/abs/path', args: [\"-R\", \"-a\", \"-1\"] }\n- Run cargo build: call 'cargo_build' with { working_directory: '/abs/path', release: true, enable_async_notification: true }\n\nUse list_tools to discover available tools and their input schema."
+                "Ahma MCP: A generic, config-driven CLI tool adapter.\n\n\
+                - Tools are exposed as `<tool>_<subcommand>` (e.g., `cargo_build`).\n\
+                - All tools require a `working_directory` argument (absolute path).\n\
+                - For long-running commands (build, test), set `enable_async_notification: true` to receive progress updates.\n\n\
+                Example: Call `cargo_build` with arguments `{\"working_directory\": \"/path/to/project\", \"release\": true}`."
                     .to_string(),
             ),
         }
@@ -331,54 +268,53 @@ impl ServerHandler for AhmaMcpService {
         _request: Option<PaginatedRequestParam>,
         _ctx: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
-        let tools = self.tools_config.read().await;
+        info!("MCP list_tools request received");
+        let configs = self.tools_config.read().await;
+        info!(
+            "Loaded {} tool configurations: {:?}",
+            configs.len(),
+            configs.keys().collect::<Vec<_>>()
+        );
+
         let mut mcp_tools = Vec::new();
 
-        for (tool_name, (config, cli_structure)) in tools.iter() {
-            info!("Processing tool: {}", tool_name);
+        for (tool_name, config) in configs.iter() {
+            info!(
+                "Processing tool '{}' with {} subcommands",
+                tool_name,
+                config.subcommand.len()
+            );
 
-            // Get base command info
-            let mut base_description = format!("{} command-line tool", config.tool_name);
-            // Append usage hint if available
-            if let Some(hints) = &config.hints
-                && let Some(usage) = &hints.usage
-            {
-                base_description = format!("{} | Usage: {}", base_description, usage.trim());
-            }
+            for subcommand in &config.subcommand {
+                let tool_id = format!("{}_{}", tool_name, subcommand.name);
+                let mut description = subcommand.description.clone();
 
-            // Create a tool for each subcommand in the CLI structure
-            if !cli_structure.subcommands.is_empty() {
-                for subcommand in &cli_structure.subcommands {
-                    let tool_id = format!("{}_{}", tool_name, subcommand.name);
-
-                    let mut description =
-                        format!("{}: {}", base_description, subcommand.description);
-                    // Encourage async for long-running subcommands
-                    let name_l = subcommand.name.to_lowercase();
-                    if ["build", "test", "bench", "run", "doc", "clippy", "nextest"]
-                        .iter()
-                        .any(|k| name_l.contains(k))
-                    {
-                        description.push_str(" | Tip: set 'enable_async_notification': true for non-blocking execution.");
-                    }
-
-                    let input_schema = Self::cli_options_to_schema(&subcommand.options);
-
-                    mcp_tools.push(Tool {
-                        name: Cow::Owned(tool_id),
-                        description: Some(Cow::Owned(description)),
-                        input_schema,
-                        annotations: None,
-                        output_schema: None,
-                    });
+                // Add a hint for async usage on common long-running commands
+                let name_l = subcommand.name.to_lowercase();
+                if ["build", "test", "bench", "run", "doc", "clippy", "nextest"]
+                    .iter()
+                    .any(|k| name_l.contains(k))
+                {
+                    description.push_str(
+                        " | Tip: set 'enable_async_notification': true for non-blocking execution.",
+                    );
                 }
-            } else {
-                // Single command tool - use global options
-                let description = base_description.clone();
-                let input_schema = Self::cli_options_to_schema(&cli_structure.global_options);
+
+                let input_schema = Self::build_input_schema(&subcommand.options);
+                info!(
+                    "Generated tool '{}' with {} options",
+                    tool_id,
+                    subcommand.options.len()
+                );
+                debug!("Tool '{}' description: {}", tool_id, description);
+                debug!(
+                    "Tool '{}' schema properties: {}",
+                    tool_id,
+                    input_schema.keys().collect::<Vec<_>>().len()
+                );
 
                 mcp_tools.push(Tool {
-                    name: Cow::Owned(format!("{}_run", tool_name)),
+                    name: Cow::Owned(tool_id),
                     description: Some(Cow::Owned(description)),
                     input_schema,
                     annotations: None,
@@ -387,7 +323,11 @@ impl ServerHandler for AhmaMcpService {
             }
         }
 
-        info!("Listing {} tools", mcp_tools.len());
+        info!("Returning {} MCP tools to client", mcp_tools.len());
+        for tool in &mcp_tools {
+            debug!("Exposing tool: {}", tool.name);
+        }
+
         Ok(ListToolsResult {
             tools: mcp_tools,
             next_cursor: None,
@@ -397,11 +337,103 @@ impl ServerHandler for AhmaMcpService {
     async fn call_tool(
         &self,
         CallToolRequestParam { name, arguments }: CallToolRequestParam,
-        ctx: RequestContext<RoleServer>,
+        _ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        let args_map = arguments.unwrap_or_else(JsonObject::new);
-        let args_value = Value::Object(args_map);
-        self.execute_tool(&name, args_value, Some(ctx)).await
+        debug!("Executing tool: {} with args: {:?}", name, arguments);
+
+        let parts: Vec<&str> = name.split('_').collect();
+        if parts.len() < 2 {
+            return Err(McpError::invalid_params(
+                "invalid_tool_name",
+                Some(json!({"tool_name": name, "expected_format": "tool_subcommand"})),
+            ));
+        }
+
+        let base_tool = parts[0];
+        let subcommand = parts[1..].join("_");
+
+        // Find the config for the base tool
+        let configs = self.tools_config.read().await;
+        let config = configs.get(base_tool).ok_or_else(|| {
+            McpError::invalid_params("unknown_tool", Some(json!({"tool": base_tool})))
+        })?;
+
+        let (cmd_args, working_dir) =
+            Self::parse_arguments(&subcommand, Value::Object(arguments.unwrap_or_default()))?;
+
+        let working_dir = working_dir.ok_or_else(|| {
+            McpError::invalid_params(
+                "missing_working_directory",
+                Some(json!({
+                    "message": "The 'working_directory' parameter is required for all tool calls.",
+                })),
+            )
+        })?;
+
+        // Execute via the adapter. The adapter expects the base command (e.g., "cargo")
+        // and a list of arguments that follow it (e.g., ["build", "--release"]).
+        // `parse_arguments` has already prepared `cmd_args` in this exact format.
+
+        debug!(
+            "Executing command: {} with args: {:?} in directory: {}",
+            &config.command, cmd_args, working_dir
+        );
+
+        // Clone values for error reporting before they're potentially moved
+        let cmd_args_clone = cmd_args.clone();
+        let working_dir_clone = working_dir.clone();
+
+        match self
+            .adapter
+            .execute_tool_in_dir(&config.command, cmd_args, Some(working_dir))
+            .await
+        {
+            Ok(result) => {
+                info!("Tool '{}' executed successfully", name);
+                Ok(CallToolResult::success(vec![Content::text(result)]))
+            }
+            Err(e) => {
+                // Provide detailed error information instead of generic failure
+                error!("Tool execution failed for '{}': {}", name, e);
+
+                // Check for common error types and provide specific guidance
+                let error_message = if e.to_string().contains("No such file or directory") {
+                    format!(
+                        "Command '{}' not found. Please ensure it is installed and available in PATH.",
+                        &config.command
+                    )
+                } else if e.to_string().contains("Permission denied") {
+                    format!(
+                        "Permission denied executing '{}'. Check file permissions and execute permissions.",
+                        &config.command
+                    )
+                } else if e.to_string().contains("Command failed:") {
+                    // This is likely stderr from the command itself - pass it through
+                    format!("Tool '{}' execution failed: {}", name, e)
+                } else if e.to_string().contains("timed out") {
+                    format!(
+                        "Tool '{}' execution timed out. Consider increasing timeout or using async execution.",
+                        name
+                    )
+                } else {
+                    // Generic error with full context
+                    format!("Tool '{}' execution error: {}", name, e)
+                };
+
+                // Create a structured error with additional context for debugging
+                Err(McpError::internal_error(
+                    "tool_execution_failed",
+                    Some(json!({
+                        "tool_name": name,
+                        "base_command": &config.command,
+                        "arguments": cmd_args_clone,
+                        "working_directory": working_dir_clone,
+                        "error_message": error_message,
+                        "original_error": e.to_string()
+                    })),
+                ))
+            }
+        }
     }
 }
 
@@ -409,10 +441,8 @@ impl AhmaMcpService {
     /// Start the MCP server with stdio transport
     pub async fn start_server(self) -> Result<()> {
         info!("Starting ahma_mcp MCP server");
-
         let service = self.serve(stdio()).await?;
         service.waiting().await?;
-
         Ok(())
     }
 }

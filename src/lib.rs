@@ -1,66 +1,61 @@
-//! # Ahma MCP Server Library
+//! # Ahma MCP Lib
 //!
-//! This crate serves as the core library for the `ahma_mcp` server, a dynamic and
-//! extensible tool server that conforms to the Machine-Checked Protocol (MCP). It is
-//! designed to expose command-line tools to an AI agent in a structured and efficient
-//! manner.
+//! This crate provides the core functionality for the `ahma_mcp` server and CLI.
+//! It is structured into several modules, each responsible for a distinct part of the
+//! application's logic.
 //!
-//! ## Core Architecture
+//! ## Modules
 //!
-//! The library is built around a few key modules:
+//! - **`adapter`**: Contains the `Adapter` struct, which is the primary engine for
+//!   executing external command-line tools. It manages a `ShellPool` to run commands
+//!   concurrently and safely, handling command construction, execution, and output
+//!   capture.
 //!
-//! - **`mcp_service`**: The main entry point of the server. The `AhmaMcpService` struct
-//!   implements the `rmcp` server trait and orchestrates all incoming requests.
+//! - **`config`**: Defines the data structures for tool configuration, primarily the
+//!   `Config`, `Subcommand`, and `CliOption` structs. These are deserialized from TOML
+//!   files and provide the blueprint for how `ahma_mcp` understands and interacts with
+//!   a CLI tool.
 //!
-//! - **`adapter`**: The heart of the dynamic tool system. The `Adapter` is responsible for
-//!   discovering, parsing, and executing CLI tools based on `.toml` configuration files.
+//! - **`constants`**: A central place for defining application-wide constants, such as
+//!   default timeout values or common string literals.
 //!
-//! - **`config`**: Defines the structures for tool configuration, allowing for declarative
-//!   definition of tools, their behavior, and AI-specific hints.
+//! - **`mcp_service`**: Implements the `rmcp::ServerHandler` trait in the `AhmaMcpService`
+//!   struct. This is the core of the MCP server, responsible for handling requests like
+//!   `get_info`, `list_tools`, and `call_tool`. It uses the loaded configurations to
+//!   dynamically generate tool definitions and execute commands via the `Adapter`.
 //!
-//! - **`cli_parser`**: A utility that parses the `--help` output of commands to dynamically
-//!   understand their subcommands and options.
+//! - **`operation_monitor`**: Provides a system for tracking the progress of long-running,
+//!   asynchronous operations. It allows the server to send notifications back to the
+//!   client about the status of background tasks.
 //!
-//! - **`mcp_schema`**: Generates MCP-compliant JSON schemas from the parsed CLI structures,
-//!   enabling the AI client to understand how to use the tools.
+//! - **`shell_pool`**: A resource management utility that maintains a pool of reusable
+//!   shell processes (`zsh`). This avoids the overhead of spawning a new shell for every
+//!   command, improving performance, especially under heavy load.
 //!
-//! - **`shell_pool`**: A high-performance, asynchronous shell pooling system that minimizes
-//!   latency for command execution by reusing pre-warmed shell processes.
+//! - **`terminal_output`**: Contains helpers for processing and sanitizing raw terminal
+//!   output, such as stripping ANSI escape codes to provide clean text to the client.
 //!
-//! - **`callback_system`** and **`operation_monitor`**: These modules provide the framework
-//!   for managing and reporting the progress of long-running asynchronous operations.
+//! - **`tool_hints`**: Logic for generating helpful, context-aware hints that are appended
+//!   to tool descriptions, guiding the user on best practices (e.g., using async for
+//!   long-running commands).
 //!
-//! ## Key Features
-//!
-//! - **Dynamic Tooling**: New CLI tools can be integrated by simply adding a TOML file to
-//!   the `tools/` directory, without any changes to the Rust code.
-//! - **Asynchronous by Default**: Leverages `tokio` and a custom shell pool to execute
-//!   commands asynchronously, enabling high concurrency and responsiveness.
-//! - **AI-Centric Design**: Includes features like `ToolHints` and dynamic guidance to help
-//!   AI agents use the exposed tools more effectively.
-//! - **MCP Compliance**: Implements the standard MCP interfaces for tool discovery and
-//!   execution, ensuring compatibility with MCP clients.
-//!
-//! This library brings together these components to create a robust and flexible foundation
-//! for the `ahma_mcp` server.
+//! - **`utils`**: A collection of miscellaneous utility functions used across the
+//!   application.
 
-// New core modules
+// Public modules
 pub mod adapter;
-pub mod cli_parser;
-pub mod config;
-pub mod constants;
-pub mod mcp_schema;
-pub mod mcp_service;
-pub mod utils;
-
-// Modules copied from async_cargo_mcp
 pub mod callback_system;
 pub mod client;
+pub mod config;
+pub mod constants;
+pub mod logging;
 pub mod mcp_callback;
+pub mod mcp_service;
 pub mod operation_monitor;
 pub mod shell_pool;
 pub mod terminal_output;
 pub mod tool_hints;
+pub mod utils;
 
 // Test utilities (conditionally compiled)
 #[cfg(test)]
@@ -68,7 +63,5 @@ pub mod test;
 
 // Re-export main types for easier use
 pub use adapter::Adapter;
-pub use cli_parser::{CliParser, CliStructure};
 pub use config::Config;
-pub use mcp_schema::McpSchemaGenerator;
 pub use mcp_service::AhmaMcpService;

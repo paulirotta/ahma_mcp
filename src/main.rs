@@ -42,35 +42,32 @@
 
 use anyhow::Result;
 use clap::Parser;
-use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::{error, info, instrument};
+use tracing::{debug, error, info, instrument};
 use tracing_subscriber::EnvFilter;
 
-use ahma_mcp::{
-    adapter::Adapter, cli_parser::CliParser, config::Config, mcp_service::AhmaMcpService,
-};
+use ahma_mcp::{adapter::Adapter, config::Config, mcp_service::AhmaMcpService};
 
-/// Ahma MCP Server: Universal CLI Tool Adapter for AI Agents
+/// Ahma MCP Server: A generic, config-driven adapter for CLI tools.
 #[derive(Parser, Debug)]
 #[command(
     author,
     version,
     about,
-    long_about = "ahma_mcp can run in two modes:
-1. Server Mode: Runs as a persistent MCP server.
+    long_about = "ahma_mcp runs in two modes:
+1. Server Mode: Runs as a persistent MCP server over stdio.
    Example: ahma_mcp --server
 
-2. CLI Mode: Executes a single command and exits.
-   Example: ahma_mcp ls_run --working-directory . -- -l -a"
+2. CLI Mode: Executes a single command and prints the result to stdout.
+   Example: ahma_mcp cargo_build --working-directory . -- --release"
 )]
 struct Cli {
     /// Run in persistent MCP server mode.
     #[arg(long)]
     server: bool,
 
-    /// Path to the tools directory containing TOML configuration files.
+    /// Path to the directory containing tool TOML configuration files.
     #[arg(long, global = true, default_value = "tools")]
     tools_dir: PathBuf,
 
@@ -78,7 +75,7 @@ struct Cli {
     #[arg(long, global = true)]
     synchronous: bool,
 
-    /// Timeout for commands in seconds.
+    /// Default timeout for commands in seconds.
     #[arg(long, global = true, default_value = "300")]
     timeout: u64,
 
@@ -86,7 +83,7 @@ struct Cli {
     #[arg(short, long, global = true)]
     debug: bool,
 
-    /// The name of the tool to execute (e.g., 'ls_run', 'cargo_build').
+    /// The name of the tool to execute (e.g., 'cargo_build').
     #[arg()]
     tool_name: Option<String>,
 
@@ -118,7 +115,7 @@ async fn main() -> Result<()> {
 }
 
 async fn run_server_mode(cli: Cli) -> Result<()> {
-    info!("Starting ahma_mcp v0.1.0");
+    info!("Starting ahma_mcp v1.0.0");
     info!("Tools directory: {:?}", cli.tools_dir);
     info!("Synchronous mode: {}", cli.synchronous);
     info!("Command timeout: {}s", cli.timeout);
@@ -127,151 +124,70 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     let adapter = Arc::new(Adapter::with_timeout(cli.synchronous, cli.timeout)?);
 
     // Load tool configurations
-    let tools = load_tools(&cli.tools_dir).await?;
-
-    if tools.is_empty() {
+    let configs = load_tool_configs(&cli.tools_dir).await?;
+    if configs.is_empty() {
         error!("No valid tool configurations found in {:?}", cli.tools_dir);
-        std::process::exit(1);
+        // It's not a fatal error to have no tools, just log it.
+    } else {
+        info!("Loaded {} tool configurations", configs.len());
     }
 
-    info!("Loaded {} tool configurations", tools.len());
-
     // Create and start the MCP service
-    let service = AhmaMcpService::new(adapter, tools).await?;
+    let service = AhmaMcpService::new(adapter, configs).await?;
     service.start_server().await?;
 
     Ok(())
 }
 
 async fn run_cli_mode(cli: Cli) -> Result<()> {
-    let tool_name = cli.tool_name.unwrap(); // Safe to unwrap due to check in main
+    let tool_name = cli.tool_name.unwrap(); // Safe due to check in main()
 
-    // Build a fresh adapter and register tools
-    let mut adapter = Adapter::with_timeout(cli.synchronous, cli.timeout)?;
-    let tools = load_tools(&cli.tools_dir).await?;
-    for (name, config, cli_structure) in tools {
-        adapter.register_tool(&name, config, cli_structure);
+    // Initialize adapter
+    let adapter = Adapter::with_timeout(cli.synchronous, cli.timeout)?;
+
+    // Parse tool name to get base command and subcommand
+    let parts: Vec<&str> = tool_name.split('_').collect();
+    if parts.len() < 2 {
+        anyhow::bail!("Invalid tool name format. Expected 'tool_subcommand'.");
     }
+    let base_tool = parts[0];
+    let subcommand = parts[1..].join("_");
 
-    // Construct arguments from the remaining parts
-    let mut arguments = serde_json::Map::new();
+    // Construct arguments
+    let mut cmd_args = vec![subcommand];
     let mut raw_args = Vec::new();
-    let mut iter = cli.tool_args.into_iter().peekable();
+    let mut working_directory: Option<String> = None;
 
+    let mut iter = cli.tool_args.into_iter();
     while let Some(arg) = iter.next() {
         if arg == "--" {
-            // Treat the rest as positional args verbatim
-            for rest in iter {
-                raw_args.push(Value::String(rest));
-            }
+            raw_args.extend(iter);
             break;
         }
-        if let Some(key) = arg.strip_prefix("--") {
-            if let Some(next_arg) = iter.peek() {
-                if !next_arg.starts_with('-') {
-                    // Value argument (e.g., --key value)
-                    arguments.insert(key.to_string(), Value::String(iter.next().unwrap()));
-                } else {
-                    // Flag (e.g., --release)
-                    arguments.insert(key.to_string(), Value::Bool(true));
-                }
-            } else {
-                // Flag at the end
-                arguments.insert(key.to_string(), Value::Bool(true));
-            }
+        if arg == "--working-directory" {
+            working_directory = iter.next();
         } else {
-            raw_args.push(Value::String(arg));
+            raw_args.push(arg);
         }
     }
+    cmd_args.extend(raw_args.iter().map(|s| s.to_string()));
 
-    if !raw_args.is_empty() {
-        arguments.insert("args".to_string(), Value::Array(raw_args));
-    }
+    let final_working_dir = working_directory.or_else(|| {
+        std::env::current_dir()
+            .ok()
+            .map(|p| p.to_string_lossy().into_owned())
+    });
 
-    // Default working_directory to current dir if not provided
-    if !arguments.contains_key("working_directory") {
-        let current_dir = std::env::current_dir()?.to_string_lossy().to_string();
-        arguments.insert("working_directory".to_string(), Value::String(current_dir));
-    }
-
-    // Directly execute via Adapter to avoid MCP conversion layers
-    let mut args_vec = if let Some(Value::Array(vals)) = arguments.remove("args") {
-        vals.into_iter()
-            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-            .collect::<Vec<_>>()
-    } else {
-        Vec::new()
-    };
-
-    let working_directory = arguments
-        .remove("working_directory")
-        .and_then(|v| v.as_str().map(|s| s.to_string()));
-
-    // Convert remaining key/value pairs in `arguments` into CLI flags
-    let mut flags_vec: Vec<String> = Vec::new();
-    for (k, v) in arguments.into_iter() {
-        match v {
-            Value::Bool(true) => {
-                flags_vec.push(format!("--{}", k));
-            }
-            Value::String(s) => {
-                flags_vec.push(format!("--{}", k));
-                flags_vec.push(s);
-            }
-            Value::Array(arr) => {
-                // Support multi-value flags: --key v1 --key v2
-                for item in arr {
-                    if let Some(s) = item.as_str() {
-                        flags_vec.push(format!("--{}", k));
-                        flags_vec.push(s.to_string());
-                    }
-                }
-            }
-            _ => {
-                // Ignore unsupported types in CLI mode
-            }
-        }
-    }
-    // Prepend flags so options appear before positional args (e.g., git push)
-    if !flags_vec.is_empty() {
-        let mut combined = Vec::with_capacity(flags_vec.len() + args_vec.len());
-        combined.extend(flags_vec);
-        combined.extend(args_vec);
-        args_vec = combined;
-    }
-
-    let base_tool = tool_name.split('_').next().unwrap_or("");
-    // Insert subcommands if present (e.g., cargo_nextest_run -> ["nextest", "run"], cargo_build -> ["build"]).
-    // For single-command tools like ls_run, suppress a sole "run".
-    let subcmd_parts: Vec<String> = tool_name
-        .split('_')
-        .skip(1)
-        .map(|s| s.to_string())
-        .collect();
-    if !(subcmd_parts.is_empty() || (subcmd_parts.len() == 1 && subcmd_parts[0] == "run")) {
-        let mut with_subcmd = Vec::with_capacity(subcmd_parts.len() + args_vec.len());
-        with_subcmd.extend(subcmd_parts);
-        with_subcmd.extend(args_vec);
-        let exec_result = adapter
-            .execute_tool_in_dir(base_tool, with_subcmd, working_directory)
-            .await;
-        return match exec_result {
-            Ok(output) => {
-                println!("{}", output);
-                Ok(())
-            }
-            Err(e) => {
-                eprintln!("Error executing tool: {}", e);
-                Err(anyhow::anyhow!("Tool execution failed"))
-            }
-        };
-    }
-
-    let exec_result = adapter
-        .execute_tool_in_dir(base_tool, args_vec, working_directory)
+    // Execute the tool
+    let result = adapter
+        .execute_tool_in_dir(
+            base_tool,
+            cmd_args.iter().map(|s| s.to_string()).collect(),
+            final_working_dir,
+        )
         .await;
 
-    match exec_result {
+    match result {
         Ok(output) => {
             println!("{}", output);
             Ok(())
@@ -283,46 +199,69 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     }
 }
 
-async fn load_tools(
-    tools_dir: &PathBuf,
-) -> Result<Vec<(String, Config, ahma_mcp::cli_parser::CliStructure)>> {
-    let mut tools = Vec::new();
+/// Loads all valid `.toml` tool configurations from the specified directory.
+async fn load_tool_configs(tools_dir: &PathBuf) -> Result<Vec<(String, Config)>> {
+    let mut configs = Vec::new();
     if !tools_dir.exists() {
         error!("Tools directory does not exist: {:?}", tools_dir);
-        return Ok(tools); // Return empty, don't exit
+        return Ok(configs);
     }
 
+    info!("Scanning tools directory: {:?}", tools_dir);
     let mut entries = tokio::fs::read_dir(tools_dir).await?;
+    let mut toml_files = Vec::new();
+
     while let Some(entry) = entries.next_entry().await? {
         let path = entry.path();
         if path.extension().and_then(|s| s.to_str()) == Some("toml") {
-            let tool_name = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("unknown")
-                .to_string();
+            toml_files.push(path);
+        }
+    }
 
-            info!("Loading tool configuration: {}", tool_name);
+    info!("Found {} .toml files in tools directory", toml_files.len());
 
-            match Config::load_from_file(&path) {
-                Ok(config) => {
-                    let cli_parser = CliParser::new()?;
-                    match cli_parser.parse_tool_with_config(&config).await {
-                        Ok(cli_structure) => {
-                            info!("Successfully parsed CLI structure for {}", tool_name);
-                            tools.push((tool_name, config, cli_structure));
-                        }
-                        Err(e) => {
-                            error!("Failed to parse CLI structure for {}: {}", tool_name, e);
-                        }
+    for path in toml_files {
+        let tool_name = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown")
+            .to_string();
+
+        info!("Loading configuration for tool: {}", tool_name);
+        debug!("Reading config file: {:?}", path);
+
+        match Config::load_from_file(&path) {
+            Ok(config) => {
+                if config.enabled.unwrap_or(true) {
+                    info!(
+                        "Successfully loaded and enabled tool: {} (command: {}, {} subcommands)",
+                        tool_name,
+                        config.command,
+                        config.subcommand.len()
+                    );
+
+                    // Log subcommand details for debugging
+                    for subcommand in &config.subcommand {
+                        debug!(
+                            "  - Subcommand '{}': {} (options: {})",
+                            subcommand.name,
+                            subcommand.description,
+                            subcommand.options.len()
+                        );
                     }
+
+                    configs.push((tool_name, config));
+                } else {
+                    info!("Skipping disabled tool: {}", tool_name);
                 }
-                Err(e) => {
-                    error!("Failed to load config for {}: {}", tool_name, e);
-                }
+            }
+            Err(e) => {
+                error!("Failed to load config for {}: {}", tool_name, e);
+                debug!("Config file path: {:?}", path);
             }
         }
     }
-    Ok(tools)
+
+    info!("Successfully loaded {} tool configurations", configs.len());
+    Ok(configs)
 }
-// TODO: Add comprehensive error handling examples// TODO: Performance optimization for large tool configurations

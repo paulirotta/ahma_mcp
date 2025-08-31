@@ -92,7 +92,7 @@ jobs:
             sccache-nextest-${{ runner.os }}-
 
       - name: Setup Cargo Binstall
-        uses: cargo-bins/cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
 
       - name: Add Cargo Bin to PATH
         run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
@@ -175,7 +175,7 @@ jobs:
             sccache-build-${{ runner.os }}-
 
       - name: Setup Cargo Binstall
-        uses: cargo-bins/cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
 
       - name: Add Cargo Bin to PATH
         run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH

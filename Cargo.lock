@@ -26,6 +26,7 @@ dependencies = [
  "chrono",
  "clap",
  "directories",
+ "futures",
  "regex",
  "rmcp",
  "serde",

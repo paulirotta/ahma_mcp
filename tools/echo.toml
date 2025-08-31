@@ -1,12 +1,11 @@
-# Echo Tool Configuration
-tool_name = "echo"
+# Echo Tool Configuration for Ahma MCP
 command = "echo"
 enabled = true
-timeout_seconds = 30
 
-[hints]
-primary = "Use echo to display text output"
-usage = "echo <text> - display text to stdout"
-
-[hints.parameters]
-text = "The text to display"
+[[subcommand]]
+name = "message"
+description = "Echo text to stdout"
+[[subcommand.options]]
+name = "text"
+type = "string" 
+description = "Text to echo"
