@@ -312,6 +312,13 @@ impl Adapter {
         Ok(())
     }
 
+    /// Register a tool with pre-parsed configuration and CLI structure.
+    /// This avoids re-parsing help output when the structure is already available.
+    pub fn register_tool(&mut self, tool_name: &str, config: Config, structure: CliStructure) {
+        self.cli_structures.insert(tool_name.to_string(), structure);
+        self.configs.insert(tool_name.to_string(), config);
+    }
+
     /// Get all available tool schemas for MCP.
     pub fn get_tool_schemas(&self) -> Result<Vec<Value>> {
         let mut schemas = Vec::new();

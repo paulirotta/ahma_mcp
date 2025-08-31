@@ -39,7 +39,7 @@
 //! - **AI-Centric Design**: Includes features like `ToolHints` and dynamic guidance to help
 //!   AI agents use the exposed tools more effectively.
 //! - **MCP Compliance**: Implements the standard MCP interfaces for tool discovery and
--   execution, ensuring compatibility with MCP clients.
+//!   execution, ensuring compatibility with MCP clients.
 //!
 //! This library brings together these components to create a robust and flexible foundation
 //! for the `ahma_mcp` server.

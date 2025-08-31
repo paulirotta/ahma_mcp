@@ -198,11 +198,11 @@ impl AhmaMcpService {
 
 impl AhmaMcpService {
     /// Dynamic tool execution - this will be called by MCP for any tool
-    async fn execute_tool(
+    pub async fn execute_tool(
         &self,
         tool_name: &str,
         arguments: Value,
-        _ctx: RequestContext<RoleServer>,
+        _ctx: Option<RequestContext<RoleServer>>,
     ) -> Result<CallToolResult, McpError> {
         debug!("Executing tool: {} with args: {:?}", tool_name, arguments);
 
@@ -216,24 +216,28 @@ impl AhmaMcpService {
         }
 
         let base_tool = parts[0];
-        let command = parts[1..].join("_");
+        let command_to_run = parts[1..].join("_");
 
         // Look up the tool configuration
         let tools = self.tools_config.read().await;
-        let (_config, _cli_structure) = tools.get(base_tool).ok_or_else(|| {
+        let (config, cli_structure) = tools.get(base_tool).ok_or_else(|| {
             McpError::invalid_params("unknown_tool", Some(json!({"tool": base_tool})))
         })?;
 
         // Convert arguments to command-line args and extract working directory
-        let mut cmd_args = vec![command.clone()];
+        let mut cmd_args = if command_to_run == "run" && cli_structure.subcommands.is_empty() {
+            vec![]
+        } else {
+            vec![command_to_run.clone()]
+        };
         let mut working_dir: Option<String> = None;
 
-        if let Value::Object(args_map) = arguments {
+        if let Value::Object(mut args_map) = arguments {
             // Pull out working_directory and args first, then convert the rest into flags
-            if let Some(Value::String(dir)) = args_map.get("working_directory") {
-                working_dir = Some(dir.clone());
+            if let Some(Value::String(dir)) = args_map.remove("working_directory") {
+                working_dir = Some(dir);
             }
-            if let Some(Value::Array(raw_args)) = args_map.get("args") {
+            if let Some(Value::Array(raw_args)) = args_map.remove("args") {
                 for v in raw_args {
                     if let Some(s) = v.as_str() {
                         cmd_args.push(s.to_string());
@@ -242,9 +246,6 @@ impl AhmaMcpService {
             }
 
             for (key, value) in args_map {
-                if key == "working_directory" || key == "args" {
-                    continue;
-                }
                 match value {
                     Value::Bool(true) => {
                         if key.len() == 1 {
@@ -288,9 +289,11 @@ impl AhmaMcpService {
         }
 
         // Execute the command using the adapter
+        let command_to_execute = config.command.as_deref().unwrap_or(base_tool);
+
         match self
             .adapter
-            .execute_tool_in_dir(base_tool, cmd_args, working_dir)
+            .execute_tool_in_dir(command_to_execute, cmd_args, working_dir)
             .await
         {
             Ok(result) => Ok(CallToolResult::success(vec![Content::text(result)])),
@@ -398,7 +401,7 @@ impl ServerHandler for AhmaMcpService {
     ) -> Result<CallToolResult, McpError> {
         let args_map = arguments.unwrap_or_else(JsonObject::new);
         let args_value = Value::Object(args_map);
-        self.execute_tool(&name, args_value, ctx).await
+        self.execute_tool(&name, args_value, Some(ctx)).await
     }
 }
 
