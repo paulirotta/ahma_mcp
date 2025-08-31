@@ -7,11 +7,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 /// Get the workspace directory for tests
+#[allow(dead_code)]
 pub fn get_workspace_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
 /// Create a test config for integration tests
+#[allow(dead_code)]
 pub fn create_test_config(_workspace_dir: &PathBuf) -> Result<Arc<Adapter>> {
     Adapter::with_timeout(false, 30).map(Arc::new)
 }
