@@ -2,11 +2,10 @@
 //! Integration tests for all CLI tools available through ahma_mcp
 //! Tests ls, cat, grep, sed, echo, git, and cargo tools
 
+use ahma_mcp::adapter::Adapter;
 use anyhow::Result;
 use tempfile::TempDir;
 use tokio::fs;
-
-use ahma_mcp::adapter::Adapter;
 
 mod common;
 

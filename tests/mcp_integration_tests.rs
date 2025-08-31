@@ -1,11 +1,10 @@
 //! Advanced integration tests for ahma_mcp MCP tool loading and configuration
 //! Tests the actual tool loading, configuration parsing, and schema generation
 
+use ahma_mcp::{adapter::Adapter, cli_parser::CliParser, config::Config};
 use anyhow::Result;
 use tempfile::TempDir;
 use tokio::fs;
-
-use ahma_mcp::{adapter::Adapter, cli_parser::CliParser, config::Config};
 
 /// Test MCP tool loading and configuration
 #[tokio::test]

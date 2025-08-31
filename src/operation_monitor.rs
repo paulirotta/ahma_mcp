@@ -5,11 +5,12 @@
 //! automatic cleanup, and detailed logging for debugging.
 
 use crate::callback_system::{CallbackSender, ProgressUpdate};
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
-use tokio::time::timeout;
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use tokio::{sync::RwLock, time::timeout};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 use uuid::Uuid;

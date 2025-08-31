@@ -136,11 +136,6 @@ impl Adapter {
         }
     }
 
-    /// Execute command asynchronously (placeholder for now)
-    async fn execute_async(&self, args: &[String]) -> Result<String> {
-        self.execute_async_in_dir(args, None).await
-    }
-
     /// Execute command asynchronously using pre-warmed shell when possible
     async fn execute_async_in_dir(
         &self,

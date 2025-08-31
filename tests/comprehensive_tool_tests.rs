@@ -1,11 +1,10 @@
 //! Comprehensive integration tests translated from comprehensive_tool_test.py
 //! These tests exercise the Adapter directly for speed and determinism.
 
+use ahma_mcp::{adapter::Adapter, config::Config};
 use anyhow::Result;
 use tempfile::TempDir;
 use tokio::fs;
-
-use ahma_mcp::{adapter::Adapter, config::Config};
 
 async fn add_tool_from_toml(adapter: &mut Adapter, tool: &str) -> Result<()> {
     let toml_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

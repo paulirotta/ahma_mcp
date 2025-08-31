@@ -1,19 +1,17 @@
-use std::{borrow::Cow, collections::HashMap, sync::Arc};
-
+use crate::{
+    adapter::Adapter,
+    cli_parser::{CliOption, CliStructure},
+    config::Config,
+};
 use anyhow::Result;
 use rmcp::{
     ErrorData as McpError, RoleServer, ServerHandler, ServiceExt, model::*,
     service::RequestContext, transport::stdio,
 };
 use serde_json::{Map, Value, json};
+use std::{borrow::Cow, collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
-
-use crate::{
-    adapter::Adapter,
-    cli_parser::{CliOption, CliStructure},
-    config::Config,
-};
 
 /// JSON object type alias to match rmcp expectations
 type JsonObject = Map<String, Value>;
