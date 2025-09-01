@@ -43,17 +43,28 @@ async fn test_vscode_mcp_config_has_valid_command_structure() -> Result<()> {
     // Read the VS Code MCP configuration
     let mcp_config_content = fs::read_to_string(".vscode/mcp.json")?;
     let mcp_config: Value = serde_json::from_str(&mcp_config_content)?;
-    
+
     let server_config = &mcp_config["servers"]["ahma_mcp"];
-    
+
     // Verify basic structure
-    assert_eq!(server_config["type"], "stdio", "Should use stdio communication");
-    assert_eq!(server_config["cwd"], "${workspaceFolder}", "Should set working directory");
-    assert_eq!(server_config["command"], "cargo", "Should use cargo command");
-    
+    assert_eq!(
+        server_config["type"], "stdio",
+        "Should use stdio communication"
+    );
+    assert_eq!(
+        server_config["cwd"], "${workspaceFolder}",
+        "Should set working directory"
+    );
+    assert_eq!(
+        server_config["command"], "cargo",
+        "Should use cargo command"
+    );
+
     // Verify args structure for running the server
-    let args = server_config["args"].as_array().expect("Args should be an array");
-    
+    let args = server_config["args"]
+        .as_array()
+        .expect("Args should be an array");
+
     // Should have the correct cargo run structure
     assert_eq!(args[0], "run", "First arg should be 'run'");
     assert_eq!(args[1], "--release", "Should use release build");
@@ -63,6 +74,6 @@ async fn test_vscode_mcp_config_has_valid_command_structure() -> Result<()> {
     assert_eq!(args[5], "--server", "Should run in server mode");
     assert_eq!(args[6], "--tools-dir", "Should specify tools-dir");
     assert_eq!(args[7], "tools", "Should use tools directory");
-    
+
     Ok(())
 }
