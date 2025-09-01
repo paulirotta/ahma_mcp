@@ -1,30 +1,72 @@
-//! # MCP Client Abstraction
+//! # MCP Client for Pushing Results
 //!
-//! This module defines a trait for an MCP (Machine-Checked Protocol) client.
-//! By abstracting the client's capabilities, it allows for easier testing and
-//! potential integration with different MCP client implementations.
-//!
-//! ## Core Components
-//!
-//! - **`McpClient`**: An `async_trait` that specifies the essential functions an MCP
-//!   client must provide:
-//!   - `list_all_tools()`: To discover the tools available on the server.
-//!   - `call_tool()`: To execute a specific tool with given parameters.
-//!
-//! ## Purpose
-//!
-//! The primary purpose of this abstraction is to decouple the server's logic from any
-//! concrete MCP client implementation. This is particularly useful for unit and
-//! integration testing, where a mock `McpClient` can be substituted to simulate
-//! client behavior without needing a full network connection.
+//! This module provides a `Client` struct that is responsible for sending asynchronous
+//! `mcp.result` notifications back to the connected language model.
 
-use async_trait::async_trait;
-use rmcp::model::{CallToolRequestParam, CallToolResult, ListToolsResult};
+use rmcp::model::{self as mcp_model, Content, ErrorData};
+use rmcp::server::Control;
+use serde_json::json;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tracing::{info, warn};
 
-/// A trait representing the capabilities of an MCP client.
-/// This allows for mocking the client in tests.
-#[async_trait]
-pub trait McpClient: Send + Sync {
-    async fn list_all_tools(&self) -> anyhow::Result<ListToolsResult>;
-    async fn call_tool(&self, params: CallToolRequestParam) -> anyhow::Result<CallToolResult>;
+use crate::operation_monitor::OperationInfo;
+
+#[derive(Debug, Clone)]
+pub struct Client {
+    /// The control handle allows sending messages back to the client.
+    control: Arc<Mutex<Option<Control>>>,
+}
+
+impl Client {
+    /// Creates a new `Client`.
+    pub fn new() -> Self {
+        Self {
+            control: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Sets the control handle for the client, enabling it to send messages.
+    /// This is typically called once the server has established a connection.
+    pub fn set_control(&self, control: Control) {
+        let mut guard = self.control.blocking_lock();
+        *guard = Some(control);
+    }
+
+    /// Pushes the result of a completed operation back to the language model.
+    pub async fn push_result(&self, op: &OperationInfo) {
+        let mut guard = self.control.lock().await;
+        if let Some(control) = guard.as_mut() {
+            info!("Pushing result for completed operation: {}", op.id);
+
+            let result_payload = match &op.result {
+                Some(Ok(output)) => json!({
+                    "job_id": op.id,
+                    "status": "success",
+                    "output": output,
+                }),
+                Some(Err(error)) => json!({
+                    "job_id": op.id,
+                    "status": "failure",
+                    "error": error,
+                }),
+                None => json!({
+                    "job_id": op.id,
+                    "status": "failure",
+                    "error": "Operation completed without a result.",
+                }),
+            };
+
+            let mcp_result = mcp_model::Notification::new(
+                "mcp.result".to_string(),
+                Some(result_payload.as_object().unwrap().clone()),
+            );
+
+            if let Err(e) = control.send_notification(mcp_result).await {
+                warn!("Failed to send mcp.result notification: {}", e);
+            }
+        } else {
+            warn!("Cannot push result: MCP control handle is not set.");
+        }
+    }
 }

@@ -35,7 +35,7 @@ You MUST keep working until the problem is completely solved, and all items in t
 
 You are a highly capable and autonomous agent, and you can definitely solve this problem without needing to ask the user for further input.
 
-# Rust-Specific Guidelines
+# Rust Language Guidelines
 
 ## Test-Driven Development (TDD)
 
@@ -46,8 +46,8 @@ You are a highly capable and autonomous agent, and you can definitely solve this
 
 ## Cargo Tooling
 
-- **ALWAYS use 'ahma_mcp'** for Rust cargo tasks instead of direct cargo commands.
-- If a desired feature is not available in ahma_mcp, inform the user what would be nice to add, then use 'cargo' directly.
+- **ALWAYS use 'ahma_mcp'** tools for all supported tasks such as cargo instead of using the terminal. This speeds up the developement workflow.
+- If a desired feature is not available in ahma_mcp, inform the user what command or subcommand would be useful to add, then use the terminal directly.
 
 ## Build and Test Sequence
 
