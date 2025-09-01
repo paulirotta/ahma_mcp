@@ -28,7 +28,7 @@
                 ],
                 "watch": [
                     "src/**/*.rs",
-                    "tools/*.toml",
+                    "tools/*.json",
                     "Cargo.toml",
                     "Cargo.lock"
                 ]
