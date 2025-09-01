@@ -1,7 +1,6 @@
 //! Integration tests for the ahma_mcp service.
 mod common;
 
-use ahma_mcp::adapter::ExecutionMode;
 use ahma_mcp::config::{OptionConfig, SubcommandConfig, ToolConfig};
 use ahma_mcp::mcp_service::AhmaMcpService;
 use anyhow::Result;
@@ -15,7 +14,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::io::duplex;
 use tokio_util::sync::CancellationToken;
-use uuid::Uuid;
 
 // A dummy service that does nothing, just to get a Peer instance.
 #[derive(Clone)]
@@ -59,7 +57,7 @@ fn dummy_peer() -> (rmcp::service::Peer<RoleServer>, tokio::task::JoinHandle<()>
 fn dummy_request_context() -> (RequestContext<RoleServer>, tokio::task::JoinHandle<()>) {
     let (peer, handle) = dummy_peer();
     let request_context = RequestContext {
-        id: NumberOrString::String(Uuid::new_v4().to_string().into()),
+        id: NumberOrString::String("test_req_1".to_string().into()),
         peer,
         ct: CancellationToken::new(),
         meta: Default::default(),
@@ -82,10 +80,12 @@ fn create_test_configs() -> HashMap<String, ToolConfig> {
                 option_type: "string".to_string(),
                 description: "Message to echo".to_string(),
             }],
+            synchronous: Some(true), // Fast echo command should be synchronous
+            timeout_seconds: Some(30),
+            hint: Some("Echo is fast and synchronous - result returns immediately.".to_string()),
         }],
         input_schema: json!({}),
-        execution_mode: ExecutionMode::Synchronous,
-        timeout: Some(30),
+        timeout_seconds: Some(30),
         hints: Default::default(),
         enabled: true,
     };
@@ -139,10 +139,11 @@ async fn test_list_tools() -> Result<()> {
 
     handle.abort();
 
-    // Should have echo_text tool (base command "echo" + subcommand "text")
-    assert_eq!(result.tools.len(), 1);
+    // Should have echo_text tool (base command "echo" + subcommand "text") AND wait tool (hard-wired)
+    assert_eq!(result.tools.len(), 2);
     let tool_names: Vec<_> = result.tools.iter().map(|t| t.name.as_ref()).collect();
     assert!(tool_names.contains(&"echo_text"));
+    assert!(tool_names.contains(&"wait"));
 
     Ok(())
 }

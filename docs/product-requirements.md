@@ -5,8 +5,9 @@ This document outlines the high-level requirements for `ahma_mcp`, a universal, 
 ## 1. Core Functionality
 
 - **R1.1**: The system shall adapt any command-line tool for use as a set of MCP tools based on a declarative TOML configuration file.
-- **R1.2**: The primary mode of operation shall be asynchronous, allowing an AI agent to execute long-running commands without blocking. The system will immediately return an operation ID and optional tool hints.
-- **R1.3**: The system shall support a synchronous execution mode, either globally via a command-line flag (`--synchronous`) or on a per-subcommand basis via the TOML configuration. In this mode, the system blocks until the command completes and returns the result directly.
+- **R1.2**: The primary mode of operation shall be asynchronous by default, with automatic result push notifications to AI clients when operations complete. Long-running operations immediately return an operation ID and execute in the background without blocking the AI.
+- **R1.3**: Individual subcommands can be marked as `synchronous = true` in their TOML configuration for fast operations (e.g., status, version). Synchronous operations block and return results directly without operation IDs or notifications.
+- **R1.4**: The system shall use a pre-warmed shell pool to achieve 10x faster command startup times (5-20ms vs 50-200ms), optimizing performance for both synchronous and asynchronous operations.
 
 ## 2. Configuration and Tool Definition
 
@@ -24,25 +25,36 @@ This document outlines the high-level requirements for `ahma_mcp`, a universal, 
 
 ## 4. Asynchronous Operation and AI Interaction
 
-- **R4.1**: In asynchronous mode, invoking a tool shall immediately return a unique operation ID to the AI client.
-- **R4.2**: The system should provide a mechanism for pushing operation results back to the AI client upon completion (e.g., via MCP progress notifications, though this is currently handled by the client polling with the operation ID).
-- **R4.3**: The system shall provide "tool hints" to the AI agent after initiating an asynchronous operation. These hints, defined in the TOML configuration, suggest productive next steps for the agent to take while waiting.
-- **R4.4**: Tool hints are only sent for asynchronous operations.
+- **R4.1**: In asynchronous mode (default), invoking a tool shall immediately return a unique operation ID and started status to the AI client.
+- **R4.2**: The system shall automatically push operation results back to the AI client via MCP progress notifications upon completion, eliminating the need for client polling.
+- **R4.3**: Tool descriptions shall include explicit guidance to AI clients about asynchronous behavior, instructing them to continue productive work rather than waiting for results.
+- **R4.4**: The system shall strongly discourage the use of "wait" tools, making them available only for final project validation when no other productive work remains.
 
 ## 5. Synchronous Operation
 
-- **R5.1**: A global `--synchronous` flag shall force all commands to execute in a blocking manner, returning the final result directly.
-- **R5.2**: A `synchronous = true` flag can be set on any `Subcommand` in the TOML configuration to force that specific command to run synchronously, overriding the global default.
-- **R5.3**: When a command is run synchronously, no operation ID or tool hints are returned; only the final `stdout` or `stderr` is provided upon completion.
+- **R5.1**: Fast operations (e.g., status, version) can be marked with `synchronous = true` in their TOML subcommand configuration to execute in blocking mode.
+- **R5.2**: Synchronous operations return final results directly with no operation IDs, notifications, or waiting mechanisms.
+- **R5.3**: Tool descriptions for synchronous operations shall be clear and simple, with no mention of asynchronous behavior or operation tracking.
 
 ## 6. Performance and Reliability
 
-- **R6.1**: The system shall use a high-performance shell pool (`ShellPoolManager`) to minimize command startup latency for asynchronous commands executed within a known working directory.
-- **R6.2**: Operations shall be isolated to prevent interference between concurrent commands.
-- **R6.3**: The system shall provide robust error handling, clearly reporting command failures, timeouts, and configuration errors.
-- **R6.4**: Resource usage shall be optimized to handle multiple concurrent operations efficiently.
+- **R6.1**: The system shall use a high-performance, pre-warmed shell pool (`ShellPoolManager`) to minimize command startup latency, achieving 10x faster startup times (5-20ms vs 50-200ms) for commands executed within a known working directory.
+- **R6.2**: Operations shall be isolated to prevent interference between concurrent commands, with proper resource management and cleanup.
+- **R6.3**: The system shall provide robust error handling with automatic timeout management, clearly reporting command failures, timeouts, and configuration errors via MCP notifications.
+- **R6.4**: Resource usage shall be optimized to handle multiple concurrent operations efficiently, with background health monitoring and automatic cleanup of idle resources.
 
-## 7. Extensibility and Maintainability
+## 7. AI Client Guidance and User Experience
 
-- **R7.1**: The architecture shall be modular, with a clear separation of concerns between configuration (`config.rs`), MCP service logic (`mcp_service.rs`), and command execution (`adapter.rs`).
-- **R7.2**: Adding new tools or modifying existing ones should be achievable purely by editing TOML files, with no changes to the core Rust codebase.
+- **R7.1**: Tool descriptions shall include standardized guidance for AI clients, explicitly stating asynchronous behavior and instructing clients to continue productive work while operations execute in the background.
+- **R7.2**: The system shall provide context-aware hints to AI clients about productive parallel work they can perform while waiting for asynchronous operations to complete.
+- **R7.3**: "Wait" functionality shall be available but strongly discouraged through tool descriptions, positioned only for final project validation when no other tasks remain.
+- **R7.4**: Tool descriptions shall use imperative language and clear formatting to guide AI behavior effectively, reducing confusion and optimizing productivity.
+
+## 8. Extensibility and Maintainability
+
+## 8. Extensibility and Maintainability
+
+- **R8.1**: The architecture shall be modular, with a clear separation of concerns between configuration (`config.rs`), MCP service logic (`mcp_service.rs`), and command execution (`adapter.rs`).
+- **R8.2**: Adding new tools or modifying existing ones should be achievable purely by editing TOML files, with no changes to the core Rust codebase.
+- **R8.3**: The system shall provide comprehensive logging and debugging capabilities to facilitate troubleshooting and performance optimization.
+- **R8.4**: Configuration schema shall support rich metadata including timeout overrides, LLM guidance hints, and performance tuning parameters.

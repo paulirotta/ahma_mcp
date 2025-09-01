@@ -6,17 +6,17 @@
 
 ## 1. Introduction
 
-`ahma_mcp` is a universal, high-performance Model Context Protocol (MCP) server designed to dynamically adapt any command-line tool for use by AI agents. Its core principle is **configuration over code**: it uses simple TOML files to define a tool's complete interface, eliminating the need for tool-specific, hardcoded logic.
+`ahma_mcp` is a universal, high-performance Model Context Protocol (MCP) server designed to dynamically adapt any command-line tool for use by AI agents. Its core principle is **async-first execution with automatic result push**: it uses simple TOML files to define tool interfaces and automatically pushes results back to AI clients when operations complete, eliminating blocking and maximizing AI productivity.
 
-This approach provides a consistent, powerful, and maintainable bridge between AI and the vast ecosystem of command-line utilities, enabling AI agents to work productively with any CLI tool through declarative definitions.
+This approach provides a consistent, powerful, and non-blocking bridge between AI and the vast ecosystem of command-line utilities, enabling AI agents to work concurrently on multiple tasks while operations execute in the background.
 
 ### 1.1. Key Capabilities
 
-- **Configuration-Driven Tool Definition**: `ahma_mcp` uses `.toml` files as the single source of truth to define a tool's interface, including its base command, subcommands, and their options.
-- **Dedicated Subcommand Tools**: It exposes each subcommand as a distinct MCP tool (e.g., `cargo build` becomes `cargo_test`), providing a clear and unambiguous interface for the AI client.
-- **Flexible Sync/Async Architecture**: Operations can be run asynchronously (the default) or synchronously. This can be controlled globally via a CLI flag or on a per-subcommand basis within the TOML configuration.
-- **Intelligent AI Guidance**: For asynchronous operations, it provides context-aware "tool hints" that guide AI agents toward productive, concurrent workflows instead of passive waiting.
-- **High-Performance Execution**: It uses a pre-warmed shell pool (`ShellPoolManager`) for minimal command startup latency, optimizing concurrent operation handling.
+- **Async-First Architecture**: Operations execute asynchronously by default with automatic MCP progress notifications when complete, eliminating AI blocking and enabling concurrent workflows.
+- **Configuration-Driven Tool Definition**: Uses `.toml` files as the single source of truth to define a tool's interface, including sync/async behavior, timeouts, and AI guidance.
+- **High-Performance Shell Pool**: Pre-warmed shell processes provide 10x faster command startup (5-20ms vs 50-200ms), optimizing both synchronous and asynchronous operations.
+- **AI Guidance Integration**: Tool descriptions include explicit instructions to AI clients about optimal behavior, promoting productive parallel work over waiting.
+- **Selective Synchronous Override**: Fast operations (status, version) can be marked synchronous in TOML for immediate results without notifications.
 
 ## 2. Architecture
 
@@ -44,21 +44,22 @@ This approach provides a consistent, powerful, and maintainable bridge between A
 4.  The **MCP Service** iterates through these definitions. For each subcommand, it generates a complete MCP tool schema (e.g., a `cargo_build` tool with properties for `--release`, `--jobs`, etc.).
 5.  The MCP server registers all these generated tools, making them available to the client.
 
-### 2.3. Data Flow: Asynchronous Operation
+### 2.3. Data Flow: Asynchronous Operation (Default)
 
 1.  The AI sends a tool request, e.g., `{"tool_name": "cargo_build", "arguments": {"release": true, "working_directory": "/path/to/project"}}`.
 2.  The server validates the request against the `cargo_build` schema.
-3.  Because the command is asynchronous by default, the server immediately returns a response containing an `operation_id` and any configured `hints`.
-4.  The **Command Executor (`Adapter`)** dispatches the command (`cargo build --release`) to the **Shell Pool Manager**, which runs it in a background shell.
-5.  The AI, unblocked, can proceed with other tasks, using the hints for guidance.
-6.  The client is responsible for polling for the result using the `operation_id`.
+3.  The **Command Executor (`Adapter`)** immediately returns a response containing an `operation_id` and `status: "started"`.
+4.  A background task spawns to execute the command (`cargo build --release`) using the **Shell Pool Manager**.
+5.  The AI receives the immediate response and can proceed with other productive tasks.
+6.  When the background command completes, the system automatically pushes an MCP progress notification with the final result to the AI client.
+7.  The AI processes the completion notification and takes appropriate action based on success or failure.
 
-### 2.4. Data Flow: Synchronous Operation
+### 2.4. Data Flow: Synchronous Operation (Override)
 
 1.  The AI sends a tool request for a command marked as `synchronous = true` in its TOML config, e.g., `git_status`.
 2.  The server validates the request.
-3.  The **Command Executor (`Adapter`)** identifies the command as synchronous. It blocks and executes the command directly.
-4.  Once the command completes, the server returns the final result (`stdout` or `stderr`) directly to the client. No `operation_id` or `hints` are sent.
+3.  The **Command Executor (`Adapter`)** identifies the command as synchronous and executes it directly using the shell pool for performance.
+4.  Once the command completes, the server returns the final result (`stdout` or `stderr`) directly to the client. No `operation_id` or notifications are sent.
 
 ## 3. Command-Line Interface
 
@@ -68,12 +69,13 @@ ahma_mcp [OPTIONS]
 Options:
   --tools-dir <PATH>     Path to the directory containing tool TOML files.
                          (Default: 'tools')
-  --synchronous          Force ALL operations to run synchronously, overriding
-                         individual tool configurations.
   --timeout <SECONDS>    Default timeout for commands in seconds. (Default: 300)
   --debug                Enable debug-level logging.
+  --server               Run in persistent MCP server mode (required).
   --help                 Print help information.
 ```
+
+**Note**: The `--synchronous` flag has been removed. Synchronous vs asynchronous behavior is now determined exclusively by TOML configuration to eliminate AI confusion and optimize productivity.
 
 ## 4. Configuration File (`tools/*.toml`)
 
@@ -86,19 +88,31 @@ The TOML file is the central point of configuration, defining a tool's structure
 command = "cargo"
 # Optional: Is this tool enabled? Defaults to true.
 enabled = true
+# Optional: Default timeout for this tool's operations in seconds.
+timeout_seconds = 600
 
-# Optional: Global hints for this tool.
+# Optional: Global hints for AI clients using this tool.
 [hints]
-default = "While waiting for the cargo command, you could review the project's dependencies in Cargo.toml."
+default = "While cargo operations run, consider reviewing Cargo.toml dependencies, planning tests, or analyzing code structure for optimization opportunities."
+build = "Building in progress - review compilation output for warnings, plan deployment steps, or work on documentation."
+test = "Tests running - analyze test patterns, consider additional test cases, or review code coverage strategies."
 
 # Define each subcommand that should be exposed as an MCP tool.
 [[subcommand]]
 name = "build"
-description = "Compile the current package."
-# This command will run asynchronously by default.
+description = """Compile the current package.
+
+**IMPORTANT:** This tool operates asynchronously.
+1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.
+2. **Final Result:** Result pushed automatically via MCP notification when complete.
+
+**Your Instructions:**
+- **DO NOT** wait for the final result.
+- **DO** continue with other tasks that don't depend on this operation.
+- You **MUST** process the future result notification to know if operation succeeded."""
+# Async by default - no synchronous flag needed
 
 # Define the options for the 'build' subcommand.
-# The 'type' can be 'boolean', 'string', 'integer', or 'array'.
 options = [
     { name = "release", type = "boolean", description = "Build artifacts in release mode, with optimizations" },
     { name = "jobs", type = "integer", description = "Number of parallel jobs, defaults to # of CPUs" },
@@ -106,13 +120,23 @@ options = [
 ]
 
 [[subcommand]]
-name = "status"
-description = "Show the working tree status (equivalent to 'git status')."
-# This command should be fast, so we'll make it synchronous.
+name = "version"
+description = "Show cargo version information - returns immediately."
+# Fast operation - make it synchronous
 synchronous = true
+options = []
 
+[[subcommand]]
+name = "wait"
+description = """Wait for previously started asynchronous operations to complete.
+
+**WARNING:** This is a blocking tool and makes you inefficient.
+- **ONLY** use this if you have NO other tasks and cannot proceed until completion.
+- It is **ALWAYS** better to perform other work and let results be pushed to you.
+- Use this ONLY for final project validation when all work is complete."""
+synchronous = true
 options = [
-    { name = "short", type = "boolean", description = "Give the output in the short-format" }
+    { name = "operation_ids", type = "array", description = "Specific operation IDs to wait for" }
 ]
 ```
 

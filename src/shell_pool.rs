@@ -45,7 +45,10 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     process::Stdio,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, Instant},
 };
 use tokio::{
@@ -54,8 +57,9 @@ use tokio::{
     sync::{Mutex, RwLock},
     time::timeout,
 };
-use tracing::{debug, error, info, warn};
-use uuid::Uuid;
+use tracing;
+
+static SHELL_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Configuration for shell pool behavior
 #[derive(Debug, Clone)]
@@ -211,11 +215,12 @@ impl PrewarmedShell {
         _config: &ShellPoolConfig,
     ) -> Result<Self, ShellError> {
         let working_dir = working_dir.as_ref().to_path_buf();
-        let shell_id = Uuid::new_v4().to_string();
+        let shell_id = format!("sh_{}", SHELL_ID_COUNTER.fetch_add(1, Ordering::Relaxed));
 
-        debug!(
+        tracing::debug!(
             "Spawning new shell {} for directory: {:?}",
-            shell_id, &working_dir
+            shell_id,
+            &working_dir
         );
 
         // Spawn bash process with JSON communication
@@ -245,11 +250,11 @@ impl PrewarmedShell {
                         Ok(0) => break, // EOF
                         Ok(_) => {
                             if !line.trim().is_empty() {
-                                warn!(target: "shell_stderr", "shell stderr: {}", line.trim_end());
+                                tracing::warn!(target: "shell_stderr", "shell stderr: {}", line.trim_end());
                             }
                         }
                         Err(e) => {
-                            warn!(target: "shell_stderr", "error reading shell stderr: {}", e);
+                            tracing::warn!(target: "shell_stderr", "error reading shell stderr: {}", e);
                             break;
                         }
                     }
@@ -272,9 +277,10 @@ impl PrewarmedShell {
         // Initialize the shell with our command protocol handler
         shell.initialize_protocol().await?;
 
-        info!(
+        tracing::info!(
             "Successfully spawned shell {} for directory: {:?}",
-            shell_id, &working_dir
+            shell_id,
+            &working_dir
         );
         Ok(shell)
     }
@@ -350,7 +356,7 @@ done
         self.stdout_reader.read_line(&mut ready_line).await?;
 
         if ready_line.trim() != "SHELL_READY" {
-            error!(
+            tracing::error!(
                 "Shell {} failed to emit SHELL_READY, got: '{}'",
                 self.id,
                 ready_line.trim()
@@ -358,7 +364,7 @@ done
             return Err(ShellError::ProcessDied);
         }
 
-        debug!("Shell {} initialized and ready", self.id);
+        tracing::debug!("Shell {} initialized and ready", self.id);
         Ok(())
     }
 
@@ -370,9 +376,11 @@ done
         let _lock = self.command_lock.lock().await;
         self.last_used = Instant::now();
 
-        info!(
+        tracing::info!(
             "Executing command {} in shell {}: {:?}",
-            command.id, self.id, command.command
+            command.id,
+            self.id,
+            command.command
         );
 
         // Serialize command as JSON
@@ -383,17 +391,17 @@ done
             .write_all(command_json.as_bytes())
             .await
             .map_err(|_| ShellError::ProcessDied)?;
-        info!("shell {} wrote command bytes", self.id);
+        tracing::info!("shell {} wrote command bytes", self.id);
         self.stdin
             .write_all(b"\n")
             .await
             .map_err(|_| ShellError::ProcessDied)?;
-        info!("shell {} wrote newline", self.id);
+        tracing::info!("shell {} wrote newline", self.id);
         self.stdin
             .flush()
             .await
             .map_err(|_| ShellError::ProcessDied)?;
-        info!("shell {} flushed stdin", self.id);
+        tracing::info!("shell {} flushed stdin", self.id);
 
         // Read response with timeout
         let response_future = async {
@@ -418,14 +426,14 @@ done
                     return Err(ShellError::ProcessDied);
                 }
                 let trimmed = response_line.trim();
-                info!("shell {} raw line: '{}'", self.id, trimmed);
+                tracing::info!("shell {} raw line: '{}'", self.id, trimmed);
                 if trimmed.is_empty() {
                     continue;
                 }
                 match serde_json::from_str::<ShellResponse>(trimmed) {
                     Ok(resp) => break Ok(resp),
                     Err(e) => {
-                        info!("Shell {} skipping non-JSON line: '{}'", self.id, trimmed);
+                        tracing::info!("Shell {} skipping non-JSON line: '{}'", self.id, trimmed);
                         last_err = Some(e);
                         continue;
                     }
@@ -438,9 +446,11 @@ done
             .await
             .map_err(|_| ShellError::Timeout)??;
 
-        info!(
+        tracing::info!(
             "Command {} completed with exit code {} in {}ms",
-            response.id, response.exit_code, response.duration_ms
+            response.id,
+            response.exit_code,
+            response.duration_ms
         );
 
         Ok(response)
@@ -450,17 +460,17 @@ done
     pub async fn health_check(&mut self) -> bool {
         let _lock = self.command_lock.lock().await;
 
-        debug!("Performing health check on shell {}", self.id);
+        tracing::debug!("Performing health check on shell {}", self.id);
 
         // Send health check command
         if let Err(e) = self.stdin.write_all(b"HEALTH_CHECK\n").await {
-            warn!("Health check failed for shell {}: {}", self.id, e);
+            tracing::warn!("Health check failed for shell {}: {}", self.id, e);
             self.is_healthy = false;
             return false;
         }
 
         if let Err(e) = self.stdin.flush().await {
-            warn!("Health check failed for shell {}: {}", self.id, e);
+            tracing::warn!("Health check failed for shell {}: {}", self.id, e);
             self.is_healthy = false;
             return false;
         }
@@ -474,12 +484,12 @@ done
 
         match timeout(Duration::from_secs(2), health_future).await {
             Ok(Ok(response)) if response.trim() == "HEALTHY" => {
-                debug!("Shell {} is healthy", self.id);
+                tracing::debug!("Shell {} is healthy", self.id);
                 self.is_healthy = true;
                 true
             }
             _ => {
-                warn!("Shell {} failed health check", self.id);
+                tracing::warn!("Shell {} failed health check", self.id);
                 self.is_healthy = false;
                 false
             }
@@ -508,7 +518,7 @@ done
 
     /// Gracefully shutdown this shell
     pub async fn shutdown(&mut self) {
-        debug!("Shutting down shell {}", self.id);
+        tracing::debug!("Shutting down shell {}", self.id);
 
         // Try to send shutdown signal
         if (self.stdin.write_all(b"SHUTDOWN\n").await).is_ok() {
@@ -517,15 +527,15 @@ done
 
         // Kill the process
         if let Err(e) = self.process.kill().await {
-            warn!("Failed to kill shell process {}: {}", self.id, e);
+            tracing::warn!("Failed to kill shell process {}: {}", self.id, e);
         }
 
         // Wait for process to exit
         if let Err(e) = self.process.wait().await {
-            warn!("Error waiting for shell {} to exit: {}", self.id, e);
+            tracing::warn!("Error waiting for shell {} to exit: {}", self.id, e);
         }
 
-        info!("Shell {} has been shut down", self.id);
+        tracing::info!("Shell {} has been shut down", self.id);
     }
 }
 
@@ -549,7 +559,7 @@ impl ShellPool {
     /// Create a new shell pool for the specified working directory
     pub fn new(working_dir: impl AsRef<Path>, config: ShellPoolConfig) -> Self {
         let working_dir = working_dir.as_ref().to_path_buf();
-        info!("Creating shell pool for directory: {:?}", working_dir);
+        tracing::info!("Creating shell pool for directory: {:?}", working_dir);
 
         Self {
             working_dir,
@@ -570,10 +580,10 @@ impl ShellPool {
         // Try to find a healthy shell
         while let Some(shell) = shells.pop() {
             if shell.is_healthy() {
-                debug!("Reusing healthy shell {} from pool", shell.id());
+                tracing::debug!("Reusing healthy shell {} from pool", shell.id());
                 return Ok(shell);
             } else {
-                debug!("Discarding unhealthy shell {} from pool", shell.id());
+                tracing::debug!("Discarding unhealthy shell {} from pool", shell.id());
                 // Shell is unhealthy, let it drop and try next
             }
         }
@@ -581,7 +591,7 @@ impl ShellPool {
         drop(shells);
 
         // No healthy shells available, create a new one
-        debug!(
+        tracing::debug!(
             "Creating new shell for pool (directory: {:?})",
             self.working_dir
         );
@@ -594,10 +604,10 @@ impl ShellPool {
 
         // Only return healthy shells and respect pool size limits
         if shell.is_healthy() && shells.len() < self.config.shells_per_directory {
-            debug!("Returning shell {} to pool", shell.id());
+            tracing::debug!("Returning shell {} to pool", shell.id());
             shells.push(shell);
         } else {
-            debug!("Discarding shell {} (unhealthy or pool full)", shell.id());
+            tracing::debug!("Discarding shell {} (unhealthy or pool full)", shell.id());
             // Shell will be dropped and process killed
         }
     }
@@ -622,7 +632,7 @@ impl ShellPool {
             if shell.health_check().await {
                 healthy_shells.push(shell);
             } else {
-                debug!("Removing unhealthy shell {} from pool", shell.id());
+                tracing::debug!("Removing unhealthy shell {} from pool", shell.id());
                 // Unhealthy shell will be dropped
             }
         }
@@ -636,7 +646,7 @@ impl ShellPool {
         for mut shell in shells.drain(..) {
             shell.shutdown().await;
         }
-        info!("Shut down shell pool for directory: {:?}", self.working_dir);
+        tracing::info!("Shut down shell pool for directory: {:?}", self.working_dir);
     }
 
     /// Get the current number of shells in the pool
@@ -657,7 +667,7 @@ pub struct ShellPoolManager {
 impl ShellPoolManager {
     /// Create a new shell pool manager
     pub fn new(config: ShellPoolConfig) -> Self {
-        info!("Creating shell pool manager with config: {:#?}", config);
+        tracing::info!("Creating shell pool manager with config: {:#?}", config);
 
         Self {
             pools: RwLock::new(HashMap::new()),
@@ -694,14 +704,14 @@ impl ShellPoolManager {
                 }
             });
 
-            info!("Started background tasks for shell pool monitoring");
+            tracing::info!("Started background tasks for shell pool monitoring");
         }
     }
 
     /// Get a shell for the specified working directory
     pub async fn get_shell(&self, working_dir: impl AsRef<Path>) -> Option<PrewarmedShell> {
         if !self.config.enabled {
-            debug!("Shell pooling is disabled");
+            tracing::debug!("Shell pooling is disabled");
             return None;
         }
 
@@ -711,7 +721,7 @@ impl ShellPoolManager {
         {
             let total_shells = self.total_shells.lock().await;
             if *total_shells >= self.config.max_total_shells {
-                warn!("Shell pool manager at capacity ({} shells)", *total_shells);
+                tracing::warn!("Shell pool manager at capacity ({} shells)", *total_shells);
                 return None;
             }
         }
@@ -732,11 +742,11 @@ impl ShellPoolManager {
             Ok(shell) => {
                 let mut total_shells = self.total_shells.lock().await;
                 *total_shells += 1;
-                debug!("Got shell from pool, total shells: {}", *total_shells);
+                tracing::debug!("Got shell from pool, total shells: {}", *total_shells);
                 Some(shell)
             }
             Err(e) => {
-                warn!("Failed to get shell from pool for {:?}: {}", working_dir, e);
+                tracing::warn!("Failed to get shell from pool for {:?}: {}", working_dir, e);
                 None
             }
         }
@@ -756,9 +766,9 @@ impl ShellPoolManager {
 
             let mut total_shells = self.total_shells.lock().await;
             *total_shells = total_shells.saturating_sub(1);
-            debug!("Returned shell to pool, total shells: {}", *total_shells);
+            tracing::debug!("Returned shell to pool, total shells: {}", *total_shells);
         } else {
-            warn!("No pool found for working directory: {:?}", working_dir);
+            tracing::warn!("No pool found for working directory: {:?}", working_dir);
             // Shell will be dropped
         }
     }
@@ -775,13 +785,13 @@ impl ShellPoolManager {
         let pool = Arc::new(ShellPool::new(working_dir, self.config.clone()));
         pools.insert(working_dir.to_path_buf(), Arc::clone(&pool));
 
-        info!("Created new shell pool for directory: {:?}", working_dir);
+        tracing::info!("Created new shell pool for directory: {:?}", working_dir);
         pool
     }
 
     /// Clean up idle pools and perform health checks
     pub async fn cleanup_idle_pools(&self) {
-        debug!("Starting cleanup of idle pools");
+        tracing::debug!("Starting cleanup of idle pools");
 
         let mut pools = self.pools.write().await;
         let mut pools_to_remove = Vec::new();
@@ -789,7 +799,7 @@ impl ShellPoolManager {
         // Check each pool for idleness and health
         for (working_dir, pool) in pools.iter() {
             if pool.is_idle().await {
-                debug!("Pool for {:?} is idle, marking for removal", working_dir);
+                tracing::debug!("Pool for {:?} is idle, marking for removal", working_dir);
                 pools_to_remove.push(working_dir.clone());
             } else {
                 // Perform health check on active pools
@@ -804,12 +814,12 @@ impl ShellPoolManager {
             }
         }
 
-        debug!("Completed cleanup, {} pools remaining", pools.len());
+        tracing::debug!("Completed cleanup, {} pools remaining", pools.len());
     }
 
     /// Shutdown all pools and shells
     pub async fn shutdown_all(&self) {
-        info!("Shutting down all shell pools");
+        tracing::info!("Shutting down all shell pools");
 
         let mut pools = self.pools.write().await;
         let pool_count = pools.len();
@@ -821,7 +831,7 @@ impl ShellPoolManager {
         let mut total_shells = self.total_shells.lock().await;
         *total_shells = 0;
 
-        info!("Shut down {} shell pools", pool_count);
+        tracing::info!("Shut down {} shell pools", pool_count);
     }
 
     /// Get configuration
@@ -850,13 +860,13 @@ impl ShellPoolManager {
             let before_count = pool.shell_count().await;
             // Shells will be cleaned up based on their idle timeout
             // This is a placeholder - actual cleanup logic would be in ShellPool
-            debug!("Checking pool {:?} for idle shells", path);
+            tracing::debug!("Checking pool {:?} for idle shells", path);
             let after_count = pool.shell_count().await;
             cleaned_count += before_count.saturating_sub(after_count);
         }
 
         if cleaned_count > 0 {
-            info!("Cleaned up {} idle shells", cleaned_count);
+            tracing::info!("Cleaned up {} idle shells", cleaned_count);
         }
     }
 
@@ -865,7 +875,7 @@ impl ShellPoolManager {
         let pools = self.pools.read().await;
 
         for (path, pool) in pools.iter() {
-            debug!("Health checking pool {:?}", path);
+            tracing::debug!("Health checking pool {:?}", path);
             pool.health_check().await;
         }
     }

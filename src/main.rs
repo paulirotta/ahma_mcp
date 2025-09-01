@@ -53,7 +53,7 @@ use rmcp::ServiceExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{error, info, instrument, warn};
+use tracing::instrument;
 use tracing_subscriber::EnvFilter;
 
 /// Ahma MCP Server: A generic, config-driven adapter for CLI tools.
@@ -77,10 +77,6 @@ struct Cli {
     /// Path to the directory containing tool TOML configuration files.
     #[arg(long, global = true, default_value = "tools")]
     tools_dir: PathBuf,
-
-    /// Force all operations to run synchronously.
-    #[arg(long, global = true)]
-    synchronous: bool,
 
     /// Default timeout for commands in seconds.
     #[arg(long, global = true, default_value = "300")]
@@ -113,10 +109,10 @@ async fn main() -> Result<()> {
         .init();
 
     if cli.server || cli.tool_name.is_none() {
-        info!("Running in Server mode");
+        tracing::info!("Running in Server mode");
         run_server_mode(cli).await
     } else {
-        info!("CLI mode is currently disabled during refactoring.");
+        tracing::info!("CLI mode is currently disabled during refactoring.");
         anyhow::bail!(
             "CLI mode is currently disabled during refactoring. Please use --server mode."
         );
@@ -124,10 +120,9 @@ async fn main() -> Result<()> {
 }
 
 async fn run_server_mode(cli: Cli) -> Result<()> {
-    info!("Starting ahma_mcp v1.0.0");
-    info!("Tools directory: {:?}", cli.tools_dir);
-    info!("Synchronous mode: {}", cli.synchronous);
-    info!("Command timeout: {}s", cli.timeout);
+    tracing::info!("Starting ahma_mcp v1.0.0");
+    tracing::info!("Tools directory: {:?}", cli.tools_dir);
+    tracing::info!("Command timeout: {}s", cli.timeout);
 
     // Initialize the operation monitor
     let monitor_config = MonitorConfig::with_timeout(std::time::Duration::from_secs(cli.timeout));
@@ -147,10 +142,10 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     // Load tool configurations
     let configs = Arc::new(load_tool_configs()?);
     if configs.is_empty() {
-        error!("No valid tool configurations found in {:?}", cli.tools_dir);
+        tracing::error!("No valid tool configurations found in {:?}", cli.tools_dir);
         // It's not a fatal error to have no tools, just log it.
     } else {
-        info!("Loaded {} tool configurations", configs.len());
+        tracing::info!("Loaded {} tool configurations", configs.len());
     }
 
     // Create and start the MCP service
@@ -161,10 +156,12 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     // Start the MCP notification system for async operations
     let operation_monitor_clone = operation_monitor.clone();
     tokio::spawn(async move {
-        info!("Starting MCP notification system for async operations");
+        tracing::info!("Starting MCP notification system for async operations");
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await; // Check more frequently for better responsiveness
-            let completed_ops = operation_monitor_clone.get_completed_operations().await;
+            let completed_ops = operation_monitor_clone
+                .get_and_clear_completed_operations()
+                .await;
 
             if !completed_ops.is_empty() {
                 // Get the MCP peer handle for notifications
@@ -172,7 +169,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
                     let peer_guard = service_handler_clone.peer.read().unwrap();
                     peer_guard.clone()
                 } {
-                    info!(
+                    tracing::info!(
                         "Sending MCP notifications for {} completed operations",
                         completed_ops.len()
                     );
@@ -218,19 +215,20 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
                         };
 
                         if let Err(e) = callback.send_progress(progress_update).await {
-                            warn!(
+                            tracing::warn!(
                                 "Failed to send MCP notification for operation {}: {:?}",
-                                op.id, e
+                                op.id,
+                                e
                             );
                         } else {
-                            info!(
+                            tracing::info!(
                                 "Successfully sent MCP notification for operation: {}",
                                 op.id
                             );
                         }
                     }
                 } else {
-                    warn!(
+                    tracing::warn!(
                         "No MCP peer available for sending notifications - operations completed but notifications not sent"
                     );
                 }

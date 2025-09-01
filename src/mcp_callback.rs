@@ -49,7 +49,7 @@ use rmcp::{
     service::{Peer, RoleServer},
 };
 use std::sync::Arc;
-use tracing::{debug, error, warn};
+use tracing;
 
 /// MCP callback sender that sends progress notifications to the AI client
 pub struct McpCallbackSender {
@@ -66,7 +66,7 @@ impl McpCallbackSender {
 #[async_trait]
 impl CallbackSender for McpCallbackSender {
     async fn send_progress(&self, update: ProgressUpdate) -> Result<(), CallbackError> {
-        debug!("Sending MCP progress notification: {:?}", update);
+        tracing::debug!("Sending MCP progress notification: {:?}", update);
 
         let progress_token = ProgressToken(NumberOrString::String(Arc::from(
             self.operation_id.as_str(),
@@ -78,9 +78,11 @@ impl CallbackSender for McpCallbackSender {
                 command,
                 description,
             } => {
-                debug!(
+                tracing::debug!(
                     "Starting operation {}: {} - {}",
-                    operation_id, command, description
+                    operation_id,
+                    command,
+                    description
                 );
                 ProgressNotificationParam {
                     progress_token: progress_token.clone(),
@@ -121,7 +123,7 @@ impl CallbackSender for McpCallbackSender {
                 message,
                 ..
             } => {
-                debug!("Completed operation {}: {}", operation_id, message);
+                tracing::debug!("Completed operation {}: {}", operation_id, message);
                 ProgressNotificationParam {
                     progress_token: progress_token.clone(),
                     progress: 100.0,
@@ -134,7 +136,7 @@ impl CallbackSender for McpCallbackSender {
                 error,
                 ..
             } => {
-                warn!("Failed operation {}: {}", operation_id, error);
+                tracing::warn!("Failed operation {}: {}", operation_id, error);
                 ProgressNotificationParam {
                     progress_token: progress_token.clone(),
                     progress: 100.0, // Mark as complete even on failure
@@ -147,7 +149,7 @@ impl CallbackSender for McpCallbackSender {
                 message,
                 ..
             } => {
-                warn!("Cancelled operation {}: {}", operation_id, message);
+                tracing::warn!("Cancelled operation {}: {}", operation_id, message);
                 ProgressNotificationParam {
                     progress_token: progress_token.clone(),
                     progress: 100.0, // Mark as complete even when cancelled
@@ -165,7 +167,7 @@ impl CallbackSender for McpCallbackSender {
                 duration_ms,
             } => {
                 let status = if success { "COMPLETED" } else { "FAILED" };
-                debug!("{} operation {}: {}", status, operation_id, command);
+                tracing::debug!("{} operation {}: {}", status, operation_id, command);
 
                 let final_message = format!(
                     "OPERATION {}: '{}'\nCommand: {}\nDescription: {}\nWorking Directory: {}\nDuration: {}ms\n\n=== FULL OUTPUT ===\n{}",
@@ -189,11 +191,11 @@ impl CallbackSender for McpCallbackSender {
 
         match self.peer.notify_progress(params).await {
             Ok(()) => {
-                debug!("Successfully sent MCP progress notification");
+                tracing::debug!("Successfully sent MCP progress notification");
                 Ok(())
             }
             Err(e) => {
-                error!("Failed to send MCP progress notification: {:?}", e);
+                tracing::error!("Failed to send MCP progress notification: {:?}", e);
                 Err(CallbackError::SendFailed(format!(
                     "Failed to send MCP notification: {e:?}"
                 )))
