@@ -45,7 +45,6 @@
 // Public modules
 pub mod adapter;
 pub mod callback_system;
-pub mod client;
 pub mod config;
 pub mod constants;
 pub mod logging;
@@ -63,5 +62,5 @@ pub mod test;
 
 // Re-export main types for easier use
 pub use adapter::Adapter;
-pub use config::Config;
+
 pub use mcp_service::AhmaMcpService;

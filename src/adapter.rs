@@ -37,231 +37,226 @@
 //!   asynchronous operations are executed with minimal overhead, which is critical for a
 //!   responsive user experience in a server context.
 
-use anyhow::{Context, Result};
-use rmcp::model::{CallToolResult, Content};
-use std::collections::HashMap;
+use crate::{
+    operation_monitor::{Operation, OperationMonitor, OperationStatus},
+    shell_pool::{ShellCommand, ShellPoolManager},
+};
+use anyhow::Result;
+use rmcp::ErrorData as McpError;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use std::sync::Arc;
-use tokio::process::Command;
-use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::shell_pool::{ShellCommand, ShellPoolConfig, ShellPoolManager};
-
-/// Defines whether a command should run synchronously (blocking) or asynchronously (non-blocking).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExecutionMode {
     Synchronous,
-    Asynchronous,
+    AsyncResultPush,
 }
 
 /// The main adapter that handles command execution.
 #[derive(Debug)]
 pub struct Adapter {
-    /// Whether to force all operations to run synchronously.
-    synchronous_mode: bool,
-    /// Default command timeout in seconds.
-    timeout_secs: u64,
+    /// Operation monitor for async tasks.
+    monitor: Arc<OperationMonitor>,
     /// Pre-warmed shell pool manager for async execution.
     shell_pool: Arc<ShellPoolManager>,
 }
 
 impl Adapter {
     /// Create a new adapter with a specific timeout.
-    pub fn with_timeout(synchronous_mode: bool, timeout_secs: u64) -> Result<Self> {
-        let shell_pool = Arc::new(ShellPoolManager::new(ShellPoolConfig::default()));
-        shell_pool.clone().start_background_tasks();
-
-        Ok(Adapter {
-            synchronous_mode,
-            timeout_secs,
+    pub fn new(monitor: Arc<OperationMonitor>, shell_pool: Arc<ShellPoolManager>) -> Result<Self> {
+        Ok(Self {
+            monitor,
             shell_pool,
         })
     }
 
-    /// Execute a tool with the given arguments in an optional working directory.
-    ///
-    /// # Arguments
-    /// * `command` - The base command to execute (e.g., "cargo").
-    /// * `args` - A vector of string arguments for the command (e.g., ["build", "--release"]).
-    /// * `working_directory` - The absolute path to the directory where the command should run.
-    /// * `mode` - The execution mode (sync or async).
-    /// * `hints` - Optional hints to return for async operations.
-    pub async fn execute_tool_in_dir(
+    /// Synchronously executes a command and returns the result directly.
+    pub async fn execute_sync_in_dir(
         &self,
         command: &str,
-        mut args: Vec<String>,
-        working_directory: Option<String>,
-        mode: ExecutionMode,
-        hints: Option<HashMap<String, String>>,
-    ) -> Result<CallToolResult> {
-        let mut full_cmd_args = vec![command.to_string()];
-        full_cmd_args.extend(args.clone());
+        args: Option<serde_json::Map<String, Value>>,
+        working_directory: &str,
+        timeout: Option<u64>,
+    ) -> Result<String, McpError> {
+        let mut shell = self
+            .shell_pool
+            .get_shell(working_directory)
+            .await
+            .ok_or_else(|| McpError::internal_error("shell_unavailable", None))?;
 
-        // Global synchronous flag overrides everything
-        if self.synchronous_mode || mode == ExecutionMode::Synchronous {
-            let result = self
-                .execute_sync_in_dir(&full_cmd_args, working_directory.as_deref())
-                .await?;
-            Ok(CallToolResult::success(vec![Content::text(result)]))
-        } else {
-            self.execute_async_in_dir(command, &mut args, working_directory.as_deref(), hints)
-                .await
-        }
-    }
+        let args_vec = args
+            .map(|map| {
+                let mut positional_args = Vec::new();
+                let mut flag_args = Vec::new();
 
-    /// Execute command synchronously with optional working directory.
-    async fn execute_sync_in_dir(
-        &self,
-        args: &[String],
-        working_directory: Option<&str>,
-    ) -> Result<String> {
-        let mut cmd = Command::new(&args[0]);
-        if args.len() > 1 {
-            cmd.args(&args[1..]);
-        }
-
-        if let Some(dir) = working_directory {
-            cmd.current_dir(dir);
-        }
-
-        let output = tokio::time::timeout(
-            std::time::Duration::from_secs(self.timeout_secs),
-            cmd.output(),
-        )
-        .await
-        .context("Command timed out")?
-        .context("Failed to execute command")?;
-
-        if output.status.success() {
-            Ok(String::from_utf8_lossy(&output.stdout).to_string())
-        } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            Err(anyhow::anyhow!("Command failed: {}", stderr))
-        }
-    }
-
-    /// Spawns a command asynchronously using the shell pool and immediately returns an operation ID.
-    async fn execute_async_in_dir(
-        &self,
-        command: &str,
-        args: &mut Vec<String>,
-        working_directory: Option<&str>,
-        hints: Option<HashMap<String, String>>,
-    ) -> Result<CallToolResult> {
-        let op_id = Uuid::new_v4().to_string();
-
-        // If we have a working directory and shell pooling is enabled, use it.
-        if let Some(dir) = working_directory {
-            if let Some(mut shell) = self.shell_pool.get_shell(dir).await {
-                let mut command_parts = vec![command.to_string()];
-                command_parts.append(args);
-
-                let shell_cmd = ShellCommand {
-                    id: op_id.clone(),
-                    command: command_parts,
-                    working_dir: dir.to_string(),
-                    timeout_ms: self.timeout_secs * 1000,
-                };
-
-                // Execute in the background, don't await the final result here.
-                let _shell_pool = self.shell_pool.clone();
-                tokio::spawn(async move {
-                    info!(
-                        "Starting async shell operation (op_id: {}): {:?}",
-                        shell_cmd.id, shell_cmd.command
-                    );
-                    match shell.execute_command(shell_cmd).await {
-                        Ok(resp) if resp.exit_code == 0 => {
-                            info!("Async shell op {} succeeded.", resp.id);
-                            // TODO: Store result
-                        }
-                        Ok(resp) => {
-                            warn!(
-                                "Async shell op {} failed with code {}: {}",
-                                resp.id, resp.exit_code, resp.stderr
-                            );
-                            // TODO: Store result
-                        }
-                        Err(e) => {
-                            error!("Async shell op failed to execute: {}", e);
-                            // TODO: Store result
-                        }
-                    }
-                    _shell_pool.return_shell(shell).await;
-                });
-            } else {
-                // Fallback to spawning a regular command if shell is not available
-                self.spawn_background_command(&op_id, command, args, working_directory)
-                    .await;
-            }
-        } else {
-            // Fallback for commands without a working directory
-            self.spawn_background_command(&op_id, command, args, working_directory)
-                .await;
-        }
-
-        // Immediately return the operation ID and hints to the client
-        let mut content = vec![Content::text(format!("operation_id: {}", op_id))];
-        if let Some(hints_map) = hints {
-            let subcommand_name = args.first().map(|s| s.as_str()).unwrap_or("");
-            let hint_text = hints_map
-                .get(subcommand_name)
-                .or_else(|| hints_map.get("default"))
-                .map(|s| s.as_str());
-
-            if let Some(text) = hint_text {
-                content.push(Content::text(text));
-            }
-        }
-
-        Ok(CallToolResult::success(content))
-    }
-
-    /// Helper to spawn a standard tokio::process::Command in the background.
-    async fn spawn_background_command(
-        &self,
-        op_id: &str,
-        command: &str,
-        args: &[String],
-        working_directory: Option<&str>,
-    ) {
-        let op_id = op_id.to_string();
-        let command = command.to_string();
-        let args = args.to_vec();
-        let wd = working_directory.map(|s| s.to_string());
-        let timeout_secs = self.timeout_secs;
-
-        tokio::spawn(async move {
-            info!(
-                "Starting async operation (op_id: {}): {} {:?}",
-                op_id, command, args
-            );
-            let mut cmd = Command::new(&command);
-            cmd.args(&args);
-            if let Some(dir) = wd {
-                cmd.current_dir(dir);
-            }
-
-            let result =
-                tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), cmd.output())
-                    .await;
-
-            // TODO: Store the result somewhere for the client to fetch using the op_id.
-            match result {
-                Ok(Ok(output)) => {
-                    if output.status.success() {
-                        info!("Async op {} finished successfully.", op_id);
+                for (k, v) in map.into_iter() {
+                    if k == "_subcommand" {
+                        // Handle subcommand as positional argument (first)
+                        positional_args.insert(0, v.as_str().unwrap_or("").to_string());
                     } else {
-                        warn!(
-                            "Async op {} failed. Stderr: {}",
-                            op_id,
-                            String::from_utf8_lossy(&output.stderr)
-                        );
+                        // Handle regular arguments as flags
+                        flag_args.push(format!("--{}={}", k, v.as_str().unwrap_or("")));
                     }
                 }
-                Ok(Err(e)) => error!("Async op {} failed to execute: {}", op_id, e),
-                Err(_) => warn!("Async op {} timed out.", op_id),
+
+                // Combine positional args first, then flag args
+                positional_args
+                    .into_iter()
+                    .chain(flag_args.into_iter())
+                    .collect::<Vec<String>>()
+            })
+            .unwrap_or_default();
+
+        let shell_cmd = ShellCommand {
+            id: Uuid::new_v4().to_string(),
+            command: [command]
+                .iter()
+                .map(ToString::to_string)
+                .chain(args_vec.into_iter())
+                .collect(),
+            working_dir: working_directory.to_string(),
+            timeout_ms: timeout.map_or(
+                self.shell_pool.config().command_timeout.as_millis() as u64,
+                |t| t * 1000,
+            ),
+        };
+
+        let result = shell.execute_command(shell_cmd).await;
+        self.shell_pool.return_shell(shell).await;
+
+        match result {
+            Ok(output) => {
+                if output.exit_code == 0 {
+                    Ok(output.stdout)
+                } else {
+                    Err(McpError::internal_error(
+                        "command_failed",
+                        Some(json!({
+                            "error": output.stderr,
+                            "stdout": output.stdout,
+                            "exit_code": output.exit_code
+                        })),
+                    ))
+                }
+            }
+            Err(e) => Err(McpError::internal_error(
+                "command_failed",
+                Some(json!({"error": e.to_string()})),
+            )),
+        }
+    }
+
+    /// Asynchronously starts a command, returns a job_id, and pushes the result later.
+    pub async fn execute_async_in_dir(
+        &self,
+        command: &str,
+        args: Option<serde_json::Map<String, Value>>,
+        working_directory: &str,
+        timeout: Option<u64>,
+    ) -> String {
+        let op_id = Uuid::new_v4().to_string();
+        let op_id_clone = op_id.clone();
+        let wd = working_directory.to_string();
+
+        let operation = Operation::new(op_id.clone(), format!("{} {:?}", command, args), None);
+        self.monitor.add_operation(operation).await;
+
+        let monitor = self.monitor.clone();
+        let shell_pool = self.shell_pool.clone();
+        let command = command.to_string();
+
+        let args_vec = args
+            .map(|map| {
+                let mut positional_args = Vec::new();
+                let mut flag_args = Vec::new();
+
+                for (k, v) in map.into_iter() {
+                    if k == "_subcommand" {
+                        // Handle subcommand as positional argument (first)
+                        positional_args.insert(0, v.as_str().unwrap_or("").to_string());
+                    } else {
+                        // Handle regular arguments as flags
+                        flag_args.push(format!("--{}={}", k, v.as_str().unwrap_or("")));
+                    }
+                }
+
+                // Combine positional args first, then flag args
+                positional_args
+                    .into_iter()
+                    .chain(flag_args.into_iter())
+                    .collect::<Vec<String>>()
+            })
+            .unwrap_or_default();
+
+        let full_command = [command.clone()]
+            .iter()
+            .map(ToString::to_string)
+            .chain(args_vec.into_iter())
+            .collect();
+
+        tokio::spawn(async move {
+            monitor
+                .update_status(&op_id, OperationStatus::InProgress, None)
+                .await;
+
+            let mut shell = match shell_pool.get_shell(&wd).await {
+                Some(s) => s,
+                None => {
+                    let error_message = "Failed to get shell from pool".to_string();
+                    monitor
+                        .update_status(
+                            &op_id,
+                            OperationStatus::Failed,
+                            Some(Value::String(error_message)),
+                        )
+                        .await;
+                    return;
+                }
+            };
+
+            let shell_cmd = ShellCommand {
+                id: op_id.clone(),
+                command: full_command,
+                working_dir: wd,
+                timeout_ms: timeout.map_or(
+                    shell_pool.config().command_timeout.as_millis() as u64,
+                    |t| t * 1000,
+                ),
+            };
+
+            let result = shell.execute_command(shell_cmd).await;
+            shell_pool.return_shell(shell).await;
+
+            match result {
+                Ok(output) => {
+                    let final_output = json!({
+                        "stdout": output.stdout,
+                        "stderr": output.stderr,
+                        "exit_code": output.exit_code,
+                    });
+                    let status = if output.exit_code == 0 {
+                        OperationStatus::Completed
+                    } else {
+                        OperationStatus::Failed
+                    };
+                    monitor
+                        .update_status(&op_id, status, Some(final_output))
+                        .await;
+                }
+                Err(e) => {
+                    monitor
+                        .update_status(
+                            &op_id,
+                            OperationStatus::Failed,
+                            Some(Value::String(e.to_string())),
+                        )
+                        .await;
+                }
             }
         });
+
+        op_id_clone
     }
 }

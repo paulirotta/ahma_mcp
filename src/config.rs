@@ -40,89 +40,88 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+
+use crate::adapter::ExecutionMode;
 
 /// Represents the complete configuration for a command-line tool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Config {
-    /// The base command to execute (e.g., "cargo", "git").
+pub struct ToolConfig {
+    pub name: String,
+    pub description: String,
     pub command: String,
-
-    /// A list of subcommands to be exposed as individual MCP tools.
     #[serde(default)]
-    pub subcommand: Vec<Subcommand>,
-
-    /// Optional: Tool-specific hints for AI guidance.
-    pub hints: Option<HashMap<String, String>>,
-
-    /// Whether this tool is enabled. Defaults to true.
-    pub enabled: Option<bool>,
+    pub subcommand: Vec<SubcommandConfig>,
+    pub input_schema: Value,
+    #[serde(default = "default_execution_mode")]
+    pub execution_mode: ExecutionMode,
+    pub timeout: Option<u64>,
+    #[serde(default)]
+    pub hints: ToolHints,
+    #[serde(default)]
+    pub enabled: bool,
 }
 
-/// Defines a subcommand to be exposed as a distinct MCP tool.
+/// Configuration for a subcommand within a tool
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Subcommand {
-    /// The name of the subcommand (e.g., "build", "test").
+pub struct SubcommandConfig {
     pub name: String,
-
-    /// A description of what the subcommand does.
     pub description: String,
-
-    /// A list of options (flags) that the subcommand accepts.
     #[serde(default)]
-    pub options: Vec<CliOption>,
-
-    /// An optional list of raw string arguments to be passed to the command.
-    #[serde(default)]
-    pub args: Vec<String>,
-
-    /// If true, this subcommand will always run synchronously.
-    #[serde(default)]
-    pub synchronous: Option<bool>,
+    pub options: Vec<OptionConfig>,
 }
 
-/// Defines a single command-line option for a subcommand.
+/// Configuration for an option within a subcommand
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CliOption {
-    /// The name of the option (e.g., "release", "jobs").
+pub struct OptionConfig {
     pub name: String,
-
-    /// The data type of the option's value.
     #[serde(rename = "type")]
-    pub type_: String, // "boolean", "string", "integer", "array"
-
-    /// A description of what the option does.
+    pub option_type: String,
     pub description: String,
 }
 
-impl Config {
-    /// Load configuration from a TOML file.
-    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let path = path.as_ref();
-        let contents = fs::read_to_string(path)
-            .with_context(|| format!("Failed to read config file: {}", path.display()))?;
+fn default_execution_mode() -> ExecutionMode {
+    ExecutionMode::AsyncResultPush
+}
 
-        let config: Config = toml::from_str(&contents).with_context(|| {
-            format!(
-                "Failed to parse config file: {}. Content:\n{}",
-                path.display(),
-                contents
-            )
-        })?;
+/// A collection of hints for a tool.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ToolHints {
+    /// Hints for specific operations like "build" or "test".
+    #[serde(flatten)]
+    pub operation_hints: HashMap<String, String>,
+    /// If true, treat any output on stderr as a failure.
+    pub treat_stderr_as_error: Option<bool>,
+}
 
-        Ok(config)
+/// Load all tool configurations from the `tools` directory.
+pub fn load_tool_configs() -> Result<HashMap<String, ToolConfig>> {
+    let mut configs = HashMap::new();
+    let tools_dir = PathBuf::from("tools");
+
+    if !tools_dir.exists() {
+        return Ok(configs);
     }
 
-    /// Load configuration for a specific tool from the tools directory.
-    pub fn load_tool_config(tool_name: &str) -> Result<Self> {
-        let config_path = PathBuf::from("tools").join(format!("{}.toml", tool_name));
-        Self::load_from_file(&config_path)
+    for entry in fs::read_dir(tools_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("toml") {
+            let contents = fs::read_to_string(&path)
+                .with_context(|| format!("Failed to read config file: {}", path.display()))?;
+            let config: ToolConfig = toml::from_str(&contents).with_context(|| {
+                format!(
+                    "Failed to parse config file: {}. Content:\n{}",
+                    path.display(),
+                    contents
+                )
+            })?;
+            configs.insert(config.name.clone(), config);
+        }
     }
 
-    /// Check if the tool is enabled (default: true).
-    pub fn is_enabled(&self) -> bool {
-        self.enabled.unwrap_or(true)
-    }
+    Ok(configs)
 }

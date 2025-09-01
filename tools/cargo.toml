@@ -1,6 +1,13 @@
 # Cargo Tool Configuration for Ahma MCP
+name = "cargo"
+description = "Rust's build tool and package manager"
 command = "cargo"
 enabled = true
+
+# JSON Schema for the tool input parameters
+[input_schema]
+type = "object"
+properties = {}
 
 # Common cargo subcommands
 [[subcommand]]
@@ -91,3 +98,107 @@ description = "Open documentation in browser"
 [hints]
 primary = "Cargo is Rust's build tool and package manager"
 usage = "Common commands: build, test, run, check, clippy, fmt"
+ 
+[[subcommand]]
+name = "clean"
+description = "Remove build artifacts"
+
+[[subcommand]]
+name = "add"
+description = "Add a dependency to Cargo.toml (requires cargo-edit)"
+[[subcommand.options]]
+name = "package"
+type = "string"
+description = "Package name (and optional version) to add, e.g. serde@1.0"
+
+[[subcommand]]
+name = "remove"
+description = "Remove a dependency from Cargo.toml (requires cargo-edit)"
+[[subcommand.options]]
+name = "package"
+type = "string"
+description = "Package name to remove"
+
+[[subcommand]]
+name = "update"
+description = "Update dependencies in Cargo.lock to latest compatible versions"
+[[subcommand.options]]
+name = "package"
+type = "string"
+description = "Optional specific package to update"
+
+[[subcommand]]
+name = "fetch"
+description = "Download dependencies without building"
+
+[[subcommand]]
+name = "install"
+description = "Install a Rust binary via cargo"
+[[subcommand.options]]
+name = "package"
+type = "string"
+description = "Package/binary to install"
+
+[[subcommand]]
+name = "search"
+description = "Search for packages on crates.io"
+[[subcommand.options]]
+name = "query"
+type = "string"
+description = "Search query"
+
+[[subcommand]]
+name = "tree"
+description = "Display dependency tree"
+
+[[subcommand]]
+name = "version"
+description = "Show cargo version information"
+
+[[subcommand]]
+name = "rustc"
+description = "Compile with custom rustc options"
+[[subcommand.options]]
+name = "flag"
+type = "string"
+description = "Pass-through rustc flag"
+
+[[subcommand]]
+name = "metadata"
+description = "Output package metadata as JSON"
+
+[[subcommand]]
+name = "nextest"
+description = "Run tests with cargo-nextest (if installed)"
+[[subcommand.options]]
+name = "workspace"
+type = "boolean"
+description = "Run tests for all packages in workspace"
+
+[[subcommand]]
+name = "audit"
+description = "Run security vulnerability scanning (if cargo-audit installed)"
+
+[[subcommand]]
+name = "upgrade"
+description = "Upgrade dependency versions in Cargo.toml (requires cargo-edit)"
+[[subcommand.options]]
+name = "yes"
+type = "boolean"
+description = "Automatically apply upgrades"
+
+[[subcommand]]
+name = "bump_version"
+description = "Bump package version (requires cargo-edit or custom script)"
+[[subcommand.options]]
+name = "bump_type"
+type = "string"
+description = "patch, minor, or major"
+[[subcommand.options]]
+name = "dry_run"
+type = "boolean"
+description = "Show changes without modifying files"
+
+[[subcommand]]
+name = "bench"
+description = "Run benchmarks"

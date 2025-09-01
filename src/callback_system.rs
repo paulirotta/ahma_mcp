@@ -1,69 +1,44 @@
-//! # Asynchronous Callback System for Operation Monitoring
+//! Asynchronous callback system for monitoring cargo operation progress
 //!
-//! This module defines a flexible, asynchronous callback system designed for monitoring
-//! the progress of long-running operations. It provides a structured way to report
-//! status updates, stream output, and handle completion or failure notifications.
+//! This module provides a flexible callback architecture for tracking the progress of
+//! long-running cargo operations. It enables real-time progress updates, output streaming,
+//! and completion notifications through various callback mechanisms.
 //!
-//! ## Core Components
+//! ## Key Components
 //!
-//! * **`ProgressUpdate`**: An enum that represents all possible states and outputs of an
-//!   operation. It includes variants for start, progress, output lines (stdout/stderr),
-//!   completion, failure, and cancellation. This standardized structure allows consumers
-//!   to easily parse and react to operation events.
+//! - [`ProgressUpdate`]: Enumeration of different progress event types
+//! - [`CallbackSender`]: Trait for implementing custom progress callback handlers
+//! - [`ChannelCallbackSender`]: Channel-based callback implementation for async communication
+//! - [`LoggingCallbackSender`]: Simple logging-based callback for debugging and monitoring
 //!
-//! * **`CallbackSender`**: An `async_trait` that defines the contract for sending
-//!   `ProgressUpdate`s. This abstraction allows for different callback implementations
-//!   (e.g., sending updates over a channel, logging to the console, or pushing to a
-//!   WebSocket) without changing the core operation logic.
+//! ## Usage Example
 //!
-//! * **`CallbackError`**: An enum for errors that can occur during the callback process,
-//!   such as a disconnected receiver or a timeout.
+//! ```rust,no_run
+//! use async_cargo_mcp::callback_system::{CallbackSender, LoggingCallbackSender, ProgressUpdate};
 //!
-//! ## Implementations
-//!
-//! The module provides several concrete implementations of `CallbackSender`:
-//!
-//! * **`ChannelCallbackSender`**: The primary implementation for concurrent applications.
-//!   It sends progress updates through a `tokio::sync::mpsc` channel, allowing a separate
-//!   task to listen for and process these updates in a non-blocking manner. It also
-//!   integrates with `tokio_util::sync::CancellationToken` to support cancellation.
-//!
-//! * **`NoOpCallbackSender`**: A "dummy" implementation that does nothing. It is useful
-//!   in contexts where progress reporting is not needed, avoiding the overhead of
-//!   setting up channels or other communication mechanisms.
-//!
-//! * **`LoggingCallbackSender`**: A simple implementation that logs every progress update
-//!   using the `tracing` crate. This is useful for debugging and for operations where
-//!   detailed, real-time console output is desired.
-//!
-//! ## Usage Pattern
-//!
-//! 1. **Creation**: Before starting an operation, create a `CallbackSender` instance.
-//!    The `channel_callback` utility function is often used to get both the sender
-//!    and the receiver part of a channel.
-//!
-//! 2. **Execution**: Pass the `CallbackSender` (usually as a `Box<dyn CallbackSender>`)
-//!    to the function that performs the long-running operation.
-//!
-//! 3. **Reporting**: Inside the operation, periodically call `callback.send_progress(...)`
-//!    with the appropriate `ProgressUpdate` variant to report status. The operation
-//!    should also check `callback.should_cancel().await` to gracefully terminate if a
-//!    cancellation request is received.
-//!
-//! 4. **Listening**: A separate task (e.g., an MCP service handler) listens on the
-//!    receiver end of the channel, processing each `ProgressUpdate` as it arrives and
-//!    forwarding the information to the client.
-//!
-//! This decoupled architecture ensures that the core business logic of an operation is
-//! separate from the details of how its progress is reported, enhancing modularity and
-//! testability.
+//! #[tokio::main]
+//! async fn main() {
+//!     let callback: Box<dyn CallbackSender> = Box::new(
+//!         LoggingCallbackSender::new("cargo_build_001".to_string())
+//!     );
+//!     
+//!     // Send progress updates during a cargo operation
+//!     let update = ProgressUpdate::Started {
+//!         operation_id: "cargo_build_001".to_string(),
+//!         command: "cargo build".to_string(),
+//!         description: "Building project dependencies".to_string(),
+//!     };
+//!     
+//!     callback.send_progress(update).await;
+//! }
+//! ```
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tokio::sync::mpsc;
 
-/// Represents different types of progress updates during operations
+/// Represents different types of progress updates during cargo operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum ProgressUpdate {
@@ -80,7 +55,7 @@ pub enum ProgressUpdate {
         percentage: Option<f64>,
         current_step: Option<String>,
     },
-    /// Output line from the command
+    /// Output line from the cargo command
     Output {
         operation_id: String,
         line: String,
@@ -262,7 +237,7 @@ impl ProgressUpdate {
     }
 }
 
-/// Trait for sending progress updates during operations
+/// Trait for sending progress updates during cargo operations
 /// This allows for different callback implementations (MCP notifications, logging, etc.)
 #[async_trait]
 pub trait CallbackSender: Send + Sync {
@@ -438,8 +413,8 @@ mod tests {
         let callback = no_callback();
         let update = ProgressUpdate::Started {
             operation_id: "test".to_string(),
-            command: "command".to_string(),
-            description: "description".to_string(),
+            command: "cargo build".to_string(),
+            description: "Building project".to_string(),
         };
 
         assert!(callback.send_progress(update).await.is_ok());

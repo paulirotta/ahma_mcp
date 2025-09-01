@@ -41,15 +41,19 @@
 //!    is shut down.
 
 use ahma_mcp::{
-    adapter::{Adapter, ExecutionMode},
-    config::Config,
+    adapter::Adapter,
+    config::load_tool_configs,
     mcp_service::AhmaMcpService,
+    operation_monitor::{MonitorConfig, OperationMonitor},
+    shell_pool::{ShellPoolConfig, ShellPoolManager},
 };
 use anyhow::Result;
 use clap::Parser;
+use rmcp::ServiceExt;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::{debug, error, info, instrument};
+use std::time::Duration;
+use tracing::{error, info, instrument, warn};
 use tracing_subscriber::EnvFilter;
 
 /// Ahma MCP Server: A generic, config-driven adapter for CLI tools.
@@ -112,8 +116,10 @@ async fn main() -> Result<()> {
         info!("Running in Server mode");
         run_server_mode(cli).await
     } else {
-        info!("Running in CLI mode");
-        run_cli_mode(cli).await
+        info!("CLI mode is currently disabled during refactoring.");
+        anyhow::bail!(
+            "CLI mode is currently disabled during refactoring. Please use --server mode."
+        );
     }
 }
 
@@ -123,11 +129,23 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     info!("Synchronous mode: {}", cli.synchronous);
     info!("Command timeout: {}s", cli.timeout);
 
+    // Initialize the operation monitor
+    let monitor_config = MonitorConfig::with_timeout(std::time::Duration::from_secs(cli.timeout));
+    let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
+
+    // Initialize the shell pool manager
+    let shell_pool_config = ShellPoolConfig {
+        command_timeout: Duration::from_secs(cli.timeout),
+        ..Default::default()
+    };
+    let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
+    shell_pool_manager.clone().start_background_tasks();
+
     // Initialize the adapter
-    let adapter = Arc::new(Adapter::with_timeout(cli.synchronous, cli.timeout)?);
+    let adapter = Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager)?);
 
     // Load tool configurations
-    let configs = load_tool_configs(&cli.tools_dir).await?;
+    let configs = Arc::new(load_tool_configs()?);
     if configs.is_empty() {
         error!("No valid tool configurations found in {:?}", cli.tools_dir);
         // It's not a fatal error to have no tools, just log it.
@@ -136,17 +154,108 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     }
 
     // Create and start the MCP service
-    let service = AhmaMcpService::new(adapter, configs).await?;
-    service.start_server().await?;
+    let service_handler = AhmaMcpService::new(adapter, operation_monitor.clone(), configs).await?;
+    let service_handler_clone = service_handler.clone();
+    let service = service_handler.serve(rmcp::transport::stdio()).await?;
+
+    // Start the MCP notification system for async operations
+    let operation_monitor_clone = operation_monitor.clone();
+    tokio::spawn(async move {
+        info!("Starting MCP notification system for async operations");
+        loop {
+            tokio::time::sleep(Duration::from_secs(1)).await; // Check more frequently for better responsiveness
+            let completed_ops = operation_monitor_clone.get_completed_operations().await;
+
+            if !completed_ops.is_empty() {
+                // Get the MCP peer handle for notifications
+                if let Some(peer) = {
+                    let peer_guard = service_handler_clone.peer.read().unwrap();
+                    peer_guard.clone()
+                } {
+                    info!(
+                        "Sending MCP notifications for {} completed operations",
+                        completed_ops.len()
+                    );
+
+                    for op in &completed_ops {
+                        // Use the MCP callback to send completion notification
+                        let callback =
+                            ahma_mcp::mcp_callback::mcp_callback(peer.clone(), op.id.clone());
+
+                        // Use a default duration since Operation doesn't track timing
+                        let duration_ms = 1000u64; // Default 1 second for now
+
+                        // Send appropriate completion notification based on operation result
+                        let progress_update = match (&op.state, &op.result) {
+                            (
+                                ahma_mcp::operation_monitor::OperationStatus::Completed,
+                                Some(result),
+                            ) => ahma_mcp::callback_system::ProgressUpdate::Completed {
+                                operation_id: op.id.clone(),
+                                message: format!("Operation completed successfully: {}", result),
+                                duration_ms,
+                            },
+                            (
+                                ahma_mcp::operation_monitor::OperationStatus::Failed,
+                                Some(result),
+                            ) => ahma_mcp::callback_system::ProgressUpdate::Failed {
+                                operation_id: op.id.clone(),
+                                error: format!("Operation failed: {}", result),
+                                duration_ms,
+                            },
+                            (ahma_mcp::operation_monitor::OperationStatus::Completed, None) => {
+                                ahma_mcp::callback_system::ProgressUpdate::Completed {
+                                    operation_id: op.id.clone(),
+                                    message: "Operation completed successfully".to_string(),
+                                    duration_ms,
+                                }
+                            }
+                            _ => ahma_mcp::callback_system::ProgressUpdate::Completed {
+                                operation_id: op.id.clone(),
+                                message: format!("Operation finished with status: {:?}", op.state),
+                                duration_ms,
+                            },
+                        };
+
+                        if let Err(e) = callback.send_progress(progress_update).await {
+                            warn!(
+                                "Failed to send MCP notification for operation {}: {:?}",
+                                op.id, e
+                            );
+                        } else {
+                            info!(
+                                "Successfully sent MCP notification for operation: {}",
+                                op.id
+                            );
+                        }
+                    }
+                } else {
+                    warn!(
+                        "No MCP peer available for sending notifications - operations completed but notifications not sent"
+                    );
+                }
+            }
+        }
+    });
+
+    service.waiting().await?;
 
     Ok(())
 }
 
+/*
 async fn run_cli_mode(cli: Cli) -> Result<()> {
     let tool_name = cli.tool_name.unwrap(); // Safe due to check in main()
 
-    // Initialize adapter
-    let adapter = Adapter::with_timeout(cli.synchronous, cli.timeout)?;
+    // Initialize adapter and monitor for CLI mode
+    let monitor_config = MonitorConfig::with_timeout(std::time::Duration::from_secs(cli.timeout));
+    let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
+    let shell_pool_config = ShellPoolConfig {
+        command_timeout: Duration::from_secs(cli.timeout),
+        ..Default::default()
+    };
+    let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
+    let adapter = Adapter::new(operation_monitor, shell_pool_manager)?;
 
     // Load the specific tool's config to check for sync override
     let parts: Vec<&str> = tool_name.split('_').collect();
@@ -275,70 +384,4 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         }
     }
 }
-
-/// Loads all valid `.toml` tool configurations from the specified directory.
-async fn load_tool_configs(tools_dir: &PathBuf) -> Result<Vec<(String, Config)>> {
-    let mut configs = Vec::new();
-    if !tools_dir.exists() {
-        error!("Tools directory does not exist: {:?}", tools_dir);
-        return Ok(configs);
-    }
-
-    info!("Scanning tools directory: {:?}", tools_dir);
-    let mut entries = tokio::fs::read_dir(tools_dir).await?;
-    let mut toml_files = Vec::new();
-
-    while let Some(entry) = entries.next_entry().await? {
-        let path = entry.path();
-        if path.extension().and_then(|s| s.to_str()) == Some("toml") {
-            toml_files.push(path);
-        }
-    }
-
-    info!("Found {} .toml files in tools directory", toml_files.len());
-
-    for path in toml_files {
-        let tool_name = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("unknown")
-            .to_string();
-
-        info!("Loading configuration for tool: {}", tool_name);
-        debug!("Reading config file: {:?}", path);
-
-        match Config::load_from_file(&path) {
-            Ok(config) => {
-                if config.enabled.unwrap_or(true) {
-                    info!(
-                        "Successfully loaded and enabled tool: {} (command: {}, {} subcommands)",
-                        tool_name,
-                        config.command,
-                        config.subcommand.len()
-                    );
-
-                    // Log subcommand details for debugging
-                    for subcommand in &config.subcommand {
-                        debug!(
-                            "  - Subcommand '{}': {} (options: {})",
-                            subcommand.name,
-                            subcommand.description,
-                            subcommand.options.len()
-                        );
-                    }
-
-                    configs.push((tool_name, config));
-                } else {
-                    info!("Skipping disabled tool: {}", tool_name);
-                }
-            }
-            Err(e) => {
-                error!("Failed to load config for {}: {}", tool_name, e);
-                debug!("Config file path: {:?}", path);
-            }
-        }
-    }
-
-    info!("Successfully loaded {} tool configurations", configs.len());
-    Ok(configs)
-}
+*/
