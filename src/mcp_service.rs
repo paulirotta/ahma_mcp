@@ -37,9 +37,13 @@ use rmcp::{
 use serde_json::Map;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use tracing::{error, info};
+use tracing;
 
-use crate::{adapter::Adapter, config::ToolConfig, operation_monitor::OperationMonitor};
+use crate::{
+    adapter::Adapter,
+    config::ToolConfig,
+    operation_monitor::{Operation, OperationMonitor},
+};
 
 /// `AhmaMcpService` is the server handler for the MCP service.
 #[derive(Clone)]
@@ -87,14 +91,16 @@ impl ServerHandler for AhmaMcpService {
         context: NotificationContext<RoleServer>,
     ) -> impl std::future::Future<Output = ()> + Send + '_ {
         async move {
-            info!("Client connected: {context:?}");
+            tracing::info!("Client connected: {context:?}");
             // Get the peer from the context
             let peer = &context.peer;
             if self.peer.read().unwrap().is_none() {
                 let mut peer_guard = self.peer.write().unwrap();
                 if peer_guard.is_none() {
                     *peer_guard = Some(peer.clone());
-                    info!("Successfully captured MCP peer handle for async notifications.");
+                    tracing::info!(
+                        "Successfully captured MCP peer handle for async notifications."
+                    );
                 }
             }
         }
@@ -107,6 +113,25 @@ impl ServerHandler for AhmaMcpService {
     ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
         async move {
             let mut tools = Vec::new();
+
+            // Hard-wired wait command - always available
+            tools.push(Tool {
+                name: "wait".into(),
+                description: Some("Wait for previously started asynchronous operations to complete. **WARNING:** This is a blocking tool and makes you inefficient. **ONLY** use this if you have NO other tasks and cannot proceed until completion. It is **ALWAYS** better to perform other work and let results be pushed to you.".into()),
+                input_schema: Arc::new({
+                    let mut schema = serde_json::Map::new();
+                    schema.insert("type".to_string(), "object".into());
+                    let mut properties = serde_json::Map::new();
+                    let mut tools_prop = serde_json::Map::new();
+                    tools_prop.insert("type".to_string(), "string".into());
+                    tools_prop.insert("description".to_string(), "Comma-separated tool name prefixes to wait for (optional; waits for all if omitted)".into());
+                    properties.insert("tools".to_string(), tools_prop.into());
+                    schema.insert("properties".to_string(), properties.into());
+                    schema
+                }),
+                output_schema: None,
+                annotations: None,
+            });
 
             for config in self.configs.values() {
                 if config.subcommand.is_empty() {
@@ -160,6 +185,74 @@ impl ServerHandler for AhmaMcpService {
         async move {
             let tool_name = params.name.as_ref();
 
+            if tool_name == "wait" {
+                let args = params.arguments.unwrap_or_default();
+
+                // Parse tools parameter as comma-separated string
+                let tool_filters: Vec<String> = if let Some(v) = args.get("tools") {
+                    if let Some(s) = v.as_str() {
+                        s.split(',')
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect()
+                    } else {
+                        Vec::new()
+                    }
+                } else {
+                    Vec::new()
+                };
+
+                // Build from pending ops, optionally filtered by tools
+                let pending_ops: Vec<Operation> = self
+                    .operation_monitor
+                    .get_all_operations()
+                    .await
+                    .into_iter()
+                    .filter(|op| {
+                        if op.state.is_terminal() {
+                            return false;
+                        }
+                        if tool_filters.is_empty() {
+                            true
+                        } else {
+                            tool_filters.iter().any(|tn| op.tool_name.starts_with(tn))
+                        }
+                    })
+                    .collect();
+
+                if pending_ops.is_empty() {
+                    return Ok(CallToolResult::success(vec![Content::text(
+                        if tool_filters.is_empty() {
+                            "No pending operations to wait for.".to_string()
+                        } else {
+                            format!(
+                                "No pending operations for tools: {}",
+                                tool_filters.join(", ")
+                            )
+                        },
+                    )]));
+                }
+
+                tracing::info!(
+                    "Waiting for {} pending operations: {:?}",
+                    pending_ops.len(),
+                    pending_ops.iter().map(|op| &op.id).collect::<Vec<_>>()
+                );
+
+                // Wait sequentially for all targets
+                let mut contents = Vec::new();
+                for op in pending_ops {
+                    if let Some(done) = self.operation_monitor.wait_for_operation(&op.id).await {
+                        match serde_json::to_string_pretty(&done) {
+                            Ok(s) => contents.push(Content::text(s)),
+                            Err(e) => tracing::error!("Serialization error: {}", e),
+                        }
+                    }
+                }
+
+                return Ok(CallToolResult::success(contents));
+            }
+
             // Parse tool name to extract base command and subcommand
             let (base_command, subcommand) = if let Some(underscore_pos) = tool_name.find('_') {
                 let base = &tool_name[..underscore_pos];
@@ -176,7 +269,7 @@ impl ServerHandler for AhmaMcpService {
                         "Tool '{}' not found (base command '{}' not configured)",
                         tool_name, base_command
                     );
-                    error!("{}", error_message);
+                    tracing::error!("{}", error_message);
                     return Err(McpError::invalid_params(
                         error_message,
                         Some(
@@ -193,7 +286,7 @@ impl ServerHandler for AhmaMcpService {
                     None => {
                         let error_message =
                             format!("Subcommand '{}' not found for tool '{}'", sub, base_command);
-                        error!("{}", error_message);
+                        tracing::error!("{}", error_message);
                         return Err(McpError::invalid_params(
                             error_message,
                             Some(
@@ -210,9 +303,10 @@ impl ServerHandler for AhmaMcpService {
             // Async by default, but can be overridden to sync per subcommand
             let is_synchronous = subcommand_config
                 .and_then(|sc| {
-                    info!(
+                    tracing::info!(
                         "Subcommand '{}' synchronous flag: {:?}",
-                        sc.name, sc.synchronous
+                        sc.name,
+                        sc.synchronous
                     );
                     sc.synchronous
                 })
@@ -230,7 +324,7 @@ impl ServerHandler for AhmaMcpService {
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| ".".to_string());
 
-            info!(
+            tracing::info!(
                 "Executing tool '{}' (base: '{}', subcommand: {:?}) in directory '{}' with mode: {}",
                 tool_name,
                 base_command,
@@ -268,7 +362,7 @@ impl ServerHandler for AhmaMcpService {
                     Ok(output) => Ok(CallToolResult::success(vec![Content::text(output)])),
                     Err(e) => {
                         let error_message = format!("Error executing tool '{}': {}", tool_name, e);
-                        error!("{}", error_message);
+                        tracing::error!("{}", error_message);
                         Err(McpError::internal_error(
                             error_message,
                             Some(serde_json::json!({ "details": e.to_string() })),
@@ -281,6 +375,7 @@ impl ServerHandler for AhmaMcpService {
                 let operation_id = self
                     .adapter
                     .execute_async_in_dir(
+                        tool_name,
                         &config.command, // Use base command only
                         Some(modified_args),
                         &working_directory,
@@ -288,9 +383,10 @@ impl ServerHandler for AhmaMcpService {
                     )
                     .await;
 
-                info!(
+                tracing::info!(
                     "Asynchronously started tool '{}' with operation ID '{}'",
-                    tool_name, operation_id
+                    tool_name,
+                    operation_id
                 );
 
                 // Send immediate "Started" notification using MCP callback
@@ -313,12 +409,13 @@ impl ServerHandler for AhmaMcpService {
                     };
 
                     if let Err(e) = callback.send_progress(started_notification).await {
-                        error!(
+                        tracing::error!(
                             "Failed to send started notification for operation {}: {:?}",
-                            operation_id_clone, e
+                            operation_id_clone,
+                            e
                         );
                     } else {
-                        info!(
+                        tracing::info!(
                             "Sent started notification for operation: {}",
                             operation_id_clone
                         );
@@ -330,7 +427,7 @@ impl ServerHandler for AhmaMcpService {
                     let mut peer_guard = self.peer.write().unwrap();
                     if peer_guard.is_none() {
                         *peer_guard = Some(peer.clone());
-                        info!("Captured MCP peer handle for async notifications");
+                        tracing::info!("Captured MCP peer handle for async notifications");
                     }
                 }
 

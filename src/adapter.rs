@@ -46,7 +46,14 @@ use rmcp::ErrorData as McpError;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::sync::Arc;
-use uuid::Uuid;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static OPERATION_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+fn generate_operation_id() -> String {
+    let id = OPERATION_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("op_{}", id)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExecutionMode {
@@ -110,7 +117,7 @@ impl Adapter {
             .unwrap_or_default();
 
         let shell_cmd = ShellCommand {
-            id: Uuid::new_v4().to_string(),
+            id: generate_operation_id(),
             command: [command]
                 .iter()
                 .map(ToString::to_string)
@@ -151,16 +158,22 @@ impl Adapter {
     /// Asynchronously starts a command, returns a job_id, and pushes the result later.
     pub async fn execute_async_in_dir(
         &self,
+        tool_name: &str,
         command: &str,
         args: Option<serde_json::Map<String, Value>>,
         working_directory: &str,
         timeout: Option<u64>,
     ) -> String {
-        let op_id = Uuid::new_v4().to_string();
+        let op_id = generate_operation_id();
         let op_id_clone = op_id.clone();
         let wd = working_directory.to_string();
 
-        let operation = Operation::new(op_id.clone(), format!("{} {:?}", command, args), None);
+        let operation = Operation::new(
+            op_id.clone(),
+            tool_name.to_string(),
+            format!("{} {:?}", command, args),
+            None,
+        );
         self.monitor.add_operation(operation).await;
 
         let monitor = self.monitor.clone();
