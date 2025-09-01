@@ -1,7 +1,6 @@
 //! Integration tests for the ahma_mcp service.
 mod common;
 
-use ahma_mcp::adapter::ExecutionMode;
 use ahma_mcp::config::{OptionConfig, SubcommandConfig, ToolConfig};
 use ahma_mcp::mcp_service::AhmaMcpService;
 use anyhow::Result;
@@ -82,10 +81,12 @@ fn create_test_configs() -> HashMap<String, ToolConfig> {
                 option_type: "string".to_string(),
                 description: "Message to echo".to_string(),
             }],
+            synchronous: Some(true), // Fast echo command should be synchronous
+            timeout_seconds: Some(30),
+            hint: Some("Echo is fast and synchronous - result returns immediately.".to_string()),
         }],
         input_schema: json!({}),
-        execution_mode: ExecutionMode::Synchronous,
-        timeout: Some(30),
+        timeout_seconds: Some(30),
         hints: Default::default(),
         enabled: true,
     };

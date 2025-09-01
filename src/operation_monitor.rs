@@ -113,4 +113,22 @@ impl OperationMonitor {
             .cloned()
             .collect()
     }
+
+    /// Get completed operations and remove them from tracking.
+    /// This prevents endless notification loops by ensuring each completion is only notified once.
+    pub async fn get_and_clear_completed_operations(&self) -> Vec<Operation> {
+        let mut ops = self.operations.write().await;
+        let completed_ops: Vec<Operation> = ops
+            .values()
+            .filter(|op| op.state.is_terminal())
+            .cloned()
+            .collect();
+
+        // Remove completed operations from tracking to prevent re-notification
+        for op in &completed_ops {
+            ops.remove(&op.id);
+        }
+
+        completed_ops
+    }
 }

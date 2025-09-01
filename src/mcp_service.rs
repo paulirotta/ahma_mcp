@@ -39,11 +39,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tracing::{error, info};
 
-use crate::{
-    adapter::{Adapter, ExecutionMode},
-    config::ToolConfig,
-    operation_monitor::OperationMonitor,
-};
+use crate::{adapter::Adapter, config::ToolConfig, operation_monitor::OperationMonitor};
 
 /// `AhmaMcpService` is the server handler for the MCP service.
 #[derive(Clone)]
@@ -130,12 +126,17 @@ impl ServerHandler for AhmaMcpService {
                         let tool_name = format!("{}_{}", config.name, subcommand.name);
                         let input_schema =
                             Arc::new(config.input_schema.as_object().cloned().unwrap_or_default());
+
+                        // Use the full subcommand description, which may include LLM guidance
+                        let description = if subcommand.description.is_empty() {
+                            format!("{}: {}", config.description, subcommand.name)
+                        } else {
+                            subcommand.description.clone()
+                        };
+
                         tools.push(Tool {
                             name: tool_name.into(),
-                            description: Some(
-                                format!("{}: {}", config.description, subcommand.description)
-                                    .into(),
-                            ),
+                            description: Some(description.into()),
                             input_schema,
                             output_schema: None,
                             annotations: None,
@@ -185,22 +186,42 @@ impl ServerHandler for AhmaMcpService {
                 }
             };
 
-            // Verify subcommand exists if specified
-            if let Some(sub) = subcommand {
-                if !config.subcommand.iter().any(|sc| sc.name == sub) {
-                    let error_message =
-                        format!("Subcommand '{}' not found for tool '{}'", sub, base_command);
-                    error!("{}", error_message);
-                    return Err(McpError::invalid_params(
-                        error_message,
-                        Some(
-                            serde_json::json!({ "tool_name": tool_name, "base_command": base_command, "subcommand": sub }),
-                        ),
-                    ));
+            // Verify subcommand exists if specified and get its config
+            let subcommand_config = if let Some(sub) = subcommand {
+                match config.subcommand.iter().find(|sc| sc.name == sub) {
+                    Some(sc) => Some(sc),
+                    None => {
+                        let error_message =
+                            format!("Subcommand '{}' not found for tool '{}'", sub, base_command);
+                        error!("{}", error_message);
+                        return Err(McpError::invalid_params(
+                            error_message,
+                            Some(
+                                serde_json::json!({ "tool_name": tool_name, "base_command": base_command, "subcommand": sub }),
+                            ),
+                        ));
+                    }
                 }
-            }
+            } else {
+                None
+            };
 
-            let execution_mode = config.execution_mode;
+            // Determine if this operation should be synchronous
+            // Async by default, but can be overridden to sync per subcommand
+            let is_synchronous = subcommand_config
+                .and_then(|sc| {
+                    info!(
+                        "Subcommand '{}' synchronous flag: {:?}",
+                        sc.name, sc.synchronous
+                    );
+                    sc.synchronous
+                })
+                .unwrap_or(false);
+
+            // Determine timeout - subcommand timeout overrides tool timeout
+            let timeout = subcommand_config
+                .and_then(|sc| sc.timeout_seconds)
+                .or(config.timeout_seconds);
             let working_directory = params
                 .arguments
                 .as_ref()
@@ -210,8 +231,16 @@ impl ServerHandler for AhmaMcpService {
                 .unwrap_or_else(|| ".".to_string());
 
             info!(
-                "Executing tool '{}' (base: '{}', subcommand: {:?}) in directory '{}' with mode: {:?}",
-                tool_name, base_command, subcommand, working_directory, execution_mode
+                "Executing tool '{}' (base: '{}', subcommand: {:?}) in directory '{}' with mode: {}",
+                tool_name,
+                base_command,
+                subcommand,
+                working_directory,
+                if is_synchronous {
+                    "synchronous"
+                } else {
+                    "asynchronous"
+                }
             );
 
             let arguments: Option<Map<String, serde_json::Value>> = params.arguments;
@@ -225,90 +254,87 @@ impl ServerHandler for AhmaMcpService {
                 );
             }
 
-            match execution_mode {
-                ExecutionMode::Synchronous => {
-                    match self
-                        .adapter
-                        .execute_sync_in_dir(
-                            &config.command, // Use base command only
-                            Some(modified_args),
-                            &working_directory,
-                            config.timeout,
-                        )
-                        .await
-                    {
-                        Ok(output) => Ok(CallToolResult::success(vec![Content::text(output)])),
-                        Err(e) => {
-                            let error_message =
-                                format!("Error executing tool '{}': {}", tool_name, e);
-                            error!("{}", error_message);
-                            Err(McpError::internal_error(
-                                error_message,
-                                Some(serde_json::json!({ "details": e.to_string() })),
-                            ))
-                        }
+            if is_synchronous {
+                match self
+                    .adapter
+                    .execute_sync_in_dir(
+                        &config.command, // Use base command only
+                        Some(modified_args),
+                        &working_directory,
+                        timeout,
+                    )
+                    .await
+                {
+                    Ok(output) => Ok(CallToolResult::success(vec![Content::text(output)])),
+                    Err(e) => {
+                        let error_message = format!("Error executing tool '{}': {}", tool_name, e);
+                        error!("{}", error_message);
+                        Err(McpError::internal_error(
+                            error_message,
+                            Some(serde_json::json!({ "details": e.to_string() })),
+                        ))
                     }
                 }
-                ExecutionMode::AsyncResultPush => {
-                    // Two-stage async pattern: immediate response + background notifications
-                    let operation_id = self
-                        .adapter
-                        .execute_async_in_dir(
-                            &config.command, // Use base command only
-                            Some(modified_args),
-                            &working_directory,
-                            config.timeout,
-                        )
-                        .await;
+            } else {
+                // Asynchronous execution (default behavior)
+                // Two-stage async pattern: immediate response + background notifications
+                let operation_id = self
+                    .adapter
+                    .execute_async_in_dir(
+                        &config.command, // Use base command only
+                        Some(modified_args),
+                        &working_directory,
+                        timeout,
+                    )
+                    .await;
 
-                    info!(
-                        "Asynchronously started tool '{}' with operation ID '{}'",
-                        tool_name, operation_id
-                    );
+                info!(
+                    "Asynchronously started tool '{}' with operation ID '{}'",
+                    tool_name, operation_id
+                );
 
-                    // Send immediate "Started" notification using MCP callback
-                    let peer = context.peer.clone();
-                    let callback =
-                        crate::mcp_callback::mcp_callback(peer.clone(), operation_id.clone());
+                // Send immediate "Started" notification using MCP callback
+                let peer = context.peer.clone();
+                let callback =
+                    crate::mcp_callback::mcp_callback(peer.clone(), operation_id.clone());
 
-                    // Send started notification asynchronously (don't block the response)
-                    let operation_id_clone = operation_id.clone();
-                    let tool_name_clone = tool_name.to_string();
-                    let working_directory_clone = working_directory.clone();
-                    tokio::spawn(async move {
-                        let started_notification =
-                            crate::callback_system::ProgressUpdate::Started {
-                                operation_id: operation_id_clone.clone(),
-                                command: tool_name_clone.clone(),
-                                description: format!(
-                                    "Executing {} in {}",
-                                    tool_name_clone, working_directory_clone
-                                ),
-                            };
+                // Send started notification asynchronously (don't block the response)
+                let operation_id_clone = operation_id.clone();
+                let tool_name_clone = tool_name.to_string();
+                let working_directory_clone = working_directory.clone();
+                tokio::spawn(async move {
+                    let started_notification = crate::callback_system::ProgressUpdate::Started {
+                        operation_id: operation_id_clone.clone(),
+                        command: tool_name_clone.clone(),
+                        description: format!(
+                            "Executing {} in {}",
+                            tool_name_clone, working_directory_clone
+                        ),
+                    };
 
-                        if let Err(e) = callback.send_progress(started_notification).await {
-                            error!(
-                                "Failed to send started notification for operation {}: {:?}",
-                                operation_id_clone, e
-                            );
-                        } else {
-                            info!(
-                                "Sent started notification for operation: {}",
-                                operation_id_clone
-                            );
-                        }
-                    });
-
-                    // Store peer handle for later notifications (if not already stored)
-                    if self.peer.read().unwrap().is_none() {
-                        let mut peer_guard = self.peer.write().unwrap();
-                        if peer_guard.is_none() {
-                            *peer_guard = Some(peer.clone());
-                            info!("Captured MCP peer handle for async notifications");
-                        }
+                    if let Err(e) = callback.send_progress(started_notification).await {
+                        error!(
+                            "Failed to send started notification for operation {}: {:?}",
+                            operation_id_clone, e
+                        );
+                    } else {
+                        info!(
+                            "Sent started notification for operation: {}",
+                            operation_id_clone
+                        );
                     }
+                });
 
-                    Ok(CallToolResult::success(vec![Content::text(
+                // Store peer handle for later notifications (if not already stored)
+                if self.peer.read().unwrap().is_none() {
+                    let mut peer_guard = self.peer.write().unwrap();
+                    if peer_guard.is_none() {
+                        *peer_guard = Some(peer.clone());
+                        info!("Captured MCP peer handle for async notifications");
+                    }
+                }
+
+                Ok(CallToolResult::success(vec![Content::text(
                     serde_json::to_string(&serde_json::json!({
                         "status": "started",
                         "job_id": operation_id,
@@ -316,7 +342,6 @@ impl ServerHandler for AhmaMcpService {
                     }))
                     .unwrap(),
                 )]))
-                }
             }
         }
     }

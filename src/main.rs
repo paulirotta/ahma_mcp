@@ -78,10 +78,6 @@ struct Cli {
     #[arg(long, global = true, default_value = "tools")]
     tools_dir: PathBuf,
 
-    /// Force all operations to run synchronously.
-    #[arg(long, global = true)]
-    synchronous: bool,
-
     /// Default timeout for commands in seconds.
     #[arg(long, global = true, default_value = "300")]
     timeout: u64,
@@ -126,7 +122,6 @@ async fn main() -> Result<()> {
 async fn run_server_mode(cli: Cli) -> Result<()> {
     info!("Starting ahma_mcp v1.0.0");
     info!("Tools directory: {:?}", cli.tools_dir);
-    info!("Synchronous mode: {}", cli.synchronous);
     info!("Command timeout: {}s", cli.timeout);
 
     // Initialize the operation monitor
@@ -164,7 +159,9 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
         info!("Starting MCP notification system for async operations");
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await; // Check more frequently for better responsiveness
-            let completed_ops = operation_monitor_clone.get_completed_operations().await;
+            let completed_ops = operation_monitor_clone
+                .get_and_clear_completed_operations()
+                .await;
 
             if !completed_ops.is_empty() {
                 // Get the MCP peer handle for notifications

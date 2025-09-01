@@ -45,8 +45,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-use crate::adapter::ExecutionMode;
-
 /// Represents the complete configuration for a command-line tool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolConfig {
@@ -56,12 +54,11 @@ pub struct ToolConfig {
     #[serde(default)]
     pub subcommand: Vec<SubcommandConfig>,
     pub input_schema: Value,
-    #[serde(default = "default_execution_mode")]
-    pub execution_mode: ExecutionMode,
-    pub timeout: Option<u64>,
+    /// Default timeout for operations in seconds
+    pub timeout_seconds: Option<u64>,
     #[serde(default)]
     pub hints: ToolHints,
-    #[serde(default)]
+    #[serde(default = "default_enabled")]
     pub enabled: bool,
 }
 
@@ -72,6 +69,12 @@ pub struct SubcommandConfig {
     pub description: String,
     #[serde(default)]
     pub options: Vec<OptionConfig>,
+    /// If true, this subcommand runs synchronously instead of async
+    pub synchronous: Option<bool>,
+    /// Override timeout for this specific subcommand
+    pub timeout_seconds: Option<u64>,
+    /// Specific hint for AI clients when this subcommand is used
+    pub hint: Option<String>,
 }
 
 /// Configuration for an option within a subcommand
@@ -83,18 +86,18 @@ pub struct OptionConfig {
     pub description: String,
 }
 
-fn default_execution_mode() -> ExecutionMode {
-    ExecutionMode::AsyncResultPush
+fn default_enabled() -> bool {
+    true
 }
 
-/// A collection of hints for a tool.
+/// A collection of hints for AI clients using this tool.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ToolHints {
-    /// Hints for specific operations like "build" or "test".
+    /// Default hint for any operation with this tool
+    pub default: Option<String>,
+    /// Hints for specific operations like "build" or "test"
     #[serde(flatten)]
     pub operation_hints: HashMap<String, String>,
-    /// If true, treat any output on stderr as a failure.
-    pub treat_stderr_as_error: Option<bool>,
 }
 
 /// Load all tool configurations from the `tools` directory.

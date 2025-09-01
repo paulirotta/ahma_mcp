@@ -5,6 +5,7 @@
             "cwd": "${workspaceFolder}",
             "command": "./target/release/ahma_mcp",
             "args": [
+                "--server",
                 "--tools-dir",
                 "tools"
             ],
@@ -23,7 +24,7 @@
                     "-x",
                     "check",
                     "-x",
-                    "run --release --bin ahma_mcp -- --tools-dir tools"
+                    "run --release --bin ahma_mcp -- --server --tools-dir tools"
                 ],
                 "watch": [
                     "src/**/*.rs",

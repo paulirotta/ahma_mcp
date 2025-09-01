@@ -3,16 +3,34 @@ name = "cargo"
 description = "Rust's build tool and package manager"
 command = "cargo"
 enabled = true
+timeout_seconds = 600
 
-# JSON Schema for the tool input parameters
+[hints]
+default = "While cargo operations run, consider reviewing Cargo.toml dependencies, planning tests, or analyzing code structure for optimization opportunities."
+build = "Building in progress - review compilation output for warnings, plan deployment steps, or work on documentation."
+test = "Tests running - analyze test patterns, consider additional test cases, or review code coverage strategies."
+doc = "Documentation building - consider reviewing doc comments, planning API improvements, or working on examples."
+check = "Type checking in progress - plan refactoring opportunities or review code patterns while waiting."
+
+# JSON Schema for the tool input parameters  
 [input_schema]
 type = "object"
 properties = {}
 
-# Common cargo subcommands
+# Build project (async by default)
 [[subcommand]]
 name = "build"
-description = "Build the project"
+description = """Compile the current package.
+
+**IMPORTANT:** This tool operates asynchronously.
+1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.
+2. **Final Result:** Result pushed automatically via MCP notification when complete.
+
+**Your Instructions:**
+- **DO NOT** wait for the final result.
+- **DO** continue with other tasks that don't depend on this operation.
+- You **MUST** process the future result notification to know if operation succeeded."""
+
 [[subcommand.options]]
 name = "release"
 type = "boolean"
@@ -28,7 +46,17 @@ description = "Build all packages in the workspace"
 
 [[subcommand]]
 name = "test"
-description = "Run tests"
+description = """Run the test suite.
+
+**IMPORTANT:** This tool operates asynchronously.
+1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.
+2. **Final Result:** Result pushed automatically via MCP notification when complete.
+
+**Your Instructions:**
+- **DO NOT** wait for the final result.
+- **DO** continue with other tasks that don't depend on this operation.
+- You **MUST** process the future result notification to know if operation succeeded."""
+
 [[subcommand.options]]
 name = "release"
 type = "boolean" 
@@ -40,7 +68,17 @@ description = "Run tests for all packages in workspace"
 
 [[subcommand]]
 name = "check"
-description = "Check code without building"
+description = """Check code without building.
+
+**IMPORTANT:** This tool operates asynchronously.
+1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.
+2. **Final Result:** Result pushed automatically via MCP notification when complete.
+
+**Your Instructions:**
+- **DO NOT** wait for the final result.
+- **DO** continue with other tasks that don't depend on this operation.
+- You **MUST** process the future result notification to know if operation succeeded."""
+
 [[subcommand.options]]
 name = "release"
 type = "boolean"
@@ -52,7 +90,17 @@ description = "Check all packages in workspace"
 
 [[subcommand]]
 name = "clippy"
-description = "Run Clippy linter"
+description = """Enhanced linting and code quality checks.
+
+**IMPORTANT:** This tool operates asynchronously.
+1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.
+2. **Final Result:** Result pushed automatically via MCP notification when complete.
+
+**Your Instructions:**
+- **DO NOT** wait for the final result.
+- **DO** continue with other tasks that don't depend on this operation.
+- You **MUST** process the future result notification to know if operation succeeded."""
+
 [[subcommand.options]]
 name = "fix"
 type = "boolean"
@@ -64,7 +112,17 @@ description = "Allow fixing when working directory is dirty"
 
 [[subcommand]]
 name = "fmt" 
-description = "Format code using rustfmt"
+description = """Format code using rustfmt.
+
+**IMPORTANT:** This tool operates asynchronously.
+1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.
+2. **Final Result:** Result pushed automatically via MCP notification when complete.
+
+**Your Instructions:**
+- **DO NOT** wait for the final result.
+- **DO** continue with other tasks that don't depend on this operation.
+- You **MUST** process the future result notification to know if operation succeeded."""
+
 [[subcommand.options]]
 name = "check"
 type = "boolean"
@@ -94,11 +152,6 @@ name = "open"
 type = "boolean"
 description = "Open documentation in browser"
 
-# AI guidance hints
-[hints]
-primary = "Cargo is Rust's build tool and package manager"
-usage = "Common commands: build, test, run, check, clippy, fmt"
- 
 [[subcommand]]
 name = "clean"
 description = "Remove build artifacts"
@@ -149,23 +202,18 @@ description = "Search query"
 
 [[subcommand]]
 name = "tree"
-description = "Display dependency tree"
+description = "Display dependency tree - returns immediately."
+synchronous = true
 
 [[subcommand]]
 name = "version"
-description = "Show cargo version information"
-
-[[subcommand]]
-name = "rustc"
-description = "Compile with custom rustc options"
-[[subcommand.options]]
-name = "flag"
-type = "string"
-description = "Pass-through rustc flag"
+description = "Show cargo version information - returns immediately."
+synchronous = true
 
 [[subcommand]]
 name = "metadata"
-description = "Output package metadata as JSON"
+description = "Output package metadata as JSON - returns immediately."
+synchronous = true
 
 [[subcommand]]
 name = "nextest"
@@ -201,4 +249,28 @@ description = "Show changes without modifying files"
 
 [[subcommand]]
 name = "bench"
-description = "Run benchmarks"
+description = """Run benchmarks.
+
+**IMPORTANT:** This tool operates asynchronously.
+1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.
+2. **Final Result:** Result pushed automatically via MCP notification when complete.
+
+**Your Instructions:**
+- **DO NOT** wait for the final result.
+- **DO** continue with other tasks that don't depend on this operation.
+- You **MUST** process the future result notification to know if operation succeeded."""
+
+# Wait tool - strongly discouraged
+[[subcommand]]
+name = "wait"
+description = """Wait for previously started asynchronous operations to complete.
+
+**WARNING:** This is a blocking tool and makes you inefficient.
+- **ONLY** use this if you have NO other tasks and cannot proceed until completion.
+- It is **ALWAYS** better to perform other work and let results be pushed to you.
+- Use this ONLY for final project validation when all work is complete."""
+synchronous = true
+[[subcommand.options]]
+name = "operation_ids"
+type = "array"
+description = "Specific operation IDs to wait for (optional - waits for all if not specified)"
