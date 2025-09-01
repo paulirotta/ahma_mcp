@@ -3,8 +3,13 @@
         "ahma_mcp": {
             "type": "stdio",
             "cwd": "${workspaceFolder}",
-            "command": "./target/release/ahma_mcp",
+            "command": "cargo",
             "args": [
+                "run",
+                "--release",
+                "--bin",
+                "ahma_mcp",
+                "--",
                 "--server",
                 "--tools-dir",
                 "tools"
