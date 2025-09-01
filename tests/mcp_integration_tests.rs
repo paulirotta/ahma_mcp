@@ -41,11 +41,10 @@ async fn test_call_tool_basic() -> Result<()> {
 
     // The result should contain the current directory's contents.
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text() {
             assert!(text_content.text.contains("Cargo.toml"));
         }
-    }
 
     client.cancel().await?;
     Ok(())

@@ -311,7 +311,7 @@ mod full_system_integration_bug_test {
             completion_wait += 1;
             if completion_wait > 33 {
                 let completed_ops = operation_monitor.get_completed_operations().await;
-                if completed_ops.len() >= 1 {
+                if !completed_ops.is_empty() {
                     println!("⚠️  At least 1 operation completed, proceeding");
                     break;
                 } else {
@@ -336,7 +336,7 @@ mod full_system_integration_bug_test {
             for op in &completed_ops {
                 all_operations_seen
                     .entry(op.id.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(iteration);
                 println!("   - Operation {}: {}", op.id, op.state.is_terminal());
             }
