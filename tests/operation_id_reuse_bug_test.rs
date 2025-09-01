@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod operation_id_reuse_bug_test {
-    use ahma_mcp::operation_monitor::{MonitorConfig, Operation, OperationMonitor, OperationStatus};
+    use ahma_mcp::operation_monitor::{
+        MonitorConfig, Operation, OperationMonitor, OperationStatus,
+    };
     use serde_json::Value;
     use std::sync::Arc;
     use std::time::Duration;
@@ -15,25 +17,31 @@ mod operation_id_reuse_bug_test {
             Duration::from_secs(30),
         )));
 
-        // This is the exact operation ID from the user's logs
-        let problematic_op_id = "7fc7f85e-9217-4f48-9240-2dd0dcd908e0";
+        // Use a new-style operation ID for testing
+        let problematic_op_id = "op_test_1";
 
-        println!("🔍 Testing with problematic operation ID: {}", problematic_op_id);
+        println!(
+            "🔍 Testing with problematic operation ID: {}",
+            problematic_op_id
+        );
 
         // Scenario: First operation with this ID
         let operation1 = Operation::new(
             problematic_op_id.to_string(),
+            "test".to_string(),
             "first operation".to_string(),
             None,
         );
         monitor.add_operation(operation1).await;
-        
+
         // Complete it
-        monitor.update_status(
-            problematic_op_id,
-            OperationStatus::Completed,
-            Some(Value::String("first completion".to_string())),
-        ).await;
+        monitor
+            .update_status(
+                problematic_op_id,
+                OperationStatus::Completed,
+                Some(Value::String("first completion".to_string())),
+            )
+            .await;
 
         // Clear it (simulating notification loop)
         let first_clear = monitor.get_and_clear_completed_operations().await;
@@ -44,6 +52,7 @@ mod operation_id_reuse_bug_test {
         // This shouldn't happen with proper UUIDs, but let's test it
         let operation2 = Operation::new(
             problematic_op_id.to_string(),
+            "test".to_string(),
             "second operation with same ID".to_string(),
             None,
         );
@@ -51,11 +60,13 @@ mod operation_id_reuse_bug_test {
         println!("⚠️  Added second operation with same ID");
 
         // Complete the second operation
-        monitor.update_status(
-            problematic_op_id,
-            OperationStatus::Completed,
-            Some(Value::String("second completion".to_string())),
-        ).await;
+        monitor
+            .update_status(
+                problematic_op_id,
+                OperationStatus::Completed,
+                Some(Value::String("second completion".to_string())),
+            )
+            .await;
 
         // Now check - this could cause endless notifications if the ID reuse creates issues
         let second_clear = monitor.get_and_clear_completed_operations().await;
@@ -65,7 +76,10 @@ mod operation_id_reuse_bug_test {
         // The critical test - no operations should remain
         let final_check = monitor.get_and_clear_completed_operations().await;
         if !final_check.is_empty() {
-            panic!("OPERATION ID REUSE BUG: Found {} operations after clearing. This suggests operation ID reuse is causing endless notifications.", final_check.len());
+            panic!(
+                "OPERATION ID REUSE BUG: Found {} operations after clearing. This suggests operation ID reuse is causing endless notifications.",
+                final_check.len()
+            );
         }
 
         println!("✅ Operation ID reuse test passed");
@@ -85,6 +99,7 @@ mod operation_id_reuse_bug_test {
         // Add operation first time
         let operation1 = Operation::new(
             test_op_id.to_string(),
+            "test".to_string(),
             "first add".to_string(),
             None,
         );
@@ -94,6 +109,7 @@ mod operation_id_reuse_bug_test {
         // Add operation AGAIN with same ID - this overwrites the first one
         let operation2 = Operation::new(
             test_op_id.to_string(),
+            "test".to_string(),
             "second add".to_string(),
             None,
         );
@@ -101,25 +117,30 @@ mod operation_id_reuse_bug_test {
         println!("✅ Second add_operation call (should overwrite)");
 
         // Complete the operation
-        monitor.update_status(
-            test_op_id,
-            OperationStatus::Completed,
-            Some(Value::String("completion".to_string())),
-        ).await;
+        monitor
+            .update_status(
+                test_op_id,
+                OperationStatus::Completed,
+                Some(Value::String("completion".to_string())),
+            )
+            .await;
 
         // Check how many completed operations there are
         let completed = monitor.get_completed_operations().await;
         println!("📊 Found {} completed operations", completed.len());
-        
+
         // Should be exactly 1, not 2
         if completed.len() != 1 {
-            panic!("MULTIPLE ADD BUG: Expected 1 completed operation, found {}. Multiple add_operation calls may be causing duplicates.", completed.len());
+            panic!(
+                "MULTIPLE ADD BUG: Expected 1 completed operation, found {}. Multiple add_operation calls may be causing duplicates.",
+                completed.len()
+            );
         }
 
         // Clear and verify
         let cleared = monitor.get_and_clear_completed_operations().await;
         assert_eq!(cleared.len(), 1);
-        
+
         // Ensure it's really gone
         let final_check = monitor.get_and_clear_completed_operations().await;
         assert!(final_check.is_empty());
@@ -141,6 +162,7 @@ mod operation_id_reuse_bug_test {
         // Step 1: Operation is added (from execute_async_in_dir)
         let operation = Operation::new(
             test_op_id.to_string(),
+            "cargo".to_string(),
             "cargo version".to_string(),
             None,
         );
@@ -148,11 +170,9 @@ mod operation_id_reuse_bug_test {
         println!("✅ Step 1: Operation added");
 
         // Step 2: Operation is marked as InProgress
-        monitor.update_status(
-            test_op_id,
-            OperationStatus::InProgress,
-            None,
-        ).await;
+        monitor
+            .update_status(test_op_id, OperationStatus::InProgress, None)
+            .await;
         println!("✅ Step 2: Operation marked as InProgress");
 
         // Step 3: Notification loop runs but finds no completed operations
@@ -161,11 +181,13 @@ mod operation_id_reuse_bug_test {
         println!("✅ Step 3: Notification loop finds no completed operations");
 
         // Step 4: Operation completes
-        monitor.update_status(
-            test_op_id,
-            OperationStatus::Completed,
-            Some(Value::String("cargo 1.89.0".to_string())),
-        ).await;
+        monitor
+            .update_status(
+                test_op_id,
+                OperationStatus::Completed,
+                Some(Value::String("cargo 1.89.0".to_string())),
+            )
+            .await;
         println!("✅ Step 4: Operation completed");
 
         // Step 5: Notification loop finds and clears the completed operation
@@ -177,9 +199,16 @@ mod operation_id_reuse_bug_test {
         for step in 6..=10 {
             let check = monitor.get_and_clear_completed_operations().await;
             if !check.is_empty() {
-                panic!("PRODUCTION SEQUENCE BUG: Step {}: Found {} operations when none expected. This matches the user's endless notification pattern!", step, check.len());
+                panic!(
+                    "PRODUCTION SEQUENCE BUG: Step {}: Found {} operations when none expected. This matches the user's endless notification pattern!",
+                    step,
+                    check.len()
+                );
             }
-            println!("✅ Step {}: Notification loop finds 0 operations (expected)", step);
+            println!(
+                "✅ Step {}: Notification loop finds 0 operations (expected)",
+                step
+            );
         }
 
         println!("✅ Production sequence test passed");
@@ -199,31 +228,39 @@ mod operation_id_reuse_bug_test {
         // Add operation
         let operation = Operation::new(
             test_op_id.to_string(),
+            "test".to_string(),
             "status transition test".to_string(),
             None,
         );
         monitor.add_operation(operation).await;
 
         // Try updating status multiple times to Completed
-        monitor.update_status(
-            test_op_id,
-            OperationStatus::Completed,
-            Some(Value::String("first completion".to_string())),
-        ).await;
+        monitor
+            .update_status(
+                test_op_id,
+                OperationStatus::Completed,
+                Some(Value::String("first completion".to_string())),
+            )
+            .await;
         println!("✅ First completion status update");
 
         // Update status to Completed AGAIN (this might happen in edge cases)
-        monitor.update_status(
-            test_op_id,
-            OperationStatus::Completed,
-            Some(Value::String("second completion".to_string())),
-        ).await;
+        monitor
+            .update_status(
+                test_op_id,
+                OperationStatus::Completed,
+                Some(Value::String("second completion".to_string())),
+            )
+            .await;
         println!("✅ Second completion status update");
 
         // Check how many completed operations we have
         let completed = monitor.get_completed_operations().await;
         if completed.len() != 1 {
-            panic!("STATUS TRANSITION BUG: Expected 1 completed operation, found {}. Multiple status updates may be causing duplicates.", completed.len());
+            panic!(
+                "STATUS TRANSITION BUG: Expected 1 completed operation, found {}. Multiple status updates may be causing duplicates.",
+                completed.len()
+            );
         }
 
         // Clear operations
@@ -231,17 +268,22 @@ mod operation_id_reuse_bug_test {
         assert_eq!(cleared.len(), 1);
 
         // Try updating status of the already-cleared operation
-        monitor.update_status(
-            test_op_id,
-            OperationStatus::Completed,
-            Some(Value::String("post-clear completion".to_string())),
-        ).await;
+        monitor
+            .update_status(
+                test_op_id,
+                OperationStatus::Completed,
+                Some(Value::String("post-clear completion".to_string())),
+            )
+            .await;
         println!("✅ Post-clear status update (should be ignored)");
 
         // This should find nothing
         let post_clear_check = monitor.get_and_clear_completed_operations().await;
         if !post_clear_check.is_empty() {
-            panic!("POST-CLEAR UPDATE BUG: Found {} operations after post-clear update. Status update after clearing is causing re-appearance!", post_clear_check.len());
+            panic!(
+                "POST-CLEAR UPDATE BUG: Found {} operations after post-clear update. Status update after clearing is causing re-appearance!",
+                post_clear_check.len()
+            );
         }
 
         println!("✅ Status transition edge cases test passed");

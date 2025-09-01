@@ -107,6 +107,7 @@ mod full_system_integration_bug_test {
         let operation_id = adapter
             .execute_async_in_dir(
                 "cargo",
+                "version",
                 Some(serde_json::Map::from_iter(vec![(
                     "_subcommand".to_string(),
                     serde_json::Value::String("version".to_string()),
@@ -273,6 +274,7 @@ mod full_system_integration_bug_test {
         let op1 = adapter
             .execute_async_in_dir(
                 "cargo",
+                "version", 
                 Some(serde_json::Map::from_iter(vec![(
                     "_subcommand".to_string(),
                     serde_json::Value::String("version".to_string()),
@@ -285,6 +287,7 @@ mod full_system_integration_bug_test {
         let op2 = adapter
             .execute_async_in_dir(
                 "cargo",
+                "--version",
                 Some(serde_json::Map::from_iter(vec![(
                     "_subcommand".to_string(),
                     serde_json::Value::String("--version".to_string()),

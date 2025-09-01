@@ -19,6 +19,7 @@ mod endless_notification_test {
         // Add a completed operation
         let operation = Operation {
             id: "test-op-123".to_string(),
+            tool_name: "test".to_string(),
             description: "Test operation".to_string(),
             state: OperationStatus::Completed,
             result: Some(json!({"exit_code": 0, "stdout": "test output"})),
@@ -64,6 +65,7 @@ mod endless_notification_test {
         for i in 1..=3 {
             let operation = Operation {
                 id: format!("test-op-{}", i),
+                tool_name: "test".to_string(),
                 description: format!("Test operation {}", i),
                 state: OperationStatus::Completed,
                 result: Some(json!({"exit_code": 0, "stdout": format!("output {}", i)})),
@@ -97,6 +99,7 @@ mod endless_notification_test {
         // Add a completed operation
         let operation = Operation {
             id: "loop-test-456".to_string(),
+            tool_name: "test".to_string(),
             description: "Loop test operation".to_string(),
             state: OperationStatus::Completed,
             result: Some(json!({"exit_code": 0, "stdout": "loop test output"})),

@@ -14,7 +14,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::io::duplex;
 use tokio_util::sync::CancellationToken;
-use uuid::Uuid;
 
 // A dummy service that does nothing, just to get a Peer instance.
 #[derive(Clone)]
@@ -58,7 +57,7 @@ fn dummy_peer() -> (rmcp::service::Peer<RoleServer>, tokio::task::JoinHandle<()>
 fn dummy_request_context() -> (RequestContext<RoleServer>, tokio::task::JoinHandle<()>) {
     let (peer, handle) = dummy_peer();
     let request_context = RequestContext {
-        id: NumberOrString::String(Uuid::new_v4().to_string().into()),
+        id: NumberOrString::String("test_req_1".to_string().into()),
         peer,
         ct: CancellationToken::new(),
         meta: Default::default(),
@@ -140,10 +139,11 @@ async fn test_list_tools() -> Result<()> {
 
     handle.abort();
 
-    // Should have echo_text tool (base command "echo" + subcommand "text")
-    assert_eq!(result.tools.len(), 1);
+    // Should have echo_text tool (base command "echo" + subcommand "text") AND wait tool (hard-wired)
+    assert_eq!(result.tools.len(), 2);
     let tool_names: Vec<_> = result.tools.iter().map(|t| t.name.as_ref()).collect();
     assert!(tool_names.contains(&"echo_text"));
+    assert!(tool_names.contains(&"wait"));
 
     Ok(())
 }

@@ -28,6 +28,7 @@ mod race_condition_bug_test {
         // Step 1: Add operation in Pending state (simulating adapter.execute_async_in_dir)
         let operation = Operation::new(
             test_op_id.to_string(),
+            "test".to_string(),
             "race condition test".to_string(),
             None,
         );
@@ -95,6 +96,7 @@ mod race_condition_bug_test {
         // Add and immediately complete operation
         let operation = Operation::new(
             test_op_id.to_string(),
+            "test".to_string(),
             "update after clear test".to_string(),
             None,
         );
@@ -146,7 +148,12 @@ mod race_condition_bug_test {
         let test_op_id = "concurrent-test-op";
 
         // Add operation
-        let operation = Operation::new(test_op_id.to_string(), "concurrent test".to_string(), None);
+        let operation = Operation::new(
+            test_op_id.to_string(),
+            "test".to_string(),
+            "concurrent test".to_string(),
+            None,
+        );
         monitor.add_operation(operation).await;
 
         // Start concurrent tasks
@@ -233,7 +240,12 @@ mod race_condition_bug_test {
         let test_op_id = "multi-loop-test-op";
 
         // Add and complete operation
-        let operation = Operation::new(test_op_id.to_string(), "multi loop test".to_string(), None);
+        let operation = Operation::new(
+            test_op_id.to_string(),
+            "test".to_string(),
+            "multi loop test".to_string(),
+            None,
+        );
         monitor.add_operation(operation).await;
         monitor
             .update_status(

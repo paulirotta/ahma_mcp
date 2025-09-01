@@ -21,15 +21,15 @@ mod mcp_server_reproduction_test {
         let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
 
         // Simulate two operations like in the real server log
-        let op1_id = "722c2c28-016e-4105-ae8d-581230182b58";
-        let op2_id = "2b9243af-6c1a-4c79-a262-9bef8e8fb844";
+        let op1_id = "op_test_1";
+        let op2_id = "op_test_2";
 
         // Add first operation (cargo test - will fail)
-        let op1 = Operation::new(op1_id.to_string(), "cargo test".to_string(), None);
+        let op1 = Operation::new(op1_id.to_string(), "cargo".to_string(), "cargo test".to_string(), None);
         operation_monitor.add_operation(op1).await;
 
         // Add second operation (cargo check - will succeed)
-        let op2 = Operation::new(op2_id.to_string(), "cargo check".to_string(), None);
+        let op2 = Operation::new(op2_id.to_string(), "cargo".to_string(), "cargo check".to_string(), None);
         operation_monitor.add_operation(op2).await;
 
         println!("✅ Added 2 operations to monitor");

@@ -41,12 +41,14 @@
 //!    be reused.
 
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     process::Stdio,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, Instant},
 };
 use tokio::{

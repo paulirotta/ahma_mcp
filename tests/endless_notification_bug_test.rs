@@ -19,12 +19,13 @@ mod endless_notification_bug_test {
             Duration::from_secs(30),
         )));
 
-        // Use the exact operation ID from user's logs
-        let problematic_op_id = "7fc7f85e-9217-4f48-9240-2dd0dcd908e0";
+        // Use a test operation ID
+        let problematic_op_id = "op_test_endless";
 
         // Add a completed operation (simulating what happens when command finishes)
         let operation = Operation::new(
             problematic_op_id.to_string(),
+            "cargo".to_string(),
             "cargo version".to_string(),
             Some(Value::String("completed".to_string())),
         );
@@ -97,7 +98,12 @@ mod endless_notification_bug_test {
         let test_op_id = "concurrent-test-op-123";
 
         // Add operation
-        let operation = Operation::new(test_op_id.to_string(), "test command".to_string(), None);
+        let operation = Operation::new(
+            test_op_id.to_string(),
+            "test".to_string(),
+            "test command".to_string(),
+            None,
+        );
         monitor.add_operation(operation).await;
 
         // Mark as completed
@@ -157,7 +163,12 @@ mod endless_notification_bug_test {
         let test_op_id = "timing-test-op-456";
 
         // Add and complete operation
-        let operation = Operation::new(test_op_id.to_string(), "timing test".to_string(), None);
+        let operation = Operation::new(
+            test_op_id.to_string(),
+            "test".to_string(),
+            "timing test".to_string(),
+            None,
+        );
         monitor.add_operation(operation).await;
         monitor
             .update_status(

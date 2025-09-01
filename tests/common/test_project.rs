@@ -9,7 +9,7 @@ use tokio::task::spawn_blocking;
 /// Options to customize a temporary project with various tool configurations.
 #[derive(Debug, Clone, Default)]
 pub struct TestProjectOptions {
-    /// Prefix for the temp dir name. A UUID will be appended automatically for uniqueness.
+    /// Prefix for the temp dir name. A process ID will be appended automatically for uniqueness.
     pub prefix: Option<String>,
     /// Whether to create a Cargo project structure
     pub with_cargo: bool,
@@ -20,15 +20,15 @@ pub struct TestProjectOptions {
 }
 
 /// Create a temporary project with flexible tool configurations for testing ahma_mcp.
-/// Ensures unique directory via tempfile and uuid and never writes to the repo root.
+/// Ensures unique directory via tempfile and process ID and never writes to the repo root.
 pub async fn create_test_project(opts: TestProjectOptions) -> Result<TempDir> {
-    let uuid = uuid::Uuid::new_v4();
+    let process_id = std::process::id();
     let prefix = opts.prefix.unwrap_or_else(|| "ahma_mcp_test_".to_string());
 
     // TempDir creation is synchronous; use spawn_blocking to keep async threads unblocked under load.
     let temp_dir = spawn_blocking(move || {
         tempfile::Builder::new()
-            .prefix(&format!("{}{}_", prefix, uuid))
+            .prefix(&format!("{}{}_", prefix, process_id))
             .tempdir()
     })
     .await?
