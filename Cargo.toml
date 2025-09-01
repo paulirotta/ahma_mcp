@@ -6,6 +6,7 @@ authors = ["Paul Houghton <paulirotta@gmail.com>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 resolver = "3"
+rust-version = "1.85.0"
 
 [dependencies]
 anyhow = "1.0.99"

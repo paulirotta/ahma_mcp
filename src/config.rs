@@ -111,26 +111,20 @@ pub fn load_tool_configs(tools_dir: &Path) -> Result<HashMap<String, ToolConfig>
     for entry in fs::read_dir(tools_dir)? {
         let entry = entry?;
         let path = entry.path();
-        if path.is_file() {
-            if let Some(extension) = path.extension().and_then(|s| s.to_str()) {
-                if extension == "json" {
-                    let contents = fs::read_to_string(&path).with_context(|| {
-                        format!("Failed to read config file: {}", path.display())
-                    })?;
+        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
+            let contents = fs::read_to_string(&path)
+                .with_context(|| format!("Failed to read config file: {}", path.display()))?;
 
-                    let config: ToolConfig =
-                        serde_json::from_str(&contents).with_context(|| {
-                            format!(
-                                "Failed to parse JSON config file: {}. Content:\n{}",
-                                path.display(),
-                                contents
-                            )
-                        })?;
+            let config: ToolConfig = serde_json::from_str(&contents).with_context(|| {
+                format!(
+                    "Failed to parse JSON config file: {}. Content:\n{}",
+                    path.display(),
+                    contents
+                )
+            })?;
 
-                    if config.enabled {
-                        configs.insert(config.name.clone(), config);
-                    }
-                }
+            if config.enabled {
+                configs.insert(config.name.clone(), config);
             }
         }
     }
