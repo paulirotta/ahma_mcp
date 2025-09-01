@@ -23,7 +23,7 @@ async fn test_run_clippy() -> Result<()> {
         result
             .content
             .iter()
-            .any(|c| c.as_text().map_or(false, |t| t.text.contains("started")))
+            .any(|c| c.as_text().is_some_and(|t| t.text.contains("started")))
     );
 
     client.cancel().await?;
@@ -49,7 +49,7 @@ async fn test_run_clippy_with_tests() -> Result<()> {
         result
             .content
             .iter()
-            .any(|c| c.as_text().map_or(false, |t| t.text.contains("started")))
+            .any(|c| c.as_text().is_some_and(|t| t.text.contains("started")))
     );
 
     client.cancel().await?;

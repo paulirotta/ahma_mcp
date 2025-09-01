@@ -6,7 +6,7 @@ use ahma_mcp::adapter::Adapter;
 use ahma_mcp::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_mcp::shell_pool::{ShellPoolConfig, ShellPoolManager};
 use anyhow::Result;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -18,7 +18,7 @@ pub fn get_workspace_dir() -> PathBuf {
 
 /// Create a test config for integration tests
 #[allow(dead_code)]
-pub fn create_test_config(_workspace_dir: &PathBuf) -> Result<Arc<Adapter>> {
+pub fn create_test_config(_workspace_dir: &Path) -> Result<Arc<Adapter>> {
     // Create test monitor and shell pool configurations
     let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));

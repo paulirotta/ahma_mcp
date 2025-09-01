@@ -73,6 +73,7 @@ impl AhmaMcpService {
 }
 
 #[async_trait::async_trait]
+#[allow(clippy::manual_async_fn)] // Required by rmcp ServerHandler trait
 impl ServerHandler for AhmaMcpService {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
