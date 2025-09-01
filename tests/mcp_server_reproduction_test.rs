@@ -25,11 +25,21 @@ mod mcp_server_reproduction_test {
         let op2_id = "op_test_2";
 
         // Add first operation (cargo test - will fail)
-        let op1 = Operation::new(op1_id.to_string(), "cargo".to_string(), "cargo test".to_string(), None);
+        let op1 = Operation::new(
+            op1_id.to_string(),
+            "cargo".to_string(),
+            "cargo test".to_string(),
+            None,
+        );
         operation_monitor.add_operation(op1).await;
 
         // Add second operation (cargo check - will succeed)
-        let op2 = Operation::new(op2_id.to_string(), "cargo".to_string(), "cargo check".to_string(), None);
+        let op2 = Operation::new(
+            op2_id.to_string(),
+            "cargo".to_string(),
+            "cargo check".to_string(),
+            None,
+        );
         operation_monitor.add_operation(op2).await;
 
         println!("✅ Added 2 operations to monitor");

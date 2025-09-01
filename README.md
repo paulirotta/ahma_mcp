@@ -9,7 +9,7 @@
 
 ## Overview
 
-Ahma MCP is a Model Context Protocol server that dynamically adapts any command-line tool for asynchronous and concurrent use by AI assistants. Unlike tools designed for a single application (like `cargo`), Ahma discovers a tool's capabilities at runtime by parsing its `mytooltoadapt --help` output. A single configuration file (`tools/*.toml`) can optionally override `ahma_mcp`'s default tool availability and behavior.
+Ahma MCP is a Model Context Protocol server that dynamically adapts any command-line tool for asynchronous and concurrent use by AI assistants. Unlike tools designed for a single application (like `cargo`), Ahma discovers a tool's capabilities at runtime by parsing its `mytooltoadapt --help` output. A single configuration file (`tools/*.json`) can optionally override `ahma_mcp`'s default tool availability and behavior.
 
 AI can now use any command line interface (CLI) tool efficiently, with operations executing asynchronously by default and results automatically pushed back when complete. This eliminates blocking and enables true concurrent AI workflows.
 
@@ -67,7 +67,7 @@ Then copy the contents into your VS Code MCP configuration file (per-OS location
 - **Dynamic Tool Adaptation**: Automatically creates an MCP tool schema by inspecting a command-line tool's help documentation. No pre-configuration needed.
 - **High-Performance Shell Pool**: Pre-warmed shell processes provide 10x faster command startup (5-20ms vs 50-200ms), optimizing both synchronous and asynchronous operations.
 - **AI Productivity Optimization**: Tool descriptions include explicit guidance instructing AI clients to continue productive work rather than waiting for results.
-- **Selective Synchronous Override**: Fast operations (status, version) can be marked synchronous in TOML configuration for immediate results without notifications.
+- **Selective Synchronous Override**: Fast operations (status, version) can be marked synchronous in JSON configuration for immediate results without notifications.
 - **Unified Tool Interface**: Exposes a single, powerful MCP tool for each adapted command-line application, simplifying the AI's interaction model.
 - **Automatic Result Push**: Eliminates the need for polling or waiting - results are automatically pushed to AI clients when operations complete.
 - **Customizable Tool Hints**: Provides intelligent suggestions to AI clients about productive parallel work they can perform while operations execute.
@@ -99,26 +99,27 @@ Then copy the contents into your VS Code MCP configuration file (per-OS location
 
 Ahma MCP comes with several pre-configured tools in the `tools/` directory:
 
-- `git.toml` - Git version control (22 subcommands)
-- `cargo.toml` - Rust package manager (11 subcommands)
-- `ls.toml` - File listing
-- `cat.toml` - File viewing
-- `grep.toml` - Text searching
-- `sed.toml` - Stream editing
-- `echo.toml` - Text output
+- `git.json` - Git version control (22 subcommands)
+- `cargo.json` - Rust package manager (11 subcommands)
+- `ls.json` - File listing
+- `cat.json` - File viewing
+- `grep.json` - Text searching
+- `sed.json` - Stream editing
+- `echo.json` - Text output
 
-To add your own tools, create a `tools/<tool_name>.toml` file:
+To add your own tools, create a `tools/<tool_name>.json` file:
 
-```toml
-# tools/my_tool.toml
-tool_name = "my_tool"
-command = "my_tool"
-enabled = true
-timeout_seconds = 300
-
-[hints]
-primary = "Brief description of what this tool does"
-usage = "Common usage examples: my_tool --option value"
+```json
+{
+  "name": "my_tool",
+  "command": "my_tool",
+  "enabled": true,
+  "timeout_seconds": 300,
+  "hints": {
+    "primary": "Brief description of what this tool does",
+    "usage": "Common usage examples: my_tool --option value"
+  }
+}
 ```
 
 ### Testing the Installation
@@ -285,63 +286,67 @@ Ahma MCP includes an experimental pre-warmed shell pool inspired by `async_cargo
 
 ## Creating Custom Tool Configurations
 
-Want to add your own CLI tools? Create a TOML configuration file in the `tools/` directory:
+Want to add your own CLI tools? Create a JSON configuration file in the `tools/` directory:
 
 ### Basic Configuration
 
-```toml
-# tools/docker.toml
-tool_name = "docker"
-command = "docker"
-enabled = true
-timeout_seconds = 300
+```json
+{
+  "name": "docker",
+  "command": "docker",
+  "enabled": true,
+  "timeout_seconds": 300
+}
 ```
 
 ### Advanced Configuration with Hints
 
-```toml
-# tools/npm.toml
-tool_name = "npm"
-command = "npm"
-enabled = true
-timeout_seconds = 600
-verbose = false
-
-[hints]
-primary = "Node.js package manager for JavaScript/TypeScript projects"
-usage = "npm install, npm run build, npm test, npm publish"
-wait_hint = "Consider reviewing package.json or planning next development steps"
-build = "Review dependencies and build output for optimization opportunities"
-test = "Analyze test results and consider additional test coverage"
-default = "Use this time to plan next steps or review code"
-
-[hints.custom]
-install = "Installing dependencies - review package.json for security and updates"
-audit = "Security audit running - prepare to address vulnerabilities"
-publish = "Publishing package - verify version and changelog"
-
-[hints.parameters]
-"--save-dev" = "Add to development dependencies only"
-"--global" = "Install package globally for system-wide access"
-
-[overrides.test]
-timeout_seconds = 900
-synchronous = false
-hint = "Tests running - review test output patterns and coverage"
-default_args = ["--verbose"]
+```json
+{
+  "name": "npm",
+  "command": "npm",
+  "enabled": true,
+  "timeout_seconds": 600,
+  "verbose": false,
+  "hints": {
+    "primary": "Node.js package manager for JavaScript/TypeScript projects",
+    "usage": "npm install, npm run build, npm test, npm publish",
+    "wait_hint": "Consider reviewing package.json or planning next development steps",
+    "build": "Review dependencies and build output for optimization opportunities",
+    "test": "Analyze test results and consider additional test coverage",
+    "default": "Use this time to plan next steps or review code",
+    "custom": {
+      "install": "Installing dependencies - review package.json for security and updates",
+      "audit": "Security audit running - prepare to address vulnerabilities",
+      "publish": "Publishing package - verify version and changelog"
+    },
+    "parameters": {
+      "--save-dev": "Add to development dependencies only",
+      "--global": "Install package globally for system-wide access"
+    }
+  },
+  "overrides": {
+    "test": {
+      "timeout_seconds": 900,
+      "synchronous": false,
+      "hint": "Tests running - review test output patterns and coverage",
+      "default_args": ["--verbose"]
+    }
+  }
+}
 ```
 
 ### Configuration Options
 
-- **`tool_name`**: Name of the tool (required)
-- **`command`**: Actual command to execute (defaults to `tool_name`)
+- **`name`**: Name of the tool (required)
+- **`command`**: Actual command to execute (defaults to `name`)
 - **`enabled`**: Whether to load this tool (default: `true`)
 - **`timeout_seconds`**: Default timeout for operations (default: 300)
 - **`verbose`**: Enable verbose logging (default: `false`)
 - **`hints`**: AI guidance for different operations
 - **`overrides`**: Subcommand-specific settings
-- **`[hints.custom]`**: Custom hints for specific subcommands
-- **`[hints.parameters]`**: Descriptions for command-line parameters
+- **`hints.custom`**: Custom hints for specific subcommands
+- **`hints.parameters`**: Descriptions for command-line parameters
 
 After adding new tool configurations, restart VS Code to load them.
 

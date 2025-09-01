@@ -4,23 +4,23 @@ This document outlines the high-level requirements for `ahma_mcp`, a universal, 
 
 ## 1. Core Functionality
 
-- **R1.1**: The system shall adapt any command-line tool for use as a set of MCP tools based on a declarative TOML configuration file.
+- **R1.1**: The system shall adapt any command-line tool for use as a set of MCP tools based on a declarative JSON configuration file.
 - **R1.2**: The primary mode of operation shall be asynchronous by default, with automatic result push notifications to AI clients when operations complete. Long-running operations immediately return an operation ID and execute in the background without blocking the AI.
-- **R1.3**: Individual subcommands can be marked as `synchronous = true` in their TOML configuration for fast operations (e.g., status, version). Synchronous operations block and return results directly without operation IDs or notifications.
+- **R1.3**: Individual subcommands can be marked as `synchronous = true` in their JSON configuration for fast operations (e.g., status, version). Synchronous operations block and return results directly without operation IDs or notifications.
 - **R1.4**: The system shall use a pre-warmed shell pool to achieve 10x faster command startup times (5-20ms vs 50-200ms), optimizing performance for both synchronous and asynchronous operations.
 
 ## 2. Configuration and Tool Definition
 
-- **R2.1**: All tools shall be defined in `.toml` files located in a specified `tools/` directory.
+- **R2.1**: All tools shall be defined in `.json` files located in a specified `tools/` directory.
 - **R2.2**: The system shall scan this directory at startup and load all valid and enabled tool configurations.
 - **R2.3**: The `Config` structure (`src/config.rs`) shall define the schema for these files, including the base command, a list of subcommands, and their options.
-- **R2.4**: Each subcommand defined in the TOML will be exposed as a distinct MCP tool (e.g., `cargo build` becomes the `cargo_build` tool).
+- **R2.4**: Each subcommand defined in the JSON will be exposed as a distinct MCP tool (e.g., `cargo build` becomes the `cargo_build` tool).
 
 ## 3. Dynamic Schema Generation
 
 - **R3.1**: For each subcommand in a tool's configuration, the system shall generate a corresponding MCP tool definition.
 - **R3.2**: The tool name shall be a combination of the base command and the subcommand name (e.g., `git_commit`).
-- **R3.3**: The `input_schema` for each tool shall be dynamically generated based on the `options` defined in the `Subcommand` struct in the TOML file. This provides a strongly-typed interface for the AI client.
+- **R3.3**: The `input_schema` for each tool shall be dynamically generated based on the `options` defined in the `Subcommand` struct in the JSON file. This provides a strongly-typed interface for the AI client.
 - **R3.4**: The system must support basic data types for options, such as `boolean`, `string`, `integer`, and `array`.
 
 ## 4. Asynchronous Operation and AI Interaction
@@ -32,7 +32,7 @@ This document outlines the high-level requirements for `ahma_mcp`, a universal, 
 
 ## 5. Synchronous Operation
 
-- **R5.1**: Fast operations (e.g., status, version) can be marked with `synchronous = true` in their TOML subcommand configuration to execute in blocking mode.
+- **R5.1**: Fast operations (e.g., status, version) can be marked with `synchronous = true` in their JSON subcommand configuration to execute in blocking mode.
 - **R5.2**: Synchronous operations return final results directly with no operation IDs, notifications, or waiting mechanisms.
 - **R5.3**: Tool descriptions for synchronous operations shall be clear and simple, with no mention of asynchronous behavior or operation tracking.
 
@@ -55,6 +55,6 @@ This document outlines the high-level requirements for `ahma_mcp`, a universal, 
 ## 8. Extensibility and Maintainability
 
 - **R8.1**: The architecture shall be modular, with a clear separation of concerns between configuration (`config.rs`), MCP service logic (`mcp_service.rs`), and command execution (`adapter.rs`).
-- **R8.2**: Adding new tools or modifying existing ones should be achievable purely by editing TOML files, with no changes to the core Rust codebase.
+- **R8.2**: Adding new tools or modifying existing ones should be achievable purely by editing JSON files, with no changes to the core Rust codebase.
 - **R8.3**: The system shall provide comprehensive logging and debugging capabilities to facilitate troubleshooting and performance optimization.
 - **R8.4**: Configuration schema shall support rich metadata including timeout overrides, LLM guidance hints, and performance tuning parameters.

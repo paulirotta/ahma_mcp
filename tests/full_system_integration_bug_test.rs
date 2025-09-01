@@ -93,7 +93,7 @@ mod full_system_integration_bug_test {
         let adapter =
             Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager).unwrap());
 
-        let configs = Arc::new(load_tool_configs().unwrap());
+        let configs = Arc::new(load_tool_configs(&std::path::PathBuf::from("tools")).unwrap());
         let _service = AhmaMcpService::new(adapter.clone(), operation_monitor.clone(), configs)
             .await
             .unwrap();
@@ -274,7 +274,7 @@ mod full_system_integration_bug_test {
         let op1 = adapter
             .execute_async_in_dir(
                 "cargo",
-                "version", 
+                "version",
                 Some(serde_json::Map::from_iter(vec![(
                     "_subcommand".to_string(),
                     serde_json::Value::String("version".to_string()),

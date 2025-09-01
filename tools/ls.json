@@ -1,0 +1,53 @@
+{
+    "name": "ls",
+    "description": "List directory contents and file information",
+    "command": "ls",
+    "enabled": true,
+    "input_schema": {
+        "type": "object",
+        "properties": {}
+    },
+    "subcommand": [
+        {
+            "name": "ls",
+            "description": "List directory contents and file information",
+            "synchronous": true,
+            "options": [
+                {
+                    "name": "all",
+                    "type": "boolean",
+                    "description": "Include directory entries whose names begin with a dot (‘.’)."
+                },
+                {
+                    "name": "long",
+                    "type": "boolean",
+                    "description": "List files in the long format."
+                },
+                {
+                    "name": "human_readable",
+                    "type": "boolean",
+                    "description": "When used with the -l option, use unit suffixes: Byte, Kilobyte, Megabyte, Gigabyte, Terabyte and Petabyte in order to reduce the number of digits to four or fewer using base 2 for sizes."
+                },
+                {
+                    "name": "recursive",
+                    "type": "boolean",
+                    "description": "Recursively list subdirectories encountered."
+                },
+                {
+                    "name": "sort_by_time",
+                    "type": "boolean",
+                    "description": "Sort by descending time modified (most recently modified first)."
+                },
+                {
+                    "name": "reverse_order",
+                    "type": "boolean",
+                    "description": "Reverse the order of the sort."
+                }
+            ]
+        }
+    ],
+    "hints": {
+        "primary": "List directory contents and file information",
+        "usage": "Common options: -l (long format), -a (all files), -h (human readable)"
+    }
+}

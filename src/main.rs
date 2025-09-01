@@ -14,7 +14,7 @@
 //!   logging. The log level can be controlled via the `--debug` flag.
 //!
 //! - **Tool Loading and Parsing**:
-//!   1. Scans the specified `tools` directory for `.toml` configuration files.
+//!   1. Scans the specified `tools` directory for `.json` configuration files.
 //!   2. For each file, it loads the `Config` struct.
 //!   3. It then uses the `CliParser` to execute the tool's `--help` command and parse
 //!      the output into a `CliStructure`.
@@ -34,7 +34,7 @@
 //! 2. `Cli::parse()` reads and validates command-line arguments.
 //! 3. `tracing_subscriber` is configured.
 //! 4. An `Adapter` is created.
-//! 5. The `tools` directory is scanned, and each `.toml` file is processed to build a
+//! 5. The `tools` directory is scanned, and each `.json` file is processed to build a
 //!    collection of `(tool_name, config, cli_structure)` tuples.
 //! 6. `AhmaMcpService::new()` is called to create the service instance.
 //! 7. `service.start_server()` is awaited, running the server indefinitely until it
@@ -74,7 +74,7 @@ struct Cli {
     #[arg(long)]
     server: bool,
 
-    /// Path to the directory containing tool TOML configuration files.
+    /// Path to the directory containing tool JSON configuration files.
     #[arg(long, global = true, default_value = "tools")]
     tools_dir: PathBuf,
 
@@ -140,7 +140,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     let adapter = Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager)?);
 
     // Load tool configurations
-    let configs = Arc::new(load_tool_configs()?);
+    let configs = Arc::new(load_tool_configs(&cli.tools_dir)?);
     if configs.is_empty() {
         tracing::error!("No valid tool configurations found in {:?}", cli.tools_dir);
         // It's not a fatal error to have no tools, just log it.
