@@ -1,6 +1,13 @@
 # Cargo Tool Configuration for Ahma MCP
+name = "cargo"
+description = "Rust's build tool and package manager"
 command = "cargo"
 enabled = true
+
+# JSON Schema for the tool input parameters
+[input_schema]
+type = "object"
+properties = {}
 
 # Common cargo subcommands
 [[subcommand]]

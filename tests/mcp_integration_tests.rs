@@ -1,15 +1,18 @@
 //! Integration tests for the ahma_mcp service.
 mod common;
 
-use ahma_mcp::config::Config;
+use ahma_mcp::adapter::ExecutionMode;
+use ahma_mcp::config::{OptionConfig, SubcommandConfig, ToolConfig};
 use ahma_mcp::mcp_service::AhmaMcpService;
 use anyhow::Result;
 use common::{create_test_config, get_workspace_dir};
 use rmcp::model::{CallToolRequestParam, NumberOrString};
 use rmcp::service::{RequestContext, RoleServer, Service};
 use rmcp::{ErrorData as RmcpError, ServerHandler, model as m, service};
-use serde_json::Map;
+use serde_json::{Map, json};
 use std::borrow::Cow;
+use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::io::duplex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -65,34 +68,48 @@ fn dummy_request_context() -> (RequestContext<RoleServer>, tokio::task::JoinHand
     (request_context, handle)
 }
 
-fn create_test_configs() -> Vec<(String, Config)> {
-    let echo_config = Config {
+fn create_test_configs() -> HashMap<String, ToolConfig> {
+    let mut configs = HashMap::new();
+    let echo_config = ToolConfig {
+        name: "echo".to_string(),
+        description: "Echo text to output".to_string(),
         command: "echo".to_string(),
-        subcommand: vec![ahma_mcp::config::Subcommand {
+        subcommand: vec![SubcommandConfig {
             name: "text".to_string(),
             description: "Echo text to output".to_string(),
-            options: vec![ahma_mcp::config::CliOption {
+            options: vec![OptionConfig {
                 name: "message".to_string(),
-                type_: "string".to_string(),
+                option_type: "string".to_string(),
                 description: "Message to echo".to_string(),
             }],
-            args: vec![],
-            synchronous: Some(true), // Explicitly synchronous for testing
         }],
-        hints: None,
-        enabled: Some(true),
+        input_schema: json!({}),
+        execution_mode: ExecutionMode::Synchronous,
+        timeout: Some(30),
+        hints: Default::default(),
+        enabled: true,
     };
 
-    vec![("echo".to_string(), echo_config)]
+    configs.insert("echo".to_string(), echo_config);
+    configs
 }
 
 #[tokio::test]
 async fn test_service_creation() -> Result<()> {
     let _workspace_dir = get_workspace_dir();
     let adapter = create_test_config(&_workspace_dir)?;
-    let configs = create_test_configs();
 
-    let _service = AhmaMcpService::new(adapter, configs).await?;
+    // Create a separate operation monitor for the service
+    let monitor_config = ahma_mcp::operation_monitor::MonitorConfig::with_timeout(
+        std::time::Duration::from_secs(30),
+    );
+    let operation_monitor = Arc::new(ahma_mcp::operation_monitor::OperationMonitor::new(
+        monitor_config,
+    ));
+
+    let configs = Arc::new(create_test_configs());
+
+    let _service = AhmaMcpService::new(adapter, operation_monitor, configs).await?;
 
     // Just verify it was created successfully
     assert!(true, "Service creation should succeed");
@@ -104,16 +121,25 @@ async fn test_service_creation() -> Result<()> {
 async fn test_list_tools() -> Result<()> {
     let _workspace_dir = get_workspace_dir();
     let adapter = create_test_config(&_workspace_dir)?;
-    let configs = create_test_configs();
 
-    let service = AhmaMcpService::new(adapter, configs).await?;
+    // Create a separate operation monitor for the service
+    let monitor_config = ahma_mcp::operation_monitor::MonitorConfig::with_timeout(
+        std::time::Duration::from_secs(30),
+    );
+    let operation_monitor = Arc::new(ahma_mcp::operation_monitor::OperationMonitor::new(
+        monitor_config,
+    ));
+
+    let configs = Arc::new(create_test_configs());
+
+    let service = AhmaMcpService::new(adapter, operation_monitor, configs).await?;
     let (request_context, handle) = dummy_request_context();
 
     let result = service.list_tools(None, request_context).await?;
 
     handle.abort();
 
-    // Should have echo_text tool
+    // Should have echo_text tool (base command "echo" + subcommand "text")
     assert_eq!(result.tools.len(), 1);
     let tool_names: Vec<_> = result.tools.iter().map(|t| t.name.as_ref()).collect();
     assert!(tool_names.contains(&"echo_text"));
@@ -125,9 +151,18 @@ async fn test_list_tools() -> Result<()> {
 async fn test_call_tool_basic() -> Result<()> {
     let workspace_dir = get_workspace_dir();
     let adapter = create_test_config(&workspace_dir)?;
-    let configs = create_test_configs();
 
-    let service = AhmaMcpService::new(adapter, configs).await?;
+    // Create a separate operation monitor for the service
+    let monitor_config = ahma_mcp::operation_monitor::MonitorConfig::with_timeout(
+        std::time::Duration::from_secs(30),
+    );
+    let operation_monitor = Arc::new(ahma_mcp::operation_monitor::OperationMonitor::new(
+        monitor_config,
+    ));
+
+    let configs = Arc::new(create_test_configs());
+
+    let service = AhmaMcpService::new(adapter, operation_monitor, configs).await?;
     let (request_context, handle) = dummy_request_context();
 
     let mut params = Map::new();

@@ -44,7 +44,7 @@ use crate::{
 use anyhow::Result;
 use rmcp::ErrorData as McpError;
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -88,8 +88,23 @@ impl Adapter {
 
         let args_vec = args
             .map(|map| {
-                map.into_iter()
-                    .map(|(k, v)| format!("--{}={}", k, v.as_str().unwrap_or("")))
+                let mut positional_args = Vec::new();
+                let mut flag_args = Vec::new();
+
+                for (k, v) in map.into_iter() {
+                    if k == "_subcommand" {
+                        // Handle subcommand as positional argument (first)
+                        positional_args.insert(0, v.as_str().unwrap_or("").to_string());
+                    } else {
+                        // Handle regular arguments as flags
+                        flag_args.push(format!("--{}={}", k, v.as_str().unwrap_or("")));
+                    }
+                }
+
+                // Combine positional args first, then flag args
+                positional_args
+                    .into_iter()
+                    .chain(flag_args.into_iter())
                     .collect::<Vec<String>>()
             })
             .unwrap_or_default();
@@ -154,8 +169,23 @@ impl Adapter {
 
         let args_vec = args
             .map(|map| {
-                map.into_iter()
-                    .map(|(k, v)| format!("--{}={}", k, v.as_str().unwrap_or("")))
+                let mut positional_args = Vec::new();
+                let mut flag_args = Vec::new();
+
+                for (k, v) in map.into_iter() {
+                    if k == "_subcommand" {
+                        // Handle subcommand as positional argument (first)
+                        positional_args.insert(0, v.as_str().unwrap_or("").to_string());
+                    } else {
+                        // Handle regular arguments as flags
+                        flag_args.push(format!("--{}={}", k, v.as_str().unwrap_or("")));
+                    }
+                }
+
+                // Combine positional args first, then flag args
+                positional_args
+                    .into_iter()
+                    .chain(flag_args.into_iter())
                     .collect::<Vec<String>>()
             })
             .unwrap_or_default();

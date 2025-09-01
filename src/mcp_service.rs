@@ -81,7 +81,6 @@ impl ServerHandler for AhmaMcpService {
             server_info: Implementation {
                 name: env!("CARGO_PKG_NAME").to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
-                ..Default::default()
             },
             instructions: None,
         }
@@ -111,21 +110,40 @@ impl ServerHandler for AhmaMcpService {
         _context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
         async move {
-            let tools = self
-                .configs
-                .values()
-                .map(|config| {
+            let mut tools = Vec::new();
+
+            for config in self.configs.values() {
+                if config.subcommand.is_empty() {
+                    // If no subcommands defined, register the tool by its base name
                     let input_schema =
                         Arc::new(config.input_schema.as_object().cloned().unwrap_or_default());
-                    Tool {
+                    tools.push(Tool {
                         name: config.name.clone().into(),
                         description: Some(config.description.clone().into()),
                         input_schema,
                         output_schema: None,
                         annotations: None,
+                    });
+                } else {
+                    // Register each subcommand as a separate tool
+                    for subcommand in &config.subcommand {
+                        let tool_name = format!("{}_{}", config.name, subcommand.name);
+                        let input_schema =
+                            Arc::new(config.input_schema.as_object().cloned().unwrap_or_default());
+                        tools.push(Tool {
+                            name: tool_name.into(),
+                            description: Some(
+                                format!("{}: {}", config.description, subcommand.description)
+                                    .into(),
+                            ),
+                            input_schema,
+                            output_schema: None,
+                            annotations: None,
+                        });
                     }
-                })
-                .collect();
+                }
+            }
+
             Ok(ListToolsResult {
                 tools,
                 next_cursor: None,
@@ -136,21 +154,51 @@ impl ServerHandler for AhmaMcpService {
     fn call_tool(
         &self,
         params: CallToolRequestParam,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
         async move {
             let tool_name = params.name.as_ref();
-            let config = match self.configs.get(tool_name) {
+
+            // Parse tool name to extract base command and subcommand
+            let (base_command, subcommand) = if let Some(underscore_pos) = tool_name.find('_') {
+                let base = &tool_name[..underscore_pos];
+                let sub = &tool_name[underscore_pos + 1..];
+                (base, Some(sub))
+            } else {
+                (tool_name, None)
+            };
+
+            let config = match self.configs.get(base_command) {
                 Some(config) => config,
                 None => {
-                    let error_message = format!("Tool '{}' not found", tool_name);
+                    let error_message = format!(
+                        "Tool '{}' not found (base command '{}' not configured)",
+                        tool_name, base_command
+                    );
                     error!("{}", error_message);
                     return Err(McpError::invalid_params(
                         error_message,
-                        Some(serde_json::json!({ "tool_name": tool_name })),
+                        Some(
+                            serde_json::json!({ "tool_name": tool_name, "base_command": base_command }),
+                        ),
                     ));
                 }
             };
+
+            // Verify subcommand exists if specified
+            if let Some(sub) = subcommand {
+                if !config.subcommand.iter().any(|sc| sc.name == sub) {
+                    let error_message =
+                        format!("Subcommand '{}' not found for tool '{}'", sub, base_command);
+                    error!("{}", error_message);
+                    return Err(McpError::invalid_params(
+                        error_message,
+                        Some(
+                            serde_json::json!({ "tool_name": tool_name, "base_command": base_command, "subcommand": sub }),
+                        ),
+                    ));
+                }
+            }
 
             let execution_mode = config.execution_mode;
             let working_directory = params
@@ -162,19 +210,28 @@ impl ServerHandler for AhmaMcpService {
                 .unwrap_or_else(|| ".".to_string());
 
             info!(
-                "Executing tool '{}' in directory '{}' with mode: {:?}",
-                tool_name, working_directory, execution_mode
+                "Executing tool '{}' (base: '{}', subcommand: {:?}) in directory '{}' with mode: {:?}",
+                tool_name, base_command, subcommand, working_directory, execution_mode
             );
 
             let arguments: Option<Map<String, serde_json::Value>> = params.arguments;
+
+            // Modify arguments to include subcommand as first positional argument
+            let mut modified_args = arguments.unwrap_or_default();
+            if let Some(sub) = subcommand {
+                modified_args.insert(
+                    "_subcommand".to_string(),
+                    serde_json::Value::String(sub.to_string()),
+                );
+            }
 
             match execution_mode {
                 ExecutionMode::Synchronous => {
                     match self
                         .adapter
                         .execute_sync_in_dir(
-                            &config.command,
-                            arguments,
+                            &config.command, // Use base command only
+                            Some(modified_args),
                             &working_directory,
                             config.timeout,
                         )
@@ -193,11 +250,12 @@ impl ServerHandler for AhmaMcpService {
                     }
                 }
                 ExecutionMode::AsyncResultPush => {
+                    // Two-stage async pattern: immediate response + background notifications
                     let operation_id = self
                         .adapter
                         .execute_async_in_dir(
-                            &config.command,
-                            arguments,
+                            &config.command, // Use base command only
+                            Some(modified_args),
                             &working_directory,
                             config.timeout,
                         )
@@ -207,6 +265,48 @@ impl ServerHandler for AhmaMcpService {
                         "Asynchronously started tool '{}' with operation ID '{}'",
                         tool_name, operation_id
                     );
+
+                    // Send immediate "Started" notification using MCP callback
+                    let peer = context.peer.clone();
+                    let callback =
+                        crate::mcp_callback::mcp_callback(peer.clone(), operation_id.clone());
+
+                    // Send started notification asynchronously (don't block the response)
+                    let operation_id_clone = operation_id.clone();
+                    let tool_name_clone = tool_name.to_string();
+                    let working_directory_clone = working_directory.clone();
+                    tokio::spawn(async move {
+                        let started_notification =
+                            crate::callback_system::ProgressUpdate::Started {
+                                operation_id: operation_id_clone.clone(),
+                                command: tool_name_clone.clone(),
+                                description: format!(
+                                    "Executing {} in {}",
+                                    tool_name_clone, working_directory_clone
+                                ),
+                            };
+
+                        if let Err(e) = callback.send_progress(started_notification).await {
+                            error!(
+                                "Failed to send started notification for operation {}: {:?}",
+                                operation_id_clone, e
+                            );
+                        } else {
+                            info!(
+                                "Sent started notification for operation: {}",
+                                operation_id_clone
+                            );
+                        }
+                    });
+
+                    // Store peer handle for later notifications (if not already stored)
+                    if self.peer.read().unwrap().is_none() {
+                        let mut peer_guard = self.peer.write().unwrap();
+                        if peer_guard.is_none() {
+                            *peer_guard = Some(peer.clone());
+                            info!("Captured MCP peer handle for async notifications");
+                        }
+                    }
 
                     Ok(CallToolResult::success(vec![Content::text(
                     serde_json::to_string(&serde_json::json!({

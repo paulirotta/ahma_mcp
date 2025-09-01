@@ -4,14 +4,11 @@
 //! support for long-running cargo operations. It enables tracking of operation state,
 //! automatic cleanup, and detailed logging for debugging.
 
-use crate::callback_system::{CallbackSender, ProgressUpdate};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
-use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Represents the current state of an operation
@@ -78,6 +75,7 @@ impl MonitorConfig {
 #[derive(Debug, Clone)]
 pub struct OperationMonitor {
     operations: Arc<RwLock<HashMap<String, Operation>>>,
+    #[allow(dead_code)]
     config: MonitorConfig,
 }
 

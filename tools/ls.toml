@@ -1,6 +1,13 @@
 # LS Tool Configuration for Ahma MCP
+name = "ls"
+description = "List directory contents and file information"
 command = "ls"
 enabled = true
+
+# JSON Schema for the tool input parameters
+[input_schema]
+type = "object"
+properties = {}
 
 [[subcommand]]
 name = "ls"
@@ -16,7 +23,7 @@ description = "Use long listing format"
 [[subcommand.options]]
 name = "human_readable"
 type = "boolean"
-description = "Show file sizes in human-readable format"
+description = "Use long listing format"
 
 # AI guidance hints
 [hints]

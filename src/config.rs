@@ -43,7 +43,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::adapter::ExecutionMode;
 
@@ -53,13 +53,34 @@ pub struct ToolConfig {
     pub name: String,
     pub description: String,
     pub command: String,
-    pub subcommand: Option<String>,
+    #[serde(default)]
+    pub subcommand: Vec<SubcommandConfig>,
     pub input_schema: Value,
     #[serde(default = "default_execution_mode")]
     pub execution_mode: ExecutionMode,
     pub timeout: Option<u64>,
     #[serde(default)]
     pub hints: ToolHints,
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+/// Configuration for a subcommand within a tool
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubcommandConfig {
+    pub name: String,
+    pub description: String,
+    #[serde(default)]
+    pub options: Vec<OptionConfig>,
+}
+
+/// Configuration for an option within a subcommand
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OptionConfig {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub option_type: String,
+    pub description: String,
 }
 
 fn default_execution_mode() -> ExecutionMode {
