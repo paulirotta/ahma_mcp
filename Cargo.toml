@@ -12,7 +12,7 @@ rust-version = "1.85.0"
 anyhow = "1.0.99"
 async-trait = "0.1.89"
 chrono = { version = "0.4.41", features = ["serde"] }
-clap = { version = "4.5.46", features = ["derive"] }
+clap = { version = "4.5.47", features = ["derive"] }
 directories = "6.0.0"
 regex = "1.11.2"
 rmcp = { version = "0.6.1", features = ["server", "client", "macros", "transport-io", "transport-child-process", "elicitation", "schemars"] }
