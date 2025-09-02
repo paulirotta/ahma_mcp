@@ -65,63 +65,42 @@ pub fn duration_since_as_rounded_seconds(start: Instant) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{Local, TimeZone};
     use std::thread;
 
     #[test]
     fn test_format_time_basic() {
-        // Test with current time - we just verify the format is correct
-        let time = SystemTime::now();
+        // Test with a specific time
+        let time = Local
+            .with_ymd_and_hms(2023, 1, 1, 14, 30, 5)
+            .unwrap()
+            .into();
         let formatted = format_time(time);
-        // Length can be 7 (H:MM:SS) or 8 (HH:MM:SS) depending on hour
-        assert!(formatted.len() >= 7 && formatted.len() <= 8);
+        assert_eq!(formatted, "14:30:05");
 
-        // Should contain colons but no decimal point
-        assert!(formatted.contains(':'));
-        assert!(!formatted.contains('.'));
-
-        // Check that hours, minutes, seconds are valid numbers
-        let parts: Vec<&str> = formatted.split(':').collect();
-        assert_eq!(parts.len(), 3);
-        let hours: u32 = parts[0].parse().expect("Hours should be valid number");
-        let minutes: u32 = parts[1].parse().expect("Minutes should be valid number");
-        let seconds: u32 = parts[2].parse().expect("Seconds should be valid number");
-        assert!(hours < 24);
-        assert!(minutes < 60);
-        assert!(seconds < 60);
+        // Test single-digit hour
+        let time_morning = Local.with_ymd_and_hms(2023, 1, 1, 7, 8, 9).unwrap().into();
+        let formatted_morning = format_time(time_morning);
+        assert_eq!(formatted_morning, "7:08:09");
     }
 
     #[test]
     fn test_format_time_midnight() {
-        // Just test format validity - actual time depends on local timezone
-        let time = SystemTime::now();
+        // Test with a specific time: midnight
+        let time = Local.with_ymd_and_hms(2023, 1, 1, 0, 0, 0).unwrap().into();
         let formatted = format_time(time);
-        // Length can be 7 (H:MM:SS) or 8 (HH:MM:SS) depending on hour
-        assert!(formatted.len() >= 7 && formatted.len() <= 8);
-
-        // Should contain colons but no decimal point
-        assert!(formatted.contains(':'));
-        assert!(!formatted.contains('.'));
-
-        // Should have exactly 2 colons and no decimal points
-        assert_eq!(formatted.matches(':').count(), 2);
-        assert_eq!(formatted.matches('.').count(), 0);
+        assert_eq!(formatted, "0:00:00");
     }
 
     #[test]
     fn test_format_time_end_of_day() {
-        // Just test format validity - actual time depends on local timezone
-        let time = SystemTime::now();
+        // Test with a specific time: end of day
+        let time = Local
+            .with_ymd_and_hms(2023, 1, 1, 23, 59, 59)
+            .unwrap()
+            .into();
         let formatted = format_time(time);
-        // Length can be 7 (H:MM:SS) or 8 (HH:MM:SS) depending on hour
-        assert!(formatted.len() >= 7 && formatted.len() <= 8);
-
-        // Should contain colons but no decimal point
-        assert!(formatted.contains(':'));
-        assert!(!formatted.contains('.'));
-
-        // Should have exactly 2 colons and no decimal points
-        assert_eq!(formatted.matches(':').count(), 2);
-        assert_eq!(formatted.matches('.').count(), 0);
+        assert_eq!(formatted, "23:59:59");
     }
 
     #[test]

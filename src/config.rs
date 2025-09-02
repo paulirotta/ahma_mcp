@@ -86,6 +86,8 @@ pub struct OptionConfig {
     #[serde(rename = "type")]
     pub option_type: String,
     pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
 }
 
 fn default_enabled() -> bool {

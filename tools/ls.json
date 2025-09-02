@@ -21,6 +21,7 @@
                 {
                     "name": "path",
                     "type": "string",
+                    "format": "path",
                     "description": "The directory or file path to list. Defaults to current directory if not specified."
                 },
                 {
