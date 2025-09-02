@@ -1,6 +1,6 @@
 {
     "servers": {
-        "ahma_mcp": {
+        "ahma_mcp_dev": {
             "type": "stdio",
             "cwd": "${workspaceFolder}",
             "command": "cargo",
