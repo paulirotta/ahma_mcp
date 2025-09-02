@@ -17,6 +17,11 @@
             "synchronous": false,
             "options": [
                 {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution"
+                },
+                {
                     "name": "file",
                     "type": "string",
                     "description": "Path to Python script file to execute",
@@ -55,6 +60,11 @@
             "description": "Execute Python code passed as string",
             "options": [
                 {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution"
+                },
+                {
                     "name": "command",
                     "type": "string",
                     "description": "Python code to execute",
@@ -87,6 +97,11 @@
             "description": "Run library module as a script\n\n**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- DO NOT wait for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.",
             "synchronous": false,
             "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution"
+                },
                 {
                     "name": "module_name",
                     "type": "string",
@@ -126,6 +141,11 @@
             "synchronous": true,
             "options": [
                 {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution"
+                },
+                {
                     "name": "detailed",
                     "type": "boolean",
                     "description": "Print detailed build information (-VV)"
@@ -138,6 +158,11 @@
             "synchronous": true,
             "options": [
                 {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution"
+                },
+                {
                     "name": "help_type",
                     "type": "string",
                     "description": "Type of help: 'general' (default), 'env' (environment variables), 'xoptions' (implementation options), 'all' (complete help)"
@@ -149,6 +174,11 @@
             "description": "Start interactive Python interpreter\n\n**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- DO NOT wait for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.",
             "synchronous": false,
             "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution"
+                },
                 {
                     "name": "inspect",
                     "type": "boolean",
@@ -191,6 +221,11 @@
             "description": "Check Python script syntax without executing",
             "synchronous": true,
             "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution"
+                },
                 {
                     "name": "file",
                     "type": "string",

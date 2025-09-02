@@ -856,6 +856,12 @@ impl ServerHandler for AhmaMcpService {
                 }
             }
 
+            // SECURITY FIX: Filter out working_directory for cargo commands to prevent injection attacks
+            // Cargo should always run in the current working directory where the server started
+            if base_command == "cargo" {
+                modified_args.remove("working_directory");
+            }
+
             if is_synchronous {
                 match self
                     .adapter
@@ -998,15 +1004,6 @@ impl AhmaMcpService {
     ) -> serde_json::Map<String, serde_json::Value> {
         let mut schema = serde_json::Map::new();
         let mut properties = serde_json::Map::new();
-
-        // Add standard working directory parameter
-        properties.insert(
-            "working_directory".to_string(),
-            serde_json::json!({
-                "type": "string",
-                "description": "Working directory for command execution"
-            }),
-        );
 
         // Generate schema from options
         for option in &subcommand.options {

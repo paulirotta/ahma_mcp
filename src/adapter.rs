@@ -136,7 +136,13 @@ impl Adapter {
                         positional_args.push(v.as_str().unwrap_or("").to_string());
                     } else {
                         // Handle regular arguments as flags
-                        flag_args.push(format!("--{}={}", k, v.as_str().unwrap_or("")));
+                        match v {
+                            Value::Bool(true) => flag_args.push(format!("--{}", k)),
+                            Value::Bool(false) => {
+                                // Skip false boolean flags - they should not be included
+                            }
+                            _ => flag_args.push(format!("--{}={}", k, v.as_str().unwrap_or(""))),
+                        }
                     }
                 }
 
@@ -292,7 +298,13 @@ impl Adapter {
                         positional_args.push(v.as_str().unwrap_or("").to_string());
                     } else {
                         // Handle regular arguments as flags
-                        flag_args.push(format!("--{}={}", k, v.as_str().unwrap_or("")));
+                        match v {
+                            Value::Bool(true) => flag_args.push(format!("--{}", k)),
+                            Value::Bool(false) => {
+                                // Skip false boolean flags - they should not be included
+                            }
+                            _ => flag_args.push(format!("--{}={}", k, v.as_str().unwrap_or(""))),
+                        }
                     }
                 }
 
