@@ -54,7 +54,7 @@ use std::{
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::{Child, Command},
-    sync::{Mutex, RwLock},
+    sync::{Mutex, RwLock, Semaphore},
     time::timeout,
 };
 use tracing;
@@ -661,7 +661,7 @@ impl ShellPool {
 pub struct ShellPoolManager {
     pools: RwLock<HashMap<PathBuf, Arc<ShellPool>>>,
     config: ShellPoolConfig,
-    total_shells: Mutex<usize>,
+    shell_semaphore: Semaphore,
 }
 
 impl ShellPoolManager {
@@ -671,8 +671,8 @@ impl ShellPoolManager {
 
         Self {
             pools: RwLock::new(HashMap::new()),
+            shell_semaphore: Semaphore::new(config.max_total_shells),
             config,
-            total_shells: Mutex::new(0),
         }
     }
 
@@ -717,36 +717,44 @@ impl ShellPoolManager {
 
         let working_dir = working_dir.as_ref().to_path_buf();
 
-        // Check if we're at capacity
-        {
-            let total_shells = self.total_shells.lock().await;
-            if *total_shells >= self.config.max_total_shells {
-                tracing::warn!("Shell pool manager at capacity ({} shells)", *total_shells);
-                return None;
-            }
-        }
+        // Acquire a permit from the semaphore. This will block if the pool is at capacity.
+        match self.shell_semaphore.try_acquire() {
+            Ok(_permit) => {
+                // The permit is moved into the shell and will be released when the shell is dropped.
+                let pool = {
+                    let pools = self.pools.read().await;
+                    if let Some(pool) = pools.get(&working_dir) {
+                        Arc::clone(pool)
+                    } else {
+                        drop(pools);
+                        self.create_pool_for_dir(&working_dir).await
+                    }
+                };
 
-        // Get or create pool for this directory
-        let pool = {
-            let pools = self.pools.read().await;
-            if let Some(pool) = pools.get(&working_dir) {
-                Arc::clone(pool)
-            } else {
-                drop(pools);
-                self.create_pool_for_dir(&working_dir).await
+                // Get shell from pool
+                match pool.get_shell().await {
+                    Ok(shell) => {
+                        tracing::debug!(
+                            "Got shell from pool, available permits: {}",
+                            self.shell_semaphore.available_permits()
+                        );
+                        Some(shell)
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to get shell from pool for {:?}: {}",
+                            working_dir,
+                            e
+                        );
+                        None
+                    }
+                }
             }
-        };
-
-        // Get shell from pool
-        match pool.get_shell().await {
-            Ok(shell) => {
-                let mut total_shells = self.total_shells.lock().await;
-                *total_shells += 1;
-                tracing::debug!("Got shell from pool, total shells: {}", *total_shells);
-                Some(shell)
-            }
-            Err(e) => {
-                tracing::warn!("Failed to get shell from pool for {:?}: {}", working_dir, e);
+            Err(_) => {
+                tracing::warn!(
+                    "Shell pool manager at capacity ({} shells)",
+                    self.config.max_total_shells
+                );
                 None
             }
         }
@@ -764,9 +772,11 @@ impl ShellPoolManager {
 
             pool.return_shell(shell).await;
 
-            let mut total_shells = self.total_shells.lock().await;
-            *total_shells = total_shells.saturating_sub(1);
-            tracing::debug!("Returned shell to pool, total shells: {}", *total_shells);
+            self.shell_semaphore.add_permits(1);
+            tracing::debug!(
+                "Returned shell to pool, available permits: {}",
+                self.shell_semaphore.available_permits()
+            );
         } else {
             tracing::warn!("No pool found for working directory: {:?}", working_dir);
             // Shell will be dropped
@@ -828,8 +838,8 @@ impl ShellPoolManager {
             pool.shutdown().await;
         }
 
-        let mut total_shells = self.total_shells.lock().await;
-        *total_shells = 0;
+        self.shell_semaphore
+            .add_permits(self.config.max_total_shells - self.shell_semaphore.available_permits());
 
         tracing::info!("Shut down {} shell pools", pool_count);
     }
@@ -842,7 +852,8 @@ impl ShellPoolManager {
     /// Get current statistics
     pub async fn get_stats(&self) -> ShellPoolStats {
         let pools = self.pools.read().await;
-        let total_shells = *self.total_shells.lock().await;
+        let available_permits = self.shell_semaphore.available_permits();
+        let total_shells = self.config.max_total_shells - available_permits;
 
         ShellPoolStats {
             total_pools: pools.len(),

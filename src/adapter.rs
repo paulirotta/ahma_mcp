@@ -61,6 +61,18 @@ pub enum ExecutionMode {
     AsyncResultPush,
 }
 
+/// Options for configuring asynchronous execution.
+pub struct AsyncExecOptions {
+    /// Optional pre-defined operation ID to use; if None, a new one is generated.
+    pub operation_id: Option<String>,
+    /// Structured arguments for the command (positional and flags derived internally).
+    pub args: Option<serde_json::Map<String, Value>>,
+    /// Timeout in seconds for the command; falls back to shell pool default if None.
+    pub timeout: Option<u64>,
+    /// Optional callback to receive progress and final result notifications.
+    pub callback: Option<Box<dyn crate::callback_system::CallbackSender>>,
+}
+
 /// The main adapter that handles command execution.
 #[derive(Debug)]
 pub struct Adapter {
@@ -179,13 +191,16 @@ impl Adapter {
         working_directory: &str,
         timeout: Option<u64>,
     ) -> String {
-        self.execute_async_in_dir_with_callback(
+        self.execute_async_in_dir_with_options(
             tool_name,
             command,
-            args,
             working_directory,
-            timeout,
-            None,
+            AsyncExecOptions {
+                operation_id: None,
+                args,
+                timeout,
+                callback: None,
+            },
         )
         .await
     }
@@ -200,29 +215,35 @@ impl Adapter {
         timeout: Option<u64>,
         callback: Option<Box<dyn crate::callback_system::CallbackSender>>,
     ) -> String {
-        self.execute_async_in_dir_with_callback_and_id(
-            None,
+        self.execute_async_in_dir_with_options(
             tool_name,
             command,
-            args,
             working_directory,
-            timeout,
-            callback,
+            AsyncExecOptions {
+                operation_id: None,
+                args,
+                timeout,
+                callback,
+            },
         )
         .await
     }
 
-    /// Asynchronously starts a command with optional pre-defined operation ID
-    pub async fn execute_async_in_dir_with_callback_and_id(
+    /// Asynchronously starts a command using structured options to avoid long arg lists
+    pub async fn execute_async_in_dir_with_options(
         &self,
-        operation_id: Option<String>,
         tool_name: &str,
         command: &str,
-        args: Option<serde_json::Map<String, Value>>,
         working_directory: &str,
-        timeout: Option<u64>,
-        callback: Option<Box<dyn crate::callback_system::CallbackSender>>,
+        options: AsyncExecOptions,
     ) -> String {
+        let AsyncExecOptions {
+            operation_id,
+            args,
+            timeout,
+            callback,
+        } = options;
+
         let op_id = operation_id.unwrap_or_else(generate_operation_id);
         let op_id_clone = op_id.clone();
         let wd = working_directory.to_string();

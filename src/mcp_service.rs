@@ -25,6 +25,7 @@
 //! The `start_server()` method provides a convenient way to launch the service, wiring it
 //! up to a standard I/O transport (`stdio`) and running it until completion.
 
+use futures::future::join_all;
 use rmcp::{
     handler::server::ServerHandler,
     model::{
@@ -344,7 +345,7 @@ impl ServerHandler for AhmaMcpService {
                                 format!("⚠ Low concurrency efficiency: {:.1}% of execution time spent waiting. Consider using status tool instead of frequent waits.", avg_wait_ratio)
                             }
                         } else {
-                            format!("✓ Excellent concurrency: No blocking waits detected")
+                            "✓ Excellent concurrency: No blocking waits detected".to_string()
                         };
                         
                         contents.push(Content::text(format!("\nConcurrency Analysis:\n{}", efficiency_analysis)));
@@ -472,9 +473,16 @@ impl ServerHandler for AhmaMcpService {
                 // Apply global timeout to the entire wait operation
                 let wait_start = std::time::Instant::now();
                 let wait_result = tokio::time::timeout(timeout_duration, async {
+                    let wait_futures = pending_ops
+                        .iter()
+                        .map(|op| self.operation_monitor.wait_for_operation(&op.id))
+                        .collect::<Vec<_>>();
+
+                    let results = join_all(wait_futures).await;
+
                     let mut contents = Vec::new();
-                    for op in pending_ops {
-                        if let Some(done) = self.operation_monitor.wait_for_operation(&op.id).await {
+                    for result in results {
+                        if let Some(done) = result {
                             match serde_json::to_string_pretty(&done) {
                                 Ok(s) => contents.push(Content::text(s)),
                                 Err(e) => tracing::error!("Serialization error: {}", e),
@@ -482,7 +490,8 @@ impl ServerHandler for AhmaMcpService {
                         }
                     }
                     contents
-                }).await;
+                })
+                .await;
 
                 match wait_result {
                     Ok(contents) => {
@@ -684,14 +693,16 @@ impl ServerHandler for AhmaMcpService {
 
                 let _returned_op_id = self
                     .adapter
-                    .execute_async_in_dir_with_callback_and_id(
-                        Some(operation_id.clone()),
+                    .execute_async_in_dir_with_options(
                         tool_name,
                         &config.command, // Use base command only
-                        Some(modified_args),
                         &working_directory,
-                        timeout,
-                        callback,
+                        crate::adapter::AsyncExecOptions {
+                            operation_id: Some(operation_id.clone()),
+                            args: Some(modified_args),
+                            timeout,
+                            callback,
+                        },
                     )
                     .await;
 
