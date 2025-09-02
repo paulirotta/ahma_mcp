@@ -7,7 +7,6 @@ mod endless_notification_test {
     use std::collections::HashSet;
     use std::sync::Arc;
     use std::time::Duration;
-    use tokio::time::sleep;
 
     #[tokio::test]
     async fn test_completed_operations_are_persistent_in_history() {
@@ -98,8 +97,9 @@ mod endless_notification_test {
         let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
 
         // Add a pending operation first
+        let op_id = "loop-test-456";
         let operation = Operation::new(
-            "loop-test-456".to_string(),
+            op_id.to_string(),
             "test".to_string(),
             "Loop test operation".to_string(),
             None,
@@ -109,11 +109,14 @@ mod endless_notification_test {
         // Complete it via update_status (this moves it to completion_history)
         operation_monitor
             .update_status(
-                "loop-test-456",
+                op_id,
                 OperationStatus::Completed,
                 Some(json!({"exit_code": 0, "stdout": "loop test output"})),
             )
             .await;
+
+        // Wait for the operation to be completed
+        operation_monitor.wait_for_operation(op_id).await;
 
         let mut total_operations_found = 0;
 
@@ -140,7 +143,9 @@ mod endless_notification_test {
                 );
             }
 
-            sleep(Duration::from_millis(100)).await; // Brief delay like the real loop
+            // The test logic itself verifies the persistent history. The sleep
+            // was a simulation of the notification loop's timing, but it's not
+            // essential for validating the core behavior.
         }
 
         // NEW BEHAVIOR: We should find the operation in every iteration (5 times)

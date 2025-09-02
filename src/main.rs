@@ -53,7 +53,8 @@ use rmcp::ServiceExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::instrument;
+use tokio::signal;
+use tracing::{info, instrument};
 use tracing_subscriber::EnvFilter;
 
 /// Ahma MCP Server: A generic, config-driven adapter for CLI tools.
@@ -149,10 +150,105 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     }
 
     // Create and start the MCP service
-    let service_handler = AhmaMcpService::new(adapter, operation_monitor.clone(), configs).await?;
+    let service_handler =
+        AhmaMcpService::new(adapter.clone(), operation_monitor.clone(), configs).await?;
     let service = service_handler.serve(rmcp::transport::stdio()).await?;
 
+    // Set up signal handling for graceful shutdown
+    let adapter_for_signal = adapter.clone();
+    let operation_monitor_for_signal = operation_monitor.clone();
+    tokio::spawn(async move {
+        // Wait for SIGTERM (sent by cargo watch) or SIGINT (Ctrl+C)
+        tokio::select! {
+            _ = signal::ctrl_c() => {
+                info!("Received SIGINT, initiating graceful shutdown...");
+            }
+            _ = async {
+                #[cfg(unix)]
+                {
+                    let mut term_signal = signal::unix::signal(signal::unix::SignalKind::terminate())
+                        .expect("Failed to setup SIGTERM handler");
+                    term_signal.recv().await;
+                }
+                #[cfg(not(unix))]
+                {
+                    // On non-Unix systems, just wait indefinitely
+                    // The ctrl_c signal above will handle shutdown
+                    std::future::pending::<()>().await;
+                }
+            } => {
+                info!("Received SIGTERM (likely from cargo watch), initiating graceful shutdown...");
+            }
+        }
+
+        // Check for active operations and provide progress feedback
+        info!("🛑 Shutdown initiated - checking for active operations...");
+
+        let active_ops = operation_monitor_for_signal.get_all_operations().await;
+        let active_count = active_ops
+            .iter()
+            .filter(|op| !op.state.is_terminal())
+            .count();
+
+        if active_count > 0 {
+            info!(
+                "⏳ Waiting up to 10 seconds for {} active operation(s) to complete...",
+                active_count
+            );
+
+            // Wait up to 10 seconds for operations to complete with progress updates
+            let shutdown_start = std::time::Instant::now();
+            let shutdown_timeout = std::time::Duration::from_secs(10);
+
+            while shutdown_start.elapsed() < shutdown_timeout {
+                let current_ops = operation_monitor_for_signal.get_all_operations().await;
+                let current_active = current_ops
+                    .iter()
+                    .filter(|op| !op.state.is_terminal())
+                    .count();
+
+                if current_active == 0 {
+                    info!("✅ All operations completed successfully");
+                    break;
+                } else if current_active != active_count {
+                    info!("📈 Progress: {} operations remaining", current_active);
+                }
+
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+
+            let final_ops = operation_monitor_for_signal.get_all_operations().await;
+            let final_active = final_ops
+                .iter()
+                .filter(|op| !op.state.is_terminal())
+                .count();
+
+            if final_active > 0 {
+                tracing::warn!(
+                    "⚠️  Proceeding with shutdown - {} operation(s) still running",
+                    final_active
+                );
+                for op in final_ops.iter().filter(|op| !op.state.is_terminal()) {
+                    tracing::warn!("   - {} ({})", op.id, op.tool_name);
+                }
+            }
+        } else {
+            info!("✅ No active operations - proceeding with immediate shutdown");
+        }
+
+        info!("🔄 Shutting down adapter and shell pools...");
+        adapter_for_signal.shutdown().await;
+
+        // Force process exit if service doesn't stop naturally
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        info!("Service did not stop gracefully, forcing exit");
+        std::process::exit(0);
+    });
+
     service.waiting().await?;
+
+    // Gracefully shutdown the adapter
+    adapter.shutdown().await;
 
     Ok(())
 }

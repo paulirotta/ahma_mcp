@@ -7,7 +7,6 @@ mod async_notification_test {
     use ahma_mcp::shell_pool::{ShellPoolConfig, ShellPoolManager};
     use std::sync::Arc;
     use std::time::Duration;
-    use tokio::time::sleep;
 
     #[tokio::test]
     async fn test_operation_completion_tracking() {
@@ -56,32 +55,18 @@ mod async_notification_test {
         println!("Started operation with job ID: {}", job_id);
 
         // Wait for completion
-        let mut attempts = 0;
-        loop {
-            sleep(Duration::from_millis(500)).await;
-            let completed_ops = operation_monitor.get_completed_operations().await;
+        let completed_op = operation_monitor.wait_for_operation(&job_id).await;
+        assert!(completed_op.is_some(), "Operation did not complete in time");
 
-            println!(
-                "Attempt {}: Found {} completed operations",
-                attempts + 1,
-                completed_ops.len()
-            );
+        let completed_ops = operation_monitor.get_completed_operations().await;
+        println!("Found {} completed operations", completed_ops.len());
 
-            if !completed_ops.is_empty() {
-                for op in &completed_ops {
-                    println!("  Operation {} - Status: {:?}", op.id, op.state);
-                    if let Some(result) = &op.result {
-                        println!("  Result: {}", result);
-                    }
+        if !completed_ops.is_empty() {
+            for op in &completed_ops {
+                println!("  Operation {} - Status: {:?}", op.id, op.state);
+                if let Some(result) = &op.result {
+                    println!("  Result: {}", result);
                 }
-                break;
-            }
-
-            attempts += 1;
-            if attempts > 20 {
-                // 10 second timeout
-                println!("Timed out waiting for operation to complete");
-                break;
             }
         }
     }

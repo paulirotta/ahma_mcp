@@ -70,8 +70,12 @@ edition = "2021"
     tokio::fs::write(cargo_project_dir.join("Cargo.toml"), cargo_toml).await?;
     tokio::fs::write(src_dir.join("main.rs"), "fn main() { let x = 42; }").await?;
 
-    // Wait a moment to ensure file system operations are complete
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // The test relies on filesystem operations. While async Rust is fast,
+    // ensuring the files are fully written and available before the command
+    // runs is important for test reliability. A small delay is removed as it's
+    // not a robust way to ensure this. Instead, we rely on the OS to handle
+    // file system consistency.
+    // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     let mut cmd = tokio::process::Command::new("cargo");
     cmd.args(["run", "--bin", "ahma_mcp", "--", "cargo_clippy"]);

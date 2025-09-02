@@ -6,7 +6,6 @@ mod mcp_server_reproduction_test {
     use serde_json::Value;
     use std::sync::Arc;
     use std::time::Duration;
-    use tokio::time::sleep;
 
     /// This test validates the new persistent completion history design:
     /// 1. Add operations
@@ -63,6 +62,10 @@ mod mcp_server_reproduction_test {
 
         println!("✅ Completed both operations (moved to completion_history)");
 
+        // Wait for operations to be available
+        operation_monitor.wait_for_operation(op1_id).await;
+        operation_monitor.wait_for_operation(op2_id).await;
+
         // Test that completed operations remain consistently accessible
         for iteration in 1..=3 {
             println!("\n--- Completion History Access {} ---", iteration);
@@ -96,8 +99,9 @@ mod mcp_server_reproduction_test {
                 println!("  - Operation {}: {:?}", op.id, op.state);
             }
 
-            // Short sleep to simulate notification timing
-            sleep(Duration::from_millis(100)).await;
+            // The loop itself, combined with the assertions, is enough to test
+            // the persistence of the completion history. The sleep was here to
+            // simulate notification timing, but it's not necessary for correctness.
         }
 
         println!("\n✅ Persistent completion history test PASSED");
