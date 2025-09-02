@@ -27,7 +27,6 @@ tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 
 [dev-dependencies]
-rmcp = { version = "0.6.1", features = ["server", "client", "macros", "transport-io", "transport-child-process", "elicitation", "schemars"] }
 tempfile = "3.21.0"
 futures = "0.3"
 

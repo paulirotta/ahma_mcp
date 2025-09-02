@@ -56,24 +56,31 @@ async fn test_vscode_mcp_config_has_valid_command_structure() -> Result<()> {
         "Should set working directory"
     );
     assert_eq!(
-        server_config["command"], "cargo",
-        "Should use cargo command"
+        server_config["command"], "target/release/ahma_mcp",
+        "Default command should run the release ahma_mcp binary"
     );
 
-    // Verify args structure for running the server
+    // Verify default args structure for running the binary directly
     let args = server_config["args"]
         .as_array()
         .expect("Args should be an array");
+    assert_eq!(args[0], "--server", "Should run in server mode");
+    assert_eq!(args[1], "--tools-dir", "Should specify tools-dir");
+    assert_eq!(args[2], "tools", "Should use tools directory");
 
-    // Should have the correct cargo run structure
-    assert_eq!(args[0], "run", "First arg should be 'run'");
-    assert_eq!(args[1], "--release", "Should use release build");
-    assert_eq!(args[2], "--bin", "Should specify bin target");
-    assert_eq!(args[3], "ahma_mcp", "Should specify ahma_mcp binary");
-    assert_eq!(args[4], "--", "Should separate cargo args from binary args");
-    assert_eq!(args[5], "--server", "Should run in server mode");
-    assert_eq!(args[6], "--tools-dir", "Should specify tools-dir");
-    assert_eq!(args[7], "tools", "Should use tools directory");
+    // Verify dev command uses cargo with passthrough args
+    let dev = &server_config["dev"];
+    assert_eq!(dev["command"], "cargo", "Dev command should use cargo");
+    let dev_args = dev["args"].as_array().expect("Dev args should be an array");
+    assert_eq!(dev_args[0], "run", "Dev first arg should be 'run'");
+    assert_eq!(dev_args[1], "--release", "Dev should use release build");
+    assert_eq!(
+        dev_args[2], "--",
+        "Dev should separate cargo args from binary args"
+    );
+    assert_eq!(dev_args[3], "--server", "Dev should run in server mode");
+    assert_eq!(dev_args[4], "--tools-dir", "Dev should specify tools-dir");
+    assert_eq!(dev_args[5], "tools", "Dev should use tools directory");
 
     Ok(())
 }

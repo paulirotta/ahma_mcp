@@ -160,20 +160,7 @@ Ahma MCP comes with several pre-configured tools in the `tools/` directory:
 - `sed.json` - Stream editing
 - `echo.json` - Text output
 
-To add your own tools, create a `tools/<tool_name>.json` file:
-
-```json
-{
-  "name": "my_tool",
-  "command": "my_tool",
-  "enabled": true,
-  "timeout_seconds": 300,
-  "hints": {
-    "primary": "Brief description of what this tool does",
-    "usage": "Common usage examples: my_tool --option value"
-  }
-}
-```
+To add your own tools, create a `tools/<tool_name>.json` file.
 
 ### Testing the Installation
 
@@ -357,114 +344,16 @@ Once connected, you'll have access to ~38 dynamically generated MCP tools:
 
 ### Performance: Pre-warmed shell pool
 
-Ahma MCP includes an experimental pre-warmed shell pool inspired by `async_cargo_mcp` to reduce command startup latency. It keeps a small pool of ready shells per working directory and reuses them for subsequent operations. See `ShellPoolConfig` in `src/shell_pool.rs`.
+Ahma MCP uses a pre-warmed shell pool to minimize command startup latency. See [shell_pool.rs](https://github.com/paulirotta/ahma_mcp/blob/main/src/shell_pool.rs)
 
 ## Creating Custom Tool Configurations
 
-Want to add your own CLI tools? Create a JSON configuration file in the `tools/` directory:
+Want to add your own CLI tools? Create a JSON file in the repo's tools/ directory. See examples and templates here: [tools/](./tools/) (GitHub: https://github.com/paulirotta/ahma_mcp/tree/main/tools)
 
-### Basic Configuration
+There is a [`docs/tool-schema-guide.md`](docs/tool-schema-guide.md)
 
-```json
-{
-  "name": "docker",
-  "command": "docker",
-  "enabled": true,
-  "timeout_seconds": 300
-}
-```
-
-### Advanced Configuration with Hints
-
-```json
-{
-  "name": "npm",
-  "command": "npm",
-  "enabled": true,
-  "timeout_seconds": 600,
-  "verbose": false,
-  "hints": {
-    "primary": "Node.js package manager for JavaScript/TypeScript projects",
-    "usage": "npm install, npm run build, npm test, npm publish",
-    "wait_hint": "Consider reviewing package.json or planning next development steps",
-    "build": "Review dependencies and build output for optimization opportunities",
-    "test": "Analyze test results and consider additional test coverage",
-    "default": "Use this time to plan next steps or review code",
-    "custom": {
-      "install": "Installing dependencies - review package.json for security and updates",
-      "audit": "Security audit running - prepare to address vulnerabilities",
-      "publish": "Publishing package - verify version and changelog"
-    },
-    "parameters": {
-      "--save-dev": "Add to development dependencies only",
-      "--global": "Install package globally for system-wide access"
-    }
-  },
-  "overrides": {
-    "test": {
-      "timeout_seconds": 900,
-      "synchronous": false,
-      "hint": "Tests running - review test output patterns and coverage",
-      "default_args": ["--verbose"]
-    }
-  }
-}
-```
-
-### Configuration Options
-
-- **`name`**: Name of the tool (required)
-- **`command`**: Actual command to execute (defaults to `name`)
-- **`enabled`**: Whether to load this tool (default: `true`)
-- **`timeout_seconds`**: Default timeout for operations (default: 300)
-- **`verbose`**: Enable verbose logging (default: `false`)
-- **`hints`**: AI guidance for different operations
-- **`overrides`**: Subcommand-specific settings
-- **`hints.custom`**: Custom hints for specific subcommands
-- **`hints.parameters`**: Descriptions for command-line parameters
-
-After adding new tool configurations, restart VS Code to load them.
-
-## JSON Schema Validation
-
-Ahma MCP includes comprehensive JSON schema validation for all tool configurations, ensuring correctness and providing helpful developer feedback.
-
-### Schema Validation Features
-
-- **Automatic Validation**: All tool configurations validated during server startup
-- **Detailed Error Messages**: Precise field paths, error types, and actionable suggestions
-- **Type Checking**: Validates string, integer, boolean, array, and object types
-- **Async Guidance Validation**: Ensures async tools include proper AI instructions
-- **Constraint Enforcement**: Validates enums, patterns, array sizes, and value ranges
-
-### Schema Error Example
-
-```
-⚠️  Schema validation failed for tool configuration:
-JSON Schema Validation Failed for: tools/my_tool.json
-Found 2 error(s):
-
-1. [subcommand[0].description] Async subcommand description missing guidance about 'DO NOT wait'
-   💡 Suggestion: Should instruct AI not to wait for completion
-
-   Recommended template:
-   "**IMPORTANT:** This tool operates asynchronously.
-   1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.
-   2. **Final Result:** Result pushed automatically via MCP notification when complete.
-
-   **Your Instructions:**
-   - **DO NOT** wait for the final result.
-   - **DO** continue with other tasks that don't depend on this operation."
-
-2. [subcommand[0].options[0].type] Invalid option type 'number'
-   💡 Suggestion: Valid types: boolean, string, integer, array. Use 'integer' instead.
-```
-
-### Developer Resources
-
-- **Schema Guide**: [`docs/tool-schema-guide.md`](docs/tool-schema-guide.md) - Complete documentation
+- Complete documentation
 - **Example Tools**: See real tool configurations in `tools/` (e.g., `cargo.json`, `python3.json`, `wait.json`)
-- **Validation**: System continues to operate while reporting validation issues
 - **IDE Support**: Schema enables autocompletion in development environments
 
 ## License

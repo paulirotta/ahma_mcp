@@ -3,7 +3,7 @@
         "ahma_mcp": {
             "type": "stdio",
             "cwd": "${workspaceFolder}",
-            "command": "target/debug/ahma_mcp",
+            "command": "target/release/ahma_mcp",
             "args": [
                 "--server",
                 "--tools-dir",
@@ -11,12 +11,13 @@
             ],
             "dev": {
                 "watch": [
-                    "target/debug/ahma_mcp",
+                    "target/release/ahma_mcp",
                     "tools/*.json"
                 ],
                 "command": "cargo",
                 "args": [
                     "run",
+                    "--release",
                     "--",
                     "--server",
                     "--tools-dir",
