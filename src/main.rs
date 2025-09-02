@@ -149,10 +149,14 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     }
 
     // Create and start the MCP service
-    let service_handler = AhmaMcpService::new(adapter, operation_monitor.clone(), configs).await?;
+    let service_handler =
+        AhmaMcpService::new(adapter.clone(), operation_monitor.clone(), configs).await?;
     let service = service_handler.serve(rmcp::transport::stdio()).await?;
 
     service.waiting().await?;
+
+    // Gracefully shutdown the adapter
+    adapter.shutdown().await;
 
     Ok(())
 }

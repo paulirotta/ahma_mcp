@@ -45,8 +45,11 @@ use anyhow::Result;
 use rmcp::ErrorData as McpError;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 
 static OPERATION_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -80,6 +83,8 @@ pub struct Adapter {
     monitor: Arc<OperationMonitor>,
     /// Pre-warmed shell pool manager for async execution.
     shell_pool: Arc<ShellPoolManager>,
+    /// Handles to spawned tasks for graceful shutdown.
+    task_handles: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
 }
 
 impl Adapter {
@@ -88,7 +93,19 @@ impl Adapter {
         Ok(Self {
             monitor,
             shell_pool,
+            task_handles: Arc::new(Mutex::new(HashMap::new())),
         })
+    }
+
+    /// Gracefully shuts down the adapter by waiting for all spawned tasks to complete.
+    pub async fn shutdown(&self) {
+        let mut handles = self.task_handles.lock().await;
+        for (id, handle) in handles.drain() {
+            tracing::debug!("Waiting for task {} to complete...", id);
+            if let Err(e) = handle.await {
+                tracing::error!("Error waiting for task {}: {:?}", id, e);
+            }
+        }
     }
 
     /// Synchronously executes a command and returns the result directly.
@@ -293,7 +310,9 @@ impl Adapter {
             .chain(args_vec.into_iter())
             .collect();
 
-        tokio::spawn(async move {
+        let task_handles = self.task_handles.clone();
+
+        let handle = tokio::spawn(async move {
             monitor
                 .update_status(&op_id, OperationStatus::InProgress, None)
                 .await;
@@ -412,7 +431,15 @@ impl Adapter {
                     }
                 }
             }
+            // Remove the task handle from the map once it's complete
+            task_handles.lock().await.remove(&op_id);
         });
+
+        // Store the handle for graceful shutdown
+        self.task_handles
+            .lock()
+            .await
+            .insert(op_id_clone.clone(), handle);
 
         op_id_clone
     }

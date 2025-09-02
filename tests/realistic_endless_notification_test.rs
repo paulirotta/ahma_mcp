@@ -7,7 +7,6 @@ mod realistic_endless_notification_test {
     use ahma_mcp::shell_pool::{ShellPoolConfig, ShellPoolManager};
     use std::sync::Arc;
     use std::time::Duration;
-    use tokio::time::sleep;
 
     /// This test reproduces a scenario similar to the user's logs, but adapted
     /// for the new `completion_history` architecture.
@@ -49,17 +48,12 @@ mod realistic_endless_notification_test {
         println!("🚀 Started async operation: {}", operation_id);
 
         // Wait for the operation to appear in the completion history
-        let mut operation_found = false;
-        for _ in 0..50 { // 10-second timeout
-            let completed_ops = operation_monitor.get_completed_operations().await;
-            if completed_ops.iter().any(|op| op.id == operation_id) {
-                println!("✅ Operation found in completion history.");
-                operation_found = true;
-                break;
-            }
-            sleep(Duration::from_millis(200)).await;
-        }
-        assert!(operation_found, "Operation never appeared in completion history");
+        let completed_op = operation_monitor.wait_for_operation(&operation_id).await;
+        assert!(
+            completed_op.is_some(),
+            "Operation never appeared in completion history"
+        );
+        println!("✅ Operation found in completion history.");
 
         // Now, simulate a notification loop checking the history
         println!("🔄 Simulating notification loop checking history...");
@@ -69,23 +63,31 @@ mod realistic_endless_notification_test {
         // Check the history multiple times
         for i in 1..=5 {
             let completed_ops = operation_monitor.get_completed_operations().await;
-            println!("📊 Iteration {}: History contains {} operations.", i, completed_ops.len());
+            println!(
+                "📊 Iteration {}: History contains {} operations.",
+                i,
+                completed_ops.len()
+            );
 
             for op in completed_ops {
                 // In a real notification system, we'd check if we've already notified for this op.
                 if !seen_operations.contains(&op.id) {
-                    println!("� Sending notification for operation: {}", op.id);
+                    println!("🔔 Sending notification for operation: {}", op.id);
                     seen_operations.insert(op.id.clone());
                     notifications_sent += 1;
                 } else {
                     println!("✅ Already notified for operation: {}", op.id);
                 }
             }
-            sleep(Duration::from_secs(1)).await;
+            // The sleep is removed as the test's correctness relies on the logic
+            // of checking `seen_operations`, not on timing.
         }
 
         // We should only have sent one notification for the single operation
-        assert_eq!(notifications_sent, 1, "Should have sent exactly one notification.");
+        assert_eq!(
+            notifications_sent, 1,
+            "Should have sent exactly one notification."
+        );
         println!("✅ Test passed: Exactly one notification was sent for the operation.");
     }
 
@@ -104,21 +106,42 @@ mod realistic_endless_notification_test {
 
         // Start multiple operations
         let op_ids = vec![
-            adapter.execute_async_in_dir("cargo", "version", None, "/Users/paul/github/ahma_mcp", Some(30)).await,
-            adapter.execute_async_in_dir("cargo", "--version", None, "/Users/paul/github/ahma_mcp", Some(30)).await,
+            adapter
+                .execute_async_in_dir(
+                    "cargo",
+                    "version",
+                    None,
+                    "/Users/paul/github/ahma_mcp",
+                    Some(30),
+                )
+                .await,
+            adapter
+                .execute_async_in_dir(
+                    "cargo",
+                    "--version",
+                    None,
+                    "/Users/paul/github/ahma_mcp",
+                    Some(30),
+                )
+                .await,
         ];
         println!("🚀 Started operations: {:?}", op_ids);
 
         // Wait for both to complete
-        for _ in 0..50 { // 10-second timeout
-            let completed_count = operation_monitor.get_completed_operations().await.len();
-            if completed_count >= op_ids.len() {
-                break;
-            }
-            sleep(Duration::from_millis(200)).await;
+        for op_id in &op_ids {
+            let completed_op = operation_monitor.wait_for_operation(op_id).await;
+            assert!(
+                completed_op.is_some(),
+                "Operation {} did not complete in time",
+                op_id
+            );
         }
         let final_completed = operation_monitor.get_completed_operations().await;
-        assert_eq!(final_completed.len(), op_ids.len(), "Not all operations completed in time.");
+        assert_eq!(
+            final_completed.len(),
+            op_ids.len(),
+            "Not all operations completed in time."
+        );
         println!("✅ Both operations completed and are in history.");
 
         // Simulate notification loop
@@ -139,10 +162,15 @@ mod realistic_endless_notification_test {
                     total_notifications += 1;
                 }
             }
-            sleep(Duration::from_millis(500)).await;
+            // The sleep is removed as the test's correctness relies on the logic
+            // of checking `all_seen_operations`, not on timing.
         }
 
-        assert_eq!(total_notifications, op_ids.len(), "Incorrect number of notifications sent.");
+        assert_eq!(
+            total_notifications,
+            op_ids.len(),
+            "Incorrect number of notifications sent."
+        );
         println!("✅ Multiple operations test passed - correct number of notifications sent.");
     }
 }

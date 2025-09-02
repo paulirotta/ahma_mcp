@@ -9,7 +9,6 @@ mod full_system_integration_bug_test {
 
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
-    use tokio::time::sleep;
 
     /// A mock callback that tracks all notifications sent
     #[derive(Debug, Clone)]
@@ -91,19 +90,13 @@ mod full_system_integration_bug_test {
             .await;
         println!("🚀 Started operation: {}", operation_id);
 
-        // Wait for the operation to appear in the completion history
-        for _ in 0..50 {
-            // 10-second timeout
-            if !operation_monitor
-                .get_completed_operations()
-                .await
-                .is_empty()
-            {
-                println!("✅ Operation completed and is in history.");
-                break;
-            }
-            sleep(Duration::from_millis(200)).await;
-        }
+        // Wait for the operation to complete
+        let completed_op = operation_monitor.wait_for_operation(&operation_id).await;
+        assert!(
+            completed_op.is_some(),
+            "Operation should have completed and been returned by wait_for_operation"
+        );
+        println!("✅ Operation completed and is in history.");
 
         // Simulate a notification loop that runs multiple times
         println!("🔄 Simulating notification loop...");
@@ -128,7 +121,8 @@ mod full_system_integration_bug_test {
                     }
                 }
             }
-            sleep(Duration::from_secs(1)).await;
+            // The sleep is removed as the test's correctness relies on the logic
+            // of checking `notified_operations`, not on timing.
         }
 
         // --- Analysis ---
@@ -188,14 +182,16 @@ mod full_system_integration_bug_test {
         println!("🚀 Started operations: {:?}", op_ids);
 
         // Wait for all operations to complete
-        for _ in 0..50 {
-            // 10-second timeout
-            if operation_monitor.get_completed_operations().await.len() >= op_ids.len() {
-                println!("✅ All operations completed.");
-                break;
-            }
-            sleep(Duration::from_millis(200)).await;
+        for op_id in &op_ids {
+            let completed_op = operation_monitor.wait_for_operation(op_id).await;
+            assert!(
+                completed_op.is_some(),
+                "Operation {} should have completed",
+                op_id
+            );
         }
+        println!("✅ All operations completed.");
+
         assert_eq!(
             operation_monitor.get_completed_operations().await.len(),
             op_ids.len(),
@@ -216,7 +212,8 @@ mod full_system_integration_bug_test {
                     println!("   - Sending notification for new operation {}", op.id);
                 }
             }
-            sleep(Duration::from_millis(500)).await;
+            // The sleep is removed as the test's correctness relies on the logic
+            // of checking `all_notified_operations`, not on timing.
         }
 
         // --- Analysis ---

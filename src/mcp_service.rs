@@ -25,7 +25,6 @@
 //! The `start_server()` method provides a convenient way to launch the service, wiring it
 //! up to a standard I/O transport (`stdio`) and running it until completion.
 
-use futures::future::join_all;
 use rmcp::{
     handler::server::ServerHandler,
     model::{
@@ -473,16 +472,9 @@ impl ServerHandler for AhmaMcpService {
                 // Apply global timeout to the entire wait operation
                 let wait_start = std::time::Instant::now();
                 let wait_result = tokio::time::timeout(timeout_duration, async {
-                    let wait_futures = pending_ops
-                        .iter()
-                        .map(|op| self.operation_monitor.wait_for_operation(&op.id))
-                        .collect::<Vec<_>>();
-
-                    let results = join_all(wait_futures).await;
-
                     let mut contents = Vec::new();
-                    for result in results {
-                        if let Some(done) = result {
+                    for op in pending_ops {
+                        if let Some(done) = self.operation_monitor.wait_for_operation(&op.id).await {
                             match serde_json::to_string_pretty(&done) {
                                 Ok(s) => contents.push(Content::text(s)),
                                 Err(e) => tracing::error!("Serialization error: {}", e),
@@ -490,8 +482,7 @@ impl ServerHandler for AhmaMcpService {
                         }
                     }
                     contents
-                })
-                .await;
+                }).await;
 
                 match wait_result {
                     Ok(contents) => {

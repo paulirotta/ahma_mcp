@@ -6,7 +6,6 @@ mod race_condition_bug_test {
     use serde_json::Value;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
-    use tokio::time::sleep;
 
     /// This test specifically targets the potential race condition that could cause
     /// the endless notification loop bug. The scenario:
@@ -55,14 +54,19 @@ mod race_condition_bug_test {
 
         // Step 4: Notification loop should find it consistently in completion history
         let first_access = monitor.get_completed_operations().await;
-        assert_eq!(first_access.len(), 1, "Should find the completed operation in history");
+        assert_eq!(
+            first_access.len(),
+            1,
+            "Should find the completed operation in history"
+        );
         assert_eq!(first_access[0].id, test_op_id);
         println!("✅ First history access found the completed operation");
 
         // Step 5: NEW BEHAVIOR - operations persist in completion history
         let second_access = monitor.get_completed_operations().await;
         assert_eq!(
-            second_access.len(), 1,
+            second_access.len(),
+            1,
             "Operation should persist in completion history for wait operations"
         );
         assert_eq!(second_access[0].id, test_op_id);
@@ -72,13 +76,16 @@ mod race_condition_bug_test {
         for i in 3..=5 {
             let subsequent_access = monitor.get_completed_operations().await;
             assert_eq!(
-                subsequent_access.len(), 1,
+                subsequent_access.len(),
+                1,
                 "Iteration {}: Operation should remain in completion history",
                 i
             );
             assert_eq!(subsequent_access[0].id, test_op_id);
         }
-        println!("✅ Race condition prevention test passed - operation persists in completion history");
+        println!(
+            "✅ Race condition prevention test passed - operation persists in completion history"
+        );
     }
 
     /// Test what happens if update_status is called AFTER the operation is cleared
@@ -127,19 +134,25 @@ mod race_condition_bug_test {
         // Check that operation is still in history and properly handled
         let recheck = monitor.get_completed_operations().await;
         assert_eq!(
-            recheck.len(), 1,
+            recheck.len(),
+            1,
             "Operation should remain in completion history after late update"
         );
         assert_eq!(recheck[0].id, test_op_id);
-        
+
         // The result should remain the original value (late updates don't overwrite completed operations)
         if let Some(result) = &recheck[0].result {
             if let Some(result_str) = result.as_str() {
-                assert_eq!(result_str, "completed", "Result should remain as original value - late updates are ignored");
+                assert_eq!(
+                    result_str, "completed",
+                    "Result should remain as original value - late updates are ignored"
+                );
             }
         }
-        
-        println!("✅ Late update_status properly handled - operation remains in history with original result (late updates ignored)");
+
+        println!(
+            "✅ Late update_status properly handled - operation remains in history with original result (late updates ignored)"
+        );
     }
 
     /// Test concurrent completion and notification processing to stress-test race conditions.
@@ -152,23 +165,26 @@ mod race_condition_bug_test {
         )));
         let test_op_id = "concurrent-test-op";
 
-        monitor.add_operation(Operation::new(
-            test_op_id.to_string(),
-            "test".to_string(),
-            "concurrent test".to_string(),
-            None,
-        )).await;
+        monitor
+            .add_operation(Operation::new(
+                test_op_id.to_string(),
+                "test".to_string(),
+                "concurrent test".to_string(),
+                None,
+            ))
+            .await;
 
-        // Task 1: Complete the operation after a delay.
+        // Task 1: Complete the operation immediately.
         let completion_handle = tokio::spawn({
             let monitor = monitor.clone();
             async move {
-                sleep(Duration::from_millis(100)).await;
-                monitor.update_status(
-                    test_op_id,
-                    OperationStatus::Completed,
-                    Some(Value::String("concurrent completion".to_string())),
-                ).await;
+                monitor
+                    .update_status(
+                        test_op_id,
+                        OperationStatus::Completed,
+                        Some(Value::String("concurrent completion".to_string())),
+                    )
+                    .await;
                 println!("   🔧 Operation completed");
             }
         });
@@ -178,13 +194,12 @@ mod race_condition_bug_test {
             let monitor = monitor.clone();
             async move {
                 let mut notified_ops = std::collections::HashSet::new();
-                for i in 0..10 {
-                    sleep(Duration::from_millis(100)).await;
-                    let completed = monitor.get_completed_operations().await;
-                    for op in completed {
-                        if notified_ops.insert(op.id.clone()) {
-                            println!("   🔔 Notified for operation {} in iteration {}", op.id, i);
-                        }
+                // Wait for the operation to complete before checking
+                monitor.wait_for_operation(test_op_id).await;
+                let completed = monitor.get_completed_operations().await;
+                for op in completed {
+                    if notified_ops.insert(op.id.clone()) {
+                        println!("   🔔 Notified for operation {}", op.id);
                     }
                 }
                 notified_ops.len()
@@ -198,7 +213,11 @@ mod race_condition_bug_test {
         println!("   - Total unique operations notified: {}", total_notified);
 
         // The operation should be notified for exactly once.
-        assert_eq!(total_notified, 1, "CONCURRENCY BUG: Expected 1 unique notification, but got {}. This suggests race conditions or faulty logic.", total_notified);
+        assert_eq!(
+            total_notified, 1,
+            "CONCURRENCY BUG: Expected 1 unique notification, but got {}. This suggests race conditions or faulty logic.",
+            total_notified
+        );
 
         println!("✅ Concurrent completion and notification test passed");
     }
@@ -214,17 +233,21 @@ mod race_condition_bug_test {
         let test_op_id = "multi-loop-test-op";
 
         // Add and complete operation
-        monitor.add_operation(Operation::new(
-            test_op_id.to_string(),
-            "test".to_string(),
-            "multi loop test".to_string(),
-            None,
-        )).await;
-        monitor.update_status(
-            test_op_id,
-            OperationStatus::Completed,
-            Some(Value::String("completed".to_string())),
-        ).await;
+        monitor
+            .add_operation(Operation::new(
+                test_op_id.to_string(),
+                "test".to_string(),
+                "multi loop test".to_string(),
+                None,
+            ))
+            .await;
+        monitor
+            .update_status(
+                test_op_id,
+                OperationStatus::Completed,
+                Some(Value::String("completed".to_string())),
+            )
+            .await;
         println!("✅ Operation added and completed");
 
         // Use a shared set to track notifications across all concurrent loops
@@ -237,7 +260,8 @@ mod race_condition_bug_test {
             let monitor_clone = monitor.clone();
             let notified_ops_clone = notified_ops_global.clone();
             let handle = tokio::spawn(async move {
-                sleep(Duration::from_millis(50 * i as u64)).await; // Stagger starts
+                // Wait for the operation to be available
+                monitor_clone.wait_for_operation(test_op_id).await;
                 let completed = monitor_clone.get_completed_operations().await;
                 let mut local_notification_count = 0;
                 for op in completed {
@@ -256,10 +280,17 @@ mod race_condition_bug_test {
         let total_notifications_sent: usize = results.into_iter().map(|res| res.unwrap()).sum();
 
         println!("✅ Multiple loops completed:");
-        println!("   - Total notifications sent across all loops: {}", total_notifications_sent);
+        println!(
+            "   - Total notifications sent across all loops: {}",
+            total_notifications_sent
+        );
 
         // Only ONE notification should have been sent in total across all loops.
-        assert_eq!(total_notifications_sent, 1, "MULTIPLE NOTIFICATION LOOPS BUG: Expected exactly 1 notification across all loops, but sent {}.", total_notifications_sent);
+        assert_eq!(
+            total_notifications_sent, 1,
+            "MULTIPLE NOTIFICATION LOOPS BUG: Expected exactly 1 notification across all loops, but sent {}.",
+            total_notifications_sent
+        );
 
         println!("✅ Multiple notification loops test passed");
     }
