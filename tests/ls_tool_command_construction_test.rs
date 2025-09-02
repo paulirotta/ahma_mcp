@@ -27,7 +27,7 @@ async fn test_ls_tool_should_not_add_undefined_path_parameter() -> Result<()> {
             if let Some(content) = response.content.first() {
                 if let Some(text_content) = content.as_text() {
                     let output = &text_content.text;
-                    
+
                     // Check that we don't see the incorrect --path=. argument
                     // (This assertion should fail initially, confirming the bug exists)
                     assert!(
@@ -35,24 +35,27 @@ async fn test_ls_tool_should_not_add_undefined_path_parameter() -> Result<()> {
                         "ls command should not include --path=. parameter when no path is specified. Found: {}",
                         output
                     );
-                    
+
                     // Additional check: verify it's not trying to use invalid --path option
                     // If this fails, it confirms our bug exists
                     assert!(
-                        !output.contains("ls: unrecognized option '--path'") &&
-                        !output.contains("ls: illegal option -- -") &&
-                        !output.contains("ls: invalid option"),
+                        !output.contains("ls: unrecognized option '--path'")
+                            && !output.contains("ls: illegal option -- -")
+                            && !output.contains("ls: invalid option"),
                         "ls command appears to be using invalid --path option. Output: {}",
                         output
                     );
                 }
             }
-        },
+        }
         Err(e) => {
             // If the tool call fails, check if it's due to the --path=. bug
             let error_str = format!("{:?}", e);
             if error_str.contains("unrecognized option") || error_str.contains("illegal option") {
-                panic!("ls tool failed due to invalid --path=. parameter: {}", error_str);
+                panic!(
+                    "ls tool failed due to invalid --path=. parameter: {}",
+                    error_str
+                );
             }
             return Err(e.into());
         }
@@ -62,9 +65,9 @@ async fn test_ls_tool_should_not_add_undefined_path_parameter() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test] 
+#[tokio::test]
 async fn test_ls_tool_executes_plain_ls_command() -> Result<()> {
-    // ARRANGE: Set up test client  
+    // ARRANGE: Set up test client
     let client = new_client(Some("tools")).await?;
 
     // ACT: Execute ls tool with empty parameters
@@ -80,16 +83,16 @@ async fn test_ls_tool_executes_plain_ls_command() -> Result<()> {
     if let Some(content) = result.content.first() {
         if let Some(text_content) = content.as_text() {
             let output = &text_content.text;
-            
+
             // Verify command succeeded (no error about unrecognized option)
             assert!(
-                !output.contains("unrecognized option") && 
-                !output.contains("illegal option") &&
-                !output.contains("invalid option"),
+                !output.contains("unrecognized option")
+                    && !output.contains("illegal option")
+                    && !output.contains("invalid option"),
                 "ls command should execute successfully, got: {}",
                 output
             );
-            
+
             // Verify we get directory listing output (basic sanity check)
             assert!(
                 !output.is_empty(),
@@ -119,7 +122,7 @@ async fn test_ls_tool_with_valid_options() -> Result<()> {
     if let Some(content) = result.content.first() {
         if let Some(text_content) = content.as_text() {
             let output = &text_content.text;
-            
+
             // Basic validation that command executed
             assert!(
                 !output.contains("command not found"),

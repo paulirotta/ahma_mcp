@@ -38,7 +38,11 @@ mod continuous_update_test {
 
         // Check the history
         let initial_history = operation_monitor.get_completed_operations().await;
-        assert_eq!(initial_history.len(), 1, "Should be one operation in history");
+        assert_eq!(
+            initial_history.len(),
+            1,
+            "Should be one operation in history"
+        );
         println!(
             "✅ Verified initial history (found {} operations)",
             initial_history.len()
@@ -116,7 +120,12 @@ mod continuous_update_test {
         println!("📊 Found {} completed operations", completed.len());
 
         // Should be exactly 1, not 3
-        assert_eq!(completed.len(), 1, "Expected 1 completed operation, found {}. Multiple add_operation calls might be causing duplicates.", completed.len());
+        assert_eq!(
+            completed.len(),
+            1,
+            "Expected 1 completed operation, found {}. Multiple add_operation calls might be causing duplicates.",
+            completed.len()
+        );
 
         println!("✅ Test passed - multiple add_operation calls don't cause duplicates in history");
     }
