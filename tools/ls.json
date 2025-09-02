@@ -14,6 +14,11 @@
             "synchronous": true,
             "options": [
                 {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution"
+                },
+                {
                     "name": "path",
                     "type": "string",
                     "description": "The directory or file path to list. Defaults to current directory if not specified."
