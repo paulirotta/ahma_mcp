@@ -51,6 +51,8 @@ static INIT: Once = Once::new();
 ///
 /// Returns an error if the project directories cannot be determined.
 pub fn init_logging() -> Result<()> {
+    println!("Initializing logging...");
+
     INIT.call_once(|| {
         let env_filter = EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| EnvFilter::new("info,ahma_mcp=debug"));

@@ -628,7 +628,7 @@ impl SchemaValidator {
 
         // Add general guidance
         report.push_str("For more information on tool JSON schema, see the documentation:\n");
-        report.push_str("- docs/tool-schema-reference.md\n");
+        report.push_str("- docs/tool-schema-guide.md\n");
         report.push_str("- Example tool configurations in tools/\n\n");
 
         report.push_str("Common fixes:\n");
