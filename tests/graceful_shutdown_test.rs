@@ -21,13 +21,13 @@ async fn test_graceful_shutdown_infrastructure() -> Result<(), Box<dyn std::erro
             }
         }
     }"#;
-    
+
     std::fs::write(tools_dir.join("echo.json"), test_tool_content)?;
 
     println!("📁 Created test tools directory");
     println!("✅ Graceful shutdown infrastructure validated");
     println!("   - Signal handling implemented in main.rs");
-    println!("   - Operation monitoring in place");  
+    println!("   - Operation monitoring in place");
     println!("   - 10-second graceful shutdown delay configured");
     println!("   - Progress feedback with emojis implemented");
 
@@ -64,14 +64,14 @@ async fn test_wait_tool_timeout_scenarios() -> Result<(), Box<dyn std::error::Er
             }
         }
     }"#;
-    
+
     std::fs::write(tools_dir.join("sleep.json"), test_tool_content)?;
 
     println!("📁 Created test tools with various duration scenarios");
 
-    // Note: This test would need to use MCP client libraries to properly test 
+    // Note: This test would need to use MCP client libraries to properly test
     // the wait tool functionality. For now, we verify the infrastructure is there.
-    
+
     println!("✅ Wait tool timeout infrastructure verified through unit tests");
     println!("   (Full integration testing would require MCP client implementation)");
 
@@ -85,7 +85,7 @@ async fn test_lock_file_remediation_suggestions() {
 
     // This test verifies that our wait tool can detect common lock file patterns
     // and provide appropriate remediation suggestions
-    
+
     let temp_dir = TempDir::new().unwrap();
     let test_files = vec![
         ".cargo-lock",
@@ -103,5 +103,7 @@ async fn test_lock_file_remediation_suggestions() {
     }
 
     println!("✅ Lock file detection patterns would identify these common lock files");
-    println!("   Remediation suggestions would include removing stale locks and checking processes");
+    println!(
+        "   Remediation suggestions would include removing stale locks and checking processes"
+    );
 }

@@ -72,6 +72,31 @@ Then copy the contents into your VS Code MCP configuration file (per-OS location
 - **Automatic Result Push**: Eliminates the need for polling or waiting - results are automatically pushed to AI clients when operations complete.
 - **Customizable Tool Hints**: Provides intelligent suggestions to AI clients about productive parallel work they can perform while operations execute.
 
+## Advanced Features
+
+### Operation Management and Monitoring
+
+Ahma MCP provides sophisticated operation tracking and management capabilities:
+
+- **Real-time Operation Monitoring**: Track the status of all running operations with the `status` tool
+- **Intelligent Wait Functionality**: Use the `wait` tool to monitor operations with configurable timeouts (10-1800 seconds, default 240s)
+- **Progressive Timeout Warnings**: Receive warnings at 50%, 75%, and 90% of timeout duration to track long-running operations
+- **Automatic Error Remediation**: Get specific suggestions when operations timeout, including:
+  - Detection of stale lock files (Cargo.lock, package-lock.json, yarn.lock, composer.lock, etc.)
+  - Network connectivity checks and offline mode suggestions
+  - Disk space and resource usage monitoring recommendations
+  - Process conflict detection and resolution steps
+- **Partial Result Recovery**: When timeouts occur, completed operations return their results while failed operations provide detailed error context
+
+### Graceful Development Workflow
+
+Enhanced for seamless development experience:
+
+- **Signal-Aware Shutdown**: Handles SIGTERM/SIGINT signals gracefully during file changes and cargo watch restarts
+- **Operation Completion Grace Period**: Provides 10-second window for ongoing operations to complete naturally before shutdown
+- **Development-Friendly Restarts**: File changes during development don't abruptly terminate operations - they complete and deliver results first
+- **Progress Feedback**: Visual progress indicators (🔄⏳⚠️) show operation status during shutdown sequences
+
 ## Getting Started
 
 ### Prerequisites
@@ -258,6 +283,11 @@ Once connected, you'll have access to ~38 dynamically generated MCP tools:
 - `mcp_ahma_mcp_sed_run` - Edit text streams
 - `mcp_ahma_mcp_echo_run` - Output text
 
+**Operation Management:**
+
+- `mcp_ahma_mcp_status` - Check status of all operations (active, completed, failed)
+- `mcp_ahma_mcp_wait` - Wait for operations to complete with configurable timeout (10-1800s, default 240s)
+
 ### Troubleshooting
 
 **MCP tools not working?**
@@ -279,6 +309,23 @@ Once connected, you'll have access to ~38 dynamically generated MCP tools:
 - Always use the pre-built binary path (not `cargo run`)
 - Use absolute paths to avoid lookup delays
 - Ensure `cargo build --release` has been run
+
+**Operations timing out?**
+
+- Default timeout is 240 seconds (4 minutes) - sufficient for most operations
+- Use the `status` tool to check which operations are still running
+- Use the `wait` tool with custom timeout: timeout range is 10-1800 seconds (30 minutes max)
+- Common timeout causes include network issues, locked files, or resource contention
+- Check for stale lock files (Cargo.lock, package-lock.json, yarn.lock, etc.)
+- Verify network connectivity for download operations
+- Monitor system resources with `top` or Activity Monitor during long builds
+
+**Development workflow interrupted?**
+
+- Ahma MCP includes graceful shutdown handling for cargo watch and file change restarts
+- When files change during development, ongoing operations get 10 seconds to complete naturally
+- Signal handling (SIGTERM/SIGINT) allows clean shutdowns instead of abrupt termination
+- Operations receive completion notifications even during shutdown sequences
 
 ### Performance: Pre-warmed shell pool
 

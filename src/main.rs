@@ -154,6 +154,23 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
         AhmaMcpService::new(adapter.clone(), operation_monitor.clone(), configs).await?;
     let service = service_handler.serve(rmcp::transport::stdio()).await?;
 
+    // ============================================================================
+    // CRITICAL: Graceful Shutdown Implementation for Development Workflow
+    // ============================================================================
+    //
+    // PURPOSE: Solves "Does the ahma_mcp server shut down gracefully when
+    //          .vscode/mcp.json watch triggers a restart?"
+    //
+    // LESSON LEARNED: cargo watch sends SIGTERM during file changes, causing
+    // abrupt termination of ongoing operations. This implementation provides:
+    // 1. Signal handling for SIGTERM (cargo watch) and SIGINT (Ctrl+C)
+    // 2. 10-second grace period for operations to complete naturally
+    // 3. Progress monitoring with user feedback during shutdown
+    // 4. Forced exit if service doesn't shutdown within 5 additional seconds
+    //
+    // DO NOT REMOVE: This is essential for development workflow integration
+    // ============================================================================
+
     // Set up signal handling for graceful shutdown
     let adapter_for_signal = adapter.clone();
     let operation_monitor_for_signal = operation_monitor.clone();

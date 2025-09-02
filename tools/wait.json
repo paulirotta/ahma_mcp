@@ -1,0 +1,53 @@
+{
+    "name": "wait",
+    "description": "Wait for asynchronous operations to complete with intelligent timeout handling and progress monitoring",
+    "command": "wait",
+    "enabled": true,
+    "synchronous": false,
+    "timeout_seconds": 240,
+    "hints": {
+        "primary": "Advanced operation coordination tool with timeout management and error remediation",
+        "usage": "wait (default 240s timeout), wait --timeout_seconds 120 (custom timeout), wait --tools cargo,npm (filter by tool)",
+        "wait_hint": "**WARNING:** This is a blocking tool and makes you inefficient. **ONLY** use this if you have NO other tasks and cannot proceed until completion. It is **ALWAYS** better to perform other work and let results be pushed to you.",
+        "timeout": "Progressive warnings at 50%, 75%, and 90% completion with automatic error remediation suggestions",
+        "remediation": "Automatically detects common timeout causes: stale lock files, network issues, resource conflicts, and provides specific resolution steps"
+    },
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "timeout_seconds": {
+                "type": "number",
+                "description": "Maximum time to wait in seconds (default: 240, min: 10, max: 1800)",
+                "minimum": 10,
+                "maximum": 1800,
+                "default": 240
+            },
+            "tools": {
+                "type": "string",
+                "description": "Comma-separated tool name prefixes to wait for (optional; waits for all if omitted)"
+            }
+        }
+    },
+    "subcommand": [
+        {
+            "name": "run",
+            "synchronous": false,
+            "description": "Wait for previously started asynchronous operations to complete with configurable timeout (10-1800 seconds, default 240s). Includes progressive timeout warnings at 50%, 75%, and 90% completion, plus automatic detection and remediation suggestions for common timeout causes including stale lock files, network issues, and resource conflicts.",
+            "options": [
+                {
+                    "name": "timeout_seconds",
+                    "type": "number",
+                    "description": "Maximum time to wait in seconds (default: 240, min: 10, max: 1800)",
+                    "minimum": 10,
+                    "maximum": 1800,
+                    "default": 240
+                },
+                {
+                    "name": "tools",
+                    "type": "string",
+                    "description": "Comma-separated tool name prefixes to wait for (optional; waits for all if omitted)"
+                }
+            ]
+        }
+    ]
+}
