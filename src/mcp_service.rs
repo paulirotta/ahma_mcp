@@ -36,6 +36,8 @@ use rmcp::{
 };
 use serde_json::Map;
 use std::collections::HashMap;
+use std::env;
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use tracing;
@@ -800,6 +802,73 @@ impl ServerHandler for AhmaMcpService {
             } else {
                 None
             };
+
+            // SECURITY: Path validation
+            // Before executing, validate any arguments that are designated as paths.
+            if let Some(sub_config) = subcommand_config {
+                if let Some(ref args) = params.arguments {
+                    for (key, value) in args.iter() {
+                        // Check if the argument is a path that needs validation
+                        if let Some(option_config) =
+                            sub_config.options.iter().find(|o| o.name == *key)
+                        {
+                            if option_config.format.as_deref() == Some("path") {
+                                if let Some(path_str) = value.as_str() {
+                                    let path_to_validate = Path::new(path_str);
+
+                                    // Get the workspace root from the current working directory
+                                    let workspace_root = match env::current_dir() {
+                                        Ok(dir) => dir,
+                                        Err(e) => {
+                                            return Err(McpError::internal_error(
+                                                format!("Failed to get current directory: {}", e),
+                                                None,
+                                            ));
+                                        }
+                                    };
+
+                                    // Canonicalize both paths to resolve any '..' or symlinks
+                                    let canonical_workspace = match workspace_root.canonicalize() {
+                                        Ok(path) => path,
+                                        Err(e) => {
+                                            return Err(McpError::internal_error(
+                                                format!(
+                                                    "Failed to canonicalize workspace path: {}",
+                                                    e
+                                                ),
+                                                None,
+                                            ));
+                                        }
+                                    };
+
+                                    let canonical_path = match path_to_validate.canonicalize() {
+                                        Ok(p) => p,
+                                        Err(_) => {
+                                            // If canonicalization fails, it might be because the path doesn't exist yet.
+                                            // In that case, we check the absolute path.
+                                            path_to_validate.to_path_buf()
+                                        }
+                                    };
+
+                                    if !canonical_path.starts_with(&canonical_workspace) {
+                                        let error_message = format!(
+                                            "Path validation failed for parameter '{}'. The path '{}' is outside the allowed workspace.",
+                                            key, path_str
+                                        );
+                                        tracing::error!("{}", error_message);
+                                        return Err(McpError::invalid_params(
+                                            error_message,
+                                            Some(
+                                                serde_json::json!({ "parameter": key, "path": path_str }),
+                                            ),
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             // Determine if this operation should be synchronous
             // Async by default, but can be overridden to sync per subcommand
