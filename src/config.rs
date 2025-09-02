@@ -1,9 +1,9 @@
 //! # Tool Configuration Management
 //!
 //! This module defines the data structures and logic for managing the configuration of
-//! command-line tools. All tool configurations are loaded from `.toml` files located in
-//! the `tools/` directory. This approach allows for easy extension and modification of
-//! supported tools without altering the core server code.
+//! command-line tools. All tool configurations are loaded from `.json` files
+//! located in the `tools/` directory. This approach allows for easy extension and
+//! modification of supported tools without altering the core server code.
 //!
 //! ## Core Data Structures
 //!
@@ -21,15 +21,15 @@
 //!
 //! ## Configuration Loading
 //!
-//! - The `load_from_file` function reads a specified TOML file and deserializes it into a
-//!   `Config` struct.
+//! - The `load_from_file` function reads a specified JSON file and deserializes it
+//!   into a `Config` struct.
 //! - The `load_tool_config` helper function simplifies loading by constructing the path
 //!   to a tool's configuration file within the `tools/` directory.
 //!
 //! ## Key Features
 //!
-//! - **Declarative Tool Definition**: Tools are defined entirely through TOML, making the
-//!   system highly modular and easy to maintain.
+//! - **Declarative Tool Definition**: Tools are defined entirely through JSON,
+//!   making the system highly modular and easy to maintain.
 //! - **Hierarchical Configuration**: Settings can be applied globally (in `Config`), per
 //!   operation type (in `ToolHints`), or per specific subcommand (in `CommandOverride`),
 //!   providing a flexible and powerful configuration cascade.
@@ -43,7 +43,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::Path;
 
 /// Represents the complete configuration for a command-line tool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,9 +101,8 @@ pub struct ToolHints {
 }
 
 /// Load all tool configurations from the `tools` directory.
-pub fn load_tool_configs() -> Result<HashMap<String, ToolConfig>> {
+pub fn load_tool_configs(tools_dir: &Path) -> Result<HashMap<String, ToolConfig>> {
     let mut configs = HashMap::new();
-    let tools_dir = PathBuf::from("tools");
 
     if !tools_dir.exists() {
         return Ok(configs);
@@ -112,17 +111,21 @@ pub fn load_tool_configs() -> Result<HashMap<String, ToolConfig>> {
     for entry in fs::read_dir(tools_dir)? {
         let entry = entry?;
         let path = entry.path();
-        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("toml") {
+        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
             let contents = fs::read_to_string(&path)
                 .with_context(|| format!("Failed to read config file: {}", path.display()))?;
-            let config: ToolConfig = toml::from_str(&contents).with_context(|| {
+
+            let config: ToolConfig = serde_json::from_str(&contents).with_context(|| {
                 format!(
-                    "Failed to parse config file: {}. Content:\n{}",
+                    "Failed to parse JSON config file: {}. Content:\n{}",
                     path.display(),
                     contents
                 )
             })?;
-            configs.insert(config.name.clone(), config);
+
+            if config.enabled {
+                configs.insert(config.name.clone(), config);
+            }
         }
     }
 

@@ -32,7 +32,7 @@ mod async_notification_test {
             Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager).unwrap());
 
         // Load configs and create service (not used in this test)
-        let configs = Arc::new(load_tool_configs().unwrap());
+        let configs = Arc::new(load_tool_configs(&std::path::PathBuf::from("tools")).unwrap());
         let _service = AhmaMcpService::new(adapter.clone(), operation_monitor.clone(), configs)
             .await
             .unwrap();
@@ -42,7 +42,7 @@ mod async_notification_test {
         // Test using direct adapter call to see what happens with the fix
         let job_id = adapter
             .execute_async_in_dir(
-                "cargo", // Use base command  
+                "cargo",   // Use base command
                 "version", // command
                 Some(serde_json::Map::from_iter(vec![(
                     "_subcommand".to_string(),

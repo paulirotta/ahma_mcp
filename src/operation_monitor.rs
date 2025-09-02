@@ -44,6 +44,12 @@ pub struct Operation {
     pub description: String,
     pub state: OperationStatus,
     pub result: Option<Value>,
+    /// When the operation was created
+    pub start_time: std::time::SystemTime,
+    /// When the operation completed (None if still running)
+    pub end_time: Option<std::time::SystemTime>,
+    /// When wait_for_operation was first called for this operation (None if never waited for)
+    pub first_wait_time: Option<std::time::SystemTime>,
 }
 
 impl Operation {
@@ -55,6 +61,9 @@ impl Operation {
             description,
             state: OperationStatus::Pending,
             result,
+            start_time: std::time::SystemTime::now(),
+            end_time: None,
+            first_wait_time: None,
         }
     }
 }
@@ -132,88 +141,173 @@ impl OperationMonitor {
             op.state = status;
             op.result = result;
 
+            // Set end time when operation reaches terminal state
             if status.is_terminal() {
-                let mut history = self.completion_history.write().await;
-                history.insert(operation_id.to_string(), op.clone());
+                op.end_time = Some(std::time::SystemTime::now());
             }
-        } else {
-            tracing::warn!(
-                "Attempted to update non-existent operation: {}",
-                operation_id
-            );
+        }
+
+        // If the operation has reached a terminal state, move it from the active map
+        // to the completion history. This is the key to preventing race conditions.
+        if status.is_terminal() {
+            if let Some(op) = ops.remove(operation_id) {
+                let mut history = self.completion_history.write().await;
+                history.insert(operation_id.to_string(), op);
+                tracing::debug!("Moved operation {} to completion history.", operation_id);
+            }
         }
     }
 
     pub async fn get_completed_operations(&self) -> Vec<Operation> {
-        let ops = self.operations.read().await;
-        ops.values()
-            .filter(|op| op.state.is_terminal())
-            .cloned()
-            .collect()
-    }
-
-    /// Get completed operations and remove them from tracking.
-    /// This prevents endless notification loops by ensuring each completion is only notified once.
-    pub async fn get_and_clear_completed_operations(&self) -> Vec<Operation> {
-        let mut ops = self.operations.write().await;
-        let completed_ops: Vec<Operation> = ops
-            .values()
-            .filter(|op| op.state.is_terminal())
-            .cloned()
-            .collect();
-
-        // DEBUG: Log the state before clearing
-        if !completed_ops.is_empty() {
-            tracing::info!(
-                "CLEARING {} completed operations from monitor: {:?}",
-                completed_ops.len(),
-                completed_ops
-                    .iter()
-                    .map(|op| (&op.id, &op.state))
-                    .collect::<Vec<_>>()
-            );
-            tracing::info!("Total operations before clearing: {}", ops.len());
-        }
-
-        // Remove completed operations from tracking to prevent re-notification
-        for op in &completed_ops {
-            let removed = ops.remove(&op.id);
-            tracing::debug!(
-                "Attempted to remove operation {}: {}",
-                op.id,
-                if removed.is_some() {
-                    "SUCCESS"
-                } else {
-                    "NOT_FOUND"
-                }
-            );
-        }
-
-        // DEBUG: Log the state after clearing
-        if !completed_ops.is_empty() {
-            tracing::info!("Total operations after clearing: {}", ops.len());
-        }
-
-        completed_ops
+        let history = self.completion_history.read().await;
+        history.values().cloned().collect()
     }
 
     pub async fn wait_for_operation(&self, operation_id: &str) -> Option<Operation> {
-        loop {
-            // Check active operations
-            if let Some(op) = self.get_operation(operation_id).await {
-                if op.state.is_terminal() {
-                    return Some(op);
+        let timeout = Duration::from_secs(300); // 5 minute timeout to prevent indefinite waiting
+        let start = std::time::Instant::now();
+
+        // Record that someone is waiting for this operation (for metrics)
+        {
+            let mut ops = self.operations.write().await;
+            if let Some(op) = ops.get_mut(operation_id) {
+                if op.first_wait_time.is_none() {
+                    op.first_wait_time = Some(std::time::SystemTime::now());
                 }
-            } else {
-                // Check completion history
-                let history = self.completion_history.read().await;
-                if let Some(op) = history.get(operation_id) {
+            }
+        }
+
+        // First, do an initial check to see if operation exists at all
+        let exists_in_active = {
+            let ops = self.operations.read().await;
+            ops.contains_key(operation_id)
+        };
+
+        let exists_in_history = {
+            let history = self.completion_history.read().await;
+            history.contains_key(operation_id)
+        };
+
+        // If operation doesn't exist anywhere, return None immediately
+        if !exists_in_active && !exists_in_history {
+            tracing::warn!(
+                "Operation {} not found in active operations or completion history",
+                operation_id
+            );
+            return None;
+        }
+
+        loop {
+            // Check active operations first
+            let ops = self.operations.read().await;
+            if let Some(op) = ops.get(operation_id) {
+                if op.state.is_terminal() {
+                    // This case can happen in a race condition where the op becomes terminal
+                    // but hasn't been moved to history yet.
                     return Some(op.clone());
                 }
-                // If not in active or history, it's gone.
+            }
+            drop(ops); // Release read lock
+
+            // If not in active, check completion history. This is the primary path for completed ops.
+            let history = self.completion_history.read().await;
+            if let Some(op) = history.get(operation_id) {
+                return Some(op.clone());
+            }
+            drop(history);
+
+            // If we've been waiting for too long, give up.
+            if start.elapsed() > timeout {
+                tracing::warn!("Wait for operation {} timed out.", operation_id);
                 return None;
             }
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+            // Wait a bit before polling again
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    /// This test simulates the race condition where an operation completes
+    /// so quickly that a `wait` call might miss it. By using the `completion_history`
+    /// map, the monitor should now correctly retrieve the status of already-completed
+    /// operations.
+    #[tokio::test]
+    async fn test_wait_for_fast_completion_race_condition() {
+        let monitor = OperationMonitor::new(MonitorConfig::with_timeout(Duration::from_secs(5)));
+        let op_id = "fast_op_1".to_string();
+        let op = Operation::new(
+            op_id.clone(),
+            "test_tool".to_string(),
+            "A test operation".to_string(),
+            None,
+        );
+
+        // 1. Add the operation
+        monitor.add_operation(op).await;
+
+        // 2. Immediately update its status to Completed, which moves it to history
+        monitor
+            .update_status(
+                &op_id,
+                OperationStatus::Completed,
+                Some(serde_json::json!({"result": "success"})),
+            )
+            .await;
+
+        // 3. Now, try to wait for it. The old system might have failed here.
+        let result = monitor.wait_for_operation(&op_id).await;
+
+        // 4. Assert that we correctly found the completed operation.
+        assert!(result.is_some());
+        let completed_op = result.unwrap();
+        assert_eq!(completed_op.id, op_id);
+        assert_eq!(completed_op.state, OperationStatus::Completed);
+        assert_eq!(
+            completed_op.result,
+            Some(serde_json::json!({"result": "success"}))
+        );
+
+        // 5. Verify it's not in the active operations map anymore
+        let active_ops = monitor.operations.read().await;
+        assert!(!active_ops.contains_key(&op_id));
+
+        // 6. Verify it IS in the completion history map
+        let history = monitor.completion_history.read().await;
+        assert!(history.contains_key(&op_id));
+    }
+
+    /// Tests that waiting for an operation that never existed returns `None`
+    /// immediately instead of blocking indefinitely.
+    #[tokio::test]
+    async fn test_wait_for_nonexistent_operation() {
+        let monitor = OperationMonitor::new(MonitorConfig::with_timeout(Duration::from_secs(5)));
+
+        // Use a timeout to ensure the test completes quickly
+        let wait_result = tokio::time::timeout(
+            Duration::from_millis(200),
+            monitor.wait_for_operation("nonexistent-id"),
+        )
+        .await;
+
+        // Should complete quickly and return None for nonexistent operation
+        match wait_result {
+            Ok(result) => {
+                assert!(
+                    result.is_none(),
+                    "Should return None for nonexistent operation"
+                );
+            }
+            Err(_) => {
+                panic!(
+                    "wait_for_operation should return quickly for nonexistent operation, not timeout"
+                );
+            }
         }
     }
 }

@@ -14,7 +14,7 @@
 //!   logging. The log level can be controlled via the `--debug` flag.
 //!
 //! - **Tool Loading and Parsing**:
-//!   1. Scans the specified `tools` directory for `.toml` configuration files.
+//!   1. Scans the specified `tools` directory for `.json` configuration files.
 //!   2. For each file, it loads the `Config` struct.
 //!   3. It then uses the `CliParser` to execute the tool's `--help` command and parse
 //!      the output into a `CliStructure`.
@@ -34,7 +34,7 @@
 //! 2. `Cli::parse()` reads and validates command-line arguments.
 //! 3. `tracing_subscriber` is configured.
 //! 4. An `Adapter` is created.
-//! 5. The `tools` directory is scanned, and each `.toml` file is processed to build a
+//! 5. The `tools` directory is scanned, and each `.json` file is processed to build a
 //!    collection of `(tool_name, config, cli_structure)` tuples.
 //! 6. `AhmaMcpService::new()` is called to create the service instance.
 //! 7. `service.start_server()` is awaited, running the server indefinitely until it
@@ -74,7 +74,7 @@ struct Cli {
     #[arg(long)]
     server: bool,
 
-    /// Path to the directory containing tool TOML configuration files.
+    /// Path to the directory containing tool JSON configuration files.
     #[arg(long, global = true, default_value = "tools")]
     tools_dir: PathBuf,
 
@@ -140,7 +140,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     let adapter = Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager)?);
 
     // Load tool configurations
-    let configs = Arc::new(load_tool_configs()?);
+    let configs = Arc::new(load_tool_configs(&cli.tools_dir)?);
     if configs.is_empty() {
         tracing::error!("No valid tool configurations found in {:?}", cli.tools_dir);
         // It's not a fatal error to have no tools, just log it.
@@ -150,91 +150,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
 
     // Create and start the MCP service
     let service_handler = AhmaMcpService::new(adapter, operation_monitor.clone(), configs).await?;
-    let service_handler_clone = service_handler.clone();
     let service = service_handler.serve(rmcp::transport::stdio()).await?;
-
-    // Start the MCP notification system for async operations
-    let operation_monitor_clone = operation_monitor.clone();
-    tokio::spawn(async move {
-        tracing::info!("Starting MCP notification system for async operations");
-        loop {
-            tokio::time::sleep(Duration::from_secs(1)).await; // Check more frequently for better responsiveness
-            let completed_ops = operation_monitor_clone
-                .get_and_clear_completed_operations()
-                .await;
-
-            if !completed_ops.is_empty() {
-                // Get the MCP peer handle for notifications
-                if let Some(peer) = {
-                    let peer_guard = service_handler_clone.peer.read().unwrap();
-                    peer_guard.clone()
-                } {
-                    tracing::info!(
-                        "Sending MCP notifications for {} completed operations",
-                        completed_ops.len()
-                    );
-
-                    for op in &completed_ops {
-                        // Use the MCP callback to send completion notification
-                        let callback =
-                            ahma_mcp::mcp_callback::mcp_callback(peer.clone(), op.id.clone());
-
-                        // Use a default duration since Operation doesn't track timing
-                        let duration_ms = 1000u64; // Default 1 second for now
-
-                        // Send appropriate completion notification based on operation result
-                        let progress_update = match (&op.state, &op.result) {
-                            (
-                                ahma_mcp::operation_monitor::OperationStatus::Completed,
-                                Some(result),
-                            ) => ahma_mcp::callback_system::ProgressUpdate::Completed {
-                                operation_id: op.id.clone(),
-                                message: format!("Operation completed successfully: {}", result),
-                                duration_ms,
-                            },
-                            (
-                                ahma_mcp::operation_monitor::OperationStatus::Failed,
-                                Some(result),
-                            ) => ahma_mcp::callback_system::ProgressUpdate::Failed {
-                                operation_id: op.id.clone(),
-                                error: format!("Operation failed: {}", result),
-                                duration_ms,
-                            },
-                            (ahma_mcp::operation_monitor::OperationStatus::Completed, None) => {
-                                ahma_mcp::callback_system::ProgressUpdate::Completed {
-                                    operation_id: op.id.clone(),
-                                    message: "Operation completed successfully".to_string(),
-                                    duration_ms,
-                                }
-                            }
-                            _ => ahma_mcp::callback_system::ProgressUpdate::Completed {
-                                operation_id: op.id.clone(),
-                                message: format!("Operation finished with status: {:?}", op.state),
-                                duration_ms,
-                            },
-                        };
-
-                        if let Err(e) = callback.send_progress(progress_update).await {
-                            tracing::warn!(
-                                "Failed to send MCP notification for operation {}: {:?}",
-                                op.id,
-                                e
-                            );
-                        } else {
-                            tracing::info!(
-                                "Successfully sent MCP notification for operation: {}",
-                                op.id
-                            );
-                        }
-                    }
-                } else {
-                    tracing::warn!(
-                        "No MCP peer available for sending notifications - operations completed but notifications not sent"
-                    );
-                }
-            }
-        }
-    });
 
     service.waiting().await?;
 

@@ -2,11 +2,13 @@
 mod config_tests {
     use ahma_mcp::config::load_tool_configs;
 
+    use std::path::Path;
+
     #[test]
     fn test_config_loading() {
         println!("Testing configuration loading...");
-
-        match load_tool_configs() {
+        let tools_dir = Path::new("tools");
+        match load_tool_configs(tools_dir) {
             Ok(configs) => {
                 println!("Successfully loaded {} configurations:", configs.len());
                 for (name, config) in configs.iter() {
