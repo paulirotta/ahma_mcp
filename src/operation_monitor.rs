@@ -153,6 +153,23 @@ impl OperationMonitor {
         let timeout = Duration::from_secs(300); // 5 minute timeout to prevent indefinite waiting
         let start = std::time::Instant::now();
 
+        // First, do an initial check to see if operation exists at all
+        let exists_in_active = {
+            let ops = self.operations.read().await;
+            ops.contains_key(operation_id)
+        };
+
+        let exists_in_history = {
+            let history = self.completion_history.read().await;
+            history.contains_key(operation_id)
+        };
+
+        // If operation doesn't exist anywhere, return None immediately
+        if !exists_in_active && !exists_in_history {
+            tracing::warn!("Operation {} not found in active operations or completion history", operation_id);
+            return None;
+        }
+
         loop {
             // Check active operations first
             let ops = self.operations.read().await;
@@ -239,40 +256,26 @@ mod tests {
     }
 
     /// Tests that waiting for an operation that never existed returns `None`
-    /// instead of blocking indefinitely or erroring.
+    /// immediately instead of blocking indefinitely.
     #[tokio::test]
     async fn test_wait_for_nonexistent_operation() {
         let monitor = OperationMonitor::new(MonitorConfig::with_timeout(Duration::from_secs(5)));
 
-        // Use a short timeout to ensure the test doesn't run for the full 5 minutes
+        // Use a timeout to ensure the test completes quickly 
         let wait_result = tokio::time::timeout(
             Duration::from_millis(200),
             monitor.wait_for_operation("nonexistent-id"),
         )
         .await;
 
-        // The wait_for_operation should eventually return None, but our outer timeout will catch it if it blocks.
-        // A correct implementation will check history, find nothing, and return None quickly.
-        // Let's adjust the test to reflect the new `wait_for_operation` which blocks.
-        // The function will only return None after its internal timeout.
-        // A better test is to check that it doesn't find anything and we can stop it.
-        // For now, let's assume the desired behavior is to return None if not found in active or history.
-        // The current `wait_for_operation` will loop until timeout. Let's modify it to not do that for a non-existent op.
-        // No, the user's request implies `wait` should wait. The test should reflect that.
-        // The function as written will timeout. Let's test that.
-
-        // Re-reading my plan: "Write a test to verify that waiting for a non-existent operation ID returns a helpful message, not an error."
-        // My current `wait_for_operation` returns `Option<Operation>`. Returning `None` is the equivalent of a helpful message (not found) vs an error.
-
-        let op = monitor.wait_for_operation("nonexistent-id").await;
-        // This will take 5 minutes. The test needs to be smarter.
-        // Let's modify `wait_for_operation` to be more practical for non-existent ops.
-        // No, let's stick to the plan. The `wait` in `mcp_service` is the user-facing one. `wait_for_operation` is the internal primitive.
-        // It's okay for it to block.
-
-        // Let's re-verify the `async_cargo_mcp` implementation.
-        // `wait_for_operation` in that project *also* loops, but it has a check: `if let Some(operation) = self.get_operation(operation_id).await`. If not, it checks history. If not there either, it returns a "not found" `OperationInfo`. This is better. It never blocks for a non-existent ID.
-
-        // I will adopt that pattern.
+        // Should complete quickly and return None for nonexistent operation
+        match wait_result {
+            Ok(result) => {
+                assert!(result.is_none(), "Should return None for nonexistent operation");
+            }
+            Err(_) => {
+                panic!("wait_for_operation should return quickly for nonexistent operation, not timeout");
+            }
+        }
     }
 }

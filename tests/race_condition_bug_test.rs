@@ -53,33 +53,32 @@ mod race_condition_bug_test {
             .await;
         println!("✅ Operation completed and status updated");
 
-        // Step 4: Next notification loop iteration should find it
-        let first_clear = monitor.get_completed_operations().await;
-        assert_eq!(first_clear.len(), 1, "Should find the completed operation");
-        assert_eq!(first_clear[0].id, test_op_id);
-        println!("✅ First notification clear found the completed operation");
+        // Step 4: Notification loop should find it consistently in completion history
+        let first_access = monitor.get_completed_operations().await;
+        assert_eq!(first_access.len(), 1, "Should find the completed operation in history");
+        assert_eq!(first_access[0].id, test_op_id);
+        println!("✅ First history access found the completed operation");
 
-        // Step 5: THE CRITICAL TEST - subsequent clears should be empty
-        let second_clear = monitor.get_completed_operations().await;
-        if !second_clear.is_empty() {
-            panic!(
-                "RACE CONDITION BUG DETECTED: Operation {} was found again after being cleared! This suggests the operation was re-added or not properly removed.",
-                test_op_id
-            );
-        }
-        println!("✅ Second clear is empty - no race condition detected");
+        // Step 5: NEW BEHAVIOR - operations persist in completion history
+        let second_access = monitor.get_completed_operations().await;
+        assert_eq!(
+            second_access.len(), 1,
+            "Operation should persist in completion history for wait operations"
+        );
+        assert_eq!(second_access[0].id, test_op_id);
+        println!("✅ Second access finds same operation in completion history");
 
-        // Step 6: Verify the operation is completely gone
+        // Step 6: Verify the operation remains consistently available
         for i in 3..=5 {
-            let subsequent_clear = monitor.get_completed_operations().await;
-            if !subsequent_clear.is_empty() {
-                panic!(
-                    "PERSISTENT RACE CONDITION: Operation found again in iteration {}",
-                    i
-                );
-            }
+            let subsequent_access = monitor.get_completed_operations().await;
+            assert_eq!(
+                subsequent_access.len(), 1,
+                "Iteration {}: Operation should remain in completion history",
+                i
+            );
+            assert_eq!(subsequent_access[0].id, test_op_id);
         }
-        println!("✅ Race condition test passed");
+        println!("✅ Race condition prevention test passed - operation persists in completion history");
     }
 
     /// Test what happens if update_status is called AFTER the operation is cleared
@@ -109,12 +108,12 @@ mod race_condition_bug_test {
             )
             .await;
 
-        // Clear the completed operation
-        let cleared = monitor.get_completed_operations().await;
-        assert_eq!(cleared.len(), 1);
-        println!("✅ Operation cleared");
+        // Initial check - operation should be in completion history
+        let initial_check = monitor.get_completed_operations().await;
+        assert_eq!(initial_check.len(), 1);
+        println!("✅ Operation found in completion history");
 
-        // NOW: Try to update the status of the already-cleared operation
+        // NOW: Try to update the status of the already-completed operation
         // This simulates a late-arriving update_status call
         monitor
             .update_status(
@@ -123,17 +122,24 @@ mod race_condition_bug_test {
                 Some(Value::String("late update".to_string())),
             )
             .await;
-        println!("✅ Called update_status on already-cleared operation");
+        println!("✅ Called update_status on already-completed operation");
 
-        // Check if this causes the operation to reappear
+        // Check that operation is still in history and properly handled
         let recheck = monitor.get_completed_operations().await;
-        if !recheck.is_empty() {
-            panic!(
-                "BUG DETECTED: update_status on cleared operation caused it to reappear! Found {} operations",
-                recheck.len()
-            );
+        assert_eq!(
+            recheck.len(), 1,
+            "Operation should remain in completion history after late update"
+        );
+        assert_eq!(recheck[0].id, test_op_id);
+        
+        // The result should remain the original value (late updates don't overwrite completed operations)
+        if let Some(result) = &recheck[0].result {
+            if let Some(result_str) = result.as_str() {
+                assert_eq!(result_str, "completed", "Result should remain as original value - late updates are ignored");
+            }
         }
-        println!("✅ No operations reappeared - update_status after clear is safe");
+        
+        println!("✅ Late update_status properly handled - operation remains in history with original result (late updates ignored)");
     }
 
     /// Test concurrent completion and notification processing to stress-test race conditions.

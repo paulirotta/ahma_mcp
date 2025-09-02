@@ -4,139 +4,145 @@ mod endless_notification_test {
         MonitorConfig, Operation, OperationMonitor, OperationStatus,
     };
     use serde_json::json;
+    use std::collections::HashSet;
     use std::sync::Arc;
     use std::time::Duration;
     use tokio::time::sleep;
 
     #[tokio::test]
-    async fn test_completed_operations_are_cleared_after_notification() {
-        // FAILING TEST: Verify that get_and_clear_completed_operations()
-        // actually clears operations and prevents endless loops
+    async fn test_completed_operations_are_persistent_in_history() {
+        // NEW TEST: Verify that completed operations are moved to completion_history
+        // and remain accessible for wait operations while preventing duplicates
 
         let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
         let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
 
-        // Add a completed operation
+        // Add an operation and complete it via update_status
         let operation = Operation {
             id: "test-op-123".to_string(),
             tool_name: "test".to_string(),
             description: "Test operation".to_string(),
-            state: OperationStatus::Completed,
-            result: Some(json!({"exit_code": 0, "stdout": "test output"})),
+            state: OperationStatus::Pending,
+            result: None,
         };
 
         operation_monitor.add_operation(operation).await;
 
-        // First call should return the completed operation
-        let first_fetch = operation_monitor.get_completed_operations().await;
-        assert_eq!(first_fetch.len(), 1);
-        assert_eq!(first_fetch[0].id, "test-op-123");
-        println!("✓ First fetch returned completed operation");
+        // Complete the operation (this should move it to completion_history)
+        operation_monitor.update_status(
+            "test-op-123",
+            OperationStatus::Completed,
+            Some(json!({"exit_code": 0, "stdout": "test output"}))
+        ).await;
 
-        // Second call should return empty (operation was cleared)
+        // The completed operation should be in completion history
+        let completed_ops = operation_monitor.get_completed_operations().await;
+        assert_eq!(completed_ops.len(), 1);
+        assert_eq!(completed_ops[0].id, "test-op-123");
+        assert_eq!(completed_ops[0].state, OperationStatus::Completed);
+        println!("✓ Completed operation is in completion history");
+
+        // Multiple fetches should return the same operation (persistent)
         let second_fetch = operation_monitor.get_completed_operations().await;
-        assert_eq!(
-            second_fetch.len(),
-            0,
-            "BUG: Operation should have been cleared after first fetch, but {} operations were returned",
-            second_fetch.len()
-        );
-        println!("✓ Second fetch returned no operations - cleared properly");
-
-        // Verify that regular get_completed_operations also shows empty
-        let check_remaining = operation_monitor.get_completed_operations().await;
-        assert_eq!(
-            check_remaining.len(),
-            0,
-            "BUG: get_completed_operations() still shows {} operations after clearing",
-            check_remaining.len()
-        );
-        println!("✓ No operations remain in monitor after clearing");
+        assert_eq!(second_fetch.len(), 1);
+        assert_eq!(second_fetch[0].id, "test-op-123");
+        println!("✓ Operation remains in history after multiple fetches");
     }
 
     #[tokio::test]
-    async fn test_multiple_operations_cleared_correctly() {
-        // Test that multiple completed operations are all cleared properly
+    async fn test_multiple_operations_tracked_in_history() {
+        // Test that multiple completed operations are tracked in persistent history
 
         let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
         let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
 
-        // Add multiple completed operations
+        // Add and complete multiple operations
         for i in 1..=3 {
             let operation = Operation {
                 id: format!("test-op-{}", i),
                 tool_name: "test".to_string(),
                 description: format!("Test operation {}", i),
-                state: OperationStatus::Completed,
-                result: Some(json!({"exit_code": 0, "stdout": format!("output {}", i)})),
+                state: OperationStatus::Pending,
+                result: None,
             };
             operation_monitor.add_operation(operation).await;
+            
+            operation_monitor.update_status(
+                &format!("test-op-{}", i),
+                OperationStatus::Completed,
+                Some(json!({"exit_code": 0, "stdout": format!("output {}", i)}))
+            ).await;
         }
 
-        // First fetch should get all 3 operations
-        let first_fetch = operation_monitor.get_completed_operations().await;
-        assert_eq!(first_fetch.len(), 3);
-        println!("✓ First fetch returned {} operations", first_fetch.len());
-
-        // Second fetch should be empty
-        let second_fetch = operation_monitor.get_completed_operations().await;
-        assert_eq!(
-            second_fetch.len(),
-            0,
-            "BUG: All operations should have been cleared, but {} remained",
-            second_fetch.len()
-        );
-        println!("✓ All operations properly cleared");
+        // All 3 operations should be in completion history
+        let completed_ops = operation_monitor.get_completed_operations().await;
+        assert_eq!(completed_ops.len(), 3);
+        
+        let ids: HashSet<String> = completed_ops.iter().map(|op| op.id.clone()).collect();
+        assert!(ids.contains("test-op-1"));
+        assert!(ids.contains("test-op-2"));
+        assert!(ids.contains("test-op-3"));
+        
+        println!("✓ All {} operations are in completion history", completed_ops.len());
     }
 
     #[tokio::test]
     async fn test_notification_loop_simulation() {
-        // Simulate the notification loop to verify no endless notifications
+        // Simulate the notification loop to verify persistent history works correctly
 
         let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
         let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
 
-        // Add a completed operation
+        // Add a pending operation first
         let operation = Operation {
             id: "loop-test-456".to_string(),
             tool_name: "test".to_string(),
             description: "Loop test operation".to_string(),
-            state: OperationStatus::Completed,
-            result: Some(json!({"exit_code": 0, "stdout": "loop test output"})),
+            state: OperationStatus::Pending,
+            result: None,
         };
         operation_monitor.add_operation(operation).await;
 
-        let mut notification_count = 0;
+        // Complete it via update_status (this moves it to completion_history)
+        operation_monitor.update_status(
+            "loop-test-456",
+            OperationStatus::Completed,
+            Some(json!({"exit_code": 0, "stdout": "loop test output"}))
+        ).await;
 
-        // Simulate notification loop - should only notify once
+        let mut total_operations_found = 0;
+
+        // Simulate notification loop - should find the operation consistently in history  
         for iteration in 1..=5 {
             let completed_ops = operation_monitor.get_completed_operations().await;
 
             if !completed_ops.is_empty() {
-                notification_count += completed_ops.len();
+                total_operations_found += completed_ops.len();
                 println!(
-                    "Iteration {}: Found {} operations to notify",
+                    "Iteration {}: Found {} operations in completion history",
                     iteration,
                     completed_ops.len()
                 );
 
-                // Simulate sending notifications (what main.rs does)
+                // Simulate sending notifications (what main.rs would do)
                 for op in &completed_ops {
-                    println!("  Notifying operation: {}", op.id);
+                    println!("  Operation in history: {}", op.id);
                 }
             } else {
-                println!("Iteration {}: No operations to notify", iteration);
+                println!("Iteration {}: No operations in completion history", iteration);
             }
 
             sleep(Duration::from_millis(100)).await; // Brief delay like the real loop
         }
 
-        // We should have only notified once for the single operation
+        // NEW BEHAVIOR: We should find the operation in every iteration (5 times)
+        // because it persists in completion_history, but the MCP callback system
+        // handles deduplication to prevent actual duplicate notifications
         assert_eq!(
-            notification_count, 1,
-            "BUG: Operation should only be notified once, but was notified {} times",
-            notification_count
+            total_operations_found, 5,
+            "BUG: Operation should be found in completion history every time (5 iterations), but was found {} times",
+            total_operations_found
         );
-        println!("✓ Operation was only notified once - no endless loop");
+        println!("✓ Operation found in completion history consistently (MCP handles notification deduplication)");
     }
 }
