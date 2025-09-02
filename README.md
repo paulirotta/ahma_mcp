@@ -1,17 +1,45 @@
 # Ahma MCP
 
+<p align="right">
+  <img src="assets/ahma.png" alt="Ahma MCP logo" width="160" />
+</p>
+
+_Create agents from command line tools with a simple JSON, then complete your work faster with true concurrent tool-use agentic AI workflows._
+
 [![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/rust.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/rust.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org/)
 
-`ahma_mcp` is a fast and ferocious tool for adapting existing command-line tools and web services for AI consumption. AI calls the tool, gets rapid confirmation and can continue to plan and analyze, automatically receiving results when operations complete. Multiple concurrent tool calls execute in parallel with optional coordination by `ahma_mcp` if needed. "Ahma" is Finnish for "wolverine."
+`ahma_mcp` is a fast and ferocious tool for adapting existing command-line tools and web services for AI consumption. AI calls the tool, gets rapid confirmation and can continue to plan and analyze, automatically receiving results when operations complete. Multiple concurrent tool calls execute in parallel with optional coordination by `ahma_mcp` if needed.
+
+"Ahma" is Finnish for "wolverine."
 
 ## Overview
 
-Ahma MCP is a Model Context Protocol server that dynamically adapts any command-line tool for asynchronous and concurrent use by AI assistants. Unlike tools designed for a single application (like `cargo`), Ahma discovers a tool's capabilities at runtime by parsing its `mytooltoadapt --help` output. A single configuration file (`tools/*.json`) can optionally override `ahma_mcp`'s default tool availability and behavior.
+Ahma MCP turns any command‑line tool into an MCP-aware agent that lets the AI continue planning and reasoning while commands run. It implements the Model Context Protocol (MCP) and uses JSON tool definitions (see [tools/](./tools/) for examples).
 
-AI can now use any command line interface (CLI) tool efficiently, with operations executing asynchronously by default and results automatically pushed back when complete. This eliminates blocking and enables true concurrent AI workflows.
+By default, tool calls are asynchronous: the AI receives a push/callback when the operation completes so the AI is not blocked waiting for results. Tools that return quickly can be marked "synchronous: true" in the tool JSON.
+
+**Example: Claude Sonnet 4 simultaneously using tools and thinking**
+
+> Now let me run the tests again using the MCP server:
+>
+> Ran cargo_test ahma_mcp (MCP Server)
+>
+> While the tests run, let me continue with updating the product requirements document:
+>
+> Read product-requirements.md
+>
+> Let me add the JSON schema requirements to the product requirements:
+>
+> product-requirements.md+21-6
+>
+> Now let me check on the test results:
+>
+> Ran status ahma_mcp (MCP Server)
+>
+> I can see the issue...
 
 ### Evolution from async_cargo_mcp
 
@@ -396,6 +424,48 @@ Want to add your own CLI tools? Create a JSON configuration file in the `tools/`
 - **`hints.parameters`**: Descriptions for command-line parameters
 
 After adding new tool configurations, restart VS Code to load them.
+
+## JSON Schema Validation
+
+Ahma MCP includes comprehensive JSON schema validation for all tool configurations, ensuring correctness and providing helpful developer feedback.
+
+### Schema Validation Features
+
+- **Automatic Validation**: All tool configurations validated during server startup
+- **Detailed Error Messages**: Precise field paths, error types, and actionable suggestions
+- **Type Checking**: Validates string, integer, boolean, array, and object types
+- **Async Guidance Validation**: Ensures async tools include proper AI instructions
+- **Constraint Enforcement**: Validates enums, patterns, array sizes, and value ranges
+
+### Schema Error Example
+
+```
+⚠️  Schema validation failed for tool configuration:
+JSON Schema Validation Failed for: tools/my_tool.json
+Found 2 error(s):
+
+1. [subcommand[0].description] Async subcommand description missing guidance about 'DO NOT wait'
+   💡 Suggestion: Should instruct AI not to wait for completion
+
+   Recommended template:
+   "**IMPORTANT:** This tool operates asynchronously.
+   1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.
+   2. **Final Result:** Result pushed automatically via MCP notification when complete.
+
+   **Your Instructions:**
+   - **DO NOT** wait for the final result.
+   - **DO** continue with other tasks that don't depend on this operation."
+
+2. [subcommand[0].options[0].type] Invalid option type 'number'
+   💡 Suggestion: Valid types: boolean, string, integer, array. Use 'integer' instead.
+```
+
+### Developer Resources
+
+- **Schema Guide**: [`docs/tool-schema-guide.md`](docs/tool-schema-guide.md) - Complete documentation
+- **Example Tools**: [`tools/example_schema.json`](tools/example_schema.json) - Comprehensive example
+- **Validation**: System continues to operate while reporting validation issues
+- **IDE Support**: Schema enables autocompletion in development environments
 
 ## License
 

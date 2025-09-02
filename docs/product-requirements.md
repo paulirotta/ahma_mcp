@@ -52,9 +52,24 @@ This document outlines the high-level requirements for `ahma_mcp`, a universal, 
 
 ## 8. Extensibility and Maintainability
 
-## 8. Extensibility and Maintainability
+## 8. JSON Schema Validation and Developer Experience
 
-- **R8.1**: The architecture shall be modular, with a clear separation of concerns between configuration (`config.rs`), MCP service logic (`mcp_service.rs`), and command execution (`adapter.rs`).
-- **R8.2**: Adding new tools or modifying existing ones should be achievable purely by editing JSON files, with no changes to the core Rust codebase.
-- **R8.3**: The system shall provide comprehensive logging and debugging capabilities to facilitate troubleshooting and performance optimization.
-- **R8.4**: Configuration schema shall support rich metadata including timeout overrides, LLM guidance hints, and performance tuning parameters.
+- **R8.1**: The system shall implement comprehensive JSON schema validation for all tool configurations, ensuring correctness and providing precise error feedback during development.
+- **R8.2**: Schema validation errors shall provide structured information including the exact field path, error type, expected vs actual values, and actionable remediation suggestions.
+- **R8.3**: The system shall automatically validate all tool configurations during server startup, preventing deployment of invalid configurations.
+- **R8.4**: Schema validation shall support advanced features including:
+  - Type checking (string, number, boolean, array, object)
+  - Required vs optional field validation
+  - Enum value constraints
+  - Pattern matching for string fields
+  - Array size and item type constraints
+- **R8.5**: The system shall provide clear developer guidance for creating new tool configurations, including schema documentation, examples, and troubleshooting guides.
+- **R8.6**: Schema validation shall work consistently across all deployment scenarios (VS Code MCP, command-line usage, CI/CD environments).
+
+## 9. Extensibility and Maintainability
+
+- **R9.1**: The architecture shall be modular, with a clear separation of concerns between configuration (`config.rs`), schema validation (`schema_validation.rs`), MCP service logic (`mcp_service.rs`), and command execution (`adapter.rs`).
+- **R9.2**: Adding new tools or modifying existing ones should be achievable purely by editing JSON files, with automatic schema validation ensuring correctness.
+- **R9.3**: The system shall provide comprehensive logging and debugging capabilities to facilitate troubleshooting and performance optimization.
+- **R9.4**: Configuration schema shall support rich metadata including timeout overrides, LLM guidance hints, and performance tuning parameters.
+- **R9.5**: The system shall support future schema evolution through versioning mechanisms and backward compatibility strategies.

@@ -204,7 +204,7 @@ log "Scanning tests for common patterns and potential issues..."
     echo
     echo '```'
     echo
-} >> "$REPORT_file" 2>/dev/null || true
+} >> "$REPORT_FILE" 2>/dev/null || true
 
 # If previous append failed due to case, append correctly (defensive)
 if ! grep -q "Test Health Analysis" "$REPORT_FILE" 2>/dev/null; then

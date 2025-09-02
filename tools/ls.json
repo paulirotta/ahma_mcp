@@ -3,14 +3,14 @@
     "description": "List directory contents and file information",
     "command": "ls",
     "enabled": true,
-    "input_schema": {
-        "type": "object",
-        "properties": {}
+    "hints": {
+        "primary": "List directory contents and file information",
+        "usage": "Common options: -l (long format), -a (all files), -h (human readable)"
     },
     "subcommand": [
         {
             "name": "default",
-            "description": "List directory contents and file information",
+            "description": "List directory contents and file information - returns immediately.",
             "synchronous": true,
             "options": [
                 {
@@ -50,9 +50,5 @@
                 }
             ]
         }
-    ],
-    "hints": {
-        "primary": "List directory contents and file information",
-        "usage": "Common options: -l (long format), -a (all files), -h (human readable)"
-    }
+    ]
 }

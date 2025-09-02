@@ -53,7 +53,9 @@ pub struct ToolConfig {
     pub command: String,
     #[serde(default)]
     pub subcommand: Vec<SubcommandConfig>,
-    pub input_schema: Value,
+    /// Generated input schema (optional - auto-generated from subcommands)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_schema: Option<Value>,
     /// Default timeout for operations in seconds
     pub timeout_seconds: Option<u64>,
     #[serde(default)]
@@ -102,7 +104,10 @@ pub struct ToolHints {
 
 /// Load all tool configurations from the `tools` directory.
 pub fn load_tool_configs(tools_dir: &Path) -> Result<HashMap<String, ToolConfig>> {
+    use crate::schema_validation::SchemaValidator;
+
     let mut configs = HashMap::new();
+    let validator = SchemaValidator::new();
 
     if !tools_dir.exists() {
         return Ok(configs);
@@ -115,16 +120,42 @@ pub fn load_tool_configs(tools_dir: &Path) -> Result<HashMap<String, ToolConfig>
             let contents = fs::read_to_string(&path)
                 .with_context(|| format!("Failed to read config file: {}", path.display()))?;
 
-            let config: ToolConfig = serde_json::from_str(&contents).with_context(|| {
-                format!(
-                    "Failed to parse JSON config file: {}. Content:\n{}",
-                    path.display(),
-                    contents
-                )
-            })?;
+            // First validate with our schema validator
+            match validator.validate_tool_config(&path, &contents) {
+                Ok(config) => {
+                    if config.enabled {
+                        configs.insert(config.name.clone(), config);
+                    }
+                }
+                Err(validation_errors) => {
+                    let error_report = validator.format_errors(&validation_errors, &path);
+                    eprintln!("⚠️  Schema validation failed for tool configuration:");
+                    eprintln!("{}", error_report);
 
-            if config.enabled {
-                configs.insert(config.name.clone(), config);
+                    // Try to fallback to direct parsing for backward compatibility
+                    match serde_json::from_str::<ToolConfig>(&contents) {
+                        Ok(config) => {
+                            eprintln!(
+                                "📝 Configuration parsed successfully despite schema validation errors."
+                            );
+                            eprintln!(
+                                "💡 Consider updating the configuration to match the schema for better reliability.\n"
+                            );
+
+                            if config.enabled {
+                                configs.insert(config.name.clone(), config);
+                            }
+                        }
+                        Err(parse_error) => {
+                            return Err(anyhow::anyhow!(
+                                "Failed to parse tool configuration {}: Schema validation failed with {} errors, and JSON parsing also failed: {}",
+                                path.display(),
+                                validation_errors.len(),
+                                parse_error
+                            ));
+                        }
+                    }
+                }
             }
         }
     }

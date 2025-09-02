@@ -11,10 +11,6 @@
         "doc": "Documentation building - consider reviewing doc comments, planning API improvements, or working on examples.",
         "check": "Type checking in progress - plan refactoring opportunities or review code patterns while waiting."
     },
-    "input_schema": {
-        "type": "object",
-        "properties": {}
-    },
     "subcommand": [
         {
             "name": "build",
