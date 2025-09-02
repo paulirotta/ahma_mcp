@@ -73,6 +73,15 @@ impl Operation {
 pub struct MonitorConfig {
     /// Default timeout for operations
     pub default_timeout: Duration,
+    /// Maximum time to wait for graceful shutdown
+    pub shutdown_timeout: Duration,
+}
+
+#[derive(Debug, Clone)]
+/// Summary of active operations for shutdown coordination
+pub struct ShutdownSummary {
+    pub total_active: usize,
+    pub operations: Vec<Operation>,
 }
 
 impl MonitorConfig {
@@ -80,6 +89,15 @@ impl MonitorConfig {
     pub fn with_timeout(timeout: Duration) -> Self {
         Self {
             default_timeout: timeout,
+            shutdown_timeout: Duration::from_secs(15), // Default 15 second shutdown timeout
+        }
+    }
+
+    /// Create a MonitorConfig with custom timeouts
+    pub fn with_timeouts(operation_timeout: Duration, shutdown_timeout: Duration) -> Self {
+        Self {
+            default_timeout: operation_timeout,
+            shutdown_timeout,
         }
     }
 }
@@ -158,9 +176,28 @@ impl OperationMonitor {
         }
     }
 
+    pub async fn get_active_operations(&self) -> Vec<Operation> {
+        let ops = self.operations.read().await;
+        ops.values()
+            .filter(|op| !op.state.is_terminal())
+            .cloned()
+            .collect()
+    }
+
     pub async fn get_completed_operations(&self) -> Vec<Operation> {
         let history = self.completion_history.read().await;
         history.values().cloned().collect()
+    }
+
+    pub async fn get_shutdown_summary(&self) -> ShutdownSummary {
+        let ops = self.operations.read().await;
+        let active_ops: Vec<&Operation> =
+            ops.values().filter(|op| !op.state.is_terminal()).collect();
+
+        ShutdownSummary {
+            total_active: active_ops.len(),
+            operations: active_ops.into_iter().cloned().collect(),
+        }
     }
 
     pub async fn wait_for_operation(&self, operation_id: &str) -> Option<Operation> {

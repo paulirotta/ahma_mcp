@@ -50,6 +50,7 @@ use ahma_mcp::{
 use anyhow::Result;
 use clap::Parser;
 use rmcp::ServiceExt;
+use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -87,6 +88,10 @@ struct Cli {
     #[arg(short, long, global = true)]
     debug: bool,
 
+    /// Enable synchronous mode for CLI operations.
+    #[arg(long, global = true)]
+    synchronous: bool,
+
     /// The name of the tool to execute (e.g., 'cargo_build').
     #[arg()]
     tool_name: Option<String>,
@@ -113,10 +118,8 @@ async fn main() -> Result<()> {
         tracing::info!("Running in Server mode");
         run_server_mode(cli).await
     } else {
-        tracing::info!("CLI mode is currently disabled during refactoring.");
-        anyhow::bail!(
-            "CLI mode is currently disabled during refactoring. Please use --server mode."
-        );
+        tracing::info!("Running in CLI mode");
+        run_cli_mode(cli).await
     }
 }
 
@@ -127,6 +130,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
 
     // Initialize the operation monitor
     let monitor_config = MonitorConfig::with_timeout(std::time::Duration::from_secs(cli.timeout));
+    let shutdown_timeout = monitor_config.shutdown_timeout; // Clone before moving
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
 
     // Initialize the shell pool manager
@@ -201,51 +205,42 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
         // Check for active operations and provide progress feedback
         info!("🛑 Shutdown initiated - checking for active operations...");
 
-        let active_ops = operation_monitor_for_signal.get_all_operations().await;
-        let active_count = active_ops
-            .iter()
-            .filter(|op| !op.state.is_terminal())
-            .count();
+        let shutdown_summary = operation_monitor_for_signal.get_shutdown_summary().await;
 
-        if active_count > 0 {
+        if shutdown_summary.total_active > 0 {
             info!(
-                "⏳ Waiting up to 10 seconds for {} active operation(s) to complete...",
-                active_count
+                "⏳ Waiting up to 15 seconds for {} active operation(s) to complete...",
+                shutdown_summary.total_active
             );
 
-            // Wait up to 10 seconds for operations to complete with progress updates
+            // Wait up to configured timeout for operations to complete with priority-based progress updates
             let shutdown_start = std::time::Instant::now();
-            let shutdown_timeout = std::time::Duration::from_secs(10);
+            let shutdown_timeout = shutdown_timeout;
 
             while shutdown_start.elapsed() < shutdown_timeout {
-                let current_ops = operation_monitor_for_signal.get_all_operations().await;
-                let current_active = current_ops
-                    .iter()
-                    .filter(|op| !op.state.is_terminal())
-                    .count();
+                let current_summary = operation_monitor_for_signal.get_shutdown_summary().await;
 
-                if current_active == 0 {
+                if current_summary.total_active == 0 {
                     info!("✅ All operations completed successfully");
                     break;
-                } else if current_active != active_count {
-                    info!("📈 Progress: {} operations remaining", current_active);
+                } else if current_summary.total_active != shutdown_summary.total_active {
+                    info!(
+                        "📈 Progress: {} operations remaining",
+                        current_summary.total_active
+                    );
                 }
 
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
 
-            let final_ops = operation_monitor_for_signal.get_all_operations().await;
-            let final_active = final_ops
-                .iter()
-                .filter(|op| !op.state.is_terminal())
-                .count();
+            let final_summary = operation_monitor_for_signal.get_shutdown_summary().await;
 
-            if final_active > 0 {
+            if final_summary.total_active > 0 {
                 tracing::warn!(
                     "⚠️  Proceeding with shutdown - {} operation(s) still running",
-                    final_active
+                    final_summary.total_active
                 );
-                for op in final_ops.iter().filter(|op| !op.state.is_terminal()) {
+                for op in final_summary.operations.iter() {
                     tracing::warn!("   - {} ({})", op.id, op.tool_name);
                 }
             }
@@ -270,9 +265,16 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     Ok(())
 }
 
-/*
 async fn run_cli_mode(cli: Cli) -> Result<()> {
     let tool_name = cli.tool_name.unwrap(); // Safe due to check in main()
+
+    // Parse tool name (e.g., "cargo_check" -> base_tool: "cargo", subcommand: "check")
+    let parts: Vec<&str> = tool_name.split('_').collect();
+    if parts.len() < 2 {
+        anyhow::bail!("Invalid tool name format. Expected 'tool_subcommand'.");
+    }
+    let base_tool = parts[0];
+    let subcommand_name = parts[1..].join("_");
 
     // Initialize adapter and monitor for CLI mode
     let monitor_config = MonitorConfig::with_timeout(std::time::Duration::from_secs(cli.timeout));
@@ -284,15 +286,19 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
     let adapter = Adapter::new(operation_monitor, shell_pool_manager)?;
 
-    // Load the specific tool's config to check for sync override
-    let parts: Vec<&str> = tool_name.split('_').collect();
-    if parts.len() < 2 {
-        anyhow::bail!("Invalid tool name format. Expected 'tool_subcommand'.");
+    // Load tool configurations
+    let configs = Arc::new(load_tool_configs(&std::path::PathBuf::from("tools"))?);
+    if configs.is_empty() {
+        tracing::error!("No valid tool configurations found");
+        anyhow::bail!("No tool configurations found");
     }
-    let base_tool = parts[0];
-    let subcommand_name = parts[1..].join("_");
 
-    let config = Config::load_tool_config(base_tool)?;
+    // Get the specific tool config
+    let config = configs
+        .get(base_tool)
+        .ok_or_else(|| anyhow::anyhow!("Tool '{}' not found in configurations", base_tool))?;
+
+    // Find the subcommand configuration
     let subcommand_config = config
         .subcommand
         .iter()
@@ -308,14 +314,10 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     // Construct arguments - start with subcommand name, then add config args, then runtime args
     let mut raw_args = Vec::new();
 
-    // Only add subcommand name if it's different from the base tool name
-    // This handles cases like ls_ls where command="ls" and subcommand="ls"
-    if subcommand_name != base_tool {
-        raw_args.push(subcommand_name.clone());
-    }
+    // Don't add subcommand name here - it's handled in args_map as "_subcommand"
 
     // Add predefined args from subcommand config
-    raw_args.extend(subcommand_config.args.clone());
+    // Note: subcommand_config doesn't have args field, using options instead
 
     let mut working_directory: Option<String> = None;
     let mut tool_args_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
@@ -374,35 +376,39 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
             .map(|p| p.to_string_lossy().into_owned())
     });
 
-    // CLI mode is always synchronous in its behavior, but we respect the config
-    // to decide *how* it runs. However, for the user, it's a blocking call.
-    let exec_mode = if cli.synchronous || subcommand_config.synchronous.unwrap_or(false) {
-        ExecutionMode::Synchronous
-    } else {
-        // In CLI mode, even "async" commands should be awaited.
-        // We can treat it as synchronous from the user's perspective.
-        ExecutionMode::Synchronous
-    };
+    // Build arguments from subcommand options and user input
+    let mut args_map = serde_json::Map::new();
+
+    // Add subcommand as the first positional argument
+    args_map.insert(
+        "_subcommand".to_string(),
+        Value::String(subcommand_name.clone()),
+    );
+
+    // Add any additional arguments from command line
+    for arg in &raw_args {
+        if let Some((key, value)) = arg.split_once('=') {
+            args_map.insert(key.to_string(), Value::String(value.to_string()));
+        } else {
+            // Handle positional arguments or flags
+            args_map.insert(arg.clone(), Value::String("".to_string()));
+        }
+    }
 
     // Execute the tool
     let result = adapter
-        .execute_tool_in_dir(
+        .execute_sync_in_dir(
             base_tool,
-            raw_args,
-            final_working_dir,
-            exec_mode,
-            None, // No hints in CLI mode
+            Some(args_map),
+            &final_working_dir.unwrap_or_else(|| ".".to_string()),
+            subcommand_config.timeout_seconds,
         )
         .await;
 
     match result {
         Ok(output) => {
-            // Extract and print the text content from the result
-            for content in output.content {
-                if let rmcp::model::RawContent::Text(text) = content.raw {
-                    println!("{}", text.text);
-                }
-            }
+            // Print the output directly since execute_sync_in_dir returns a String
+            println!("{}", output);
             Ok(())
         }
         Err(e) => {
@@ -411,4 +417,3 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         }
     }
 }
-*/
