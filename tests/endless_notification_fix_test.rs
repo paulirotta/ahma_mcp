@@ -28,13 +28,13 @@ mod endless_notification_test {
         operation_monitor.add_operation(operation).await;
 
         // First call should return the completed operation
-        let first_fetch = operation_monitor.get_and_clear_completed_operations().await;
+        let first_fetch = operation_monitor.get_completed_operations().await;
         assert_eq!(first_fetch.len(), 1);
         assert_eq!(first_fetch[0].id, "test-op-123");
         println!("✓ First fetch returned completed operation");
 
         // Second call should return empty (operation was cleared)
-        let second_fetch = operation_monitor.get_and_clear_completed_operations().await;
+        let second_fetch = operation_monitor.get_completed_operations().await;
         assert_eq!(
             second_fetch.len(),
             0,
@@ -74,12 +74,12 @@ mod endless_notification_test {
         }
 
         // First fetch should get all 3 operations
-        let first_fetch = operation_monitor.get_and_clear_completed_operations().await;
+        let first_fetch = operation_monitor.get_completed_operations().await;
         assert_eq!(first_fetch.len(), 3);
         println!("✓ First fetch returned {} operations", first_fetch.len());
 
         // Second fetch should be empty
-        let second_fetch = operation_monitor.get_and_clear_completed_operations().await;
+        let second_fetch = operation_monitor.get_completed_operations().await;
         assert_eq!(
             second_fetch.len(),
             0,
@@ -110,7 +110,7 @@ mod endless_notification_test {
 
         // Simulate notification loop - should only notify once
         for iteration in 1..=5 {
-            let completed_ops = operation_monitor.get_and_clear_completed_operations().await;
+            let completed_ops = operation_monitor.get_completed_operations().await;
 
             if !completed_ops.is_empty() {
                 notification_count += completed_ops.len();

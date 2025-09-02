@@ -223,6 +223,36 @@ impl ServerHandler for AhmaMcpService {
                     .collect();
 
                 if pending_ops.is_empty() {
+                    // Before declaring no pending ops, check the history for recently completed ones
+                    // that match the filter. This avoids a confusing state where a user waits
+                    // for a tool that just finished.
+                    let completed_ops = self.operation_monitor.get_completed_operations().await;
+                    let relevant_completed: Vec<Operation> = completed_ops
+                        .into_iter()
+                        .filter(|op| {
+                            if tool_filters.is_empty() {
+                                false // Only show completed if a filter is active
+                            } else {
+                                tool_filters.iter().any(|tn| op.tool_name.starts_with(tn))
+                            }
+                        })
+                        .collect();
+
+                    if !relevant_completed.is_empty() {
+                        let mut contents = Vec::new();
+                        contents.push(Content::text(format!(
+                            "No pending operations for tools: {}. However, these operations recently completed:",
+                            tool_filters.join(", ")
+                        )));
+                        for op in relevant_completed {
+                            match serde_json::to_string_pretty(&op) {
+                                Ok(s) => contents.push(Content::text(s)),
+                                Err(e) => tracing::error!("Serialization error: {}", e),
+                            }
+                        }
+                        return Ok(CallToolResult::success(contents));
+                    }
+
                     return Ok(CallToolResult::success(vec![Content::text(
                         if tool_filters.is_empty() {
                             "No pending operations to wait for.".to_string()

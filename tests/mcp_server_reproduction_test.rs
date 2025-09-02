@@ -67,7 +67,7 @@ mod mcp_server_reproduction_test {
         for iteration in 1..=5 {
             println!("\n--- Notification Loop Iteration {} ---", iteration);
 
-            let completed_ops = operation_monitor.get_and_clear_completed_operations().await;
+            let completed_ops = operation_monitor.get_completed_operations().await;
 
             println!("Found {} completed operations", completed_ops.len());
 

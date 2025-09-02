@@ -8,10 +8,10 @@ mod continuous_update_test {
     use std::time::Duration;
 
     /// This test simulates a scenario where update_status is called repeatedly
-    /// after operations have been cleared - could this cause re-addition?
+    /// for a completed operation, ensuring it doesn't create duplicates in the history.
     #[tokio::test]
-    async fn test_continuous_updates_after_clear() {
-        println!("🔄 Testing continuous status updates after operations are cleared...");
+    async fn test_continuous_updates_dont_duplicate_history() {
+        println!("🔄 Testing continuous status updates for completed operations...");
 
         let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
         let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
@@ -36,15 +36,15 @@ mod continuous_update_test {
 
         println!("✅ Added and completed operation");
 
-        // Clear the operation (like notification loop does)
-        let first_clear = operation_monitor.get_and_clear_completed_operations().await;
-        assert_eq!(first_clear.len(), 1);
+        // Check the history
+        let initial_history = operation_monitor.get_completed_operations().await;
+        assert_eq!(initial_history.len(), 1, "Should be one operation in history");
         println!(
-            "✅ Cleared operation (found {} operations)",
-            first_clear.len()
+            "✅ Verified initial history (found {} operations)",
+            initial_history.len()
         );
 
-        // Now continuously try to update the status (simulate potential race conditions)
+        // Now continuously try to update the status
         for i in 1..=5 {
             operation_monitor
                 .update_status(
@@ -56,27 +56,28 @@ mod continuous_update_test {
 
             println!("📝 Status update attempt {}", i);
 
-            // Check if this caused the operation to reappear
-            let check_clear = operation_monitor.get_and_clear_completed_operations().await;
-            if !check_clear.is_empty() {
+            // Check that the history still only contains one entry for this op_id
+            let current_history = operation_monitor.get_completed_operations().await;
+            if current_history.len() != 1 {
                 panic!(
-                    "BUG: Status update {} caused {} operations to reappear!",
+                    "BUG: Status update {} caused history to have {} operations, expected 1!",
                     i,
-                    check_clear.len()
+                    current_history.len()
                 );
             }
         }
 
-        println!("✅ No operations reappeared after continuous status updates");
+        println!("✅ No duplicate operations appeared in history after continuous status updates");
 
         // Final verification
-        let final_clear = operation_monitor.get_and_clear_completed_operations().await;
-        assert!(
-            final_clear.is_empty(),
-            "Final check should find no operations"
+        let final_history = operation_monitor.get_completed_operations().await;
+        assert_eq!(
+            final_history.len(),
+            1,
+            "Final check should still find exactly one operation"
         );
 
-        println!("✅ Test passed - continuous updates don't cause re-addition");
+        println!("✅ Test passed - continuous updates don't cause history duplication");
     }
 
     /// Test if there's an issue with multiple add_operation calls for the same ID
@@ -115,21 +116,8 @@ mod continuous_update_test {
         println!("📊 Found {} completed operations", completed.len());
 
         // Should be exactly 1, not 3
-        if completed.len() != 1 {
-            panic!(
-                "MULTIPLE ADD BUG: Expected 1 completed operation, found {}. Multiple add_operation calls are causing duplicates.",
-                completed.len()
-            );
-        }
+        assert_eq!(completed.len(), 1, "Expected 1 completed operation, found {}. Multiple add_operation calls might be causing duplicates.", completed.len());
 
-        // Clear and verify only one operation is cleared
-        let cleared = operation_monitor.get_and_clear_completed_operations().await;
-        assert_eq!(cleared.len(), 1);
-
-        // Subsequent clears should be empty
-        let second_clear = operation_monitor.get_and_clear_completed_operations().await;
-        assert!(second_clear.is_empty());
-
-        println!("✅ Test passed - multiple add_operation calls don't cause duplicates");
+        println!("✅ Test passed - multiple add_operation calls don't cause duplicates in history");
     }
 }

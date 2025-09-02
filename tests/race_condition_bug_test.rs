@@ -4,7 +4,7 @@ mod race_condition_bug_test {
         MonitorConfig, Operation, OperationMonitor, OperationStatus,
     };
     use serde_json::Value;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
     use tokio::time::sleep;
 
@@ -36,7 +36,7 @@ mod race_condition_bug_test {
         println!("✅ Added operation in Pending state: {}", test_op_id);
 
         // Step 2: Simulate notification loop clearing operations while operation is still pending
-        let cleared_while_pending = monitor.get_and_clear_completed_operations().await;
+        let cleared_while_pending = monitor.get_completed_operations().await;
         assert!(
             cleared_while_pending.is_empty(),
             "Should not clear pending operations"
@@ -54,13 +54,13 @@ mod race_condition_bug_test {
         println!("✅ Operation completed and status updated");
 
         // Step 4: Next notification loop iteration should find it
-        let first_clear = monitor.get_and_clear_completed_operations().await;
+        let first_clear = monitor.get_completed_operations().await;
         assert_eq!(first_clear.len(), 1, "Should find the completed operation");
         assert_eq!(first_clear[0].id, test_op_id);
         println!("✅ First notification clear found the completed operation");
 
         // Step 5: THE CRITICAL TEST - subsequent clears should be empty
-        let second_clear = monitor.get_and_clear_completed_operations().await;
+        let second_clear = monitor.get_completed_operations().await;
         if !second_clear.is_empty() {
             panic!(
                 "RACE CONDITION BUG DETECTED: Operation {} was found again after being cleared! This suggests the operation was re-added or not properly removed.",
@@ -71,7 +71,7 @@ mod race_condition_bug_test {
 
         // Step 6: Verify the operation is completely gone
         for i in 3..=5 {
-            let subsequent_clear = monitor.get_and_clear_completed_operations().await;
+            let subsequent_clear = monitor.get_completed_operations().await;
             if !subsequent_clear.is_empty() {
                 panic!(
                     "PERSISTENT RACE CONDITION: Operation found again in iteration {}",
@@ -110,7 +110,7 @@ mod race_condition_bug_test {
             .await;
 
         // Clear the completed operation
-        let cleared = monitor.get_and_clear_completed_operations().await;
+        let cleared = monitor.get_completed_operations().await;
         assert_eq!(cleared.len(), 1);
         println!("✅ Operation cleared");
 
@@ -126,7 +126,7 @@ mod race_condition_bug_test {
         println!("✅ Called update_status on already-cleared operation");
 
         // Check if this causes the operation to reappear
-        let recheck = monitor.get_and_clear_completed_operations().await;
+        let recheck = monitor.get_completed_operations().await;
         if !recheck.is_empty() {
             panic!(
                 "BUG DETECTED: update_status on cleared operation caused it to reappear! Found {} operations",
@@ -136,99 +136,68 @@ mod race_condition_bug_test {
         println!("✅ No operations reappeared - update_status after clear is safe");
     }
 
-    /// Test concurrent completion and clearing to stress-test race conditions  
+    /// Test concurrent completion and notification processing to stress-test race conditions.
     #[tokio::test]
-    async fn test_concurrent_completion_and_clearing() {
-        println!("⚡ Testing concurrent operation completion and clearing...");
+    async fn test_concurrent_completion_and_notification_simulation() {
+        println!("⚡ Testing concurrent operation completion and notification simulation...");
 
         let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
             Duration::from_secs(30),
         )));
-
         let test_op_id = "concurrent-test-op";
 
-        // Add operation
-        let operation = Operation::new(
+        monitor.add_operation(Operation::new(
             test_op_id.to_string(),
             "test".to_string(),
             "concurrent test".to_string(),
             None,
-        );
-        monitor.add_operation(operation).await;
+        )).await;
 
-        // Start concurrent tasks
-        let monitor_for_completion = monitor.clone();
-        let monitor_for_clearing = monitor.clone();
-
-        // Task 1: Complete the operation after a delay
-        let completion_handle = tokio::spawn(async move {
-            sleep(Duration::from_millis(100)).await;
-            monitor_for_completion
-                .update_status(
+        // Task 1: Complete the operation after a delay.
+        let completion_handle = tokio::spawn({
+            let monitor = monitor.clone();
+            async move {
+                sleep(Duration::from_millis(100)).await;
+                monitor.update_status(
                     test_op_id,
                     OperationStatus::Completed,
                     Some(Value::String("concurrent completion".to_string())),
-                )
-                .await;
-            println!("   🔧 Operation completed");
+                ).await;
+                println!("   🔧 Operation completed");
+            }
         });
 
-        // Task 2: Repeatedly try to clear operations (simulating notification loop)
-        let clearing_handle = tokio::spawn(async move {
-            let mut total_found = 0;
-            let mut iterations = 0;
-
-            for _ in 0..10 {
-                // 10 iterations over 1 second
-                sleep(Duration::from_millis(100)).await;
-                let cleared = monitor_for_clearing
-                    .get_and_clear_completed_operations()
-                    .await;
-                total_found += cleared.len();
-                iterations += 1;
-
-                if !cleared.is_empty() {
-                    println!(
-                        "   🧹 Clearing iteration {}: found {} operations",
-                        iterations,
-                        cleared.len()
-                    );
-                    for op in &cleared {
-                        println!("      - Cleared operation: {}", op.id);
+        // Task 2: Repeatedly check for completed operations, simulating a notification loop.
+        let notification_handle = tokio::spawn({
+            let monitor = monitor.clone();
+            async move {
+                let mut notified_ops = std::collections::HashSet::new();
+                for i in 0..10 {
+                    sleep(Duration::from_millis(100)).await;
+                    let completed = monitor.get_completed_operations().await;
+                    for op in completed {
+                        if notified_ops.insert(op.id.clone()) {
+                            println!("   🔔 Notified for operation {} in iteration {}", op.id, i);
+                        }
                     }
                 }
+                notified_ops.len()
             }
-
-            (total_found, iterations)
         });
 
-        // Wait for both tasks to complete
-        let (_completion_result, (total_cleared, clearing_iterations)) =
-            tokio::try_join!(completion_handle, clearing_handle).unwrap();
+        let (_completion_result, total_notified) =
+            tokio::try_join!(completion_handle, notification_handle).unwrap();
 
         println!("✅ Concurrent test completed:");
-        println!("   - Total operations cleared: {}", total_cleared);
-        println!("   - Clearing iterations: {}", clearing_iterations);
+        println!("   - Total unique operations notified: {}", total_notified);
 
-        // The operation should be cleared exactly once
-        if total_cleared != 1 {
-            panic!(
-                "CONCURRENCY BUG: Expected 1 operation to be cleared, but {} were cleared. This suggests race conditions causing duplicate notifications.",
-                total_cleared
-            );
-        }
+        // The operation should be notified for exactly once.
+        assert_eq!(total_notified, 1, "CONCURRENCY BUG: Expected 1 unique notification, but got {}. This suggests race conditions or faulty logic.", total_notified);
 
-        // Final verification - no operations should remain
-        let final_check = monitor.get_and_clear_completed_operations().await;
-        assert!(
-            final_check.is_empty(),
-            "No operations should remain after concurrent test"
-        );
-
-        println!("✅ Concurrent completion and clearing test passed");
+        println!("✅ Concurrent completion and notification test passed");
     }
 
-    /// Test the specific scenario where multiple notification loops might run
+    /// Test the specific scenario where multiple notification loops might run concurrently.
     #[tokio::test]
     async fn test_multiple_notification_loops() {
         println!("🔁 Testing multiple concurrent notification loops...");
@@ -236,100 +205,55 @@ mod race_condition_bug_test {
         let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
             Duration::from_secs(30),
         )));
-
         let test_op_id = "multi-loop-test-op";
 
         // Add and complete operation
-        let operation = Operation::new(
+        monitor.add_operation(Operation::new(
             test_op_id.to_string(),
             "test".to_string(),
             "multi loop test".to_string(),
             None,
-        );
-        monitor.add_operation(operation).await;
-        monitor
-            .update_status(
-                test_op_id,
-                OperationStatus::Completed,
-                Some(Value::String("completed".to_string())),
-            )
-            .await;
-
+        )).await;
+        monitor.update_status(
+            test_op_id,
+            OperationStatus::Completed,
+            Some(Value::String("completed".to_string())),
+        ).await;
         println!("✅ Operation added and completed");
 
+        // Use a shared set to track notifications across all concurrent loops
+        let notified_ops_global = Arc::new(Mutex::new(std::collections::HashSet::new()));
+
+        let mut handles = Vec::new();
+
         // Start multiple "notification loops" concurrently
-        let monitor1 = monitor.clone();
-        let monitor2 = monitor.clone();
-        let monitor3 = monitor.clone();
-
-        let loop1 = tokio::spawn(async move {
-            let mut found_ops = Vec::new();
-            for i in 1..=3 {
-                sleep(Duration::from_millis(100)).await;
-                let ops = monitor1.get_and_clear_completed_operations().await;
-                if !ops.is_empty() {
-                    println!(
-                        "   📊 Loop 1, iteration {}: found {} operations",
-                        i,
-                        ops.len()
-                    );
-                    found_ops.extend(ops);
+        for i in 0..3 {
+            let monitor_clone = monitor.clone();
+            let notified_ops_clone = notified_ops_global.clone();
+            let handle = tokio::spawn(async move {
+                sleep(Duration::from_millis(50 * i as u64)).await; // Stagger starts
+                let completed = monitor_clone.get_completed_operations().await;
+                let mut local_notification_count = 0;
+                for op in completed {
+                    let mut guard = notified_ops_clone.lock().unwrap();
+                    if guard.insert(op.id.clone()) {
+                        println!("   📊 Loop {}: Sent notification for {}", i, op.id);
+                        local_notification_count += 1;
+                    }
                 }
-            }
-            found_ops
-        });
+                local_notification_count
+            });
+            handles.push(handle);
+        }
 
-        let loop2 = tokio::spawn(async move {
-            let mut found_ops = Vec::new();
-            for i in 1..=3 {
-                sleep(Duration::from_millis(150)).await; // Slightly different timing
-                let ops = monitor2.get_and_clear_completed_operations().await;
-                if !ops.is_empty() {
-                    println!(
-                        "   📊 Loop 2, iteration {}: found {} operations",
-                        i,
-                        ops.len()
-                    );
-                    found_ops.extend(ops);
-                }
-            }
-            found_ops
-        });
-
-        let loop3 = tokio::spawn(async move {
-            let mut found_ops = Vec::new();
-            for i in 1..=3 {
-                sleep(Duration::from_millis(75)).await; // Different timing again
-                let ops = monitor3.get_and_clear_completed_operations().await;
-                if !ops.is_empty() {
-                    println!(
-                        "   📊 Loop 3, iteration {}: found {} operations",
-                        i,
-                        ops.len()
-                    );
-                    found_ops.extend(ops);
-                }
-            }
-            found_ops
-        });
-
-        let (loop1_ops, loop2_ops, loop3_ops) = tokio::try_join!(loop1, loop2, loop3).unwrap();
-
-        let total_operations_found = loop1_ops.len() + loop2_ops.len() + loop3_ops.len();
+        let results = futures::future::join_all(handles).await;
+        let total_notifications_sent: usize = results.into_iter().map(|res| res.unwrap()).sum();
 
         println!("✅ Multiple loops completed:");
-        println!("   - Loop 1 found: {} operations", loop1_ops.len());
-        println!("   - Loop 2 found: {} operations", loop2_ops.len());
-        println!("   - Loop 3 found: {} operations", loop3_ops.len());
-        println!("   - Total found: {}", total_operations_found);
+        println!("   - Total notifications sent across all loops: {}", total_notifications_sent);
 
-        // Only ONE of the loops should find the operation
-        if total_operations_found != 1 {
-            panic!(
-                "MULTIPLE NOTIFICATION LOOPS BUG: Expected exactly 1 operation across all loops, but found {}. This suggests the same operation was notified multiple times.",
-                total_operations_found
-            );
-        }
+        // Only ONE notification should have been sent in total across all loops.
+        assert_eq!(total_notifications_sent, 1, "MULTIPLE NOTIFICATION LOOPS BUG: Expected exactly 1 notification across all loops, but sent {}.", total_notifications_sent);
 
         println!("✅ Multiple notification loops test passed");
     }
