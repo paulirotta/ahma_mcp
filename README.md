@@ -1,17 +1,17 @@
-[# Ahma MCP
+# Ahma MCP
 
-_Create agents from command line tools with a simple JSON, then complete your work faster with true concurrent tool-use agentic AI workflows._
+_Create agents from your command line tools with one JSON file, then watch them complete your work faster with **true multi-threaded tool-use agentic AI workflows**._
 
-<img src="./assets/ahma.png" height="65" align="right" alt="Ahma MCP Logo"/>
+<img src="./assets/ahma.png" height="250" align="right" alt="Ahma MCP Logo"/>
 
 [![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/rust.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/rust.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org/)
 
-`ahma_mcp` is a tool for rapdily adapting command-line tools and web services for AI consumption. AI calls a gets rapid confirmation and can continue to plan and analyze, automatically receiving results when operations complete. Multiple concurrent tool calls execute in parallel with optional coordination by `ahma_mcp` if needed.
+`ahma_mcp` rapdily adapts command-line tools for AI consumption. AI calls a gets rapid confirmation the background process has started and can continue to plan and analyze, automatically receiving tool results as each operation completes. Multiple concurrent tool calls execute in parallel. Individual tools and subcommands can be tagged as **`synchronous: true`** to become a traditional blocking MCP tool call as need. Generally the AI does not need to `wait` for async tool completion as it gets the result when the tool completes, but it can when needed.
 
-'Ahma' (Finnish for wolverine) is a compact, tenacious, and agile tool. It runs quickly and is capable of autonomously tackling complex tasks in less time than simple synchonous tools while reliably coordinating with AI clients.
+**Ahma** (Finnish for wolverine) is a tenacious and agile tool, speeding your workflow to rapidly consume complex tasks in less time than common synchonous tools.
 
 ## Overview
 
@@ -19,39 +19,35 @@ Ahma MCP turns any command‑line tool into an MCP-aware agent that lets the AI 
 
 By default, tool calls are asynchronous: the AI receives a push/callback when the operation completes so the AI is not blocked waiting for results. Tools that return quickly can be marked "synchronous: true" in the tool JSON.
 
-**Example: Claude Sonnet 4 simultaneously using tools and thinking**
+**Example: Claude Sonnet 4 never stops, simultaneously using tools and thinking**
 
 > Now let me run the tests again using the MCP server:
 >
-> Ran cargo_test ahma_mcp (MCP Server)
+> *Ran cargo_test ahma_mcp (MCP Server)*
 >
 > While the tests run, let me continue with updating the product requirements document:
 >
-> Read product-requirements.md
+> *Read product-requirements.md*
 >
 > Let me add the JSON schema requirements to the product requirements:
 >
-> product-requirements.md+21-6
+> *product-requirements.md+21-6*
 >
 > Now let me check on the test results:
 >
-> Ran status ahma_mcp (MCP Server)
+> *Ran status ahma_mcp (MCP Server)*
 >
 > I can see the issue...
 
-### Evolution from async_cargo_mcp
-
+### Features
 Ahma MCP is the next-generation successor to `async_cargo_mcp`, providing:
 
 - **Universal CLI Adaptation**: Works with any command-line tool, not just Cargo
-- **Async-First Architecture**: Operations execute asynchronously by default with automatic result push, eliminating AI blocking and enabling concurrent workflows
-- **Dynamic Discovery**: Automatically parses help output to generate tool schemas
-- **Multi-Tool Support**: Single server handles multiple CLI tools simultaneously
-- **10x Performance**: Pre-warmed shell pool provides 10x faster command startup (5-20ms vs 50-200ms)
-- **AI-Optimized Guidance**: Tool descriptions include explicit instructions for productive parallel work
-- **Comprehensive Testing**: 76+ tests ensuring reliability
+- **Async-First Architecture**: Operations execute asynchronously by default with automatic result push back to the AI, reducint AI blocking downtime and enabling concurrent workflows
+- **Multi-Tool Support**: Single server handles multiple CLI tools simultaneously, one JSON file per tool
+- **AI-Optimized Guidance**: Tool descriptions you can edit in JSON include explicit suggestion to AI to encourage productive concurrent work
 
-_Note: `async_cargo_mcp` is now deprecated in favor of this universal approach._
+_Note: `ahma_mcp` is early stage and undergoing rapid development. It is mostly tested in VS Code. Issue reports and pull requests welcome._
 
 ## Quick Start
 
@@ -63,26 +59,7 @@ git clone https://github.com/paulirotta/ahma_mcp.git
 cd ahma_mcp
 cargo build --release
 
-# 2) Run tests (optional but recommended)
-cargo test
-
-# 3) Create a minimal MCP config adjacent to the repo for copy/paste
-cat > mcp_config_example.json << 'JSON'
-{
-  "servers": {
-    "ahma_mcp": {
-      "type": "stdio",
-      "cwd": "/absolute/path/to/ahma_mcp",
-      "command": "/absolute/path/to/ahma_mcp/target/release/ahma_mcp",
-      "args": ["--tools-dir", "/absolute/path/to/ahma_mcp/tools"]
-    }
-  },
-  "inputs": []
-}
-JSON
-
-# 4) Open the file and replace /absolute/path/to/ahma_mcp with your path
-open mcp_config_example.json
+# 2) Copy the `tools/`, `.vscode/` and `.gihub/chatmodes/` into your VS Code project and edit the paths, tools and AI guidance for tool use to taste.
 ```
 
 Then copy the contents into your VS Code MCP configuration file (per-OS locations below), restart VS Code, and you’re ready.
