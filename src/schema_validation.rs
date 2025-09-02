@@ -105,7 +105,7 @@ impl SchemaValidator {
                 Err(e) => Err(vec![SchemaValidationError {
                     field_path: "deserialization".to_string(),
                     error_type: ValidationErrorType::LogicalInconsistency,
-                    message: format!("Configuration passed validation but failed deserialization: {}", e),
+                    message: format!("Configuration passed validation but failed deserialization: {e}"),
                     suggestion: Some("This may indicate a bug in the schema validator. Please report this issue.".to_string()),
                 }])
             }
@@ -628,7 +628,7 @@ impl SchemaValidator {
 
         // Add general guidance
         report.push_str("For more information on tool JSON schema, see the documentation:\n");
-        report.push_str("- docs/tool-schema-reference.md\n");
+        report.push_str("- docs/tool-schema-guide.md\n");
         report.push_str("- Example tool configurations in tools/\n\n");
 
         report.push_str("Common fixes:\n");

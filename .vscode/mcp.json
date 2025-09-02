@@ -3,39 +3,25 @@
         "ahma_mcp": {
             "type": "stdio",
             "cwd": "${workspaceFolder}",
-            "command": "cargo",
+            "command": "target/release/ahma_mcp",
             "args": [
-                "run",
-                "--release",
-                "--bin",
-                "ahma_mcp",
-                "--",
                 "--server",
                 "--tools-dir",
                 "tools"
             ],
             "dev": {
+                "watch": [
+                    "target/release/ahma_mcp",
+                    "tools/*.json"
+                ],
                 "command": "cargo",
                 "args": [
-                    "watch",
-                    "-w",
-                    "src",
-                    "-w",
-                    "tools",
-                    "-w",
-                    "Cargo.toml",
-                    "-w",
-                    "Cargo.lock",
-                    "-x",
-                    "check",
-                    "-x",
-                    "run --release --bin ahma_mcp -- --server --tools-dir tools"
-                ],
-                "watch": [
-                    "src/**/*.rs",
-                    "tools/*.json",
-                    "Cargo.toml",
-                    "Cargo.lock"
+                    "run",
+                    "--release",
+                    "--",
+                    "--server",
+                    "--tools-dir",
+                    "tools"
                 ]
             }
         }
