@@ -171,8 +171,7 @@ impl ServerHandler for AhmaMcpService {
             for config in self.configs.values() {
                 if config.subcommand.is_empty() {
                     // If no subcommands defined, register the tool by its base name
-                    let input_schema =
-                        Arc::new(config.input_schema.as_object().cloned().unwrap_or_default());
+                    let input_schema = Arc::new(self.generate_input_schema_for_tool(config));
                     tools.push(Tool {
                         name: config.name.clone().into(),
                         description: Some(config.description.clone().into()),
@@ -185,7 +184,7 @@ impl ServerHandler for AhmaMcpService {
                     for subcommand in &config.subcommand {
                         let tool_name = format!("{}_{}", config.name, subcommand.name);
                         let input_schema =
-                            Arc::new(config.input_schema.as_object().cloned().unwrap_or_default());
+                            Arc::new(self.generate_input_schema_for_subcommand(subcommand));
 
                         // Use the full subcommand description, which may include LLM guidance
                         let description = if subcommand.description.is_empty() {
@@ -966,5 +965,94 @@ impl ServerHandler for AhmaMcpService {
             )]))
             }
         }
+    }
+}
+
+impl AhmaMcpService {
+    /// Generate input schema for a tool (when no subcommands are defined)
+    fn generate_input_schema_for_tool(
+        &self,
+        _config: &crate::config::ToolConfig,
+    ) -> serde_json::Map<String, serde_json::Value> {
+        // For tools without subcommands, use a basic schema
+        let mut schema = serde_json::Map::new();
+        schema.insert(
+            "type".to_string(),
+            serde_json::Value::String("object".to_string()),
+        );
+        schema.insert(
+            "properties".to_string(),
+            serde_json::Value::Object(serde_json::Map::new()),
+        );
+        schema.insert(
+            "additionalProperties".to_string(),
+            serde_json::Value::Bool(false),
+        );
+        schema
+    }
+
+    /// Generate input schema for a subcommand based on its options
+    fn generate_input_schema_for_subcommand(
+        &self,
+        subcommand: &crate::config::SubcommandConfig,
+    ) -> serde_json::Map<String, serde_json::Value> {
+        let mut schema = serde_json::Map::new();
+        let mut properties = serde_json::Map::new();
+
+        // Add standard working directory parameter
+        properties.insert(
+            "working_directory".to_string(),
+            serde_json::json!({
+                "type": "string",
+                "description": "Working directory for command execution"
+            }),
+        );
+
+        // Generate schema from options
+        for option in &subcommand.options {
+            let mut param_schema = serde_json::Map::new();
+
+            // Set type
+            param_schema.insert(
+                "type".to_string(),
+                serde_json::Value::String(option.option_type.clone()),
+            );
+
+            // Set description
+            param_schema.insert(
+                "description".to_string(),
+                serde_json::Value::String(option.description.clone()),
+            );
+
+            // Handle array types
+            if option.option_type == "array" {
+                param_schema.insert(
+                    "items".to_string(),
+                    serde_json::json!({
+                        "type": "string"
+                    }),
+                );
+            }
+
+            properties.insert(option.name.clone(), serde_json::Value::Object(param_schema));
+
+            // For now, all options are optional (since we don't have default_value info)
+            // In the future, we could add a `required` field to OptionConfig
+        }
+
+        schema.insert(
+            "type".to_string(),
+            serde_json::Value::String("object".to_string()),
+        );
+        schema.insert(
+            "properties".to_string(),
+            serde_json::Value::Object(properties),
+        );
+        schema.insert(
+            "additionalProperties".to_string(),
+            serde_json::Value::Bool(false),
+        );
+
+        schema
     }
 }

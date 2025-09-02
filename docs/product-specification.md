@@ -137,8 +137,69 @@ The JSON file is the central point of configuration, defining a tool's structure
 }
 ```
 
-## 5. Future Enhancements
+## 5. JSON Schema Validation System
+
+### 5.1. Schema-Driven Development
+
+`ahma_mcp` employs a comprehensive JSON schema validation system to ensure tool configurations are correct and provide precise error feedback to developers. This system serves multiple purposes:
+
+- **Runtime Validation**: All tool configurations are validated against their schemas during server startup
+- **Developer Feedback**: Clear, actionable error messages when schemas don't match expected formats
+- **Documentation Generation**: Automatic generation of parameter documentation from schemas
+- **IDE Integration**: Schema files enable autocompletion and validation in development environments
+
+### 5.2. Schema Structure
+
+Each tool configuration includes a complete JSON schema definition:
+
+```json
+{
+  "name": "tool_name",
+  "description": "Tool description with async behavior guidance",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "parameter_name": {
+        "type": "string",
+        "description": "Clear parameter description",
+        "pattern": "^[a-zA-Z0-9_-]+$"
+      },
+      "optional_param": {
+        "type": "boolean",
+        "description": "Optional parameter with default",
+        "default": false
+      }
+    },
+    "required": ["parameter_name"],
+    "additionalProperties": false
+  }
+}
+```
+
+### 5.3. Error Handling and Feedback
+
+When schema validation fails, the system provides structured error messages:
+
+- **Precise Location**: Exact parameter path that failed validation
+- **Clear Message**: Human-readable description of the issue
+- **Expected vs Actual**: Shows what was expected and what was received
+- **Suggestions**: Actionable recommendations for fixing the issue
+
+This enables rapid development and debugging of new tool integrations.
+
+### 5.4. Schema Development Workflow
+
+1. **Define Schema**: Create comprehensive JSON schema with proper types and constraints
+2. **Validate Configuration**: System automatically validates on startup
+3. **Fix Errors**: Use detailed error messages to correct issues
+4. **Test Integration**: Verify tool works correctly with various parameter combinations
+5. **Document Usage**: Schema serves as self-documenting API specification
+
+## 6. Future Enhancements
 
 - **Interactive Tool Support**: Develop a mechanism for handling interactive commands that prompt for user input.
 - **Server-Side Operation Tracking**: Re-introduce a server-side `OperationMonitor` to track the status of async jobs, allowing for `wait` and `status` tools to query job progress from the server itself, rather than relying on the client.
 - **Automatic Callback on Completion**: Implement a true callback system where the server proactively pushes results to the client upon async completion, removing the need for client-side polling.
+- **Schema Evolution**: Support for versioned schemas and backward compatibility
+- **Dynamic Schema Updates**: Hot-reloading of tool configurations without server restart
+- **Custom Validators**: User-defined validation functions for complex parameter relationships
