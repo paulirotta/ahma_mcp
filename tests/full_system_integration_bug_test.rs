@@ -6,7 +6,7 @@ mod full_system_integration_bug_test {
     use ahma_mcp::mcp_service::AhmaMcpService;
     use ahma_mcp::operation_monitor::{MonitorConfig, OperationMonitor};
     use ahma_mcp::shell_pool::{ShellPoolConfig, ShellPoolManager};
-    use std::collections::HashMap;
+    
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
     use tokio::time::sleep;

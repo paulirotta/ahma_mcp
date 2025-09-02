@@ -6,7 +6,7 @@ use std::process::Command;
 async fn test_vscode_tool_loading_scenario() -> Result<()> {
     // First, ensure we have a release build (VS Code uses this)
     let build_output = Command::new("cargo")
-        .args(&["build", "--release"])
+        .args(["build", "--release"])
         .current_dir(".")
         .output()?;
 
@@ -18,7 +18,7 @@ async fn test_vscode_tool_loading_scenario() -> Result<()> {
 
     // Test the exact command VS Code runs
     let server_output = Command::new("./target/release/ahma_mcp")
-        .args(&["--server", "--tools-dir", "tools"])
+        .args(["--server", "--tools-dir", "tools"])
         .current_dir(".") // Same as VS Code's workspaceFolder
         .env("RUST_LOG", "info")
         .output()?;
@@ -47,7 +47,7 @@ async fn test_vscode_tool_loading_scenario() -> Result<()> {
 async fn test_vscode_dev_tool_loading_scenario() -> Result<()> {
     // Test the exact dev command VS Code might run
     let server_output = Command::new("cargo")
-        .args(&[
+        .args([
             "run",
             "--release",
             "--bin",
