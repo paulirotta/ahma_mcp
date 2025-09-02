@@ -136,7 +136,19 @@ impl Adapter {
         match result {
             Ok(output) => {
                 if output.exit_code == 0 {
-                    Ok(output.stdout)
+                    // For synchronous tools, return both stdout and stderr for completeness
+                    // Many tools (like cargo) write informational output to stderr
+                    let result_content = if output.stdout.is_empty() && !output.stderr.is_empty() {
+                        // If stdout is empty but stderr has content, return stderr (e.g., cargo check)
+                        output.stderr
+                    } else if !output.stdout.is_empty() && !output.stderr.is_empty() {
+                        // If both have content, combine them
+                        format!("{}\n{}", output.stdout, output.stderr)
+                    } else {
+                        // Otherwise, return stdout (which could be empty)
+                        output.stdout
+                    };
+                    Ok(result_content)
                 } else {
                     Err(McpError::internal_error(
                         "command_failed",

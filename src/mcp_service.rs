@@ -341,12 +341,17 @@ impl ServerHandler for AhmaMcpService {
             let arguments: Option<Map<String, serde_json::Value>> = params.arguments;
 
             // Modify arguments to include subcommand as first positional argument
+            // But only if subcommand is different from the base command to avoid duplication
             let mut modified_args = arguments.unwrap_or_default();
             if let Some(sub) = subcommand {
-                modified_args.insert(
-                    "_subcommand".to_string(),
-                    serde_json::Value::String(sub.to_string()),
-                );
+                // Only add subcommand if it's different from the base command
+                // This prevents duplication like "ls ls" when tool is "ls_ls"
+                if sub != base_command {
+                    modified_args.insert(
+                        "_subcommand".to_string(),
+                        serde_json::Value::String(sub.to_string()),
+                    );
+                }
             }
 
             if is_synchronous {
