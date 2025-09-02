@@ -2,9 +2,7 @@
 
 _Create agents from command line tools with a simple JSON, then complete your work faster with true concurrent tool-use agentic AI workflows._
 
-<p style="float: right; margin-left: 20px; margin-top: 24px;">
-  <img src="assets/ahma.png" alt="Ahma MCP logo" width="320" />
-</p>
+<img src="./assets/ahma.png" height="65" align="right" alt="Ahma MCP Logo"/>
 
 [![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/rust.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/rust.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
