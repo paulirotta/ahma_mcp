@@ -292,7 +292,7 @@ impl ServerHandler for AhmaMcpService {
                     })
                     .collect();
 
-                // Create summary
+                // Create summary with timing information
                 let active_count = active_ops.len();
                 let completed_count = completed_ops.len();
                 let total_count = active_count + completed_count;
@@ -311,6 +311,45 @@ impl ServerHandler for AhmaMcpService {
                 };
 
                 contents.push(Content::text(summary));
+
+                // Add concurrency efficiency analysis
+                if !completed_ops.is_empty() {
+                    let mut total_execution_time = 0.0;
+                    let mut total_wait_time = 0.0;
+                    let mut operations_with_waits = 0;
+                    
+                    for op in &completed_ops {
+                        if let Some(end_time) = op.end_time {
+                            if let Ok(execution_duration) = end_time.duration_since(op.start_time) {
+                                total_execution_time += execution_duration.as_secs_f64();
+                                
+                                if let Some(first_wait_time) = op.first_wait_time {
+                                    if let Ok(wait_duration) = first_wait_time.duration_since(op.start_time) {
+                                        total_wait_time += wait_duration.as_secs_f64();
+                                        operations_with_waits += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    if total_execution_time > 0.0 {
+                        let efficiency_analysis = if operations_with_waits > 0 {
+                            let avg_wait_ratio = (total_wait_time / total_execution_time) * 100.0;
+                            if avg_wait_ratio < 10.0 {
+                                format!("✓ Good concurrency efficiency: {:.1}% of execution time spent waiting", avg_wait_ratio)
+                            } else if avg_wait_ratio < 50.0 {
+                                format!("⚠ Moderate concurrency efficiency: {:.1}% of execution time spent waiting", avg_wait_ratio)
+                            } else {
+                                format!("⚠ Low concurrency efficiency: {:.1}% of execution time spent waiting. Consider using status tool instead of frequent waits.", avg_wait_ratio)
+                            }
+                        } else {
+                            format!("✓ Excellent concurrency: No blocking waits detected")
+                        };
+                        
+                        contents.push(Content::text(format!("\nConcurrency Analysis:\n{}", efficiency_analysis)));
+                    }
+                }
 
                 // Add active operations details
                 if !active_ops.is_empty() {
@@ -463,12 +502,44 @@ impl ServerHandler for AhmaMcpService {
                         }
                     }
                     Err(_) => {
+                        // Check for common issues that cause timeouts
+                        let mut error_message = format!(
+                            "Wait operation timed out after {:.2}s. Some operations may still be running in the background.",
+                            timeout_seconds
+                        );
+
+                        // Check for cargo lock files that might be causing hangs
+                        let mut remediation_steps = Vec::new();
+                        
+                        if let Ok(entries) = std::fs::read_dir("target") {
+                            for entry in entries.flatten() {
+                                if let Some(name) = entry.file_name().to_str() {
+                                    if name.contains(".cargo-lock") {
+                                        remediation_steps.push(format!(
+                                            "• Remove stale lock file: rm target/{}",
+                                            name
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+
+                        let has_remediation = !remediation_steps.is_empty();
+                        
+                        if has_remediation {
+                            error_message.push_str("\n\nPotential remediation steps:");
+                            for step in remediation_steps {
+                                error_message.push_str(&format!("\n{}", step));
+                            }
+                            error_message.push_str("\n• Try running the operations again after removing stale lock files");
+                        }
+
                         return Err(McpError::internal_error(
-                            format!(
-                                "Wait operation timed out after {:.2}s. Some operations may still be running in the background.",
-                                timeout_seconds
-                            ),
-                            Some(serde_json::json!({"timeout_seconds": timeout_seconds}))
+                            error_message,
+                            Some(serde_json::json!({
+                                "timeout_seconds": timeout_seconds,
+                                "remediation_available": has_remediation
+                            }))
                         ));
                     }
                 }

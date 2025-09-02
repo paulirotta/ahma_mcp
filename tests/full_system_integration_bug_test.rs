@@ -6,7 +6,7 @@ mod full_system_integration_bug_test {
     use ahma_mcp::mcp_service::AhmaMcpService;
     use ahma_mcp::operation_monitor::{MonitorConfig, OperationMonitor};
     use ahma_mcp::shell_pool::{ShellPoolConfig, ShellPoolManager};
-    
+
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
     use tokio::time::sleep;
@@ -27,15 +27,6 @@ mod full_system_integration_bug_test {
         #[allow(dead_code)]
         fn get_notifications(&self) -> Vec<ProgressUpdate> {
             self.notifications.lock().unwrap().clone()
-        }
-
-        fn count_by_operation_id(&self, operation_id: &str) -> usize {
-            self.notifications
-                .lock()
-                .unwrap()
-                .iter()
-                .filter(|update| update.operation_id() == operation_id)
-                .count()
         }
 
         fn count_completed_notifications(&self, operation_id: &str) -> usize {
@@ -79,21 +70,35 @@ mod full_system_integration_bug_test {
         let shell_pool_config = ShellPoolConfig::default();
         let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
         shell_pool_manager.clone().start_background_tasks();
-        let adapter = Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager).unwrap());
+        let adapter =
+            Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager).unwrap());
         let configs = Arc::new(load_tool_configs(&std::path::PathBuf::from("tools")).unwrap());
-        let _service = AhmaMcpService::new(adapter.clone(), operation_monitor.clone(), configs).await.unwrap();
+        let _service = AhmaMcpService::new(adapter.clone(), operation_monitor.clone(), configs)
+            .await
+            .unwrap();
         let tracking_callback = Arc::new(TrackingCallback::new());
         println!("✅ Full system initialized");
 
         // Start an operation
-        let operation_id = adapter.execute_async_in_dir(
-            "cargo", "version", None, "/Users/paul/github/ahma_mcp", Some(30)
-        ).await;
+        let operation_id = adapter
+            .execute_async_in_dir(
+                "cargo",
+                "version",
+                None,
+                "/Users/paul/github/ahma_mcp",
+                Some(30),
+            )
+            .await;
         println!("🚀 Started operation: {}", operation_id);
 
         // Wait for the operation to appear in the completion history
-        for _ in 0..50 { // 10-second timeout
-            if !operation_monitor.get_completed_operations().await.is_empty() {
+        for _ in 0..50 {
+            // 10-second timeout
+            if !operation_monitor
+                .get_completed_operations()
+                .await
+                .is_empty()
+            {
                 println!("✅ Operation completed and is in history.");
                 break;
             }
@@ -106,7 +111,11 @@ mod full_system_integration_bug_test {
         for iteration in 1..=10 {
             let completed_ops = operation_monitor.get_completed_operations().await;
             if !completed_ops.is_empty() {
-                println!("📊 Iteration {}: Found {} completed operations in history", iteration, completed_ops.len());
+                println!(
+                    "📊 Iteration {}: Found {} completed operations in history",
+                    iteration,
+                    completed_ops.len()
+                );
                 for op in completed_ops {
                     // A real notification system would check if a notification has already been sent.
                     if notified_operations.insert(op.id.clone()) {
@@ -123,12 +132,20 @@ mod full_system_integration_bug_test {
         }
 
         // --- Analysis ---
-        let completed_notifications = tracking_callback.count_completed_notifications(&operation_id);
+        let completed_notifications =
+            tracking_callback.count_completed_notifications(&operation_id);
         println!("📈 Notification analysis for operation {}:", operation_id);
-        println!("   Total 'Completed' notifications sent: {}", completed_notifications);
+        println!(
+            "   Total 'Completed' notifications sent: {}",
+            completed_notifications
+        );
 
         // There should be exactly one "Completed" notification for the operation.
-        assert_eq!(completed_notifications, 1, "BUG: Expected exactly 1 completed notification, but got {}. The notification logic is flawed.", completed_notifications);
+        assert_eq!(
+            completed_notifications, 1,
+            "BUG: Expected exactly 1 completed notification, but got {}. The notification logic is flawed.",
+            completed_notifications
+        );
 
         println!("✅ Full system integration test passed - operation was notified exactly once.");
     }
@@ -144,33 +161,59 @@ mod full_system_integration_bug_test {
         let shell_pool_config = ShellPoolConfig::default();
         let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
         shell_pool_manager.clone().start_background_tasks();
-        let adapter = Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager).unwrap());
+        let adapter =
+            Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager).unwrap());
 
         // Start multiple operations
         let op_ids = vec![
-            adapter.execute_async_in_dir("cargo", "version", None, "/Users/paul/github/ahma_mcp", Some(30)).await,
-            adapter.execute_async_in_dir("cargo", "--version", None, "/Users/paul/github/ahma_mcp", Some(30)).await,
+            adapter
+                .execute_async_in_dir(
+                    "cargo",
+                    "version",
+                    None,
+                    "/Users/paul/github/ahma_mcp",
+                    Some(30),
+                )
+                .await,
+            adapter
+                .execute_async_in_dir(
+                    "cargo",
+                    "--version",
+                    None,
+                    "/Users/paul/github/ahma_mcp",
+                    Some(30),
+                )
+                .await,
         ];
         println!("🚀 Started operations: {:?}", op_ids);
 
         // Wait for all operations to complete
-        for _ in 0..50 { // 10-second timeout
+        for _ in 0..50 {
+            // 10-second timeout
             if operation_monitor.get_completed_operations().await.len() >= op_ids.len() {
                 println!("✅ All operations completed.");
                 break;
             }
             sleep(Duration::from_millis(200)).await;
         }
-        assert_eq!(operation_monitor.get_completed_operations().await.len(), op_ids.len(), "Not all operations completed in time.");
+        assert_eq!(
+            operation_monitor.get_completed_operations().await.len(),
+            op_ids.len(),
+            "Not all operations completed in time."
+        );
 
         // Simulate notification loop and track notifications
         let mut all_notified_operations = std::collections::HashSet::new();
         for iteration in 1..=6 {
             let completed_ops = operation_monitor.get_completed_operations().await;
-            println!("📊 Iteration {}: Found {} operations in history", iteration, completed_ops.len());
+            println!(
+                "📊 Iteration {}: Found {} operations in history",
+                iteration,
+                completed_ops.len()
+            );
             for op in completed_ops {
                 if all_notified_operations.insert(op.id.clone()) {
-                     println!("   - Sending notification for new operation {}", op.id);
+                    println!("   - Sending notification for new operation {}", op.id);
                 }
             }
             sleep(Duration::from_millis(500)).await;
@@ -183,9 +226,17 @@ mod full_system_integration_bug_test {
             println!("   - Operation {}: Notified? {}", op_id, was_notified);
             assert!(was_notified, "BUG: Operation {} was never notified!", op_id);
         }
-        
-        assert_eq!(all_notified_operations.len(), op_ids.len(), "BUG: The number of unique notified operations ({}) does not match the number of started operations ({}).", all_notified_operations.len(), op_ids.len());
 
-        println!("✅ Multiple operations integration test passed - each operation was notified exactly once.");
+        assert_eq!(
+            all_notified_operations.len(),
+            op_ids.len(),
+            "BUG: The number of unique notified operations ({}) does not match the number of started operations ({}).",
+            all_notified_operations.len(),
+            op_ids.len()
+        );
+
+        println!(
+            "✅ Multiple operations integration test passed - each operation was notified exactly once."
+        );
     }
 }

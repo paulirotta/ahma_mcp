@@ -44,6 +44,12 @@ pub struct Operation {
     pub description: String,
     pub state: OperationStatus,
     pub result: Option<Value>,
+    /// When the operation was created
+    pub start_time: std::time::SystemTime,
+    /// When the operation completed (None if still running)
+    pub end_time: Option<std::time::SystemTime>,
+    /// When wait_for_operation was first called for this operation (None if never waited for)
+    pub first_wait_time: Option<std::time::SystemTime>,
 }
 
 impl Operation {
@@ -55,6 +61,9 @@ impl Operation {
             description,
             state: OperationStatus::Pending,
             result,
+            start_time: std::time::SystemTime::now(),
+            end_time: None,
+            first_wait_time: None,
         }
     }
 }
@@ -131,6 +140,11 @@ impl OperationMonitor {
             );
             op.state = status;
             op.result = result;
+
+            // Set end time when operation reaches terminal state
+            if status.is_terminal() {
+                op.end_time = Some(std::time::SystemTime::now());
+            }
         }
 
         // If the operation has reached a terminal state, move it from the active map
@@ -153,6 +167,16 @@ impl OperationMonitor {
         let timeout = Duration::from_secs(300); // 5 minute timeout to prevent indefinite waiting
         let start = std::time::Instant::now();
 
+        // Record that someone is waiting for this operation (for metrics)
+        {
+            let mut ops = self.operations.write().await;
+            if let Some(op) = ops.get_mut(operation_id) {
+                if op.first_wait_time.is_none() {
+                    op.first_wait_time = Some(std::time::SystemTime::now());
+                }
+            }
+        }
+
         // First, do an initial check to see if operation exists at all
         let exists_in_active = {
             let ops = self.operations.read().await;
@@ -166,7 +190,10 @@ impl OperationMonitor {
 
         // If operation doesn't exist anywhere, return None immediately
         if !exists_in_active && !exists_in_history {
-            tracing::warn!("Operation {} not found in active operations or completion history", operation_id);
+            tracing::warn!(
+                "Operation {} not found in active operations or completion history",
+                operation_id
+            );
             return None;
         }
 
@@ -261,7 +288,7 @@ mod tests {
     async fn test_wait_for_nonexistent_operation() {
         let monitor = OperationMonitor::new(MonitorConfig::with_timeout(Duration::from_secs(5)));
 
-        // Use a timeout to ensure the test completes quickly 
+        // Use a timeout to ensure the test completes quickly
         let wait_result = tokio::time::timeout(
             Duration::from_millis(200),
             monitor.wait_for_operation("nonexistent-id"),
@@ -271,10 +298,15 @@ mod tests {
         // Should complete quickly and return None for nonexistent operation
         match wait_result {
             Ok(result) => {
-                assert!(result.is_none(), "Should return None for nonexistent operation");
+                assert!(
+                    result.is_none(),
+                    "Should return None for nonexistent operation"
+                );
             }
             Err(_) => {
-                panic!("wait_for_operation should return quickly for nonexistent operation, not timeout");
+                panic!(
+                    "wait_for_operation should return quickly for nonexistent operation, not timeout"
+                );
             }
         }
     }

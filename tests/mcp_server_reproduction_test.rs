@@ -68,21 +68,34 @@ mod mcp_server_reproduction_test {
             println!("\n--- Completion History Access {} ---", iteration);
 
             let completed_ops = operation_monitor.get_completed_operations().await;
-            
+
             // NEW BEHAVIOR: Operations remain in persistent history
-            assert_eq!(completed_ops.len(), 2, "Both operations should persist in completion_history");
-            
+            assert_eq!(
+                completed_ops.len(),
+                2,
+                "Both operations should persist in completion_history"
+            );
+
             // Verify specific operations are present
             let ids: Vec<&str> = completed_ops.iter().map(|op| op.id.as_str()).collect();
-            assert!(ids.contains(&op1_id), "op_test_1 should be in completion history");
-            assert!(ids.contains(&op2_id), "op_test_2 should be in completion history");
-            
-            println!("✅ Iteration {}: Found expected 2 operations in completion history", iteration);
-            
+            assert!(
+                ids.contains(&op1_id),
+                "op_test_1 should be in completion history"
+            );
+            assert!(
+                ids.contains(&op2_id),
+                "op_test_2 should be in completion history"
+            );
+
+            println!(
+                "✅ Iteration {}: Found expected 2 operations in completion history",
+                iteration
+            );
+
             for op in &completed_ops {
                 println!("  - Operation {}: {:?}", op.id, op.state);
             }
-            
+
             // Short sleep to simulate notification timing
             sleep(Duration::from_millis(100)).await;
         }
