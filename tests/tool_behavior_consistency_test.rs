@@ -74,7 +74,10 @@ async fn test_ls_tool_command_structure() -> Result<()> {
     let result = client.call_tool(call_param).await?;
 
     // The issue: ls command should work, not fail with "No such file or directory"
-    assert!(!result.content.is_empty(), "ls_default should return results");
+    assert!(
+        !result.content.is_empty(),
+        "ls_default should return results"
+    );
 
     let content_text = result
         .content

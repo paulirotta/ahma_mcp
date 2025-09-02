@@ -179,7 +179,51 @@ impl Adapter {
         working_directory: &str,
         timeout: Option<u64>,
     ) -> String {
-        let op_id = generate_operation_id();
+        self.execute_async_in_dir_with_callback(
+            tool_name,
+            command,
+            args,
+            working_directory,
+            timeout,
+            None,
+        )
+        .await
+    }
+
+    /// Asynchronously starts a command with callback support for notifications
+    pub async fn execute_async_in_dir_with_callback(
+        &self,
+        tool_name: &str,
+        command: &str,
+        args: Option<serde_json::Map<String, Value>>,
+        working_directory: &str,
+        timeout: Option<u64>,
+        callback: Option<Box<dyn crate::callback_system::CallbackSender>>,
+    ) -> String {
+        self.execute_async_in_dir_with_callback_and_id(
+            None,
+            tool_name,
+            command,
+            args,
+            working_directory,
+            timeout,
+            callback,
+        )
+        .await
+    }
+
+    /// Asynchronously starts a command with optional pre-defined operation ID
+    pub async fn execute_async_in_dir_with_callback_and_id(
+        &self,
+        operation_id: Option<String>,
+        tool_name: &str,
+        command: &str,
+        args: Option<serde_json::Map<String, Value>>,
+        working_directory: &str,
+        timeout: Option<u64>,
+        callback: Option<Box<dyn crate::callback_system::CallbackSender>>,
+    ) -> String {
+        let op_id = operation_id.unwrap_or_else(generate_operation_id);
         let op_id_clone = op_id.clone();
         let wd = working_directory.to_string();
 
@@ -194,6 +238,7 @@ impl Adapter {
         let monitor = self.monitor.clone();
         let shell_pool = self.shell_pool.clone();
         let command = command.to_string();
+        let wd_clone = wd.clone();
 
         let args_vec = args
             .map(|map| {
@@ -232,7 +277,7 @@ impl Adapter {
                 .update_status(&op_id, OperationStatus::InProgress, None)
                 .await;
 
-            let mut shell = match shell_pool.get_shell(&wd).await {
+            let mut shell = match shell_pool.get_shell(&wd_clone).await {
                 Some(s) => s,
                 None => {
                     let error_message = "Failed to get shell from pool".to_string();
@@ -240,9 +285,25 @@ impl Adapter {
                         .update_status(
                             &op_id,
                             OperationStatus::Failed,
-                            Some(Value::String(error_message)),
+                            Some(Value::String(error_message.clone())),
                         )
                         .await;
+
+                    // Send failure notification if callback is provided
+                    if let Some(callback) = &callback {
+                        let failure_update = crate::callback_system::ProgressUpdate::FinalResult {
+                            operation_id: op_id.clone(),
+                            command: command.clone(),
+                            description: format!("Execute {} in {}", command, wd_clone),
+                            working_directory: wd_clone.clone(),
+                            success: false,
+                            duration_ms: 0,
+                            full_output: error_message,
+                        };
+                        if let Err(e) = callback.send_progress(failure_update).await {
+                            tracing::error!("Failed to send failure notification: {:?}", e);
+                        }
+                    }
                     return;
                 }
             };
@@ -250,14 +311,16 @@ impl Adapter {
             let shell_cmd = ShellCommand {
                 id: op_id.clone(),
                 command: full_command,
-                working_dir: wd,
+                working_dir: wd_clone.clone(),
                 timeout_ms: timeout.map_or(
                     shell_pool.config().command_timeout.as_millis() as u64,
                     |t| t * 1000,
                 ),
             };
 
+            let start_time = std::time::Instant::now();
             let result = shell.execute_command(shell_cmd).await;
+            let duration_ms = start_time.elapsed().as_millis() as u64;
             shell_pool.return_shell(shell).await;
 
             match result {
@@ -267,23 +330,65 @@ impl Adapter {
                         "stderr": output.stderr,
                         "exit_code": output.exit_code,
                     });
-                    let status = if output.exit_code == 0 {
+                    let success = output.exit_code == 0;
+                    let status = if success {
                         OperationStatus::Completed
                     } else {
                         OperationStatus::Failed
                     };
                     monitor
-                        .update_status(&op_id, status, Some(final_output))
+                        .update_status(&op_id, status, Some(final_output.clone()))
                         .await;
+
+                    // Send completion notification if callback is provided
+                    if let Some(callback) = &callback {
+                        let completion_update =
+                            crate::callback_system::ProgressUpdate::FinalResult {
+                                operation_id: op_id.clone(),
+                                command: command.clone(),
+                                description: format!("Execute {} in {}", command, wd_clone),
+                                working_directory: wd_clone.clone(),
+                                success,
+                                duration_ms,
+                                full_output: format!(
+                                    "Exit code: {}\nStdout:\n{}\nStderr:\n{}",
+                                    output.exit_code, output.stdout, output.stderr
+                                ),
+                            };
+                        if let Err(e) = callback.send_progress(completion_update).await {
+                            tracing::error!("Failed to send completion notification: {:?}", e);
+                        } else {
+                            tracing::info!("Sent completion notification for operation: {}", op_id);
+                        }
+                    }
                 }
                 Err(e) => {
+                    let error_message = e.to_string();
                     monitor
                         .update_status(
                             &op_id,
                             OperationStatus::Failed,
-                            Some(Value::String(e.to_string())),
+                            Some(Value::String(error_message.clone())),
                         )
                         .await;
+
+                    // Send failure notification if callback is provided
+                    if let Some(callback) = &callback {
+                        let failure_update = crate::callback_system::ProgressUpdate::FinalResult {
+                            operation_id: op_id.clone(),
+                            command: command.clone(),
+                            description: format!("Execute {} in {}", command, wd_clone),
+                            working_directory: wd_clone.clone(),
+                            success: false,
+                            duration_ms,
+                            full_output: format!("Error: {}", error_message),
+                        };
+                        if let Err(e) = callback.send_progress(failure_update).await {
+                            tracing::error!("Failed to send failure notification: {:?}", e);
+                        } else {
+                            tracing::info!("Sent failure notification for operation: {}", op_id);
+                        }
+                    }
                 }
             }
         });

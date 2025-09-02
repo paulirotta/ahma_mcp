@@ -36,6 +36,7 @@ use rmcp::{
 };
 use serde_json::Map;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use tracing;
 
@@ -379,14 +380,28 @@ impl ServerHandler for AhmaMcpService {
             } else {
                 // Asynchronous execution (default behavior)
                 // Two-stage async pattern: immediate response + background notifications
-                let operation_id = self
+
+                // Generate operation ID and create MCP callback for notifications
+                static OPERATION_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+                let op_id = OPERATION_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+                let operation_id = format!("op_{}", op_id);
+
+                let peer = context.peer.clone();
+                let callback = Some(crate::mcp_callback::mcp_callback(
+                    peer.clone(),
+                    operation_id.clone(),
+                ));
+
+                let _returned_op_id = self
                     .adapter
-                    .execute_async_in_dir(
+                    .execute_async_in_dir_with_callback_and_id(
+                        Some(operation_id.clone()),
                         tool_name,
                         &config.command, // Use base command only
                         Some(modified_args),
                         &working_directory,
                         timeout,
+                        callback,
                     )
                     .await;
 
