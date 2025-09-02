@@ -67,14 +67,14 @@ async fn test_ls_tool_command_structure() -> Result<()> {
     let client = new_client(Some("tools")).await?;
 
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("ls_ls"),
+        name: Cow::Borrowed("ls_default"),
         arguments: None, // ls without arguments should list current directory
     };
 
     let result = client.call_tool(call_param).await?;
 
     // The issue: ls command should work, not fail with "No such file or directory"
-    assert!(!result.content.is_empty(), "ls_ls should return results");
+    assert!(!result.content.is_empty(), "ls_default should return results");
 
     let content_text = result
         .content

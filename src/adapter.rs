@@ -102,6 +102,9 @@ impl Adapter {
                     if k == "_subcommand" {
                         // Handle subcommand as positional argument (first)
                         positional_args.insert(0, v.as_str().unwrap_or("").to_string());
+                    } else if k == "path" && command == "ls" {
+                        // Special case: path parameter for ls command should be positional, not a flag
+                        positional_args.push(v.as_str().unwrap_or("").to_string());
                     } else {
                         // Handle regular arguments as flags
                         flag_args.push(format!("--{}={}", k, v.as_str().unwrap_or("")));
@@ -201,6 +204,9 @@ impl Adapter {
                     if k == "_subcommand" {
                         // Handle subcommand as positional argument (first)
                         positional_args.insert(0, v.as_str().unwrap_or("").to_string());
+                    } else if k == "path" && command == "ls" {
+                        // Special case: path parameter for ls command should be positional, not a flag
+                        positional_args.push(v.as_str().unwrap_or("").to_string());
                     } else {
                         // Handle regular arguments as flags
                         flag_args.push(format!("--{}={}", k, v.as_str().unwrap_or("")));

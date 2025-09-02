@@ -346,7 +346,8 @@ impl ServerHandler for AhmaMcpService {
             if let Some(sub) = subcommand {
                 // Only add subcommand if it's different from the base command
                 // This prevents duplication like "ls ls" when tool is "ls_ls"
-                if sub != base_command {
+                // Also skip generic subcommands like "default" that shouldn't be passed to the command
+                if sub != base_command && sub != "default" {
                     modified_args.insert(
                         "_subcommand".to_string(),
                         serde_json::Value::String(sub.to_string()),

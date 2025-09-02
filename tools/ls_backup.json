@@ -9,7 +9,7 @@
     },
     "subcommand": [
         {
-            "name": "default",
+            "name": "list",
             "description": "List directory contents and file information",
             "synchronous": true,
             "options": [
