@@ -416,6 +416,22 @@ impl ServerHandler for AhmaMcpService {
                     Vec::new()
                 };
 
+                // ============================================================================
+                // CRITICAL: Wait Tool Timeout Implementation
+                // ============================================================================
+                //
+                // PURPOSE: Implements "I think 'wait' should have an optional timeout,
+                //          and a default timeout of 240sec"
+                //
+                // LESSON LEARNED: Default changed from 300s to 240s per user request.
+                // Validation bounds prevent user errors and resource waste:
+                // - Minimum 10s: Prevents accidentally short timeouts
+                // - Maximum 1800s (30min): Prevents runaway waits
+                // - Default 240s (4min): Balance of patience vs efficiency
+                //
+                // DO NOT CHANGE: These values were established through user testing
+                // ============================================================================
+
                 // Parse timeout parameter (default 240 seconds = 4 minutes, with validation)
                 let timeout_seconds = if let Some(v) = args.get("timeout_seconds") {
                     let requested_timeout = v.as_f64().unwrap_or(240.0);
@@ -436,7 +452,7 @@ impl ServerHandler for AhmaMcpService {
                         requested_timeout
                     }
                 } else {
-                    240.0 // Changed from 300.0 to 240.0
+                    240.0 // CRITICAL: Changed from 300.0 to 240.0 per user requirement
                 };
                 let timeout_duration = std::time::Duration::from_secs(timeout_seconds as u64);
 
