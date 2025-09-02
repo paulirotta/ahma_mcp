@@ -15,7 +15,7 @@ chrono = { version = "0.4.41", features = ["serde"] }
 clap = { version = "4.5.46", features = ["derive"] }
 directories = "6.0.0"
 regex = "1.11.2"
-rmcp = { version = "0.6.0", features = ["server", "client", "macros", "transport-io", "transport-child-process", "elicitation", "schemars"] }
+rmcp = { version = "0.6.1", features = ["server", "client", "macros", "transport-io", "transport-child-process", "elicitation", "schemars"] }
 serde = "1.0.219"
 serde_json = "1.0.143"
 thiserror = "2.0.16"
@@ -27,7 +27,7 @@ tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 
 [dev-dependencies]
-rmcp = { version = "0.6.0", features = ["server", "client", "macros", "transport-io", "transport-child-process", "elicitation", "schemars"] }
+rmcp = { version = "0.6.1", features = ["server", "client", "macros", "transport-io", "transport-child-process", "elicitation", "schemars"] }
 tempfile = "3.21.0"
 futures = "0.3"
 
