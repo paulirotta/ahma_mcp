@@ -52,8 +52,18 @@ use serde_json::Value;
 /// Represents the structure of the guidance JSON file.
 #[derive(serde::Deserialize, Debug, Clone)]
 pub struct GuidanceConfig {
-    _general_guidance: HashMap<String, String>,
-    tool_specific_guidance: HashMap<String, HashMap<String, String>>,
+    pub guidance_blocks: HashMap<String, String>,
+    #[serde(default)]
+    pub templates: HashMap<String, serde_json::Value>,
+    #[serde(default)]
+    pub legacy_guidance: Option<LegacyGuidanceConfig>,
+}
+
+/// Legacy guidance config structure for backward compatibility
+#[derive(serde::Deserialize, Debug, Clone)]
+pub struct LegacyGuidanceConfig {
+    pub general_guidance: HashMap<String, String>,
+    pub tool_specific_guidance: HashMap<String, HashMap<String, String>>,
 }
 
 /// `AhmaMcpService` is the server handler for the MCP service.
@@ -162,12 +172,23 @@ impl ServerHandler for AhmaMcpService {
                         let mut description = subcommand.description.clone();
                         if let Some(guidance_key) = &subcommand.guidance_key {
                             if let Some(guidance_config) = self.guidance.as_ref() {
-                                if let Some(guidance_text) = guidance_config
-                                    .tool_specific_guidance
-                                    .get(&config.name)
-                                    .and_then(|g| g.get(guidance_key))
+                                // First try the new guidance_blocks structure
+                                if let Some(guidance_text) =
+                                    guidance_config.guidance_blocks.get(guidance_key)
                                 {
                                     description = format!("{}\n\n{}", guidance_text, description);
+                                }
+                                // Fallback to legacy structure for backward compatibility
+                                else if let Some(legacy_config) = &guidance_config.legacy_guidance
+                                {
+                                    if let Some(guidance_text) = legacy_config
+                                        .tool_specific_guidance
+                                        .get(&config.name)
+                                        .and_then(|g| g.get(guidance_key))
+                                    {
+                                        description =
+                                            format!("{}\n\n{}", guidance_text, description);
+                                    }
                                 }
                             }
                         }

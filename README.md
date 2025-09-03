@@ -15,9 +15,19 @@ _Create agents from your command line tools with one JSON file, then watch them 
 
 ## Overview
 
-Ahma MCP turns any command‑line tool into an MCP-aware agent that lets the AI continue planning and reasoning while commands run. It implements the Model Context Protocol (MCP) and uses JSON tool definitions (see [tools/](./tools/) for examples).
+Ahma MCP turns any command‑line tool into an MCP-aware agent that lets the AI continue planning and reasoning while commands run. It implements the Model Context Protocol (MCP) and uses the **MCP Tool Definition Format (MTDF)** - JSON tool definitions that enable zero-compilation tool integration (see [tools/](./tools/) for examples).
 
-By default, tool calls are asynchronous: the AI receives a push/callback when the operation completes so the AI is not blocked waiting for results. Tools that return quickly can be marked "synchronous: true" in the tool JSON.
+By default, tool calls are asynchronous: the AI receives a push/callback when the operation completes so the AI is not blocked waiting for results. Tools that return quickly can be marked `"synchronous": true` in the tool JSON configuration.
+
+### MTDF: MCP Tool Definition Format
+
+MTDF is ahma_mcp's JSON-based tool configuration format that enables dynamic tool loading without code changes:
+
+- **Dynamic Tool Registration**: Add new tools by creating JSON files in `tools/` directory
+- **Zero-Compilation Integration**: No Rust code changes needed to add CLI tools
+- **Centralized Guidance System**: Reusable AI guidance blocks via `tool_guidance.json`
+- **Schema Validation**: Built-in MtdfValidator ensures configuration correctness
+- **Synchronous/Asynchronous Control**: Fine-grained execution mode control per subcommand
 
 **Example: Claude Sonnet 4 never stops, simultaneously using tools and thinking**
 
@@ -43,10 +53,12 @@ By default, tool calls are asynchronous: the AI receives a push/callback when th
 
 Ahma MCP is the next-generation successor to `async_cargo_mcp`, providing:
 
-- **Universal CLI Adaptation**: Works with any command-line tool, not just Cargo
-- **Async-First Architecture**: Operations execute asynchronously by default with automatic result push back to the AI, reducint AI blocking downtime and enabling concurrent workflows
-- **Multi-Tool Support**: Single server handles multiple CLI tools simultaneously, one JSON file per tool
-- **AI-Optimized Guidance**: Tool descriptions you can edit in JSON include explicit suggestion to AI to encourage productive concurrent work
+- **Universal CLI Adaptation**: Works with any command-line tool via MTDF JSON configurations
+- **Async-First Architecture**: Operations execute asynchronously by default with automatic result push back to the AI, reducing AI blocking downtime and enabling concurrent workflows
+- **Multi-Tool Support**: Single server handles multiple CLI tools simultaneously, one MTDF JSON file per tool
+- **Centralized Guidance System**: Reusable guidance blocks in `tool_guidance.json` ensure consistent AI instructions across tools with `guidance_key` references
+- **MtdfValidator**: Built-in schema validation ensures MTDF configuration correctness and prevents common errors
+- **AI-Optimized Guidance**: Tool descriptions include explicit suggestions encouraging productive concurrent work
 
 _Note: `ahma_mcp` is early stage and undergoing rapid development. It is mostly tested in VS Code. Issue reports and pull requests welcome._
 
@@ -68,12 +80,12 @@ Then copy the contents into your VS Code MCP configuration file (per-OS location
 ## Key Features
 
 - **Async-First Execution**: Operations execute asynchronously by default with automatic MCP progress notifications when complete, eliminating AI blocking and enabling concurrent workflows.
-- **Dynamic Tool Adaptation**: Automatically creates an MCP tool schema by inspecting a command-line tool's help documentation. No pre-configuration needed.
+- **Dynamic Tool Adaptation**: Uses MTDF (MCP Tool Definition Format) to automatically create MCP tool schemas from JSON configurations. Zero-compilation tool integration.
 - **High-Performance Shell Pool**: Pre-warmed shell processes provide 10x faster command startup (5-20ms vs 50-200ms), optimizing both synchronous and asynchronous operations.
-- **AI Productivity Optimization**: Tool descriptions include explicit guidance instructing AI clients to continue productive work rather than waiting for results.
-- **Selective Synchronous Override**: Fast operations (status, version) can be marked synchronous in JSON configuration for immediate results without notifications.
-- **Unified Tool Interface**: Exposes a single, powerful MCP tool for each adapted command-line application, simplifying the AI's interaction model.
-- **Automatic Result Push**: Eliminates the need for polling or waiting - results are automatically pushed to AI clients when operations complete.
+- **AI Productivity Optimization**: Centralized guidance system with reusable blocks instructs AI clients to continue productive work rather than waiting for results.
+- **Selective Synchronous Override**: Fast operations (status, version, check) can be marked `"synchronous": true` in JSON configuration for immediate results without notifications.
+- **Unified Tool Interface**: Exposes MCP tools for each CLI application subcommand, simplifying the AI's interaction model with consistent naming patterns.
+- **Automatic Result Push**: Eliminates the need for polling or waiting - results are automatically pushed to AI clients when operations complete via MCP notifications.
 - **Customizable Tool Hints**: Provides intelligent suggestions to AI clients about productive parallel work they can perform while operations execute.
 
 ## Advanced Features
@@ -126,17 +138,19 @@ Enhanced for seamless development experience:
 
 ### Tool Configuration
 
-Ahma MCP comes with several pre-configured tools in the `tools/` directory:
+Ahma MCP uses MTDF (MCP Tool Definition Format) JSON files in the `tools/` directory to define CLI tool integrations:
 
 - `git.json` - Git version control (22 subcommands)
-- `cargo.json` - Rust package manager (11 subcommands)
-- `ls.json` - File listing
-- `cat.json` - File viewing
-- `grep.json` - Text searching
-- `sed.json` - Stream editing
-- `echo.json` - Text output
+- `cargo.json` - Rust package manager with guidance_key references (11+ subcommands)
+- `gh.json` - GitHub CLI with synchronous cache, run, and workflow operations
+- `python3.json` - Python interpreter and module execution
+- `ls.json` - File listing with positional arguments
+- `pwd.json` - Current directory (synchronous)
+- `wait.json` - Operation coordination (references coordination_tool guidance)
 
-To add your own tools, create a `tools/<tool_name>.json` file.
+Each MTDF file can reference guidance blocks from `tool_guidance.json` using `guidance_key` fields, eliminating guidance duplication and ensuring consistency.
+
+To add your own tools, create a `tools/<tool_name>.json` file following the MTDF specification.
 
 ### Testing the Installation
 
@@ -291,13 +305,49 @@ Ahma MCP uses a pre-warmed shell pool to minimize command startup latency. See [
 
 ## Creating Custom Tool Configurations
 
-Want to add your own CLI tools? Create a JSON file in the repo's tools/ directory. See examples and templates here: [tools/](./tools/) (GitHub: https://github.com/paulirotta/ahma_mcp/tree/main/tools)
+Want to add your own CLI tools? Create an MTDF (MCP Tool Definition Format) JSON file in the `tools/` directory:
 
-There is a [`docs/tool-schema-guide.md`](docs/tool-schema-guide.md)
+### Quick Start Template
 
-- Complete documentation
-- **Example Tools**: See real tool configurations in `tools/` (e.g., `cargo.json`, `python3.json`, `wait.json`)
-- **IDE Support**: Schema enables autocompletion in development environments
+```json
+{
+    "name": "your_tool",
+    "description": "Brief description of the tool",
+    "command": "your_command",
+    "enabled": true,
+    "subcommand": [
+        {
+            "name": "subcommand_name",
+            "guidance_key": "sync_behavior",
+            "synchronous": true,
+            "description": "What this subcommand does",
+            "options": [
+                {
+                    "name": "option_name", 
+                    "type": "string",
+                    "description": "Option description"
+                }
+            ]
+        }
+    ]
+}
+```
+
+### Guidance System
+
+Use the centralized guidance system to maintain consistent AI instructions:
+
+- Reference guidance blocks: `"guidance_key": "async_behavior"` for long-running operations
+- Reference guidance blocks: `"guidance_key": "sync_behavior"` for fast operations  
+- Reference guidance blocks: `"guidance_key": "coordination_tool"` for wait/status tools
+- Custom guidance: Define reusable blocks in `tool_guidance.json`
+
+### Documentation and Examples
+
+- **Complete MTDF Specification**: [`docs/tool-schema-guide.md`](docs/tool-schema-guide.md)
+- **Real Examples**: See live tool configurations in [`tools/`](./tools/) (e.g., `cargo.json`, `python3.json`, `gh.json`)
+- **Schema Validation**: Built-in MtdfValidator provides helpful error messages and suggestions
+- **IDE Support**: JSON schema enables autocompletion in development environments
 
 ## License
 

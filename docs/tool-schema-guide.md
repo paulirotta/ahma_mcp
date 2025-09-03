@@ -1,50 +1,121 @@
-# Tool Schema Guide
+# MCP Tool Definition Format (MTDF) Guide
 
-This document provides guidance for developers creating new tools for the AHMA MCP server, focusing on JSON schema validation and error handling.
+This document provides comprehensive guidance for creating tool definitions using the **MCP Tool Definition Format (MTDF)**. MTDF enables dynamic tool integration in Ahma MCP without requiring code changes or server recompilation.
 
 ## Overview
 
-The AHMA MCP server uses JSON schemas to validate tool configurations and provide precise error messages when tool definitions don't comply with expected formats. This ensures robust tool loading and clear developer feedback.
+Ahma MCP uses the **MCP Tool Definition Format (MTDF)** for defining command-line tools. MTDF is a JSON-based schema that describes:
 
-## Schema Structure
+- Tool commands and subcommands
+- Parameter definitions and validation
+- Synchronous vs. asynchronous behavior
+- AI guidance integration
+- Path security and validation
 
-Each tool must define a JSON schema that describes its configuration format. The schema is used for:
+The **MtdfValidator** ensures all tool definitions comply with the MTDF specification and provides detailed error reporting when issues are detected.
 
-1. **Validation**: Ensuring tool configurations are correctly formatted
-2. **Error reporting**: Providing precise feedback about validation failures
-3. **Documentation**: Auto-generating tool parameter documentation
-4. **IDE support**: Enabling autocompletion and validation in development environments
+## MTDF Structure
 
-## Tool Definition Format
+Each tool is defined in a single JSON file in the `tools/` directory. The MTDF schema provides:
 
-### Basic Structure
+1. **Dynamic Schema Generation**: Tool schemas are generated at runtime from MTDF definitions
+2. **Validation**: The MtdfValidator ensures all tool configurations comply with MTDF specification
+3. **Error Reporting**: Detailed validation errors with suggestions for fixes
+4. **Guidance Integration**: Centralized guidance system via `tool_guidance.json`
+5. **Security**: Path validation and format enforcement
+
+## MTDF Tool Definition Format
+
+### Basic MTDF Structure
 
 ```json
 {
   "name": "tool_name",
-  "description": "Brief description of what the tool does",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "parameter_name": {
-        "type": "string",
-        "description": "Description of the parameter",
-        "default": "optional_default_value"
-      }
-    },
-    "required": ["parameter_name"],
-    "additionalProperties": false
+  "description": "Brief description of the tool family",
+  "command": "base_command",
+  "enabled": true,
+  "timeout_seconds": 300,
+  "hints": {
+    "default": "Guidance for AI while tool executes"
+  },
+  "subcommand": [
+    {
+      "name": "subcommand_name",
+      "description": "Description of this specific subcommand",
+      "synchronous": false,
+      "guidance_key": "async_behavior",
+      "options": [
+        {
+          "name": "parameter_name",
+          "type": "string",
+          "description": "Parameter description",
+          "format": "path",
+          "required": true
+        }
+      ],
+      "positional_args": [
+        {
+          "name": "arg_name",
+          "type": "string",
+          "description": "Positional argument description"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### MTDF Validation Rules
+
+1. **Required Fields**: Every tool must have `name`, `description`, `command`, and `subcommand`
+2. **Subcommand Structure**: Each subcommand must have `name` and `description`
+3. **Parameter Types**: Supported types are `string`, `integer`, `boolean`, `array`
+4. **Path Security**: Parameters representing file paths must include `"format": "path"`
+5. **Guidance Integration**: Use `guidance_key` to reference centralized guidance blocks
+6. **Synchronous Marking**: Fast operations should include `"synchronous": true`
+
+### Centralized Guidance System
+
+The MTDF integrates with a centralized guidance system via `tool_guidance.json`:
+
+```json
+{
+  "guidance_blocks": {
+    "async_behavior": "**IMPORTANT:** This tool operates asynchronously...",
+    "sync_behavior": "This tool runs synchronously and returns results immediately.",
+    "blocking_warning": "**WARNING:** This is a blocking tool...",
+    "coordination_tool": "**WARNING:** This is a blocking coordination tool. Use ONLY for final project validation when no other productive work remains."
+  },
+  "templates": {
+    "async_full": "**IMPORTANT:** This tool operates asynchronously.
+1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.
+2. **Final Result:** Result pushed automatically via MCP notification when complete.
+
+**Your Instructions:**
+- **DO NOT** wait for the final result.
+- **DO** continue with other tasks that don't depend on this operation.
+- You **MUST** process the future result notification to know if operation succeeded."
   }
 }
 ```
 
-### Schema Validation Rules
+**Usage in MTDF:**
 
-1. **Required Fields**: Every tool must have `name`, `description`, and `inputSchema`
-2. **Parameter Types**: Supported types are `string`, `number`, `integer`, `boolean`, `array`, `object`
-3. **Descriptions**: All parameters must have meaningful descriptions
-4. **Defaults**: Optional parameters should specify default values when appropriate
-5. **Additional Properties**: Set to `false` to prevent unexpected parameters
+```json
+{
+  "name": "subcommand_name", 
+  "guidance_key": "async_behavior",
+  "description": "Brief description without embedded guidance text"
+}
+```
+
+**Benefits:**
+- **Consistency**: All tools using `async_behavior` get identical guidance
+- **Maintainability**: Update guidance in one place affects all tools
+- **Validation Efficiency**: Tools with `guidance_key` skip embedded guidance validation
+- **Backward Compatibility**: Tools without `guidance_key` continue to work with embedded guidance
+
+The server automatically prepends the guidance block to the description when generating the final tool schema.
 
 ### Advanced Schema Features
 
@@ -85,12 +156,12 @@ Each tool must define a JSON schema that describes its configuration format. The
     "advanced_options": {
       "type": "object",
       "properties": {
-        "timeout": {"type": "number"}
+        "timeout": { "type": "number" }
       }
     }
   },
   "if": {
-    "properties": {"mode": {"const": "advanced"}}
+    "properties": { "mode": { "const": "advanced" } }
   },
   "then": {
     "required": ["advanced_options"]
@@ -122,14 +193,17 @@ When a tool configuration fails validation, the system provides structured error
 ### Common Validation Errors
 
 1. **Missing Required Parameters**
+
    - Message: "Missing required parameter '{name}'"
    - Solution: Add the required parameter to your tool configuration
 
 2. **Invalid Parameter Types**
+
    - Message: "Expected {type}, received {actual_type}"
    - Solution: Convert the parameter to the expected type
 
 3. **Invalid Enum Values**
+
    - Message: "Value must be one of: {allowed_values}"
    - Solution: Use one of the specified enum values
 
@@ -194,6 +268,7 @@ When the system reports validation errors:
 ### 4. Best Practices
 
 #### Schema Design
+
 - Use descriptive parameter names
 - Provide comprehensive descriptions
 - Set appropriate constraints (min/max values, patterns)
@@ -201,12 +276,14 @@ When the system reports validation errors:
 - Use enums for limited option sets
 
 #### Error Prevention
+
 - Test with various input combinations
 - Validate edge cases
 - Document parameter interactions
 - Use clear, actionable error messages
 
 #### Performance
+
 - Keep schemas simple and flat when possible
 - Avoid deeply nested objects unless necessary
 - Use appropriate data types (integer vs number)
@@ -229,7 +306,7 @@ When the system reports validation errors:
       },
       "features": {
         "type": "array",
-        "items": {"type": "string"},
+        "items": { "type": "string" },
         "description": "List of features to enable",
         "default": []
       },
@@ -260,13 +337,13 @@ When the system reports validation errors:
       },
       "args": {
         "type": "array",
-        "items": {"type": "string"},
+        "items": { "type": "string" },
         "description": "Command-line arguments",
         "default": []
       },
       "env_vars": {
         "type": "object",
-        "additionalProperties": {"type": "string"},
+        "additionalProperties": { "type": "string" },
         "description": "Environment variables to set",
         "default": {}
       }
@@ -282,11 +359,13 @@ When the system reports validation errors:
 ### Common Issues
 
 1. **Schema Not Loading**
+
    - Check file syntax with JSON validator
    - Verify file is in correct `/tools/` directory
    - Ensure proper file permissions
 
 2. **Validation Always Failing**
+
    - Double-check required vs optional parameters
    - Verify data types match schema
    - Check for typos in parameter names
@@ -299,11 +378,13 @@ When the system reports validation errors:
 ### Debugging Tools
 
 1. **Schema Validation Testing**
+
    ```bash
    cargo run -- --validate-schema tools/my_tool.json
    ```
 
 2. **Verbose Error Reporting**
+
    ```bash
    cargo run -- --debug-validation
    ```

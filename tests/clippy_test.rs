@@ -18,13 +18,11 @@ async fn test_run_clippy() -> Result<()> {
 
     let result = client.call_tool(call_param).await?;
 
-    // The result should indicate that the operation started.
-    assert!(
-        result
-            .content
-            .iter()
-            .any(|c| c.as_text().is_some_and(|t| t.text.contains("started")))
-    );
+    // The result should be immediate since clippy is synchronous
+    assert!(result.content.iter().any(|c| {
+        c.as_text()
+            .is_some_and(|t| t.text.contains("Finished") || t.text.contains("clippy"))
+    }));
 
     client.cancel().await?;
     Ok(())
@@ -44,13 +42,11 @@ async fn test_run_clippy_with_tests() -> Result<()> {
 
     let result = client.call_tool(call_param).await?;
 
-    // The result should indicate that the operation started.
-    assert!(
-        result
-            .content
-            .iter()
-            .any(|c| c.as_text().is_some_and(|t| t.text.contains("started")))
-    );
+    // The result should be immediate since clippy is synchronous
+    assert!(result.content.iter().any(|c| {
+        c.as_text()
+            .is_some_and(|t| t.text.contains("Finished") || t.text.contains("clippy"))
+    }));
 
     client.cancel().await?;
     Ok(())

@@ -1,24 +1,41 @@
 {
-    "general_guidance": {
-        "default": "Select a tool to begin. Use 'status' to monitor ongoing operations.",
-        "completion": "Task completed. Review the output and plan your next action.",
-        "error": "An error occurred. Check the error message for details and use 'status' to check other operations."
+    "guidance_blocks": {
+        "async_behavior": "**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- DO NOT wait for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.",
+        "sync_behavior": "This tool runs synchronously and returns results immediately.",
+        "blocking_warning": "**WARNING:** This is a blocking tool and makes you inefficient. **ONLY** use this if you have NO other tasks and cannot proceed until completion. It is **ALWAYS** better to perform other work and let results be pushed to you.",
+        "coordination_tool": "**WARNING:** This is a blocking coordination tool. Use ONLY for final project validation when no other productive work remains."
     },
-    "tool_specific_guidance": {
-        "cargo_build": {
-            "start": "Cargo build started. You can monitor progress with 'status' or work on other tasks.",
-            "completion": "Build successful. Artifacts are located in the target directory.",
-            "error": "Build failed. Review the compilation errors to identify the issue."
+    "templates": {
+        "working_progress": "While {tool} operations run, consider reviewing {suggestions}",
+        "standard_hints": {
+            "build": "Building in progress - review compilation output for warnings, plan deployment steps, or work on documentation.",
+            "test": "Tests running - analyze test patterns, consider additional test cases, or review code coverage strategies.",
+            "doc": "Documentation building - consider reviewing doc comments, planning API improvements, or working on examples.",
+            "format": "Code formatting in progress - plan refactoring opportunities or review code patterns while waiting."
+        }
+    },
+    "legacy_guidance": {
+        "general_guidance": {
+            "default": "Select a tool to begin. Use 'status' to monitor ongoing operations.",
+            "completion": "Task completed. Review the output and plan your next action.",
+            "error": "An error occurred. Check the error message for details and use 'status' to check other operations."
         },
-        "cargo_test": {
-            "start": "Running tests...",
-            "completion": "All tests passed.",
-            "error": "Some tests failed. Review the test output to debug."
-        },
-        "wait": {
-            "start": "Waiting for operations to complete. This is a blocking call.",
-            "completion": "Wait complete. All specified operations have finished.",
-            "error": "Wait timed out. Some operations may still be running."
+        "tool_specific_guidance": {
+            "cargo_build": {
+                "start": "Cargo build started. You can monitor progress with 'status' or work on other tasks.",
+                "completion": "Build successful. Artifacts are located in the target directory.",
+                "error": "Build failed. Review the compilation errors to identify the issue."
+            },
+            "cargo_test": {
+                "start": "Running tests...",
+                "completion": "All tests passed.",
+                "error": "Some tests failed. Review the test output to debug."
+            },
+            "wait": {
+                "start": "Waiting for operations to complete. This is a blocking call.",
+                "completion": "Wait complete. All specified operations have finished.",
+                "error": "Wait timed out. Some operations may still be running."
+            }
         }
     }
 }

@@ -14,7 +14,8 @@
     "subcommand": [
         {
             "name": "build",
-            "description": "Compile the current package.\n\n**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- DO NOT wait for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.",
+            "guidance_key": "async_behavior",
+            "description": "Compile the current package.",
             "options": [
                 {
                     "name": "future-incompat-report",
@@ -225,7 +226,8 @@
         },
         {
             "name": "test",
-            "description": "Run the test suite.\n\n**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- DO NOT wait for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.",
+            "guidance_key": "async_behavior",
+            "description": "Run the test suite.",
             "options": [
                 {
                     "name": "testname",
@@ -446,7 +448,8 @@
         {
             "name": "check",
             "synchronous": true,
-            "description": "Check code without building. This tool runs synchronously and returns results immediately.",
+            "guidance_key": "sync_behavior",
+            "description": "Check code without building.",
             "options": [
                 {
                     "name": "release",
@@ -462,7 +465,8 @@
         },
         {
             "name": "clippy",
-            "description": "Enhanced linting and code quality checks.\n\n**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- DO NOT wait for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.",
+            "synchronous": true,
+            "description": "Enhanced linting and code quality checks - returns immediately for incremental checks.",
             "options": [
                 {
                     "name": "fix",
@@ -479,7 +483,8 @@
         {
             "name": "fmt",
             "synchronous": true,
-            "description": "Format code using rustfmt. This tool runs synchronously and returns results immediately.",
+            "guidance_key": "sync_behavior",
+            "description": "Format code using rustfmt.",
             "options": [
                 {
                     "name": "check",
