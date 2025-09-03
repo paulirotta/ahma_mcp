@@ -11,18 +11,20 @@
             "name": "default",
             "description": "List directory contents and file information - returns immediately.",
             "synchronous": true,
+            "positional_args": [
+                {
+                    "name": "path",
+                    "type": "string",
+                    "format": "path",
+                    "description": "The directory or file path to list. Defaults to current directory if not specified."
+                }
+            ],
             "options": [
                 {
                     "name": "working_directory",
                     "type": "string",
                     "description": "Working directory for command execution",
                     "format": "path"
-                },
-                {
-                    "name": "path",
-                    "type": "string",
-                    "format": "path",
-                    "description": "The directory or file path to list. Defaults to current directory if not specified."
                 },
                 {
                     "name": "all",

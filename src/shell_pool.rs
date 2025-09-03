@@ -309,9 +309,15 @@ execute_command() {
     id=$(echo "$cmd_json" | jq -r '.id')
     working_dir=$(echo "$cmd_json" | jq -r '.working_dir')
     
-    # Safely read command and arguments into a bash array
+    # Safely read command and arguments into a bash array (bash 3.2+ compatible)
     # This is the critical security change to prevent command injection
-    mapfile -t cmd_array < <(echo "$cmd_json" | jq -r '.command[]')
+    temp_cmd_file=$(mktemp)
+    echo "$cmd_json" | jq -r '.command[]' > "$temp_cmd_file"
+    cmd_array=()
+    while IFS= read -r cmd_part; do
+        cmd_array[${#cmd_array[@]}]="$cmd_part"
+    done < "$temp_cmd_file"
+    rm -f "$temp_cmd_file"
 
     cd "$working_dir" 2>/dev/null || {
         echo '{"id":"'"$id"'","exit_code":1,"stdout":"","stderr":"Failed to change directory","duration_ms":0}'
