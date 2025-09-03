@@ -323,7 +323,7 @@ Want to add your own CLI tools? Create an MTDF (MCP Tool Definition Format) JSON
             "description": "What this subcommand does",
             "options": [
                 {
-                    "name": "option_name", 
+                    "name": "option_name",
                     "type": "string",
                     "description": "Option description"
                 }
@@ -338,7 +338,7 @@ Want to add your own CLI tools? Create an MTDF (MCP Tool Definition Format) JSON
 Use the centralized guidance system to maintain consistent AI instructions:
 
 - Reference guidance blocks: `"guidance_key": "async_behavior"` for long-running operations
-- Reference guidance blocks: `"guidance_key": "sync_behavior"` for fast operations  
+- Reference guidance blocks: `"guidance_key": "sync_behavior"` for fast operations
 - Reference guidance blocks: `"guidance_key": "coordination_tool"` for wait/status tools
 - Custom guidance: Define reusable blocks in `tool_guidance.json`
 
