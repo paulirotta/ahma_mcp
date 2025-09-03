@@ -4,17 +4,18 @@
 mod common;
 
 use common::test_client::new_client;
+use futures::future::join_all;
 use serde_json::Value;
 
 /// This test reproduces the exact VSCode GitHub Copilot Chat failure
 /// and ensures our fix prevents it from happening again.
 #[tokio::test]
 async fn test_array_parameters_must_have_items_property() -> anyhow::Result<()> {
-    // Create a test client with the real tool configurations
+    // Create a test client with the real tool configurations (assume new_client is now async)
     let client = new_client(Some("tools")).await?;
     let tools = client.list_all_tools().await?;
 
-    println!(
+    eprintln!(
         "Testing {} tools for proper array schema generation",
         tools.len()
     );
@@ -25,7 +26,7 @@ async fn test_array_parameters_must_have_items_property() -> anyhow::Result<()> 
         .find(|tool| tool.name == "cargo_audit")
         .expect("Should have cargo_audit tool - this was the tool causing VSCode GitHub Copilot Chat to fail");
 
-    println!("Found cargo_audit tool, checking its array parameters...");
+    eprintln!("Found cargo_audit tool, checking its array parameters...");
 
     // The schema should be valid and not cause VSCode failures
     let schema = cargo_audit_tool.input_schema.as_ref();
@@ -35,59 +36,73 @@ async fn test_array_parameters_must_have_items_property() -> anyhow::Result<()> 
         .as_object()
         .expect("Properties must be an object");
 
-    // These specific array parameters were causing the VSCode failure
-    let mut validated_arrays = 0;
+    // Collect array parameters for potential parallel validation
+    let array_params: Vec<_> = properties
+        .iter()
+        .filter_map(|(param_name, param_schema)| {
+            param_schema.as_object().and_then(|param_obj| {
+                if param_obj.get("type") == Some(&Value::String("array".to_string())) {
+                    Some((param_name.clone(), param_obj.clone()))
+                } else {
+                    None
+                }
+            })
+        })
+        .collect();
 
-    for (param_name, param_schema) in properties {
-        if let Some(param_obj) = param_schema.as_object() {
-            if param_obj.get("type") == Some(&Value::String("array".to_string())) {
-                validated_arrays += 1;
-                println!("Validating array parameter: {}", param_name);
+    // Validate array parameters (use join_all for concurrency if validation can be parallelized)
+    let validation_futures: Vec<_> = array_params
+        .into_iter()
+        .map(|(param_name, param_obj)| async move {
+            // CRITICAL FIX: Array parameters MUST have 'items' property
+            assert!(
+                param_obj.contains_key("items"),
+                "CRITICAL: Array parameter '{}' MUST have 'items' property! \
+                 This is what caused VSCode GitHub Copilot Chat to fail with: \
+                 'tool parameters array type must have items'",
+                param_name
+            );
 
-                // CRITICAL FIX: Array parameters MUST have 'items' property
-                // This is what was missing and causing the catastrophic failure
-                assert!(
-                    param_obj.contains_key("items"),
-                    "CRITICAL: Array parameter '{}' MUST have 'items' property! \
-                     This is what caused VSCode GitHub Copilot Chat to fail with: \
-                     'tool parameters array type must have items'",
-                    param_name
-                );
+            let items = param_obj
+                .get("items")
+                .expect("Items must be present")
+                .as_object()
+                .expect("Items must be an object");
 
-                let items = param_obj
-                    .get("items")
-                    .expect("Items must be present")
-                    .as_object()
-                    .expect("Items must be an object");
+            assert!(
+                items.contains_key("type"),
+                "Array items must have a type for parameter '{}'",
+                param_name
+            );
 
-                assert!(
-                    items.contains_key("type"),
-                    "Array items must have a type for parameter '{}'",
-                    param_name
-                );
+            // For command-line tools, array items should typically be strings
+            assert_eq!(
+                items.get("type").unwrap(),
+                &Value::String("string".to_string()),
+                "Array items should be strings for CLI parameter '{}'",
+                param_name
+            );
 
-                // For command-line tools, array items should typically be strings
-                assert_eq!(
-                    items.get("type").unwrap(),
-                    &Value::String("string".to_string()),
-                    "Array items should be strings for CLI parameter '{}'",
-                    param_name
-                );
+            eprintln!(
+                "✅ Array parameter '{}' has valid items property",
+                param_name
+            );
+            Ok(())
+        })
+        .collect();
 
-                println!(
-                    "✅ Array parameter '{}' has valid items property",
-                    param_name
-                );
-            }
-        }
+    // Await all validations concurrently
+    let results: Vec<Result<(), anyhow::Error>> = join_all(validation_futures).await;
+    let validated_arrays = results.len();
+    for result in results {
+        result?; // Propagate any errors
     }
-
     assert!(
         validated_arrays >= 3,
         "Should have validated at least 3 array parameters in cargo_audit (ignore, target-arch, target-os)"
     );
 
-    println!(
+    eprintln!(
         "✅ All {} array parameters have proper 'items' properties!",
         validated_arrays
     );

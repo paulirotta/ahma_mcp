@@ -2,18 +2,20 @@
 mod common;
 
 use common::test_client::new_client;
-use rmcp::ServiceError;
-use rmcp::model::{CallToolRequestParam, ErrorCode};
+use rmcp::{
+    ServiceError,
+    model::{CallToolRequestParam, ErrorCode},
+};
 use serde_json::json;
-use std::fs::{self, File};
-use std::io::Write;
 use tempfile::tempdir;
+use tokio::fs::{self, File};
+use tokio::io::AsyncWriteExt;
 
 #[tokio::test]
 async fn test_path_validation_success() {
     let dir = tempdir().unwrap();
     let tools_dir = dir.path().join("tools");
-    fs::create_dir(&tools_dir).unwrap();
+    fs::create_dir(&tools_dir).await.unwrap();
 
     let ls_config = r#"{
         "name": "ls",
@@ -30,8 +32,8 @@ async fn test_path_validation_success() {
             }]
         }]
     }"#;
-    let mut file = File::create(tools_dir.join("ls.json")).unwrap();
-    file.write_all(ls_config.as_bytes()).unwrap();
+    let mut file = File::create(tools_dir.join("ls.json")).await.unwrap();
+    file.write_all(ls_config.as_bytes()).await.unwrap();
 
     let client = new_client(Some(tools_dir.to_str().unwrap())).await.unwrap();
 
@@ -49,7 +51,7 @@ async fn test_path_validation_success() {
 async fn test_path_validation_failure_absolute() {
     let dir = tempdir().unwrap();
     let tools_dir = dir.path().join("tools");
-    fs::create_dir(&tools_dir).unwrap();
+    fs::create_dir(&tools_dir).await.unwrap();
 
     let ls_config = r#"{
         "name": "ls",
@@ -66,8 +68,8 @@ async fn test_path_validation_failure_absolute() {
             }]
         }]
     }"#;
-    let mut file = File::create(tools_dir.join("ls.json")).unwrap();
-    file.write_all(ls_config.as_bytes()).unwrap();
+    let mut file = File::create(tools_dir.join("ls.json")).await.unwrap();
+    file.write_all(ls_config.as_bytes()).await.unwrap();
 
     let client = new_client(Some(tools_dir.to_str().unwrap())).await.unwrap();
 
@@ -97,7 +99,7 @@ async fn test_path_validation_failure_absolute() {
 async fn test_path_validation_failure_relative() {
     let dir = tempdir().unwrap();
     let tools_dir = dir.path().join("tools");
-    fs::create_dir(&tools_dir).unwrap();
+    fs::create_dir(&tools_dir).await.unwrap();
 
     let ls_config = r#"{
         "name": "ls",
@@ -114,8 +116,8 @@ async fn test_path_validation_failure_relative() {
             }]
         }]
     }"#;
-    let mut file = File::create(tools_dir.join("ls.json")).unwrap();
-    file.write_all(ls_config.as_bytes()).unwrap();
+    let mut file = File::create(tools_dir.join("ls.json")).await.unwrap();
+    file.write_all(ls_config.as_bytes()).await.unwrap();
 
     let client = new_client(Some(tools_dir.to_str().unwrap())).await.unwrap();
 

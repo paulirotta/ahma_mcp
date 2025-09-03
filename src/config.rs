@@ -59,6 +59,8 @@ pub struct ToolConfig {
     pub input_schema: Option<Value>,
     /// Default timeout for operations in seconds
     pub timeout_seconds: Option<u64>,
+    /// Default synchronous behavior for all subcommands (can be overridden per subcommand)
+    pub synchronous: Option<bool>,
     #[serde(default)]
     pub hints: ToolHints,
     #[serde(default = "default_enabled")]
