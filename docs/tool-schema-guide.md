@@ -103,13 +103,14 @@ The MTDF integrates with a centralized guidance system via `tool_guidance.json`:
 
 ```json
 {
-  "name": "subcommand_name", 
+  "name": "subcommand_name",
   "guidance_key": "async_behavior",
   "description": "Brief description without embedded guidance text"
 }
 ```
 
 **Benefits:**
+
 - **Consistency**: All tools using `async_behavior` get identical guidance
 - **Maintainability**: Update guidance in one place affects all tools
 - **Validation Efficiency**: Tools with `guidance_key` skip embedded guidance validation
@@ -169,7 +170,17 @@ The server automatically prepends the guidance block to the description when gen
 }
 ```
 
-## Error Handling
+## Error Handling and MtdfValidator
+
+### MtdfValidator Features
+
+The **MtdfValidator** (renamed from SchemaValidator) provides comprehensive MTDF validation:
+
+- **Syntax Validation**: Ensures JSON structure compliance with MTDF specification
+- **Semantic Validation**: Checks logical consistency (e.g., path parameters must have `"format": "path"`)
+- **Guidance Validation**: Verifies async/sync operations have appropriate guidance
+- **Security Validation**: Enforces path security requirements and prevents injection vulnerabilities
+- **Performance Optimization**: Tools with `guidance_key` skip embedded guidance validation for faster loading
 
 ### Validation Error Format
 
