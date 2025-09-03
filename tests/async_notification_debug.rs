@@ -32,9 +32,14 @@ mod async_notification_test {
 
         // Load configs and create service (not used in this test)
         let configs = Arc::new(load_tool_configs(&std::path::PathBuf::from("tools")).unwrap());
-        let _service = AhmaMcpService::new(adapter.clone(), operation_monitor.clone(), configs)
-            .await
-            .unwrap();
+        let _service = AhmaMcpService::new(
+            adapter.clone(),
+            operation_monitor.clone(),
+            configs,
+            Arc::new(None),
+        )
+        .await
+        .unwrap();
 
         println!("Starting a quick async operation...");
 

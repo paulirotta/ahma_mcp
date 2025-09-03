@@ -37,6 +37,16 @@ You are a highly capable and autonomous agent, and you can definitely solve this
 
 # Rust Language Guidelines
 
+- **Plan Upkeep:** This `agent-plan.md` document is the single source of truth for this task. I will keep it updated with the current status, next steps, and any new findings.
+- **Verification Checkpoint:** Before pausing or handing off for a checkpoint, I will always run the following sequence using `ahma_mcp` MCP service to ensure the codebase is in a clean and working state:
+  1. `cargo check`
+  1. `cargo fmt`
+  1. `cargo nextest run`
+  1. `cargo clippy --fix --allow-dirty`
+  1. `cargo clippy --fix --tests --allow-dirty`
+  1. `cargo doc --no-deps`
+  1. `wait` # if necessary because you are about to stop at a checkpoint.
+
 ## Test-Driven Development (TDD)
 
 - **ALWAYS follow strict TDD principles**: Write tests first to define expected behavior, implement code to make tests pass, then refactor while ensuring tests still pass

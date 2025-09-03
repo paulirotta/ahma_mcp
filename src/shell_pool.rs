@@ -308,9 +308,10 @@ execute_command() {
     cmd_json="$1"
     id=$(echo "$cmd_json" | jq -r '.id')
     working_dir=$(echo "$cmd_json" | jq -r '.working_dir')
-    timeout_ms=$(echo "$cmd_json" | jq -r '.timeout_ms')
-    # Build command line joining args safely (shell-escaped)
-    cmd_line=$(echo "$cmd_json" | jq -r '.command | map(@sh) | join(" ")')
+    
+    # Safely read command and arguments into a bash array
+    # This is the critical security change to prevent command injection
+    mapfile -t cmd_array < <(echo "$cmd_json" | jq -r '.command[]')
 
     cd "$working_dir" 2>/dev/null || {
         echo '{"id":"'"$id"'","exit_code":1,"stdout":"","stderr":"Failed to change directory","duration_ms":0}'
@@ -321,8 +322,8 @@ execute_command() {
     temp_stdout=$(mktemp)
     temp_stderr=$(mktemp)
 
-    # Execute command via bash -c using safe assembled line
-    bash -c "$cmd_line" >"$temp_stdout" 2>"$temp_stderr"
+    # Execute command directly, with each part as a separate argument
+    "${cmd_array[@]}" >"$temp_stdout" 2>"$temp_stderr"
     exit_code=$?
     end_time=$(date +%s)
     duration=$(((end_time - start_time)*1000))

@@ -4,8 +4,7 @@
     "command": "ls",
     "enabled": true,
     "hints": {
-        "primary": "List directory contents and file information",
-        "usage": "Common options: -l (long format), -a (all files), -h (human readable)"
+        "default": "List directory contents and file information. Common options: -l (long format), -a (all files), -h (human readable). Use `ls -l` for detailed output and `ls -R` for recursive listing."
     },
     "subcommand": [
         {
@@ -16,7 +15,8 @@
                 {
                     "name": "working_directory",
                     "type": "string",
-                    "description": "Working directory for command execution"
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "path",
