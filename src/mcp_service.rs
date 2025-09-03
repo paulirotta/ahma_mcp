@@ -1065,6 +1065,15 @@ impl AhmaMcpService {
                 _ => "string", // Default to string for safety
             };
             option_schema.insert("type".to_string(), Value::String(param_type.to_string()));
+
+            // CRITICAL FIX: For array types, add required "items" property
+            // This prevents catastrophic MCP validation failures in VSCode GitHub Copilot Chat
+            if param_type == "array" {
+                let mut items_schema = Map::new();
+                items_schema.insert("type".to_string(), Value::String("string".to_string()));
+                option_schema.insert("items".to_string(), Value::Object(items_schema));
+            }
+
             option_schema.insert(
                 "description".to_string(),
                 Value::String(option.description.clone()),

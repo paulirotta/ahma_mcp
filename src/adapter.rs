@@ -538,7 +538,7 @@ impl Adapter {
         }
 
         // Special handling for `cargo nextest run`
-        if base_command == "cargo" && command_args.first().map_or(false, |s| s == "nextest") {
+        if base_command == "cargo" && command_args.first().is_some_and(|s| s == "nextest") {
             // Transform `cargo nextest ...` to `cargo-nextest run ...`
             let mut new_args = vec!["run".to_string()];
             new_args.extend(command_args.into_iter().skip(1));

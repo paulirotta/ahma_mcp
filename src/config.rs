@@ -106,7 +106,6 @@ fn default_enabled() -> bool {
 
 /// A collection of hints for AI clients using this tool.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(deny_unknown_fields)]
 pub struct ToolHints {
     /// Default hint for any operation with this tool
     pub default: Option<String>,

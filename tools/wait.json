@@ -5,8 +5,7 @@
     "enabled": true,
     "timeout_seconds": 240,
     "hints": {
-        "default": "Advanced operation coordination tool with timeout management and error remediation. **WARNING:** This is a blocking tool and makes you inefficient. **ONLY** use this if you have NO other tasks and cannot proceed until completion. It is **ALWAYS** better to perform other work and let results be pushed to you.",
-        "run": "wait (default 240s timeout), wait --timeout_seconds 120 (custom timeout), wait --tools cargo,npm (filter by tool)"
+        "default": "Advanced operation coordination tool with timeout management and error remediation. **WARNING:** This is a blocking tool and makes you inefficient. **ONLY** use this if you have NO other tasks and cannot proceed until completion. It is **ALWAYS** better to perform other work and let results be pushed to you."
     },
     "subcommand": [
         {

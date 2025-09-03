@@ -1,11 +1,11 @@
 {
-    "family": "gh",
+    "name": "gh",
+    "command": "gh",
     "description": "GitHub's official command-line tool.",
-    "subcommands": [
+    "subcommand": [
         {
             "name": "pr_close",
             "description": "Close a pull request.",
-            "command": "pr close",
             "synchronous": true,
             "options": [
                 {
