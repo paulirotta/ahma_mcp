@@ -6,6 +6,7 @@ mod common;
 use common::test_client::new_client;
 use serde_json::Value;
 use std::fs;
+use tempfile::tempdir;
 
 /// This test dumps the actual schemas to files for debugging VSCode failures
 #[tokio::test]
@@ -19,16 +20,18 @@ async fn test_dump_actual_schemas_for_debugging() -> anyhow::Result<()> {
         tools.len()
     );
 
-    // Create debug output directory
-    fs::create_dir_all("debug_schemas").unwrap_or(());
+    // Create debug output directory using tempdir to avoid side effects
+    let temp_dir = tempdir()?;
+    let debug_dir = temp_dir.path().join("debug_schemas");
+    fs::create_dir_all(&debug_dir)?;
 
     // Dump all tool schemas
     for tool in &tools {
         let schema_json = serde_json::to_string_pretty(tool.input_schema.as_ref())?;
-        let filename = format!("debug_schemas/{}_schema.json", tool.name);
+        let filename = debug_dir.join(format!("{}_schema.json", tool.name));
 
         fs::write(&filename, &schema_json)?;
-        println!("Wrote schema for '{}' to {}", tool.name, filename);
+        println!("Wrote schema for '{}' to {:?}", tool.name, filename);
 
         // Check for array parameters in this tool
         if let Some(properties) = tool.input_schema.get("properties") {
@@ -71,11 +74,9 @@ async fn test_dump_actual_schemas_for_debugging() -> anyhow::Result<()> {
     let schema_json = serde_json::to_string_pretty(cargo_audit_tool.input_schema.as_ref())?;
     println!("Complete schema:\n{}", schema_json);
 
-    // Write the specific problematic schema
-    fs::write(
-        "debug_schemas/PROBLEMATIC_cargo_audit_schema.json",
-        &schema_json,
-    )?;
+    // Write the specific problematic schema to temporary directory
+    let problematic_file = debug_dir.join("PROBLEMATIC_cargo_audit_schema.json");
+    fs::write(&problematic_file, &schema_json)?;
 
     client.cancel().await?;
     Ok(())
