@@ -23,23 +23,24 @@ By default, tool calls are asynchronous: the AI receives a push/callback when th
 
 > Now let me run the tests again using the MCP server:
 >
-> *Ran cargo_test ahma_mcp (MCP Server)*
+> _Ran cargo_test ahma_mcp (MCP Server)_
 >
 > While the tests run, let me continue with updating the product requirements document:
 >
-> *Read product-requirements.md*
+> _Read product-requirements.md_
 >
 > Let me add the JSON schema requirements to the product requirements:
 >
-> *product-requirements.md+21-6*
+> _product-requirements.md+21-6_
 >
 > Now let me check on the test results:
 >
-> *Ran status ahma_mcp (MCP Server)*
+> _Ran status ahma_mcp (MCP Server)_
 >
 > I can see the issue...
 
 ### Features
+
 Ahma MCP is the next-generation successor to `async_cargo_mcp`, providing:
 
 - **Universal CLI Adaptation**: Works with any command-line tool, not just Cargo
@@ -173,65 +174,32 @@ Create or edit your global MCP configuration file:
 - **Linux**: `~/.config/Code/User/mcp.json`
 - **Windows**: `%APPDATA%\Code\User\mcp.json`
 
-**Configuration content** (replace `/absolute/path/to/ahma_mcp`):
-
-```jsonc
+````jsonc
 {
-  "servers": {
-    "ahma_mcp": {
-      "type": "stdio",
-      "cwd": "/absolute/path/to/ahma_mcp",
-      "command": "/absolute/path/to/ahma_mcp/target/release/ahma_mcp",
-      "args": ["--tools-dir", "/absolute/path/to/ahma_mcp/tools"]
-    }
-  },
-  "inputs": []
-}
-```
-
-**Cross-platform examples:**
-
-**macOS/Linux:**
-
-```jsonc
-{
-  "servers": {
-    "ahma_mcp": {
-      "type": "stdio",
-      "cwd": "/home/username/projects/ahma_mcp",
-      "command": "/home/username/projects/ahma_mcp/target/release/ahma_mcp",
-      "args": ["--tools-dir", "/home/username/projects/ahma_mcp/tools"]
-    }
-  },
-  "inputs": []
-}
-```
-
-**Windows:**
-
-```jsonc
-{
-  "servers": {
-    "ahma_mcp": {
-      "type": "stdio",
-      "cwd": "C:\\Users\\username\\projects\\ahma_mcp",
-      "command": "C:\\Users\\username\\projects\\ahma_mcp\\target\\release\\ahma_mcp.exe",
-      "args": ["--tools-dir", "C:\\Users\\username\\projects\\ahma_mcp\\tools"]
-    }
-  },
-  "inputs": []
-}
-```
+    "servers": {
+        "ahma_mcp": {
+            "type": "stdio",
+            "cwd": "${workspaceFolder}",
+            "command": "target/release/ahma_mcp",
+            "args": [
+                "--server",
+                "--tools-dir",
+                "tools"
+            ],
+        }
+    },
+    "inputs": []
+}```
 
 ### Step 3: Restart VS Code
 
-After saving the `mcp.json` file, restart VS Code completely to activate the MCP server.
+After saving the `mcp.json` file, restart VS Code to activate the MCP server.
 
 ### Step 4: Verify Connection
 
 1. Open VS Code and start a chat with GitHub Copilot
 2. You should see "ahma_mcp" listed in the available MCP servers
-3. Test with a simple command like: "Use ahma_mcp to check git status"
+3. Test with a simple command like: "Use ahma_mcp to ls the working directory contents"
 
 ### Available Tools
 
@@ -334,3 +302,4 @@ There is a [`docs/tool-schema-guide.md`](docs/tool-schema-guide.md)
 ## License
 
 Licensed under either [Apache License 2.0](APACHE_LICENSE.txt) or [MIT License](MIT_LICENSE.txt).
+````
