@@ -7,6 +7,10 @@ use rmcp::model::CallToolRequestParam;
 use serde_json::Map;
 use std::borrow::Cow;
 
+// Assuming common::test_client::new_client can be optimized for speed,
+// e.g., by using in-memory setups or pre-initialized clients.
+// If new_client involves file I/O, replace std::fs with tokio::fs for async ops.
+
 #[tokio::test]
 async fn test_list_tools() -> Result<()> {
     let client = new_client(Some("tools")).await?;

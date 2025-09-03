@@ -144,6 +144,11 @@ impl MtdfValidator {
                 "number",
                 "Default timeout in seconds (default: 300)",
             ),
+            (
+                "synchronous",
+                "boolean",
+                "Default synchronous behavior for all subcommands (can be overridden per subcommand)",
+            ),
             ("hints", "object", "Context-aware hints for AI agents"),
             ("subcommand", "array", "Array of subcommand definitions"),
         ];

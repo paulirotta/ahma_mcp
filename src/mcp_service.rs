@@ -875,7 +875,9 @@ impl ServerHandler for AhmaMcpService {
             }
 
             // Determine if this operation should be synchronous
-            // Async by default, but can be overridden to sync per subcommand
+            // 1. If subcommand.synchronous is Some(value), use value
+            // 2. If subcommand.synchronous is None, inherit tool.synchronous
+            // 3. If tool.synchronous is None, default to false (async)
             let is_synchronous = subcommand_config
                 .and_then(|sc| {
                     tracing::info!(
@@ -885,6 +887,7 @@ impl ServerHandler for AhmaMcpService {
                     );
                     sc.synchronous
                 })
+                .or(config.synchronous)
                 .unwrap_or(false);
 
             // Determine timeout - subcommand timeout overrides tool timeout
