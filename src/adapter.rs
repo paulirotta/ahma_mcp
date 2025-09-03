@@ -42,10 +42,9 @@ use crate::{
     shell_pool::{ShellCommand, ShellPoolManager},
 };
 use anyhow::Result;
-use rmcp::ErrorData as McpError;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
-use std::collections::HashMap;
+use serde_json::{Map, Value, json};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::Mutex;
@@ -65,15 +64,17 @@ pub enum ExecutionMode {
 }
 
 /// Options for configuring asynchronous execution.
-pub struct AsyncExecOptions {
+pub struct AsyncExecOptions<'a> {
     /// Optional pre-defined operation ID to use; if None, a new one is generated.
     pub operation_id: Option<String>,
     /// Structured arguments for the command (positional and flags derived internally).
-    pub args: Option<serde_json::Map<String, Value>>,
+    pub args: Option<Map<String, serde_json::Value>>,
     /// Timeout in seconds for the command; falls back to shell pool default if None.
     pub timeout: Option<u64>,
     /// Optional callback to receive progress and final result notifications.
     pub callback: Option<Box<dyn crate::callback_system::CallbackSender>>,
+    /// Subcommand configuration for handling positional arguments and aliases.
+    pub subcommand_config: Option<&'a crate::config::SubcommandConfig>,
 }
 
 /// The main adapter that handles command execution.
@@ -112,60 +113,31 @@ impl Adapter {
     pub async fn execute_sync_in_dir(
         &self,
         command: &str,
-        args: Option<serde_json::Map<String, Value>>,
-        working_directory: &str,
-        timeout: Option<u64>,
-    ) -> Result<String, McpError> {
+        args: Option<Map<String, serde_json::Value>>,
+        working_dir: &str,
+        timeout_seconds: Option<u64>,
+        subcommand_config: Option<&crate::config::SubcommandConfig>,
+    ) -> Result<String, anyhow::Error> {
         let mut shell = self
             .shell_pool
-            .get_shell(working_directory)
+            .get_shell(working_dir)
             .await
-            .ok_or_else(|| McpError::internal_error("shell_unavailable", None))?;
+            .ok_or_else(|| anyhow::anyhow!("Failed to get shell from pool"))?;
 
-        let args_vec = args
-            .map(|map| {
-                let mut positional_args = Vec::new();
-                let mut flag_args = Vec::new();
-
-                for (k, v) in map.into_iter() {
-                    if k == "_subcommand" {
-                        // Handle subcommand as positional argument (first)
-                        positional_args.insert(0, v.as_str().unwrap_or("").to_string());
-                    } else if k == "path" && command == "ls" {
-                        // Special case: path parameter for ls command should be positional, not a flag
-                        positional_args.push(v.as_str().unwrap_or("").to_string());
-                    } else {
-                        // Handle regular arguments as flags
-                        match v {
-                            Value::Bool(true) => flag_args.push(format!("--{}", k)),
-                            Value::Bool(false) => {
-                                // Skip false boolean flags - they should not be included
-                            }
-                            _ => flag_args.push(format!("--{}={}", k, v.as_str().unwrap_or(""))),
-                        }
-                    }
-                }
-
-                // Combine positional args first, then flag args
-                positional_args
-                    .into_iter()
-                    .chain(flag_args.into_iter())
-                    .collect::<Vec<String>>()
-            })
-            .unwrap_or_default();
+        let (command_with_subcommand, args_vec) =
+            self.prepare_command_and_args(command, args.as_ref(), subcommand_config);
 
         let shell_cmd = ShellCommand {
             id: generate_operation_id(),
-            command: [command]
+            command: [command_with_subcommand]
                 .iter()
                 .map(ToString::to_string)
                 .chain(args_vec.into_iter())
                 .collect(),
-            working_dir: working_directory.to_string(),
-            timeout_ms: timeout.map_or(
-                self.shell_pool.config().command_timeout.as_millis() as u64,
-                |t| t * 1000,
-            ),
+            working_dir: working_dir.to_string(),
+            timeout_ms: timeout_seconds
+                .unwrap_or_else(|| self.shell_pool.config().command_timeout.as_millis() as u64)
+                * 1000,
         };
 
         let result = shell.execute_command(shell_cmd).await;
@@ -188,20 +160,15 @@ impl Adapter {
                     };
                     Ok(result_content)
                 } else {
-                    Err(McpError::internal_error(
-                        "command_failed",
-                        Some(json!({
-                            "error": output.stderr,
-                            "stdout": output.stdout,
-                            "exit_code": output.exit_code
-                        })),
+                    Err(anyhow::anyhow!(
+                        "Command failed with exit code {}: stderr: {}, stdout: {}",
+                        output.exit_code,
+                        output.stderr,
+                        output.stdout
                     ))
                 }
             }
-            Err(e) => Err(McpError::internal_error(
-                "command_failed",
-                Some(json!({"error": e.to_string()})),
-            )),
+            Err(e) => Err(anyhow::anyhow!("Command execution failed: {}", e)),
         }
     }
 
@@ -210,7 +177,7 @@ impl Adapter {
         &self,
         tool_name: &str,
         command: &str,
-        args: Option<serde_json::Map<String, Value>>,
+        args: Option<Map<String, serde_json::Value>>,
         working_directory: &str,
         timeout: Option<u64>,
     ) -> String {
@@ -223,6 +190,7 @@ impl Adapter {
                 args,
                 timeout,
                 callback: None,
+                subcommand_config: None,
             },
         )
         .await
@@ -233,7 +201,7 @@ impl Adapter {
         &self,
         tool_name: &str,
         command: &str,
-        args: Option<serde_json::Map<String, Value>>,
+        args: Option<Map<String, serde_json::Value>>,
         working_directory: &str,
         timeout: Option<u64>,
         callback: Option<Box<dyn crate::callback_system::CallbackSender>>,
@@ -247,29 +215,31 @@ impl Adapter {
                 args,
                 timeout,
                 callback,
+                subcommand_config: None,
             },
         )
         .await
     }
 
     /// Asynchronously starts a command using structured options to avoid long arg lists
-    pub async fn execute_async_in_dir_with_options(
+    pub async fn execute_async_in_dir_with_options<'a>(
         &self,
         tool_name: &str,
         command: &str,
-        working_directory: &str,
-        options: AsyncExecOptions,
+        working_dir: &str,
+        options: AsyncExecOptions<'a>,
     ) -> String {
         let AsyncExecOptions {
             operation_id,
             args,
             timeout,
             callback,
+            subcommand_config,
         } = options;
 
         let op_id = operation_id.unwrap_or_else(generate_operation_id);
         let op_id_clone = op_id.clone();
-        let wd = working_directory.to_string();
+        let wd = working_dir.to_string();
 
         let operation = Operation::new(
             op_id.clone(),
@@ -284,39 +254,10 @@ impl Adapter {
         let command = command.to_string();
         let wd_clone = wd.clone();
 
-        let args_vec = args
-            .map(|map| {
-                let mut positional_args = Vec::new();
-                let mut flag_args = Vec::new();
+        let (command_with_subcommand, args_vec) =
+            self.prepare_command_and_args(&command, args.as_ref(), subcommand_config);
 
-                for (k, v) in map.into_iter() {
-                    if k == "_subcommand" {
-                        // Handle subcommand as positional argument (first)
-                        positional_args.insert(0, v.as_str().unwrap_or("").to_string());
-                    } else if k == "path" && command == "ls" {
-                        // Special case: path parameter for ls command should be positional, not a flag
-                        positional_args.push(v.as_str().unwrap_or("").to_string());
-                    } else {
-                        // Handle regular arguments as flags
-                        match v {
-                            Value::Bool(true) => flag_args.push(format!("--{}", k)),
-                            Value::Bool(false) => {
-                                // Skip false boolean flags - they should not be included
-                            }
-                            _ => flag_args.push(format!("--{}={}", k, v.as_str().unwrap_or(""))),
-                        }
-                    }
-                }
-
-                // Combine positional args first, then flag args
-                positional_args
-                    .into_iter()
-                    .chain(flag_args.into_iter())
-                    .collect::<Vec<String>>()
-            })
-            .unwrap_or_default();
-
-        let full_command = [command.clone()]
+        let full_command = [command_with_subcommand]
             .iter()
             .map(ToString::to_string)
             .chain(args_vec.into_iter())
@@ -454,5 +395,156 @@ impl Adapter {
             .insert(op_id_clone.clone(), handle);
 
         op_id_clone
+    }
+
+    fn prepare_command_and_args(
+        &self,
+        base_command: &str,
+        args: Option<&Map<String, serde_json::Value>>,
+        subcommand_config: Option<&crate::config::SubcommandConfig>,
+    ) -> (String, Vec<String>) {
+        let mut command_args = Vec::new();
+        let mut processed_args = HashSet::new();
+
+        if let Some(config) = subcommand_config {
+            // Handle subcommand if present in args
+            if let Some(subcommand_val) = args.and_then(|a| a.get("_subcommand")) {
+                if let Some(subcommand_str) = subcommand_val.as_str() {
+                    command_args.push(subcommand_str.to_string());
+                    processed_args.insert("_subcommand".to_string());
+                }
+            }
+
+            // Handle positional arguments in the order they are defined
+            for pos_arg_config in &config.positional_args {
+                if let Some(value) = args.and_then(|a| a.get(&pos_arg_config.name)) {
+                    if let Some(s) = value.as_str() {
+                        command_args.push(s.to_string());
+                    } else if let Some(arr) = value.as_array() {
+                        for item in arr {
+                            if let Some(s) = item.as_str() {
+                                command_args.push(s.to_string());
+                            }
+                        }
+                    } else if !value.is_null() {
+                        command_args.push(value.to_string().trim_matches('"').to_string());
+                    }
+                    processed_args.insert(pos_arg_config.name.clone());
+                }
+            }
+
+            // Handle named options
+            if let Some(args_map) = args {
+                for opt_config in &config.options {
+                    // Check for the option by its name or alias
+                    let arg_value = args_map.get(&opt_config.name).or_else(|| {
+                        opt_config
+                            .alias
+                            .as_ref()
+                            .and_then(|alias| args_map.get(alias))
+                    });
+
+                    if let Some(value) = arg_value {
+                        let flag = if opt_config.name.starts_with('-') {
+                            opt_config.name.clone()
+                        } else if opt_config.name.len() == 1 {
+                            format!("-{}", opt_config.name)
+                        } else {
+                            format!("--{}", opt_config.name)
+                        };
+
+                        match opt_config.option_type.as_str() {
+                            "bool" => {
+                                if value.as_bool().unwrap_or(false) {
+                                    command_args.push(flag);
+                                }
+                            }
+                            "array" => {
+                                if let Some(arr) = value.as_array() {
+                                    for item in arr {
+                                        command_args.push(flag.clone());
+                                        if let Some(s) = item.as_str() {
+                                            command_args.push(s.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {
+                                // string, int, etc.
+                                if let Some(s) = value.as_str() {
+                                    command_args.push(flag);
+                                    command_args.push(s.to_string());
+                                } else if !value.is_null() {
+                                    command_args.push(flag);
+                                    command_args
+                                        .push(value.to_string().trim_matches('"').to_string());
+                                }
+                            }
+                        }
+                        processed_args.insert(opt_config.name.clone());
+                        if let Some(alias) = &opt_config.alias {
+                            processed_args.insert(alias.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback for arguments not covered by the config or when no config is provided
+        if let Some(args_map) = args {
+            for (key, value) in args_map {
+                if processed_args.contains(key) || key == "working_directory" {
+                    continue;
+                }
+
+                // This part retains the old logic for args not in the config
+                if key == "_subcommand" {
+                    if let Some(subcommand) = value.as_str() {
+                        // Insert subcommand at the beginning if not already there
+                        if command_args.is_empty() || command_args[0] != subcommand {
+                            command_args.insert(0, subcommand.to_string());
+                        }
+                    }
+                    continue;
+                }
+
+                let flag = if key.starts_with('-') {
+                    key.clone()
+                } else if key.len() == 1 {
+                    format!("-{}", key)
+                } else {
+                    format!("--{}", key)
+                };
+
+                if let Some(b) = value.as_bool() {
+                    if b {
+                        command_args.push(flag);
+                    }
+                } else if let Some(arr) = value.as_array() {
+                    for item in arr {
+                        command_args.push(flag.clone());
+                        if let Some(s) = item.as_str() {
+                            command_args.push(s.to_string());
+                        }
+                    }
+                } else if let Some(s) = value.as_str() {
+                    command_args.push(flag);
+                    command_args.push(s.to_string());
+                } else if !value.is_null() {
+                    command_args.push(flag);
+                    command_args.push(value.to_string().trim_matches('"').to_string());
+                }
+            }
+        }
+
+        // Special handling for `cargo nextest run`
+        if base_command == "cargo" && command_args.first().is_some_and(|s| s == "nextest") {
+            // Transform `cargo nextest ...` to `cargo-nextest run ...`
+            let mut new_args = vec!["run".to_string()];
+            new_args.extend(command_args.into_iter().skip(1));
+            return ("cargo-nextest".to_string(), new_args);
+        }
+
+        (base_command.to_string(), command_args)
     }
 }

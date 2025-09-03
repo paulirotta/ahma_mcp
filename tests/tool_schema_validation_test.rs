@@ -1,56 +1,28 @@
-//! Validate all tool JSON files in /tools against the schema validator
-use ahma_mcp::schema_validation::SchemaValidator;
+//! Validate all tool JSON files in /tools against the ToolConfig struct
+use ahma_mcp::config::load_tool_configs;
 use anyhow::Result;
-use std::fs;
-use std::path::PathBuf;
+use std::path::Path;
 
 #[tokio::test]
-async fn test_all_tool_json_files_validate() -> Result<()> {
-    let validator = SchemaValidator::new();
-    let tools_dir = PathBuf::from("tools");
+async fn test_all_tool_json_files_load_correctly() -> Result<()> {
+    let tools_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tools");
+    let tool_configs = load_tool_configs(&tools_dir);
 
-    // Canonicalize the tools directory to get absolute path for security validation
-    let canonical_tools_dir = tools_dir.canonicalize()?;
+    assert!(
+        tool_configs.is_ok(),
+        "Failed to load tool configs: {:#?}",
+        tool_configs.err().unwrap()
+    );
 
-    let mut had_errors = false;
-    let mut reports = Vec::new();
+    let tool_configs = tool_configs.unwrap();
+    assert!(!tool_configs.is_empty(), "No tool configs were loaded");
 
-    for entry in fs::read_dir(&tools_dir)? {
-        let entry = entry?;
-        let path = entry.path();
-
-        // Security: Validate that the path is actually within the tools directory
-        // This prevents path traversal attacks
-        let canonical_path = match path.canonicalize() {
-            Ok(p) => p,
-            Err(_) => continue, // Skip files that can't be canonicalized (e.g., broken symlinks)
-        };
-
-        if !canonical_path.starts_with(&canonical_tools_dir) {
-            continue; // Skip files outside the tools directory
-        }
-
-        if path.extension().and_then(|s| s.to_str()) != Some("json") {
-            continue;
-        }
-
-        let contents = fs::read_to_string(&path)?;
-        match validator.validate_tool_config(&path, &contents) {
-            Ok(_) => {
-                // valid
-            }
-            Err(errors) => {
-                had_errors = true;
-                let report = validator.format_errors(&errors, &path);
-                reports.push(report);
-            }
-        }
-    }
-
-    if had_errors {
-        // Join reports to show all issues in a single failure message
-        let full = reports.join("\n\n");
-        panic!("Tool schema validation failed:\n{}", full);
+    println!(
+        "Successfully loaded and validated {} tools:",
+        tool_configs.len()
+    );
+    for (name, config) in tool_configs {
+        println!("  - {}: {}", name, config.description);
     }
 
     Ok(())

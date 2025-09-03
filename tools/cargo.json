@@ -44,7 +44,8 @@
                 {
                     "name": "config",
                     "type": "string",
-                    "description": "Override a configuration value (KEY=VALUE or PATH)"
+                    "description": "Override a configuration value (KEY=VALUE or PATH)",
+                    "format": "path-or-value"
                 },
                 {
                     "name": "unstable",
@@ -164,12 +165,14 @@
                 {
                     "name": "target-dir",
                     "type": "string",
-                    "description": "Directory for all generated artifacts"
+                    "description": "Directory for all generated artifacts",
+                    "format": "path"
                 },
                 {
                     "name": "artifact-dir",
                     "type": "string",
-                    "description": "Copy final artifacts to this directory (unstable)"
+                    "description": "Copy final artifacts to this directory (unstable)",
+                    "format": "path"
                 },
                 {
                     "name": "build-plan",
@@ -189,12 +192,14 @@
                 {
                     "name": "manifest-path",
                     "type": "string",
-                    "description": "Path to Cargo.toml"
+                    "description": "Path to Cargo.toml",
+                    "format": "path"
                 },
                 {
                     "name": "lockfile-path",
                     "type": "string",
-                    "description": "Path to Cargo.lock (unstable)"
+                    "description": "Path to Cargo.lock (unstable)",
+                    "format": "path"
                 },
                 {
                     "name": "ignore-rust-version",
@@ -270,7 +275,8 @@
                 {
                     "name": "config",
                     "type": "string",
-                    "description": "Override a configuration value (KEY=VALUE or PATH)"
+                    "description": "Override a configuration value (KEY=VALUE or PATH)",
+                    "format": "path-or-value"
                 },
                 {
                     "name": "unstable",
@@ -390,7 +396,8 @@
                 {
                     "name": "target-dir",
                     "type": "string",
-                    "description": "Directory for all generated artifacts"
+                    "description": "Directory for all generated artifacts",
+                    "format": "path"
                 },
                 {
                     "name": "unit-graph",
@@ -405,12 +412,14 @@
                 {
                     "name": "manifest-path",
                     "type": "string",
-                    "description": "Path to Cargo.toml"
+                    "description": "Path to Cargo.toml",
+                    "format": "path"
                 },
                 {
                     "name": "lockfile-path",
                     "type": "string",
-                    "description": "Path to Cargo.lock (unstable)"
+                    "description": "Path to Cargo.lock (unstable)",
+                    "format": "path"
                 },
                 {
                     "name": "ignore-rust-version",
@@ -628,7 +637,8 @@
                 {
                     "name": "config",
                     "type": "string",
-                    "description": "Override a configuration value (KEY=VALUE or PATH)"
+                    "description": "Override a configuration value (KEY=VALUE or PATH)",
+                    "format": "path-or-value"
                 },
                 {
                     "name": "unstable",
@@ -653,12 +663,14 @@
                 {
                     "name": "manifest-path",
                     "type": "string",
-                    "description": "Path to Cargo.toml"
+                    "description": "Path to Cargo.toml",
+                    "format": "path"
                 },
                 {
                     "name": "lockfile-path",
                     "type": "string",
-                    "description": "Path to Cargo.lock (unstable)"
+                    "description": "Path to Cargo.lock (unstable)",
+                    "format": "path"
                 },
                 {
                     "name": "locked",
@@ -694,17 +706,20 @@
                 {
                     "name": "manifest-path",
                     "type": "string",
-                    "description": "Path to Cargo.toml"
+                    "description": "Path to Cargo.toml",
+                    "format": "path"
                 },
                 {
                     "name": "config-file",
                     "type": "string",
-                    "description": "Config file [default: workspace-root/.config/nextest.toml]"
+                    "description": "Config file [default: workspace-root/.config/nextest.toml]",
+                    "format": "path"
                 },
                 {
                     "name": "tool-config-file",
                     "type": "string",
-                    "description": "Tool-specific config files in the format 'tool:abs_path'. May be specified multiple times; later files are lower priority."
+                    "description": "Tool-specific config files in the format 'tool:abs_path'. May be specified multiple times; later files are lower priority.",
+                    "format": "path"
                 },
                 {
                     "name": "override-version-check",
@@ -735,7 +750,8 @@
                 {
                     "name": "db",
                     "type": "string",
-                    "description": "advisory database git repo path (default: ~/.cargo/advisory-db)"
+                    "description": "advisory database git repo path (default: ~/.cargo/advisory-db)",
+                    "format": "path"
                 },
                 {
                     "name": "deny",
@@ -745,7 +761,8 @@
                 {
                     "name": "file",
                     "type": "string",
-                    "description": "Cargo lockfile to inspect (or '-' for STDIN, default: Cargo.lock)"
+                    "description": "Cargo lockfile to inspect (or '-' for STDIN, default: Cargo.lock)",
+                    "format": "path"
                 },
                 {
                     "name": "ignore",
@@ -868,7 +885,8 @@
                 {
                     "name": "config",
                     "type": "string",
-                    "description": "Override a configuration value (KEY=VALUE or PATH)"
+                    "description": "Override a configuration value (KEY=VALUE or PATH)",
+                    "format": "path-or-value"
                 },
                 {
                     "name": "unstable",
@@ -978,7 +996,8 @@
                 {
                     "name": "target-dir",
                     "type": "string",
-                    "description": "Directory for all generated artifacts"
+                    "description": "Directory for all generated artifacts",
+                    "format": "path"
                 },
                 {
                     "name": "unit-graph",
@@ -993,12 +1012,14 @@
                 {
                     "name": "manifest-path",
                     "type": "string",
-                    "description": "Path to Cargo.toml"
+                    "description": "Path to Cargo.toml",
+                    "format": "path"
                 },
                 {
                     "name": "lockfile-path",
                     "type": "string",
-                    "description": "Path to Cargo.lock (unstable)"
+                    "description": "Path to Cargo.lock (unstable)",
+                    "format": "path"
                 },
                 {
                     "name": "ignore-rust-version",

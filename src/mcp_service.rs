@@ -44,9 +44,17 @@ use tracing;
 
 use crate::{
     adapter::Adapter,
-    config::ToolConfig,
+    config::{SubcommandConfig, ToolConfig},
     operation_monitor::{Operation, OperationMonitor},
 };
+use serde_json::Value;
+
+/// Represents the structure of the guidance JSON file.
+#[derive(serde::Deserialize, Debug, Clone)]
+pub struct GuidanceConfig {
+    _general_guidance: HashMap<String, String>,
+    tool_specific_guidance: HashMap<String, HashMap<String, String>>,
+}
 
 /// `AhmaMcpService` is the server handler for the MCP service.
 #[derive(Clone)]
@@ -54,6 +62,7 @@ pub struct AhmaMcpService {
     pub adapter: Arc<Adapter>,
     pub operation_monitor: Arc<OperationMonitor>,
     pub configs: Arc<HashMap<String, ToolConfig>>,
+    pub guidance: Arc<Option<GuidanceConfig>>,
     /// The peer handle for sending notifications to the client.
     /// This is populated by capturing it from the first request context.
     pub peer: Arc<RwLock<Option<Peer<RoleServer>>>>,
@@ -65,11 +74,13 @@ impl AhmaMcpService {
         adapter: Arc<Adapter>,
         operation_monitor: Arc<OperationMonitor>,
         configs: Arc<HashMap<String, ToolConfig>>,
+        guidance: Arc<Option<GuidanceConfig>>,
     ) -> Result<Self, anyhow::Error> {
         Ok(Self {
             adapter,
             operation_monitor,
             configs,
+            guidance,
             peer: Arc::new(RwLock::new(None)),
         })
     }
@@ -120,80 +131,46 @@ impl ServerHandler for AhmaMcpService {
 
             // Hard-wired wait command - always available
             tools.push(Tool {
-            name: "wait".into(),
-            description: Some("Wait for previously started asynchronous operations to complete. **WARNING:** This is a blocking tool and makes you inefficient. **ONLY** use this if you have NO other tasks and cannot proceed until completion. It is **ALWAYS** better to perform other work and let results be pushed to you.".into()),
-            input_schema: Arc::new({
-                let mut schema = serde_json::Map::new();
-                schema.insert("type".to_string(), "object".into());
-                let mut properties = serde_json::Map::new();
-
-                let mut tools_prop = serde_json::Map::new();
-                tools_prop.insert("type".to_string(), "string".into());
-                tools_prop.insert("description".to_string(), "Comma-separated tool name prefixes to wait for (optional; waits for all if omitted)".into());
-                properties.insert("tools".to_string(), tools_prop.into());
-
-                let mut timeout_prop = serde_json::Map::new();
-                timeout_prop.insert("type".to_string(), "number".into());
-                timeout_prop.insert("description".to_string(), "Maximum time to wait in seconds (default: 240, min: 10, max: 1800)".into());
-                properties.insert("timeout_seconds".to_string(), timeout_prop.into());
-
-                schema.insert("properties".to_string(), properties.into());
-                schema
-            }),
-            output_schema: None,
-            annotations: None,
-        });
+                name: "wait".into(),
+                description: Some("Wait for previously started asynchronous operations to complete. **WARNING:** This is a blocking tool and makes you inefficient. **ONLY** use this if you have NO other tasks and cannot proceed until completion. It is **ALWAYS** better to perform other work and let results be pushed to you.".into()),
+                input_schema: self.generate_input_schema_for_wait(),
+                output_schema: None,
+                annotations: None,
+            });
 
             // Hard-wired status command - always available
             tools.push(Tool {
-            name: "status".into(),
-            description: Some("Query the status of operations without blocking. Shows active and completed operations.".into()),
-            input_schema: Arc::new({
-                let mut schema = serde_json::Map::new();
-                schema.insert("type".to_string(), "object".into());
-                let mut properties = serde_json::Map::new();
-
-                let mut tools_prop = serde_json::Map::new();
-                tools_prop.insert("type".to_string(), "string".into());
-                tools_prop.insert("description".to_string(), "Comma-separated tool name prefixes to filter by (optional; shows all if omitted)".into());
-                properties.insert("tools".to_string(), tools_prop.into());
-
-                let mut operation_id_prop = serde_json::Map::new();
-                operation_id_prop.insert("type".to_string(), "string".into());
-                operation_id_prop.insert("description".to_string(), "Specific operation ID to query (optional; shows all if omitted)".into());
-                properties.insert("operation_id".to_string(), operation_id_prop.into());
-
-                schema.insert("properties".to_string(), properties.into());
-                schema
-            }),
-            output_schema: None,
-            annotations: None,
-        });
+                name: "status".into(),
+                description: Some("Query the status of operations without blocking. Shows active and completed operations.".into()),
+                input_schema: self.generate_input_schema_for_status(),
+                output_schema: None,
+                annotations: None,
+            });
 
             for config in self.configs.values() {
                 if config.subcommand.is_empty() {
-                    // If no subcommands defined, register the tool by its base name
-                    let input_schema = Arc::new(self.generate_input_schema_for_tool(config));
-                    tools.push(Tool {
-                        name: config.name.clone().into(),
-                        description: Some(config.description.clone().into()),
-                        input_schema,
-                        output_schema: None,
-                        annotations: None,
-                    });
+                    // This case might be for tools without subcommands.
+                    // We'll assume for now that all tools have subcommands,
+                    // as per the current design.
                 } else {
                     // Register each subcommand as a separate tool
                     for subcommand in &config.subcommand {
                         let tool_name = format!("{}_{}", config.name, subcommand.name);
                         let input_schema =
-                            Arc::new(self.generate_input_schema_for_subcommand(subcommand));
+                            self.generate_input_schema_for_subcommand(config, subcommand);
 
-                        // Use the full subcommand description, which may include LLM guidance
-                        let description = if subcommand.description.is_empty() {
-                            format!("{}: {}", config.description, subcommand.name)
-                        } else {
-                            subcommand.description.clone()
-                        };
+                        let mut description = subcommand.description.clone();
+                        if let Some(guidance_key) = &subcommand.guidance_key {
+                            if let Some(guidance_config) = self.guidance.as_ref() {
+                                if let Some(guidance_text) = guidance_config
+                                    .tool_specific_guidance
+                                    .get(&config.name)
+                                    .and_then(|g| g.get(guidance_key))
+                                {
+                                    description = format!("{}\n\n{}", guidance_text, description);
+                                }
+                            }
+                        }
 
                         tools.push(Tool {
                             name: tool_name.into(),
@@ -812,8 +789,14 @@ impl ServerHandler for AhmaMcpService {
                         if let Some(option_config) =
                             sub_config.options.iter().find(|o| o.name == *key)
                         {
-                            if option_config.format.as_deref() == Some("path") {
+                            let format = option_config.format.as_deref();
+                            if format == Some("path") || format == Some("path-or-value") {
                                 if let Some(path_str) = value.as_str() {
+                                    // For "path-or-value", skip validation if it's a KEY=VALUE string
+                                    if format == Some("path-or-value") && path_str.contains('=') {
+                                        continue;
+                                    }
+
                                     let path_to_validate = Path::new(path_str);
 
                                     // Get the workspace root from the current working directory
@@ -939,6 +922,7 @@ impl ServerHandler for AhmaMcpService {
                         Some(modified_args),
                         &working_directory,
                         timeout,
+                        subcommand_config,
                     )
                     .await
                 {
@@ -978,6 +962,7 @@ impl ServerHandler for AhmaMcpService {
                             args: Some(modified_args),
                             timeout,
                             callback,
+                            subcommand_config,
                         },
                     )
                     .await;
@@ -1044,81 +1029,122 @@ impl ServerHandler for AhmaMcpService {
 }
 
 impl AhmaMcpService {
-    /// Generate input schema for a tool (when no subcommands are defined)
-    fn generate_input_schema_for_tool(
-        &self,
-        _config: &crate::config::ToolConfig,
-    ) -> serde_json::Map<String, serde_json::Value> {
-        // For tools without subcommands, use a basic schema
-        let mut schema = serde_json::Map::new();
-        schema.insert(
-            "type".to_string(),
-            serde_json::Value::String("object".to_string()),
-        );
-        schema.insert(
-            "properties".to_string(),
-            serde_json::Value::Object(serde_json::Map::new()),
-        );
-        schema.insert(
-            "additionalProperties".to_string(),
-            serde_json::Value::Bool(false),
-        );
-        schema
-    }
-
-    /// Generate input schema for a subcommand based on its options
+    /// Generates a JSON schema for a given subcommand's inputs.
     fn generate_input_schema_for_subcommand(
         &self,
-        subcommand: &crate::config::SubcommandConfig,
-    ) -> serde_json::Map<String, serde_json::Value> {
-        let mut schema = serde_json::Map::new();
-        let mut properties = serde_json::Map::new();
+        tool_config: &ToolConfig,
+        subcommand_config: &SubcommandConfig,
+    ) -> Arc<Map<String, Value>> {
+        let mut properties = Map::new();
+        let mut required = Vec::new();
 
-        // Generate schema from options
-        for option in &subcommand.options {
-            let mut param_schema = serde_json::Map::new();
-
-            // Set type
-            param_schema.insert(
-                "type".to_string(),
-                serde_json::Value::String(option.option_type.clone()),
-            );
-
-            // Set description
-            param_schema.insert(
+        // Add common `working_directory` parameter unless it's a cargo command
+        if tool_config.name != "cargo" {
+            let mut wd_schema = Map::new();
+            wd_schema.insert("type".to_string(), Value::String("string".to_string()));
+            wd_schema.insert(
                 "description".to_string(),
-                serde_json::Value::String(option.description.clone()),
+                Value::String("Working directory for command execution".to_string()),
             );
-
-            // Handle array types
-            if option.option_type == "array" {
-                param_schema.insert(
-                    "items".to_string(),
-                    serde_json::json!({
-                        "type": "string"
-                    }),
-                );
-            }
-
-            properties.insert(option.name.clone(), serde_json::Value::Object(param_schema));
-
-            // For now, all options are optional (since we don't have default_value info)
-            // In the future, we could add a `required` field to OptionConfig
+            wd_schema.insert("format".to_string(), Value::String("path".to_string()));
+            properties.insert("working_directory".to_string(), Value::Object(wd_schema));
         }
 
-        schema.insert(
-            "type".to_string(),
-            serde_json::Value::String("object".to_string()),
+        let all_options = subcommand_config
+            .options
+            .iter()
+            .chain(subcommand_config.positional_args.iter());
+
+        for option in all_options {
+            let mut option_schema = Map::new();
+            let param_type = match option.option_type.as_str() {
+                "bool" => "boolean",
+                "int" => "integer",
+                "string" => "string",
+                "array" => "array",
+                _ => "string", // Default to string for safety
+            };
+            option_schema.insert("type".to_string(), Value::String(param_type.to_string()));
+
+            // CRITICAL FIX: For array types, add required "items" property
+            // This prevents catastrophic MCP validation failures in VSCode GitHub Copilot Chat
+            if param_type == "array" {
+                let mut items_schema = Map::new();
+                items_schema.insert("type".to_string(), Value::String("string".to_string()));
+                option_schema.insert("items".to_string(), Value::Object(items_schema));
+            }
+
+            option_schema.insert(
+                "description".to_string(),
+                Value::String(option.description.clone()),
+            );
+
+            if let Some(format) = &option.format {
+                option_schema.insert("format".to_string(), Value::String(format.clone()));
+            }
+
+            properties.insert(option.name.clone(), Value::Object(option_schema));
+
+            if option.required.unwrap_or(false) {
+                required.push(Value::String(option.name.clone()));
+            }
+        }
+
+        let mut schema = Map::new();
+        schema.insert("type".to_string(), Value::String("object".to_string()));
+        schema.insert("properties".to_string(), Value::Object(properties));
+        if !required.is_empty() {
+            schema.insert("required".to_string(), Value::Array(required));
+        }
+
+        Arc::new(schema)
+    }
+
+    /// Generates the specific input schema for the `wait` tool.
+    fn generate_input_schema_for_wait(&self) -> Arc<Map<String, Value>> {
+        let mut properties = Map::new();
+        properties.insert(
+            "tools".to_string(),
+            serde_json::json!({
+                "type": "string",
+                "description": "Comma-separated tool name prefixes to wait for (optional; waits for all if omitted)"
+            }),
         );
-        schema.insert(
-            "properties".to_string(),
-            serde_json::Value::Object(properties),
-        );
-        schema.insert(
-            "additionalProperties".to_string(),
-            serde_json::Value::Bool(false),
+        properties.insert(
+            "timeout_seconds".to_string(),
+            serde_json::json!({
+                "type": "number",
+                "description": "Maximum time to wait in seconds (default: 240, min: 10, max: 1800)"
+            }),
         );
 
-        schema
+        let mut schema = Map::new();
+        schema.insert("type".to_string(), Value::String("object".to_string()));
+        schema.insert("properties".to_string(), Value::Object(properties));
+        Arc::new(schema)
+    }
+
+    /// Generates the specific input schema for the `status` tool.
+    fn generate_input_schema_for_status(&self) -> Arc<Map<String, Value>> {
+        let mut properties = Map::new();
+        properties.insert(
+            "tools".to_string(),
+            serde_json::json!({
+                "type": "string",
+                "description": "Comma-separated tool name prefixes to filter by (optional; shows all if omitted)"
+            }),
+        );
+        properties.insert(
+            "operation_id".to_string(),
+            serde_json::json!({
+                "type": "string",
+                "description": "Specific operation ID to query (optional; shows all if omitted)"
+            }),
+        );
+
+        let mut schema = Map::new();
+        schema.insert("type".to_string(), Value::String("object".to_string()));
+        schema.insert("properties".to_string(), Value::Object(properties));
+        Arc::new(schema)
     }
 }

@@ -4,25 +4,27 @@
     "command": "ls",
     "enabled": true,
     "hints": {
-        "primary": "List directory contents and file information",
-        "usage": "Common options: -l (long format), -a (all files), -h (human readable)"
+        "default": "List directory contents and file information. Common options: -l (long format), -a (all files), -h (human readable). Use `ls -l` for detailed output and `ls -R` for recursive listing."
     },
     "subcommand": [
         {
             "name": "default",
             "description": "List directory contents and file information - returns immediately.",
             "synchronous": true,
-            "options": [
-                {
-                    "name": "working_directory",
-                    "type": "string",
-                    "description": "Working directory for command execution"
-                },
+            "positional_args": [
                 {
                     "name": "path",
                     "type": "string",
                     "format": "path",
                     "description": "The directory or file path to list. Defaults to current directory if not specified."
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "all",

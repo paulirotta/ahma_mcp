@@ -47,6 +47,7 @@ use std::path::Path;
 
 /// Represents the complete configuration for a command-line tool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ToolConfig {
     pub name: String,
     pub description: String,
@@ -66,28 +67,37 @@ pub struct ToolConfig {
 
 /// Configuration for a subcommand within a tool
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SubcommandConfig {
     pub name: String,
     pub description: String,
     #[serde(default)]
     pub options: Vec<OptionConfig>,
+    #[serde(default)]
+    pub positional_args: Vec<OptionConfig>,
     /// If true, this subcommand runs synchronously instead of async
     pub synchronous: Option<bool>,
     /// Override timeout for this specific subcommand
     pub timeout_seconds: Option<u64>,
-    /// Specific hint for AI clients when this subcommand is used
-    pub hint: Option<String>,
+    /// Key to look up guidance in tool_guidance.json
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guidance_key: Option<String>,
 }
 
 /// Configuration for an option within a subcommand
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OptionConfig {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alias: Option<String>,
     #[serde(rename = "type")]
     pub option_type: String,
     pub description: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<String>,
+    #[serde(default)]
+    pub required: Option<bool>,
 }
 
 fn default_enabled() -> bool {

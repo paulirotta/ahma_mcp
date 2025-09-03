@@ -19,12 +19,14 @@
                 {
                     "name": "working_directory",
                     "type": "string",
-                    "description": "Working directory for command execution"
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "file",
                     "type": "string",
                     "description": "Path to Python script file to execute",
+                    "format": "path",
                     "required": true
                 },
                 {
@@ -62,7 +64,8 @@
                 {
                     "name": "working_directory",
                     "type": "string",
-                    "description": "Working directory for command execution"
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "command",
@@ -100,7 +103,8 @@
                 {
                     "name": "working_directory",
                     "type": "string",
-                    "description": "Working directory for command execution"
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "module_name",
@@ -143,7 +147,8 @@
                 {
                     "name": "working_directory",
                     "type": "string",
-                    "description": "Working directory for command execution"
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "detailed",
@@ -160,7 +165,8 @@
                 {
                     "name": "working_directory",
                     "type": "string",
-                    "description": "Working directory for command execution"
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "help_type",
@@ -177,7 +183,8 @@
                 {
                     "name": "working_directory",
                     "type": "string",
-                    "description": "Working directory for command execution"
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "inspect",
@@ -224,12 +231,14 @@
                 {
                     "name": "working_directory",
                     "type": "string",
-                    "description": "Working directory for command execution"
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "file",
                     "type": "string",
                     "description": "Path to Python script file to check",
+                    "format": "path",
                     "required": true
                 },
                 {

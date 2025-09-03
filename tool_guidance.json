@@ -1,0 +1,24 @@
+{
+    "general_guidance": {
+        "default": "Select a tool to begin. Use 'status' to monitor ongoing operations.",
+        "completion": "Task completed. Review the output and plan your next action.",
+        "error": "An error occurred. Check the error message for details and use 'status' to check other operations."
+    },
+    "tool_specific_guidance": {
+        "cargo_build": {
+            "start": "Cargo build started. You can monitor progress with 'status' or work on other tasks.",
+            "completion": "Build successful. Artifacts are located in the target directory.",
+            "error": "Build failed. Review the compilation errors to identify the issue."
+        },
+        "cargo_test": {
+            "start": "Running tests...",
+            "completion": "All tests passed.",
+            "error": "Some tests failed. Review the test output to debug."
+        },
+        "wait": {
+            "start": "Waiting for operations to complete. This is a blocking call.",
+            "completion": "Wait complete. All specified operations have finished.",
+            "error": "Wait timed out. Some operations may still be running."
+        }
+    }
+}

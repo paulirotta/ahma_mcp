@@ -43,14 +43,15 @@
 use ahma_mcp::{
     adapter::Adapter,
     config::load_tool_configs,
-    mcp_service::AhmaMcpService,
+    mcp_service::{AhmaMcpService, GuidanceConfig},
     operation_monitor::{MonitorConfig, OperationMonitor},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
 };
 use anyhow::Result;
 use clap::Parser;
 use rmcp::ServiceExt;
-use serde_json::Value;
+use serde_json::{Value, from_str};
+use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -79,6 +80,10 @@ struct Cli {
     /// Path to the directory containing tool JSON configuration files.
     #[arg(long, global = true, default_value = "tools")]
     tools_dir: PathBuf,
+
+    /// Path to the tool guidance JSON file.
+    #[arg(long, global = true, default_value = "tool_guidance.json")]
+    guidance_file: PathBuf,
 
     /// Default timeout for commands in seconds.
     #[arg(long, global = true, default_value = "300")]
@@ -126,7 +131,16 @@ async fn main() -> Result<()> {
 async fn run_server_mode(cli: Cli) -> Result<()> {
     tracing::info!("Starting ahma_mcp v1.0.0");
     tracing::info!("Tools directory: {:?}", cli.tools_dir);
+    tracing::info!("Guidance file: {:?}", cli.guidance_file);
     tracing::info!("Command timeout: {}s", cli.timeout);
+
+    // Load guidance configuration
+    let guidance_config = if cli.guidance_file.exists() {
+        let guidance_content = fs::read_to_string(&cli.guidance_file)?;
+        from_str::<GuidanceConfig>(&guidance_content).ok()
+    } else {
+        None
+    };
 
     // Initialize the operation monitor
     let monitor_config = MonitorConfig::with_timeout(std::time::Duration::from_secs(cli.timeout));
@@ -154,8 +168,13 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     }
 
     // Create and start the MCP service
-    let service_handler =
-        AhmaMcpService::new(adapter.clone(), operation_monitor.clone(), configs).await?;
+    let service_handler = AhmaMcpService::new(
+        adapter.clone(),
+        operation_monitor.clone(),
+        configs,
+        Arc::new(guidance_config),
+    )
+    .await?;
     let service = service_handler.serve(rmcp::transport::stdio()).await?;
 
     // ============================================================================
@@ -324,10 +343,10 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
 
     // Check for environment variable for programmatic execution
     if let Ok(env_args) = std::env::var("AHMA_MCP_ARGS") {
-        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(&env_args)
-            && let Some(map) = json_val.as_object()
-        {
-            tool_args_map = map.clone();
+        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(&env_args) {
+            if let Some(map) = json_val.as_object() {
+                tool_args_map = map.clone();
+            }
         }
     } else {
         // Manual parsing for CLI invocation
@@ -354,12 +373,13 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         }
     }
 
-    if working_directory.is_none()
-        && let Some(wd) = tool_args_map
+    if working_directory.is_none() {
+        if let Some(wd) = tool_args_map
             .get("working_directory")
             .and_then(|v| v.as_str())
-    {
-        working_directory = Some(wd.to_string());
+        {
+            working_directory = Some(wd.to_string());
+        }
     }
 
     if let Some(args_from_map) = tool_args_map.get("args").and_then(|v| v.as_array()) {
@@ -402,6 +422,7 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
             Some(args_map),
             &final_working_dir.unwrap_or_else(|| ".".to_string()),
             subcommand_config.timeout_seconds,
+            Some(subcommand_config),
         )
         .await;
 

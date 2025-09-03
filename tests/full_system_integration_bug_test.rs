@@ -72,9 +72,14 @@ mod full_system_integration_bug_test {
         let adapter =
             Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager).unwrap());
         let configs = Arc::new(load_tool_configs(&std::path::PathBuf::from("tools")).unwrap());
-        let _service = AhmaMcpService::new(adapter.clone(), operation_monitor.clone(), configs)
-            .await
-            .unwrap();
+        let _service = AhmaMcpService::new(
+            adapter.clone(),
+            operation_monitor.clone(),
+            configs,
+            Arc::new(None),
+        )
+        .await
+        .unwrap();
         let tracking_callback = Arc::new(TrackingCallback::new());
         println!("✅ Full system initialized");
 
