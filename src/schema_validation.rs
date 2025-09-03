@@ -26,12 +26,12 @@ pub enum ValidationErrorType {
     LogicalInconsistency,
 }
 
-pub struct SchemaValidator {
+pub struct MtdfValidator {
     pub strict_mode: bool,
     pub allow_unknown_fields: bool,
 }
 
-impl Default for SchemaValidator {
+impl Default for MtdfValidator {
     fn default() -> Self {
         Self {
             strict_mode: true,
@@ -40,7 +40,7 @@ impl Default for SchemaValidator {
     }
 }
 
-impl SchemaValidator {
+impl MtdfValidator {
     pub fn new() -> Self {
         Self::default()
     }
@@ -443,8 +443,16 @@ impl SchemaValidator {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
+        // Check if guidance_key is present - if so, skip guidance validation entirely
+        let has_guidance_key = obj.get("guidance_key").is_some();
+
+        if has_guidance_key {
+            // Skip all guidance validation for tools using guidance_key
+            return;
+        }
+
         if !is_synchronous {
-            // For async operations, check for required guidance patterns
+            // For async operations without guidance_key, check for required guidance patterns
             let required_patterns = vec![
                 (
                     "asynchronous",
@@ -648,7 +656,7 @@ mod tests {
 
     #[test]
     fn test_valid_tool_config() {
-        let validator = SchemaValidator::new();
+        let validator = MtdfValidator::new();
         let config = r#"
         {
             "name": "test_tool",
@@ -683,7 +691,7 @@ mod tests {
 
     #[test]
     fn test_missing_required_fields() {
-        let validator = SchemaValidator::new();
+        let validator = MtdfValidator::new();
         let config = r#"
         {
             "description": "A test tool"
@@ -704,7 +712,7 @@ mod tests {
 
     #[test]
     fn test_invalid_async_guidance() {
-        let validator = SchemaValidator::new();
+        let validator = MtdfValidator::new();
         let config = r#"
         {
             "name": "test_tool",
@@ -733,7 +741,7 @@ mod tests {
 
     #[test]
     fn test_synchronous_tool_validation() {
-        let validator = SchemaValidator::new();
+        let validator = MtdfValidator::new();
         let config = r#"
         {
             "name": "test_tool",
@@ -761,7 +769,7 @@ mod tests {
 
     #[test]
     fn test_invalid_option_type() {
-        let validator = SchemaValidator::new();
+        let validator = MtdfValidator::new();
         let config = r#"
         {
             "name": "test_tool",

@@ -1,0 +1,21 @@
+{
+    "name": "pwd",
+    "description": "Print working directory commands",
+    "command": "pwd",
+    "enabled": true,
+    "subcommand": [
+        {
+            "name": "default",
+            "description": "Print the current working directory - returns immediately.",
+            "synchronous": true,
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        }
+    ]
+}

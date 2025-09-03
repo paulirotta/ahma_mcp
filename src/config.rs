@@ -116,10 +116,10 @@ pub struct ToolHints {
 
 /// Load all tool configurations from the `tools` directory.
 pub fn load_tool_configs(tools_dir: &Path) -> Result<HashMap<String, ToolConfig>> {
-    use crate::schema_validation::SchemaValidator;
+    use crate::schema_validation::MtdfValidator;
 
     let mut configs = HashMap::new();
-    let validator = SchemaValidator::new();
+    let validator = MtdfValidator::new();
 
     if !tools_dir.exists() {
         return Ok(configs);
