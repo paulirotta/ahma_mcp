@@ -67,19 +67,19 @@ fn test_synchronous_inheritance_logic() {
 
 #[test]
 fn test_gh_tool_optimized_format() -> Result<()> {
-    // Test that our optimized gh.json loads correctly
+    // Test that our optimized gh.json loads correctly with inheritance pattern
     let gh_json = std::fs::read_to_string("tools/gh.json")?;
     let config: ToolConfig = serde_json::from_str(&gh_json)?;
 
-    // Should NOT have tool-level synchronous field (async is default, no redundant declaration)
-    assert_eq!(config.synchronous, None);
+    // Should have tool-level synchronous=true for inheritance pattern
+    assert_eq!(config.synchronous, Some(true));
 
-    // Subcommands should also NOT have redundant synchronous = false for async behavior
+    // Subcommands should NOT have explicit synchronous field and inherit from tool level
     if let Some(subcommands) = &config.subcommand {
         for subcommand in subcommands {
             assert_eq!(
                 subcommand.synchronous, None,
-                "Subcommand '{}' should not have redundant synchronous=false (async is default)",
+                "Subcommand '{}' should inherit synchronous behavior from tool level (should be None)",
                 subcommand.name
             );
         }

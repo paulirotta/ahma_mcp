@@ -34,11 +34,11 @@ async fn test_gh_tool_expansion_all_synchronous() {
         expected_subcommands.len()
     );
 
-    // Check that tool does NOT have redundant synchronous = false at tool level
-    // (async is the default, so this should not be specified)
+    // Check that tool has synchronous = true at tool level for inheritance
     assert_eq!(
-        gh_tool.synchronous, None,
-        "Tool should not have redundant synchronous=false declaration (async is default)"
+        gh_tool.synchronous,
+        Some(true),
+        "Tool should have synchronous=true for subcommand inheritance"
     );
 
     for expected_name in &expected_subcommands {

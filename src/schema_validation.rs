@@ -346,7 +346,7 @@ impl MtdfValidator {
 
         // Validate nested subcommands array if present
         if let Some(subcommands) = obj.get("subcommand") {
-            self.validate_subcommands_array(subcommands, errors);
+            self.validate_subcommands_array(subcommands, parent_tool, errors);
         }
 
         // Validate options array if present
