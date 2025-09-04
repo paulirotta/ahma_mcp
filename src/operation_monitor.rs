@@ -280,7 +280,7 @@ impl OperationMonitor {
         timeout_seconds: Option<u32>,
     ) -> Vec<Operation> {
         // Validate and set timeout (1-1800 seconds, default 240)
-        let timeout_secs = timeout_seconds.unwrap_or(240).max(1).min(1800);
+        let timeout_secs = timeout_seconds.unwrap_or(240).clamp(1, 1800);
         let timeout = Duration::from_secs(timeout_secs as u64);
         let start_time = std::time::Instant::now();
 

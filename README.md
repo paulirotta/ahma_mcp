@@ -138,20 +138,27 @@ Enhanced for seamless development experience:
 
 ### Tool Configuration
 
-Ahma MCP uses MTDF (MCP Tool Definition Format) JSON files in the `tools/` directory to define CLI tool integrations:
+Ahma MCP uses **MTDF** (MCP Tool Definition Format) JSON files in the `tools/` directory to define CLI tool integrations:
 
-- `git.json` - Git version control (22 subcommands)
+Internal tools implemented in ahama_mcp:
+
+- `await.json` - (ahma_mcp internal) Operation coordination, pauses operations until one or more tools complete
+- `status.json` - (ahma_mcp_internal) Ongoing and recently completed operation(s) information
+
+Common command line tool definitions are included. Copy and edit those you want, or add your own:
+
 - `cargo.json` - Rust package manager with guidance_key references (11+ subcommands)
 - `gh.json` - GitHub CLI with synchronous cache, run, and workflow operations
-- `python3.json` - Python interpreter and module execution
+- `git.json` - Git version control (22 subcommands)
+- `grep.json` - Text search with regex support
 - `ls.json` - File listing with positional arguments
+- `python3.json` - Python interpreter and module execution
 - `pwd.json` - Current directory
-- `status.json` - Ongoing and recently completed operation(s) information
-- `wait.json` - Operation coordination, pauses operations until something completes
+- `sed.json` - Stream editor for filtering and transforming text
 
 Each MTDF file can reference guidance blocks from `tool_guidance.json` using `guidance_key` fields, eliminating guidance duplication and ensuring consistency.
 
-To add your own tools, create a `tools/<tool_name>.json` file following the MTDF specification.
+To add your own tools, create a `tools/<tool_name>.json` file following the MTDF specification and guidance.
 
 ### Testing the Installation
 
