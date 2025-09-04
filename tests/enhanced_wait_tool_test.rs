@@ -25,7 +25,7 @@ async fn test_wait_tool_timeout_functionality() -> Result<()> {
         name: "wait".into(),
         arguments: Some({
             let mut args = serde_json::Map::new();
-            args.insert("timeout_seconds".to_string(), serde_json::json!(10));
+            args.insert("timeout_seconds".to_string(), serde_json::json!(1));
             args
         }),
     };
@@ -64,7 +64,7 @@ async fn test_wait_tool_timeout_validation() -> Result<()> {
         name: "wait".into(),
         arguments: Some({
             let mut args = serde_json::Map::new();
-            args.insert("timeout_seconds".to_string(), serde_json::json!(5)); // Below 10s minimum
+            args.insert("timeout_seconds".to_string(), serde_json::json!(0)); // Below 1s minimum
             args
         }),
     };

@@ -263,6 +263,157 @@ impl OperationMonitor {
             tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
         }
     }
+
+    /// Advanced wait functionality that waits for multiple operations with progressive timeout warnings.
+    /// This method implements the enhanced wait functionality with timeout validation, tool filtering,
+    /// and progressive user feedback.
+    ///
+    /// # Arguments
+    /// * `tool_filter` - Optional comma-separated list of tool prefixes to wait for
+    /// * `timeout_seconds` - Timeout in seconds (1-1800 range, defaults to 240)
+    ///
+    /// # Returns
+    /// A vector of completed operations that match the filter criteria
+    pub async fn wait_for_operations_advanced(
+        &self,
+        tool_filter: Option<&str>,
+        timeout_seconds: Option<u32>,
+    ) -> Vec<Operation> {
+        // Validate and set timeout (1-1800 seconds, default 240)
+        let timeout_secs = timeout_seconds.unwrap_or(240).max(1).min(1800);
+        let timeout = Duration::from_secs(timeout_secs as u64);
+        let start_time = std::time::Instant::now();
+
+        // Parse tool filter
+        let tool_filters: Option<Vec<String>> = tool_filter.map(|filters| {
+            filters
+                .split(',')
+                .map(|s| s.trim().to_lowercase())
+                .collect()
+        });
+
+        tracing::info!(
+            "Starting advanced wait operation: timeout={}s, tool_filter={:?}",
+            timeout_secs,
+            tool_filters
+        );
+
+        // Progressive warning thresholds (50%, 75%, 90%)
+        const WARNING_THRESHOLDS: [u8; 3] = [50, 75, 90];
+        let mut warnings_sent = [false; 3];
+
+        let mut completed_operations = Vec::new();
+
+        loop {
+            let elapsed = start_time.elapsed();
+            let progress_percent = (elapsed.as_secs_f64() / timeout.as_secs_f64() * 100.0) as u8;
+
+            // Check for timeout
+            if elapsed >= timeout {
+                tracing::warn!("Advanced wait operation timed out after {}s", timeout_secs);
+                break;
+            }
+
+            // Send progressive warnings
+            for (i, &threshold) in WARNING_THRESHOLDS.iter().enumerate() {
+                if progress_percent >= threshold && !warnings_sent[i] {
+                    warnings_sent[i] = true;
+                    let remaining_secs = timeout_secs as i64 - elapsed.as_secs() as i64;
+
+                    match threshold {
+                        50 => tracing::warn!(
+                            "⏰ Wait operation 50% complete - {}s remaining. Current active operations being monitored.",
+                            remaining_secs.max(0)
+                        ),
+                        75 => tracing::warn!(
+                            "⚠️ Wait operation 75% complete - {}s remaining. Consider checking operation status.",
+                            remaining_secs.max(0)
+                        ),
+                        90 => tracing::warn!(
+                            "🚨 Wait operation 90% complete - {}s remaining. Operations may timeout soon!",
+                            remaining_secs.max(0)
+                        ),
+                        _ => {}
+                    }
+                }
+            }
+
+            // Get currently active operations that match our filter
+            let active_ops = {
+                let ops = self.operations.read().await;
+                ops.values()
+                    .filter(|op| !op.state.is_terminal())
+                    .filter(|op| {
+                        if let Some(ref filters) = tool_filters {
+                            filters
+                                .iter()
+                                .any(|filter| op.tool_name.to_lowercase().starts_with(filter))
+                        } else {
+                            true
+                        }
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>()
+            };
+
+            // If no active operations match our criteria, collect completed ones and exit
+            if active_ops.is_empty() {
+                let history = self.completion_history.read().await;
+                completed_operations = history
+                    .values()
+                    .filter(|op| {
+                        if let Some(ref filters) = tool_filters {
+                            filters
+                                .iter()
+                                .any(|filter| op.tool_name.to_lowercase().starts_with(filter))
+                        } else {
+                            true
+                        }
+                    })
+                    .cloned()
+                    .collect();
+
+                tracing::info!(
+                    "Advanced wait completed: {} operations finished, no active operations remaining",
+                    completed_operations.len()
+                );
+                break;
+            }
+
+            // Check if any operations completed and moved to history
+            let history = self.completion_history.read().await;
+            let newly_completed: Vec<_> = history
+                .values()
+                .filter(|op| {
+                    if let Some(ref filters) = tool_filters {
+                        filters
+                            .iter()
+                            .any(|filter| op.tool_name.to_lowercase().starts_with(filter))
+                    } else {
+                        true
+                    }
+                })
+                .filter(|op| {
+                    // Only include operations completed since we started waiting
+                    if let Some(end_time) = op.end_time {
+                        let wait_start_system_time = std::time::SystemTime::now() - elapsed;
+                        end_time >= wait_start_system_time
+                    } else {
+                        false
+                    }
+                })
+                .cloned()
+                .collect();
+
+            completed_operations.extend(newly_completed);
+            drop(history);
+
+            // Sleep before next check
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        completed_operations
+    }
 }
 
 #[cfg(test)]

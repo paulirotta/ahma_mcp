@@ -3,9 +3,7 @@
     "description": "List directory contents and file information",
     "command": "ls",
     "enabled": true,
-    "hints": {
-        "default": "List directory contents and file information. Common options: -l (long format), -a (all files), -h (human readable). Use `ls -l` for detailed output and `ls -R` for recursive listing."
-    },
+    "guidance_key": "sync_behavior",
     "subcommand": [
         {
             "name": "default",

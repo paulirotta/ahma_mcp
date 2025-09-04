@@ -65,6 +65,9 @@ pub struct ToolConfig {
     pub hints: ToolHints,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+    /// Key to look up guidance in tool_guidance.json
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guidance_key: Option<String>,
 }
 
 /// Configuration for a subcommand within a tool

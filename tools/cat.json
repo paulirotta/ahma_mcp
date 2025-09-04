@@ -1,0 +1,7 @@
+{
+    "name": "cat",
+    "command": "cat",
+    "description": "Display file contents",
+    "synchronous": true,
+    "guidance_key": "sync_behavior"
+}

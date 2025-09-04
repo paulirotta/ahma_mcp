@@ -16,6 +16,16 @@ pub struct SchemaValidationError {
     pub suggestion: Option<String>,
 }
 
+impl std::fmt::Display for SchemaValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}] {}", self.field_path, self.message)?;
+        if let Some(ref suggestion) = self.suggestion {
+            write!(f, "\n   💡 Suggestion: {}", suggestion)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValidationErrorType {
     MissingRequired,
@@ -150,6 +160,11 @@ impl MtdfValidator {
                 "Default synchronous behavior for all subcommands (can be overridden per subcommand)",
             ),
             ("hints", "object", "Context-aware hints for AI agents"),
+            (
+                "guidance_key",
+                "string",
+                "Key to reference shared guidance from tool_guidance.json",
+            ),
             ("subcommand", "array", "Array of subcommand definitions"),
         ];
 
@@ -272,12 +287,17 @@ impl MtdfValidator {
                 "boolean",
                 "Whether this subcommand runs synchronously (default: false)",
             ),
+            (
+                "guidance_key",
+                "string",
+                "Key to reference shared guidance from tool_guidance.json",
+            ),
             ("options", "array", "Array of command-line options"),
         ];
 
         // Check required fields
-        for (field, expected_type, description) in required_fields {
-            match obj.get(field) {
+        for (field, expected_type, description) in &required_fields {
+            match obj.get(*field) {
                 None => {
                     errors.push(SchemaValidationError {
                         field_path: format!("{}.{}", path, field),
@@ -301,8 +321,8 @@ impl MtdfValidator {
         }
 
         // Validate optional fields if present
-        for (field, expected_type, _description) in optional_fields {
-            if let Some(value) = obj.get(field) {
+        for (field, expected_type, _description) in &optional_fields {
+            if let Some(value) = obj.get(*field) {
                 self.validate_field_type(
                     &format!("{}.{}", path, field),
                     value,
@@ -320,6 +340,34 @@ impl MtdfValidator {
         // Validate async behavior guidelines
         if let Some(desc) = obj.get("description").and_then(|v| v.as_str()) {
             self.validate_async_behavior_guidance(desc, path, obj, errors);
+        }
+
+        // Check for unknown fields if in strict mode
+        if self.strict_mode && !self.allow_unknown_fields {
+            let all_known_fields: HashSet<&str> = required_fields
+                .iter()
+                .chain(optional_fields.iter())
+                .map(|(field, _, _)| *field)
+                .chain(["positional_args"].iter().copied()) // Add positional_args as known field
+                .collect();
+
+            for key in obj.keys() {
+                if !all_known_fields.contains(key.as_str()) {
+                    errors.push(SchemaValidationError {
+                        field_path: format!("{}.{}", path, key),
+                        error_type: ValidationErrorType::UnknownField,
+                        message: format!("Unknown field '{}' in subcommand", key),
+                        suggestion: Some(format!(
+                            "Known fields: {}. Check for typos or remove this field.",
+                            all_known_fields
+                                .iter()
+                                .copied()
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )),
+                    });
+                }
+            }
         }
     }
 
@@ -534,12 +582,12 @@ impl MtdfValidator {
     ) {
         // Validate timeout_seconds is reasonable
         if let Some(timeout) = obj.get("timeout_seconds").and_then(|v| v.as_u64()) {
-            if timeout < 10 {
+            if timeout < 1 {
                 errors.push(SchemaValidationError {
                     field_path: "timeout_seconds".to_string(),
                     error_type: ValidationErrorType::ConstraintViolation,
-                    message: "timeout_seconds should be at least 10 seconds".to_string(),
-                    suggestion: Some("Use a timeout of at least 10 seconds to allow for reasonable execution time.".to_string()),
+                    message: "timeout_seconds should be at least 1 second".to_string(),
+                    suggestion: Some("Use a timeout of at least 1 second to allow for reasonable execution time.".to_string()),
                 });
             }
             if timeout > 3600 {

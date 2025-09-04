@@ -3,6 +3,7 @@
     "description": "Print working directory commands",
     "command": "pwd",
     "enabled": true,
+    "guidance_key": "sync_behavior",
     "subcommand": [
         {
             "name": "default",

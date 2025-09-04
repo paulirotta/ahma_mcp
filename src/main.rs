@@ -65,17 +65,25 @@ use tracing_subscriber::EnvFilter;
     author,
     version,
     about,
-    long_about = "ahma_mcp runs in two modes:
+    long_about = "ahma_mcp runs in three modes:
 1. Server Mode: Runs as a persistent MCP server over stdio.
    Example: ahma_mcp --server
 
 2. CLI Mode: Executes a single command and prints the result to stdout.
-   Example: ahma_mcp cargo_build --working-directory . -- --release"
+   Example: ahma_mcp cargo_build --working-directory . -- --release
+
+3. Validation Mode: Validates tool configurations without starting the server.
+   Example: ahma_mcp --validate
+   Example: ahma_mcp --validate tools/cargo.json,tools/git.json"
 )]
 struct Cli {
     /// Run in persistent MCP server mode.
     #[arg(long)]
     server: bool,
+
+    /// Validate tool configurations. Use 'all' to validate all tools, or specify specific files.
+    #[arg(long, value_name = "FILES", num_args = 0..=1, default_missing_value = "all")]
+    validate: Option<String>,
 
     /// Path to the directory containing tool JSON configuration files.
     #[arg(long, global = true, default_value = "tools")]
@@ -119,9 +127,12 @@ async fn main() -> Result<()> {
         .with_ansi(false)
         .init();
 
-    if cli.server || cli.tool_name.is_none() {
+    if cli.server || (cli.tool_name.is_none() && cli.validate.is_none()) {
         tracing::info!("Running in Server mode");
         run_server_mode(cli).await
+    } else if cli.validate.is_some() {
+        tracing::info!("Running in Validation mode");
+        run_validation_mode(cli).await
     } else {
         tracing::info!("Running in CLI mode");
         run_cli_mode(cli).await
@@ -437,4 +448,166 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
             Err(anyhow::anyhow!("Tool execution failed"))
         }
     }
+}
+
+async fn run_validation_mode(cli: Cli) -> Result<()> {
+    use ahma_mcp::schema_validation::MtdfValidator;
+
+    let validation_target = cli.validate.unwrap_or_else(|| "all".to_string());
+
+    info!("🔍 Validating tool configurations...");
+    info!("Target: {}", validation_target);
+
+    let mut validation_errors = 0;
+    let mut validation_warnings = 0;
+    let mut files_checked = 0;
+
+    // Determine which files to validate
+    let files_to_validate: Vec<PathBuf> = if validation_target == "all" {
+        // Validate all JSON files in tools directory
+        let tools_dir = &cli.tools_dir;
+        if !tools_dir.exists() {
+            anyhow::bail!("Tools directory {:?} does not exist", tools_dir);
+        }
+
+        let mut files = Vec::new();
+        for entry in fs::read_dir(tools_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                files.push(path);
+            }
+        }
+        files
+    } else {
+        // Validate specific files
+        validation_target
+            .split(',')
+            .map(|s| PathBuf::from(s.trim()))
+            .collect()
+    };
+
+    if files_to_validate.is_empty() {
+        println!("❌ No tool configuration files found to validate");
+        return Ok(());
+    }
+
+    // Load guidance configuration for cross-reference validation
+    let guidance_config = if cli.guidance_file.exists() {
+        let guidance_content = fs::read_to_string(&cli.guidance_file)?;
+        from_str::<GuidanceConfig>(&guidance_content).ok()
+    } else {
+        None
+    };
+
+    println!(
+        "📋 Validating {} configuration file(s)...\n",
+        files_to_validate.len()
+    );
+
+    // Validate each file
+    for file_path in &files_to_validate {
+        files_checked += 1;
+
+        if !file_path.exists() {
+            println!("❌ {} - File not found", file_path.display());
+            validation_errors += 1;
+            continue;
+        }
+
+        print!("🔍 {} ... ", file_path.display());
+
+        // Read and parse the file
+        match fs::read_to_string(file_path) {
+            Ok(content) => {
+                // First, try to parse as valid JSON
+                match serde_json::from_str::<Value>(&content) {
+                    Ok(json_value) => {
+                        // Run schema validation
+                        let validator = MtdfValidator::new();
+                        match validator.validate_tool_config(file_path, &content) {
+                            Ok(_) => {
+                                println!("✅ Valid");
+                            }
+                            Err(errors) => {
+                                println!("❌ {} error(s)", errors.len());
+                                validation_errors += errors.len();
+
+                                for (i, error) in errors.iter().enumerate() {
+                                    println!("   {}. {}", i + 1, error);
+                                }
+                            }
+                        }
+
+                        // Additional validation: Check guidance_key references
+                        if let Some(ref guidance) = guidance_config {
+                            if let Ok(tool_config) =
+                                serde_json::from_value::<ahma_mcp::config::ToolConfig>(json_value)
+                            {
+                                if let Some(guidance_key) = &tool_config.guidance_key {
+                                    if !guidance.guidance_blocks.contains_key(guidance_key) {
+                                        println!(
+                                            "   ⚠️  Warning: guidance_key '{}' not found in {}",
+                                            guidance_key,
+                                            cli.guidance_file.display()
+                                        );
+                                        validation_warnings += 1;
+                                    }
+                                }
+
+                                // Check subcommand guidance keys
+                                for subcommand in &tool_config.subcommand {
+                                    if let Some(guidance_key) = &subcommand.guidance_key {
+                                        if !guidance.guidance_blocks.contains_key(guidance_key) {
+                                            println!(
+                                                "   ⚠️  Warning: subcommand guidance_key '{}' not found in {}",
+                                                guidance_key,
+                                                cli.guidance_file.display()
+                                            );
+                                            validation_warnings += 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(json_error) => {
+                        println!("❌ Invalid JSON: {}", json_error);
+                        validation_errors += 1;
+                    }
+                }
+            }
+            Err(io_error) => {
+                println!("❌ Cannot read file: {}", io_error);
+                validation_errors += 1;
+            }
+        }
+    }
+
+    // Print summary
+    println!();
+    println!("📊 Validation Summary:");
+    println!("   Files checked: {}", files_checked);
+    println!("   Errors: {}", validation_errors);
+    println!("   Warnings: {}", validation_warnings);
+
+    if validation_errors > 0 {
+        println!();
+        println!("❌ Validation failed with {} error(s)", validation_errors);
+        println!("💡 Fix these errors before starting the MCP server to prevent crashes");
+        std::process::exit(1);
+    } else if validation_warnings > 0 {
+        println!();
+        println!(
+            "⚠️  Validation passed with {} warning(s)",
+            validation_warnings
+        );
+        println!("💡 Consider addressing warnings for better reliability");
+    } else {
+        println!();
+        println!("✅ All validations passed!");
+        println!("🚀 Tool configurations are ready for use");
+    }
+
+    Ok(())
 }

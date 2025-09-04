@@ -95,7 +95,7 @@ Then copy the contents into your VS Code MCP configuration file (per-OS location
 Ahma MCP provides sophisticated operation tracking and management capabilities:
 
 - **Real-time Operation Monitoring**: Track the status of all running operations with the `status` tool
-- **Intelligent Wait Functionality**: Use the `wait` tool to monitor operations with configurable timeouts (10-1800 seconds, default 240s)
+- **Intelligent Wait Functionality**: Use the `wait` tool to monitor operations with configurable timeouts (1-1800 seconds, default 240s)
 - **Progressive Timeout Warnings**: Receive warnings at 50%, 75%, and 90% of timeout duration to track long-running operations
 - **Automatic Error Remediation**: Get specific suggestions when operations timeout, including:
   - Detection of stale lock files (Cargo.lock, package-lock.json, yarn.lock, composer.lock, etc.)
@@ -145,8 +145,9 @@ Ahma MCP uses MTDF (MCP Tool Definition Format) JSON files in the `tools/` direc
 - `gh.json` - GitHub CLI with synchronous cache, run, and workflow operations
 - `python3.json` - Python interpreter and module execution
 - `ls.json` - File listing with positional arguments
-- `pwd.json` - Current directory (synchronous)
-- `wait.json` - Operation coordination (references coordination_tool guidance)
+- `pwd.json` - Current directory
+- `status.json` - Ongoing and recently completed operation(s) information
+- `wait.json` - Operation coordination, pauses operations until something completes
 
 Each MTDF file can reference guidance blocks from `tool_guidance.json` using `guidance_key` fields, eliminating guidance duplication and ensuring consistency.
 
@@ -258,7 +259,7 @@ Once connected, you'll have access to ~38 dynamically generated MCP tools:
 **Operation Management:**
 
 - `mcp_ahma_mcp_status` - Check status of all operations (active, completed, failed)
-- `mcp_ahma_mcp_wait` - Wait for operations to complete with configurable timeout (10-1800s, default 240s)
+- `mcp_ahma_mcp_wait` - Wait for operations to complete with configurable timeout (1-1800s, default 240s)
 
 ### Troubleshooting
 
@@ -286,7 +287,7 @@ Once connected, you'll have access to ~38 dynamically generated MCP tools:
 
 - Default timeout is 240 seconds (4 minutes) - sufficient for most operations
 - Use the `status` tool to check which operations are still running
-- Use the `wait` tool with custom timeout: timeout range is 10-1800 seconds (30 minutes max)
+- Use the `wait` tool with custom timeout: timeout range is 1-1800 seconds (30 minutes max)
 - Common timeout causes include network issues, locked files, or resource contention
 - Check for stale lock files (Cargo.lock, package-lock.json, yarn.lock, etc.)
 - Verify network connectivity for download operations

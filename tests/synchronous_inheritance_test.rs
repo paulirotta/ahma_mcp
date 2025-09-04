@@ -69,14 +69,15 @@ fn test_gh_tool_optimized_format() -> Result<()> {
     let gh_json = std::fs::read_to_string("tools/gh.json")?;
     let config: ToolConfig = serde_json::from_str(&gh_json)?;
 
-    // Should have tool-level synchronous = true
-    assert_eq!(config.synchronous, Some(true));
+    // Should have tool-level synchronous = false (GitHub operations are async)
+    assert_eq!(config.synchronous, Some(false));
 
-    // All subcommands should have None (no explicit synchronous field)
+    // All subcommands should have explicit synchronous = false for async behavior
     for subcommand in &config.subcommand {
         assert_eq!(
-            subcommand.synchronous, None,
-            "Subcommand '{}' should not have explicit synchronous field",
+            subcommand.synchronous,
+            Some(false),
+            "Subcommand '{}' should have explicit synchronous=false for async behavior",
             subcommand.name
         );
     }

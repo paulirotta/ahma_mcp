@@ -424,7 +424,7 @@ impl ServerHandler for AhmaMcpService {
                 //
                 // LESSON LEARNED: Default changed from 300s to 240s per user request.
                 // Validation bounds prevent user errors and resource waste:
-                // - Minimum 10s: Prevents accidentally short timeouts
+                // - Minimum 1s: Prevents accidentally short timeouts
                 // - Maximum 1800s (30min): Prevents runaway waits
                 // - Default 240s (4min): Balance of patience vs efficiency
                 //
@@ -434,13 +434,13 @@ impl ServerHandler for AhmaMcpService {
                 // Parse timeout parameter (default 240 seconds = 4 minutes, with validation)
                 let timeout_seconds = if let Some(v) = args.get("timeout_seconds") {
                     let requested_timeout = v.as_f64().unwrap_or(240.0);
-                    // Validate timeout: minimum 10s, maximum 1800s (30 minutes)
-                    if requested_timeout < 10.0 {
+                    // Validate timeout: minimum 1s, maximum 1800s (30 minutes)
+                    if requested_timeout < 1.0 {
                         tracing::warn!(
-                            "Timeout too small ({}s), using minimum of 10s",
+                            "Timeout too small ({}s), using minimum of 1s",
                             requested_timeout
                         );
-                        10.0
+                        1.0
                     } else if requested_timeout > 1800.0 {
                         tracing::warn!(
                             "Timeout too large ({}s), using maximum of 1800s",
