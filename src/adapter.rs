@@ -403,87 +403,92 @@ impl Adapter {
         args: Option<&Map<String, serde_json::Value>>,
         subcommand_config: Option<&crate::config::SubcommandConfig>,
     ) -> (String, Vec<String>) {
+        let mut command_parts: Vec<String> = base_command
+            .split_whitespace()
+            .map(|s| s.to_string())
+            .collect();
         let mut command_args = Vec::new();
         let mut processed_args = HashSet::new();
 
         if let Some(config) = subcommand_config {
-            // Handle subcommand if present in args
-            if let Some(subcommand_val) = args.and_then(|a| a.get("_subcommand")) {
-                if let Some(subcommand_str) = subcommand_val.as_str() {
-                    command_args.push(subcommand_str.to_string());
-                    processed_args.insert("_subcommand".to_string());
-                }
-            }
-
             // Handle positional arguments in the order they are defined
-            for pos_arg_config in &config.positional_args {
-                if let Some(value) = args.and_then(|a| a.get(&pos_arg_config.name)) {
-                    if let Some(s) = value.as_str() {
-                        command_args.push(s.to_string());
-                    } else if let Some(arr) = value.as_array() {
-                        for item in arr {
-                            if let Some(s) = item.as_str() {
-                                command_args.push(s.to_string());
+            if let Some(positional_args) = &config.positional_args {
+                for pos_arg_config in positional_args {
+                    if let Some(value) = args.and_then(|a| a.get(&pos_arg_config.name)) {
+                        if let Some(s) = value.as_str() {
+                            command_args.push(s.to_string());
+                        } else if let Some(arr) = value.as_array() {
+                            for item in arr {
+                                if let Some(s) = item.as_str() {
+                                    command_args.push(s.to_string());
+                                }
                             }
+                        } else if !value.is_null() {
+                            command_args.push(value.to_string().trim_matches('"').to_string());
                         }
-                    } else if !value.is_null() {
-                        command_args.push(value.to_string().trim_matches('"').to_string());
+                        processed_args.insert(pos_arg_config.name.clone());
                     }
-                    processed_args.insert(pos_arg_config.name.clone());
                 }
             }
 
             // Handle named options
             if let Some(args_map) = args {
-                for opt_config in &config.options {
-                    // Check for the option by its name or alias
-                    let arg_value = args_map.get(&opt_config.name).or_else(|| {
-                        opt_config
-                            .alias
-                            .as_ref()
-                            .and_then(|alias| args_map.get(alias))
-                    });
+                if let Some(options) = &config.options {
+                    for opt_config in options {
+                        // Check for the option by its name or alias
+                        let arg_value = args_map.get(&opt_config.name).or_else(|| {
+                            opt_config
+                                .alias
+                                .as_ref()
+                                .and_then(|alias| args_map.get(alias))
+                        });
 
-                    if let Some(value) = arg_value {
-                        let flag = if opt_config.name.starts_with('-') {
-                            opt_config.name.clone()
-                        } else if opt_config.name.len() == 1 {
-                            format!("-{}", opt_config.name)
-                        } else {
-                            format!("--{}", opt_config.name)
-                        };
+                        if let Some(value) = arg_value {
+                            let flag = if opt_config.name.starts_with('-') {
+                                opt_config.name.clone()
+                            } else if opt_config.name.len() == 1 {
+                                format!("-{}", opt_config.name)
+                            } else {
+                                format!("--{}", opt_config.name)
+                            };
 
-                        match opt_config.option_type.as_str() {
-                            "bool" => {
-                                if value.as_bool().unwrap_or(false) {
-                                    command_args.push(flag);
+                            match opt_config.option_type.as_str() {
+                                "boolean" => {
+                                    let is_true = value.as_bool().unwrap_or_else(|| {
+                                        value
+                                            .as_str()
+                                            .map(|s| s.to_lowercase() == "true")
+                                            .unwrap_or(false)
+                                    });
+                                    if is_true {
+                                        command_args.push(flag);
+                                    }
                                 }
-                            }
-                            "array" => {
-                                if let Some(arr) = value.as_array() {
-                                    for item in arr {
-                                        command_args.push(flag.clone());
-                                        if let Some(s) = item.as_str() {
-                                            command_args.push(s.to_string());
+                                "array" => {
+                                    if let Some(arr) = value.as_array() {
+                                        for item in arr {
+                                            command_args.push(flag.clone());
+                                            if let Some(s) = item.as_str() {
+                                                command_args.push(s.to_string());
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            _ => {
-                                // string, int, etc.
-                                if let Some(s) = value.as_str() {
-                                    command_args.push(flag);
-                                    command_args.push(s.to_string());
-                                } else if !value.is_null() {
-                                    command_args.push(flag);
-                                    command_args
-                                        .push(value.to_string().trim_matches('"').to_string());
+                                _ => {
+                                    if let Some(s) = value.as_str() {
+                                        command_args.push(flag);
+                                        command_args.push(s.to_string());
+                                    } else if !value.is_null() {
+                                        command_args.push(flag);
+                                        command_args
+                                            .push(value.to_string().trim_matches('"').to_string());
+                                    }
                                 }
                             }
-                        }
-                        processed_args.insert(opt_config.name.clone());
-                        if let Some(alias) = &opt_config.alias {
-                            processed_args.insert(alias.clone());
+                            processed_args.insert(opt_config.name.clone());
+                            if let Some(alias) = &opt_config.alias {
+                                processed_args.insert(alias.clone());
+                            }
                         }
                     }
                 }
@@ -494,17 +499,6 @@ impl Adapter {
         if let Some(args_map) = args {
             for (key, value) in args_map {
                 if processed_args.contains(key) || key == "working_directory" {
-                    continue;
-                }
-
-                // This part retains the old logic for args not in the config
-                if key == "_subcommand" {
-                    if let Some(subcommand) = value.as_str() {
-                        // Insert subcommand at the beginning if not already there
-                        if command_args.is_empty() || command_args[0] != subcommand {
-                            command_args.insert(0, subcommand.to_string());
-                        }
-                    }
                     continue;
                 }
 
@@ -520,6 +514,14 @@ impl Adapter {
                     if b {
                         command_args.push(flag);
                     }
+                } else if let Some(s) = value.as_str() {
+                    let lower_s = s.to_lowercase();
+                    if lower_s == "true" {
+                        command_args.push(flag);
+                    } else if lower_s != "false" {
+                        command_args.push(flag);
+                        command_args.push(s.to_string());
+                    }
                 } else if let Some(arr) = value.as_array() {
                     for item in arr {
                         command_args.push(flag.clone());
@@ -527,9 +529,6 @@ impl Adapter {
                             command_args.push(s.to_string());
                         }
                     }
-                } else if let Some(s) = value.as_str() {
-                    command_args.push(flag);
-                    command_args.push(s.to_string());
                 } else if !value.is_null() {
                     command_args.push(flag);
                     command_args.push(value.to_string().trim_matches('"').to_string());
@@ -537,14 +536,8 @@ impl Adapter {
             }
         }
 
-        // Special handling for `cargo nextest run`
-        if base_command == "cargo" && command_args.first().is_some_and(|s| s == "nextest") {
-            // Transform `cargo nextest ...` to `cargo-nextest run ...`
-            let mut new_args = vec!["run".to_string()];
-            new_args.extend(command_args.into_iter().skip(1));
-            return ("cargo-nextest".to_string(), new_args);
-        }
-
-        (base_command.to_string(), command_args)
+        let final_command = command_parts.remove(0);
+        command_parts.extend(command_args);
+        (final_command, command_parts)
     }
 }

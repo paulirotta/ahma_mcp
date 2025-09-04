@@ -94,6 +94,108 @@ impl AhmaMcpService {
             peer: Arc::new(RwLock::new(None)),
         })
     }
+
+    /// Recursively traverses the subcommand configuration to generate MCP tools.
+    /// Only "leaf" subcommands (those without further nested subcommands) are registered as executable tools.
+    fn recursively_add_tools(
+        &self,
+        tools: &mut Vec<Tool>,
+        tool_config: &ToolConfig,
+        subcommand: &SubcommandConfig,
+        parent_name: &str,
+    ) {
+        // Skip disabled subcommands
+        if !subcommand.enabled {
+            return;
+        }
+
+        let tool_name = format!("{}_{}", parent_name, subcommand.name);
+
+        // If there are nested subcommands, this is a "namespace" node. Recurse deeper.
+        if let Some(nested_subcommands) = &subcommand.subcommand {
+            for nested_subcommand in nested_subcommands {
+                self.recursively_add_tools(tools, tool_config, nested_subcommand, &tool_name);
+            }
+        } else {
+            // This is a "leaf" node, so it becomes an executable MCP tool.
+            let input_schema = self.generate_input_schema_for_subcommand(tool_config, subcommand);
+
+            let mut description = subcommand.description.clone();
+            if let Some(guidance_key) = &subcommand.guidance_key {
+                if let Some(guidance_config) = self.guidance.as_ref() {
+                    // First try the new guidance_blocks structure
+                    if let Some(guidance_text) = guidance_config.guidance_blocks.get(guidance_key) {
+                        description = format!("{}\n\n{}", guidance_text, description);
+                    }
+                    // Fallback to legacy structure for backward compatibility
+                    else if let Some(legacy_config) = &guidance_config.legacy_guidance {
+                        if let Some(guidance_text) = legacy_config
+                            .tool_specific_guidance
+                            .get(&tool_config.name)
+                            .and_then(|g| g.get(guidance_key))
+                        {
+                            description = format!("{}\n\n{}", guidance_text, description);
+                        }
+                    }
+                }
+            }
+
+            tools.push(Tool {
+                name: tool_name.into(),
+                description: Some(description.into()),
+                input_schema,
+                output_schema: None,
+                annotations: None,
+            });
+        }
+    }
+
+    /// Finds the configuration for a potentially nested subcommand by parsing the tool name.
+    /// Returns the top-level tool config, the specific subcommand config, and the command parts.
+    fn find_subcommand_config(
+        &self,
+        tool_name: &str,
+    ) -> Option<(&ToolConfig, &SubcommandConfig, Vec<String>)> {
+        let parts: Vec<&str> = tool_name.split('_').collect();
+        if parts.is_empty() {
+            return None;
+        }
+
+        let base_command_name = parts[0];
+        let tool_config = self.configs.get(base_command_name)?;
+
+        let mut current_subcommands = tool_config.subcommand.as_ref()?;
+        let mut found_subcommand = None;
+        let mut command_parts = vec![tool_config.command.clone()];
+
+        // Start iterating from the first subcommand part of the name
+        for (i, part) in parts.iter().enumerate().skip(1) {
+            if let Some(sub) = current_subcommands.iter().find(|s| s.name == *part) {
+                // Only add non-"default" subcommands to the command parts
+                // "default" is a configuration identifier, not a real subcommand
+                if sub.name != "default" {
+                    command_parts.push(sub.name.clone());
+                }
+                // If this is the last part of the tool name, we found our target
+                if i == parts.len() - 1 {
+                    found_subcommand = Some(sub);
+                    break;
+                }
+                // If there are more parts, we need to go deeper
+                if let Some(nested) = &sub.subcommand {
+                    current_subcommands = nested;
+                } else {
+                    // We have more parts in the name, but no more subcommands in the config.
+                    return None;
+                }
+            } else {
+                // A part of the name did not match any subcommand at this level.
+                return None;
+            }
+        }
+
+        found_subcommand.map(|sc| (tool_config, sc, command_parts))
+    }
 }
 
 #[async_trait::async_trait]
@@ -158,48 +260,9 @@ impl ServerHandler for AhmaMcpService {
             });
 
             for config in self.configs.values() {
-                if config.subcommand.is_empty() {
-                    // This case might be for tools without subcommands.
-                    // We'll assume for now that all tools have subcommands,
-                    // as per the current design.
-                } else {
-                    // Register each subcommand as a separate tool
-                    for subcommand in &config.subcommand {
-                        let tool_name = format!("{}_{}", config.name, subcommand.name);
-                        let input_schema =
-                            self.generate_input_schema_for_subcommand(config, subcommand);
-
-                        let mut description = subcommand.description.clone();
-                        if let Some(guidance_key) = &subcommand.guidance_key {
-                            if let Some(guidance_config) = self.guidance.as_ref() {
-                                // First try the new guidance_blocks structure
-                                if let Some(guidance_text) =
-                                    guidance_config.guidance_blocks.get(guidance_key)
-                                {
-                                    description = format!("{}\n\n{}", guidance_text, description);
-                                }
-                                // Fallback to legacy structure for backward compatibility
-                                else if let Some(legacy_config) = &guidance_config.legacy_guidance
-                                {
-                                    if let Some(guidance_text) = legacy_config
-                                        .tool_specific_guidance
-                                        .get(&config.name)
-                                        .and_then(|g| g.get(guidance_key))
-                                    {
-                                        description =
-                                            format!("{}\n\n{}", guidance_text, description);
-                                    }
-                                }
-                            }
-                        }
-
-                        tools.push(Tool {
-                            name: tool_name.into(),
-                            description: Some(description.into()),
-                            input_schema,
-                            output_schema: None,
-                            annotations: None,
-                        });
+                if let Some(subcommands) = &config.subcommand {
+                    for subcommand in subcommands {
+                        self.recursively_add_tools(&mut tools, config, subcommand, &config.name);
                     }
                 }
             }
@@ -424,7 +487,7 @@ impl ServerHandler for AhmaMcpService {
                 //
                 // LESSON LEARNED: Default changed from 300s to 240s per user request.
                 // Validation bounds prevent user errors and resource waste:
-                // - Minimum 10s: Prevents accidentally short timeouts
+                // - Minimum 1s: Prevents accidentally short timeouts
                 // - Maximum 1800s (30min): Prevents runaway waits
                 // - Default 240s (4min): Balance of patience vs efficiency
                 //
@@ -434,13 +497,13 @@ impl ServerHandler for AhmaMcpService {
                 // Parse timeout parameter (default 240 seconds = 4 minutes, with validation)
                 let timeout_seconds = if let Some(v) = args.get("timeout_seconds") {
                     let requested_timeout = v.as_f64().unwrap_or(240.0);
-                    // Validate timeout: minimum 10s, maximum 1800s (30 minutes)
-                    if requested_timeout < 10.0 {
+                    // Validate timeout: minimum 1s, maximum 1800s (30 minutes)
+                    if requested_timeout < 1.0 {
                         tracing::warn!(
-                            "Timeout too small ({}s), using minimum of 10s",
+                            "Timeout too small ({}s), using minimum of 1s",
                             requested_timeout
                         );
-                        10.0
+                        1.0
                     } else if requested_timeout > 1800.0 {
                         tracing::warn!(
                             "Timeout too large ({}s), using maximum of 1800s",
@@ -755,51 +818,25 @@ impl ServerHandler for AhmaMcpService {
                 }
             }
 
-            // Parse tool name to extract base command and subcommand
-            let (base_command, subcommand) = if let Some(underscore_pos) = tool_name.find('_') {
-                let base = &tool_name[..underscore_pos];
-                let sub = &tool_name[underscore_pos + 1..];
-                (base, Some(sub))
-            } else {
-                (tool_name, None)
-            };
-
-            let config = match self.configs.get(base_command) {
-                Some(config) => config,
-                None => {
-                    let error_message = format!(
-                        "Tool '{}' not found (base command '{}' not configured)",
-                        tool_name, base_command
-                    );
-                    tracing::error!("{}", error_message);
-                    return Err(McpError::invalid_params(
-                        error_message,
-                        Some(
-                            serde_json::json!({ "tool_name": tool_name, "base_command": base_command }),
-                        ),
-                    ));
-                }
-            };
-
-            // Verify subcommand exists if specified and get its config
-            let subcommand_config = if let Some(sub) = subcommand {
-                match config.subcommand.iter().find(|sc| sc.name == sub) {
-                    Some(sc) => Some(sc),
+            // Parse tool name to extract base command and subcommand parts
+            let (config, subcommand_config, command_parts) =
+                match self.find_subcommand_config(tool_name) {
+                    Some((config, sc_config, parts)) => (config, Some(sc_config), parts),
                     None => {
-                        let error_message =
-                            format!("Subcommand '{}' not found for tool '{}'", sub, base_command);
+                        let error_message = format!(
+                            "Tool '{}' not found or is not an executable command.",
+                            tool_name
+                        );
                         tracing::error!("{}", error_message);
                         return Err(McpError::invalid_params(
                             error_message,
-                            Some(
-                                serde_json::json!({ "tool_name": tool_name, "base_command": base_command, "subcommand": sub }),
-                            ),
+                            Some(serde_json::json!({ "tool_name": tool_name })),
                         ));
                     }
-                }
-            } else {
-                None
-            };
+                };
+
+            // The base command is now the full path of subcommands
+            let base_command = command_parts.join(" ");
 
             // SECURITY: Path validation
             // Before executing, validate any arguments that are designated as paths.
@@ -807,65 +844,71 @@ impl ServerHandler for AhmaMcpService {
                 if let Some(ref args) = params.arguments {
                     for (key, value) in args.iter() {
                         // Check if the argument is a path that needs validation
-                        if let Some(option_config) =
-                            sub_config.options.iter().find(|o| o.name == *key)
-                        {
-                            let format = option_config.format.as_deref();
-                            if format == Some("path") || format == Some("path-or-value") {
-                                if let Some(path_str) = value.as_str() {
-                                    // For "path-or-value", skip validation if it's a KEY=VALUE string
-                                    if format == Some("path-or-value") && path_str.contains('=') {
-                                        continue;
-                                    }
-
-                                    let path_to_validate = Path::new(path_str);
-
-                                    // Get the workspace root from the current working directory
-                                    let workspace_root = match env::current_dir() {
-                                        Ok(dir) => dir,
-                                        Err(e) => {
-                                            return Err(McpError::internal_error(
-                                                format!("Failed to get current directory: {}", e),
-                                                None,
-                                            ));
+                        if let Some(options) = &sub_config.options {
+                            if let Some(option_config) = options.iter().find(|o| o.name == *key) {
+                                let format = option_config.format.as_deref();
+                                if format == Some("path") || format == Some("path-or-value") {
+                                    if let Some(path_str) = value.as_str() {
+                                        // For "path-or-value", skip validation if it's a KEY=VALUE string
+                                        if format == Some("path-or-value") && path_str.contains('=')
+                                        {
+                                            continue;
                                         }
-                                    };
 
-                                    // Canonicalize both paths to resolve any '..' or symlinks
-                                    let canonical_workspace = match workspace_root.canonicalize() {
-                                        Ok(path) => path,
-                                        Err(e) => {
-                                            return Err(McpError::internal_error(
-                                                format!(
-                                                    "Failed to canonicalize workspace path: {}",
-                                                    e
+                                        let path_to_validate = Path::new(path_str);
+
+                                        // Get the workspace root from the current working directory
+                                        let workspace_root = match env::current_dir() {
+                                            Ok(dir) => dir,
+                                            Err(e) => {
+                                                return Err(McpError::internal_error(
+                                                    format!(
+                                                        "Failed to get current directory: {}",
+                                                        e
+                                                    ),
+                                                    None,
+                                                ));
+                                            }
+                                        };
+
+                                        // Canonicalize both paths to resolve any '..' or symlinks
+                                        let canonical_workspace = match workspace_root
+                                            .canonicalize()
+                                        {
+                                            Ok(path) => path,
+                                            Err(e) => {
+                                                return Err(McpError::internal_error(
+                                                    format!(
+                                                        "Failed to canonicalize workspace path: {}",
+                                                        e
+                                                    ),
+                                                    None,
+                                                ));
+                                            }
+                                        };
+
+                                        let canonical_path = match path_to_validate.canonicalize() {
+                                            Ok(p) => p,
+                                            Err(_) => {
+                                                // If canonicalization fails, it might be because the path doesn't exist yet.
+                                                // In that case, we check the absolute path.
+                                                path_to_validate.to_path_buf()
+                                            }
+                                        };
+
+                                        if !canonical_path.starts_with(&canonical_workspace) {
+                                            let error_message = format!(
+                                                "Path validation failed for parameter '{}'. The path '{}' is outside the allowed workspace.",
+                                                key, path_str
+                                            );
+                                            tracing::error!("{}", error_message);
+                                            return Err(McpError::invalid_params(
+                                                error_message,
+                                                Some(
+                                                    serde_json::json!({ "parameter": key, "path": path_str }),
                                                 ),
-                                                None,
                                             ));
                                         }
-                                    };
-
-                                    let canonical_path = match path_to_validate.canonicalize() {
-                                        Ok(p) => p,
-                                        Err(_) => {
-                                            // If canonicalization fails, it might be because the path doesn't exist yet.
-                                            // In that case, we check the absolute path.
-                                            path_to_validate.to_path_buf()
-                                        }
-                                    };
-
-                                    if !canonical_path.starts_with(&canonical_workspace) {
-                                        let error_message = format!(
-                                            "Path validation failed for parameter '{}'. The path '{}' is outside the allowed workspace.",
-                                            key, path_str
-                                        );
-                                        tracing::error!("{}", error_message);
-                                        return Err(McpError::invalid_params(
-                                            error_message,
-                                            Some(
-                                                serde_json::json!({ "parameter": key, "path": path_str }),
-                                            ),
-                                        ));
                                     }
                                 }
                             }
@@ -879,14 +922,7 @@ impl ServerHandler for AhmaMcpService {
             // 2. If subcommand.synchronous is None, inherit tool.synchronous
             // 3. If tool.synchronous is None, default to false (async)
             let is_synchronous = subcommand_config
-                .and_then(|sc| {
-                    tracing::info!(
-                        "Subcommand '{}' synchronous flag: {:?}",
-                        sc.name,
-                        sc.synchronous
-                    );
-                    sc.synchronous
-                })
+                .and_then(|sc| sc.synchronous)
                 .or(config.synchronous)
                 .unwrap_or(false);
 
@@ -903,10 +939,9 @@ impl ServerHandler for AhmaMcpService {
                 .unwrap_or_else(|| ".".to_string());
 
             tracing::info!(
-                "Executing tool '{}' (base: '{}', subcommand: {:?}) in directory '{}' with mode: {}",
+                "Executing tool '{}' (command: '{}') in directory '{}' with mode: {}",
                 tool_name,
                 base_command,
-                subcommand,
                 working_directory,
                 if is_synchronous {
                     "synchronous"
@@ -917,24 +952,13 @@ impl ServerHandler for AhmaMcpService {
 
             let arguments: Option<Map<String, serde_json::Value>> = params.arguments;
 
-            // Modify arguments to include subcommand as first positional argument
-            // But only if subcommand is different from the base command to avoid duplication
+            // We no longer need to manually add the subcommand to the args,
+            // as `find_subcommand_config` gives us the full command path.
             let mut modified_args = arguments.unwrap_or_default();
-            if let Some(sub) = subcommand {
-                // Only add subcommand if it's different from the base command
-                // This prevents duplication like "ls ls" when tool is "ls_ls"
-                // Also skip generic subcommands like "default" that shouldn't be passed to the command
-                if sub != base_command && sub != "default" {
-                    modified_args.insert(
-                        "_subcommand".to_string(),
-                        serde_json::Value::String(sub.to_string()),
-                    );
-                }
-            }
 
             // SECURITY FIX: Filter out working_directory for cargo commands to prevent injection attacks
             // Cargo should always run in the current working directory where the server started
-            if base_command == "cargo" {
+            if config.name == "cargo" {
                 modified_args.remove("working_directory");
             }
 
@@ -942,7 +966,7 @@ impl ServerHandler for AhmaMcpService {
                 match self
                     .adapter
                     .execute_sync_in_dir(
-                        &config.command, // Use base command only
+                        &base_command, // Use the full command path
                         Some(modified_args),
                         &working_directory,
                         timeout,
@@ -979,7 +1003,7 @@ impl ServerHandler for AhmaMcpService {
                     .adapter
                     .execute_async_in_dir_with_options(
                         tool_name,
-                        &config.command, // Use base command only
+                        &base_command, // Use the full command path
                         &working_directory,
                         crate::adapter::AsyncExecOptions {
                             operation_id: Some(operation_id.clone()),
@@ -1074,10 +1098,10 @@ impl AhmaMcpService {
             properties.insert("working_directory".to_string(), Value::Object(wd_schema));
         }
 
-        let all_options = subcommand_config
-            .options
-            .iter()
-            .chain(subcommand_config.positional_args.iter());
+        let options = subcommand_config.options.as_deref().unwrap_or(&[]);
+        let positional_args = subcommand_config.positional_args.as_deref().unwrap_or(&[]);
+
+        let all_options = options.iter().chain(positional_args.iter());
 
         for option in all_options {
             let mut option_schema = Map::new();

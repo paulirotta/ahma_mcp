@@ -31,11 +31,13 @@ fn test_synchronous_inheritance_loading() -> Result<()> {
     // Tool-level synchronous should be loaded
     assert_eq!(config.synchronous, Some(true));
 
+    let subcommands = config.subcommand.as_ref().expect("Should have subcommands");
+
     // First subcommand should have None (will inherit tool-level)
-    assert_eq!(config.subcommand[0].synchronous, None);
+    assert_eq!(subcommands[0].synchronous, None);
 
     // Second subcommand should have explicit override
-    assert_eq!(config.subcommand[1].synchronous, Some(false));
+    assert_eq!(subcommands[1].synchronous, Some(false));
 
     Ok(())
 }
@@ -65,20 +67,22 @@ fn test_synchronous_inheritance_logic() {
 
 #[test]
 fn test_gh_tool_optimized_format() -> Result<()> {
-    // Test that our optimized gh.json loads correctly
+    // Test that our optimized gh.json loads correctly with inheritance pattern
     let gh_json = std::fs::read_to_string("tools/gh.json")?;
     let config: ToolConfig = serde_json::from_str(&gh_json)?;
 
-    // Should have tool-level synchronous = true
+    // Should have tool-level synchronous=true for inheritance pattern
     assert_eq!(config.synchronous, Some(true));
 
-    // All subcommands should have None (no explicit synchronous field)
-    for subcommand in &config.subcommand {
-        assert_eq!(
-            subcommand.synchronous, None,
-            "Subcommand '{}' should not have explicit synchronous field",
-            subcommand.name
-        );
+    // Subcommands should NOT have explicit synchronous field and inherit from tool level
+    if let Some(subcommands) = &config.subcommand {
+        for subcommand in subcommands {
+            assert_eq!(
+                subcommand.synchronous, None,
+                "Subcommand '{}' should inherit synchronous behavior from tool level (should be None)",
+                subcommand.name
+            );
+        }
     }
 
     Ok(())

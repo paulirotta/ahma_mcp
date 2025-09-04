@@ -16,6 +16,16 @@ pub struct SchemaValidationError {
     pub suggestion: Option<String>,
 }
 
+impl std::fmt::Display for SchemaValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}] {}", self.field_path, self.message)?;
+        if let Some(ref suggestion) = self.suggestion {
+            write!(f, "\n   💡 Suggestion: {}", suggestion)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValidationErrorType {
     MissingRequired,
@@ -150,6 +160,11 @@ impl MtdfValidator {
                 "Default synchronous behavior for all subcommands (can be overridden per subcommand)",
             ),
             ("hints", "object", "Context-aware hints for AI agents"),
+            (
+                "guidance_key",
+                "string",
+                "Key to reference shared guidance from tool_guidance.json",
+            ),
             ("subcommand", "array", "Array of subcommand definitions"),
         ];
 
@@ -270,16 +285,31 @@ impl MtdfValidator {
 
         let optional_fields = vec![
             (
+                "enabled",
+                "boolean",
+                "Whether this subcommand is enabled (default: true)",
+            ),
+            (
                 "synchronous",
                 "boolean",
                 "Whether this subcommand runs synchronously (default: false)",
             ),
+            (
+                "guidance_key",
+                "string",
+                "Key to reference shared guidance from tool_guidance.json",
+            ),
             ("options", "array", "Array of command-line options"),
+            (
+                "subcommand",
+                "array",
+                "Array of nested subcommand definitions",
+            ),
         ];
 
         // Check required fields
-        for (field, expected_type, description) in required_fields {
-            match obj.get(field) {
+        for (field, expected_type, description) in &required_fields {
+            match obj.get(*field) {
                 None => {
                     errors.push(SchemaValidationError {
                         field_path: format!("{}.{}", path, field),
@@ -303,8 +333,8 @@ impl MtdfValidator {
         }
 
         // Validate optional fields if present
-        for (field, expected_type, _description) in optional_fields {
-            if let Some(value) = obj.get(field) {
+        for (field, expected_type, _description) in &optional_fields {
+            if let Some(value) = obj.get(*field) {
                 self.validate_field_type(
                     &format!("{}.{}", path, field),
                     value,
@@ -312,6 +342,11 @@ impl MtdfValidator {
                     errors,
                 );
             }
+        }
+
+        // Validate nested subcommands array if present
+        if let Some(subcommands) = obj.get("subcommand") {
+            self.validate_subcommands_array(subcommands, parent_tool, errors);
         }
 
         // Validate options array if present
@@ -322,6 +357,34 @@ impl MtdfValidator {
         // Validate async behavior guidelines
         if let Some(desc) = obj.get("description").and_then(|v| v.as_str()) {
             self.validate_async_behavior_guidance(desc, path, obj, parent_tool, errors);
+        }
+
+        // Check for unknown fields if in strict mode
+        if self.strict_mode && !self.allow_unknown_fields {
+            let all_known_fields: HashSet<&str> = required_fields
+                .iter()
+                .chain(optional_fields.iter())
+                .map(|(field, _, _)| *field)
+                .chain(["positional_args"].iter().copied()) // Add positional_args as known field
+                .collect();
+
+            for key in obj.keys() {
+                if !all_known_fields.contains(key.as_str()) {
+                    errors.push(SchemaValidationError {
+                        field_path: format!("{}.{}", path, key),
+                        error_type: ValidationErrorType::UnknownField,
+                        message: format!("Unknown field '{}' in subcommand", key),
+                        suggestion: Some(format!(
+                            "Known fields: {}. Check for typos or remove this field.",
+                            all_known_fields
+                                .iter()
+                                .copied()
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )),
+                    });
+                }
+            }
         }
     }
 
@@ -413,14 +476,21 @@ impl MtdfValidator {
         if let Some(type_val) = obj.get("type").and_then(|v| v.as_str()) {
             let valid_types = ["boolean", "string", "integer", "array"];
             if !valid_types.contains(&type_val) {
+                let suggestion = match type_val {
+                    "bool" => Some("Use 'boolean' instead of 'bool'. CLI flags like --cached, --verbose should use type 'boolean'.".to_string()),
+                    "int" => Some("Use 'integer' instead of 'int'.".to_string()),
+                    "str" => Some("Use 'string' instead of 'str'.".to_string()),
+                    _ => Some(format!(
+                        "Valid types: {}. Use one of these.",
+                        valid_types.join(", ")
+                    )),
+                };
+
                 errors.push(SchemaValidationError {
                     field_path: format!("{}.type", path),
                     error_type: ValidationErrorType::InvalidValue,
                     message: format!("Invalid option type '{}'", type_val),
-                    suggestion: Some(format!(
-                        "Valid types: {}. Use one of these.",
-                        valid_types.join(", ")
-                    )),
+                    suggestion,
                 });
             }
         }
@@ -542,12 +612,12 @@ impl MtdfValidator {
     ) {
         // Validate timeout_seconds is reasonable
         if let Some(timeout) = obj.get("timeout_seconds").and_then(|v| v.as_u64()) {
-            if timeout < 10 {
+            if timeout < 1 {
                 errors.push(SchemaValidationError {
                     field_path: "timeout_seconds".to_string(),
                     error_type: ValidationErrorType::ConstraintViolation,
-                    message: "timeout_seconds should be at least 10 seconds".to_string(),
-                    suggestion: Some("Use a timeout of at least 10 seconds to allow for reasonable execution time.".to_string()),
+                    message: "timeout_seconds should be at least 1 second".to_string(),
+                    suggestion: Some("Use a timeout of at least 1 second to allow for reasonable execution time.".to_string()),
                 });
             }
             if timeout > 3600 {
@@ -572,6 +642,26 @@ impl MtdfValidator {
                             .to_string(),
                     ),
                 });
+            }
+        }
+
+        // Validate enablement logic consistency
+        let tool_enabled = obj.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+
+        if let Some(subcommands) = obj.get("subcommand").and_then(|v| v.as_array()) {
+            for (index, subcommand) in subcommands.iter().enumerate() {
+                if let Some(sub_obj) = subcommand.as_object() {
+                    if let Some(enabled) = sub_obj.get("enabled").and_then(|v| v.as_bool()) {
+                        if enabled && !tool_enabled {
+                            errors.push(SchemaValidationError {
+                                field_path: format!("subcommand[{}].enabled", index),
+                                error_type: ValidationErrorType::LogicalInconsistency,
+                                message: "Subcommand has 'enabled: true' but tool is disabled at root level".to_string(),
+                                suggestion: Some("Remove 'enabled: true' from subcommand (it's the default) or enable the tool at root level".to_string()),
+                            });
+                        }
+                    }
+                }
             }
         }
     }
@@ -813,5 +903,42 @@ mod tests {
                 .any(|e| e.error_type == ValidationErrorType::InvalidValue
                     && e.message.contains("Invalid option type"))
         );
+    }
+
+    #[test]
+    fn test_bool_hint() {
+        let validator = MtdfValidator::new();
+        let config = r#"
+        {
+            "name": "test_tool",
+            "description": "A test tool",
+            "command": "test",
+            "subcommand": [
+                {
+                    "name": "run",
+                    "description": "**IMPORTANT:** This tool operates asynchronously. Returns operation_id immediately. Results pushed via MCP notification when complete. DO NOT wait - continue with other tasks.",
+                    "options": [
+                        {
+                            "name": "verbose",
+                            "type": "bool",
+                            "description": "Enable verbose output"
+                        }
+                    ]
+                }
+            ]
+        }"#;
+
+        let result = validator.validate_tool_config(&PathBuf::from("test.json"), config);
+        assert!(result.is_err());
+
+        let errors = result.unwrap_err();
+        // Check that we get the specific hint for using "bool" instead of "boolean"
+        assert!(errors.iter().any(|e| {
+            e.error_type == ValidationErrorType::InvalidValue
+                && e.message.contains("Invalid option type 'bool'")
+                && e.suggestion
+                    .as_ref()
+                    .is_some_and(|s| s.contains("Use 'boolean' instead of 'bool'"))
+        }));
     }
 }

@@ -19,7 +19,7 @@ This document captures the key lessons learned during implementation of graceful
 ### 2. Wait Tool Timeout Bounds
 
 - **Default**: 240 seconds (changed from 300s per user request)
-- **Minimum**: 10 seconds (prevents accidentally short timeouts)
+- **Minimum**: 1 second (prevents accidentally short timeouts)
 - **Maximum**: 1800 seconds (30 minutes - prevents resource waste)
 - **Validation**: Always clamp values to prevent user errors
 

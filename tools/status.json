@@ -1,0 +1,26 @@
+{
+    "name": "status",
+    "command": "status",
+    "description": "Query the status of operations without blocking. Shows active and completed operations.",
+    "synchronous": true,
+    "guidance_key": "sync_behavior",
+    "subcommand": [
+        {
+            "name": "default",
+            "description": "Query the status of operations without blocking. Shows active and completed operations.",
+            "synchronous": true,
+            "options": [
+                {
+                    "name": "operation_id",
+                    "type": "string",
+                    "description": "Specific operation ID to query (optional; shows all if omitted)"
+                },
+                {
+                    "name": "tools",
+                    "type": "string",
+                    "description": "Comma-separated tool name prefixes to filter by (optional; shows all if omitted)"
+                }
+            ]
+        }
+    ]
+}
