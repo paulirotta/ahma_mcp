@@ -468,7 +468,7 @@ impl MtdfValidator {
                         valid_types.join(", ")
                     )),
                 };
-                
+
                 errors.push(SchemaValidationError {
                     field_path: format!("{}.type", path),
                     error_type: ValidationErrorType::InvalidValue,
@@ -890,12 +890,12 @@ mod tests {
 
         let errors = result.unwrap_err();
         // Check that we get the specific hint for using "bool" instead of "boolean"
-        assert!(
-            errors
-                .iter()
-                .any(|e| e.error_type == ValidationErrorType::InvalidValue
-                    && e.message.contains("Invalid option type 'bool'")
-                    && e.suggestion.as_ref().map_or(false, |s| s.contains("Use 'boolean' instead of 'bool'")))
-        );
+        assert!(errors.iter().any(|e| {
+            e.error_type == ValidationErrorType::InvalidValue
+                && e.message.contains("Invalid option type 'bool'")
+                && e.suggestion
+                    .as_ref()
+                    .map_or(false, |s| s.contains("Use 'boolean' instead of 'bool'"))
+        }));
     }
 }
