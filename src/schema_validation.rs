@@ -103,7 +103,7 @@ impl MtdfValidator {
 
         // Validate subcommands array
         if let Some(subcommands) = obj.get("subcommand") {
-            self.validate_subcommands_array(subcommands, &mut errors);
+            self.validate_subcommands_array(subcommands, obj, &mut errors);
         }
 
         // Additional semantic validations
@@ -226,6 +226,7 @@ impl MtdfValidator {
     fn validate_subcommands_array(
         &self,
         subcommands: &Value,
+        parent_tool: &serde_json::Map<String, Value>,
         errors: &mut Vec<SchemaValidationError>,
     ) {
         if !subcommands.is_array() {
@@ -258,7 +259,7 @@ impl MtdfValidator {
             }
 
             let obj = subcommand.as_object().unwrap();
-            self.validate_subcommand_fields(obj, &path, errors);
+            self.validate_subcommand_fields(obj, &path, parent_tool, errors);
         }
     }
 
@@ -266,6 +267,7 @@ impl MtdfValidator {
         &self,
         obj: &serde_json::Map<String, Value>,
         path: &str,
+        parent_tool: &serde_json::Map<String, Value>,
         errors: &mut Vec<SchemaValidationError>,
     ) {
         let required_fields = vec![
@@ -354,7 +356,7 @@ impl MtdfValidator {
 
         // Validate async behavior guidelines
         if let Some(desc) = obj.get("description").and_then(|v| v.as_str()) {
-            self.validate_async_behavior_guidance(desc, path, obj, errors);
+            self.validate_async_behavior_guidance(desc, path, obj, parent_tool, errors);
         }
 
         // Check for unknown fields if in strict mode
@@ -511,17 +513,17 @@ impl MtdfValidator {
         description: &str,
         path: &str,
         obj: &serde_json::Map<String, Value>,
+        parent_tool: &serde_json::Map<String, Value>,
         errors: &mut Vec<SchemaValidationError>,
     ) {
-        // If a subcommand has nested subcommands, it's a namespace, not a runnable command.
-        // Don't validate its description for async guidance.
-        if obj.contains_key("subcommand") {
-            return;
-        }
-
+        // Determine if this subcommand should be synchronous considering inheritance
+        // 1. If subcommand.synchronous is Some(value), use value
+        // 2. If subcommand.synchronous is None, inherit parent_tool.synchronous
+        // 3. If parent_tool.synchronous is None, default to false (async)
         let is_synchronous = obj
             .get("synchronous")
             .and_then(|v| v.as_bool())
+            .or_else(|| parent_tool.get("synchronous").and_then(|v| v.as_bool()))
             .unwrap_or(false);
 
         // Check if guidance_key is present - if so, skip guidance validation entirely

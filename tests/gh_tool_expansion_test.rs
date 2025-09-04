@@ -47,11 +47,13 @@ async fn test_gh_tool_expansion_all_synchronous() {
             .find(|sc| sc.name == *expected_name)
             .unwrap_or_else(|| panic!("Should find subcommand {}", expected_name));
 
-        // With redundant declarations removed, subcommands should NOT have synchronous = false
-        // (since false is the default for async operations)
-        assert_eq!(
-            subcommand.synchronous, None,
-            "Subcommand {} should not have redundant synchronous=false declaration (async is default)",
+        // With inheritance, subcommands should have None and inherit from tool level
+        assert!(
+            subcommand
+                .synchronous
+                .or(gh_tool.synchronous)
+                .unwrap_or(false),
+            "Subcommand {} should be synchronous",
             expected_name
         );
 
