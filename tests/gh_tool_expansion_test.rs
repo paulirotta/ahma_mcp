@@ -38,7 +38,7 @@ async fn test_gh_tool_expansion_all_synchronous() {
             .expect(&format!("Should find subcommand {}", expected_name));
 
         assert!(
-            subcommand.synchronous == Some(true),
+            subcommand.synchronous.or(gh_tool.synchronous).unwrap_or(false),
             "Subcommand {} should be synchronous",
             expected_name
         );
