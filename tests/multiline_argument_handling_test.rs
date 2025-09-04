@@ -187,7 +187,7 @@ async fn test_multiline_git_commit_with_real_tool() {
     let adapter = Adapter::new(monitor.clone(), shell_pool).expect("Failed to create adapter");
 
     // Load the real git tool configuration
-    let git_tool_path = "/Users/paul/github/ahma_mcp/tools/git.json";
+    let git_tool_path = "tools/git.json";
     let git_config_str =
         std::fs::read_to_string(git_tool_path).expect("Failed to read git tool config");
     let git_tool: ahma_mcp::config::ToolConfig =

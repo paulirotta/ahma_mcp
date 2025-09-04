@@ -1,6 +1,6 @@
 //! # Standardized Constants and Templates
 //!
-//! This module serves as a centralized repository for constants, particularly for strings
+//! T - If you'll need these results soon, start additional operations in parallel.- If you'll need these results soon, start additional operations in parallel.is module serves as a centralized repository for constants, particularly for strings
 //! and templates that are presented to the AI agent. Centralizing these helps ensure
 //! consistency in the guidance and instructions provided to the agent across different
 //! parts of the application.
@@ -53,11 +53,11 @@ pub const TOOL_HINT_TEMPLATE: &str = "\n\n### ASYNC AHMA OPERATION: {operation_t
  - If you’ll need these results soon, schedule a later `status` check instead of polling.\n\
  - If you have nothing else to do and need results to proceed, use `wait` with operation_ids=['{operation_id}'].\n\
 3. Tips:\n\
- - Prefer `status` for non-blocking checks; avoid tight polling.\n\
+ - **AVOID POLLING:** Do not repeatedly call `status` - this is inefficient and wastes resources.\n\
+ - **Use `wait` with specific operation ID(s) to block until completion.**\n\
  - Batch actions: start other needed tools first, then wait for all IDs at once.\n\
- - Always specify explicit operation IDs; never pass an empty list.\n\
- - You’ll also receive a completion notification via progress updates.\n\n\
-Next: Continue useful work now. Check `status` later, or `wait` only if you’re blocked.\n\n";
+ - Prefer specifying explicit operation IDs; an empty list works too but blocks until all operations are complete.\n\n\
+Next: Continue useful work now. Use `wait` when you actually need the results.\n\n";
 
 /// Template used when detecting premature waits that harm concurrency.
 /// Placeholders: {operation_id}, {gap_seconds}, {efficiency_percent}
@@ -66,9 +66,9 @@ pub const CONCURRENCY_HINT_TEMPLATE: &str = "CONCURRENCY HINT: You waited for '{
 
 /// Template for the status polling detection guidance.
 /// Placeholders: {count}, {operation_id}
-pub const STATUS_POLLING_HINT_TEMPLATE: &str = "STATUS POLLING DETECTED: You've called status {count} times for operation '{operation_id}'. \
-                    Instead of repeatedly polling, consider using 'wait' with enable_async_notification=true \
-                    for automatic results via progress notifications.\n";
+pub const STATUS_POLLING_HINT_TEMPLATE: &str = "⚠️  STATUS POLLING ANTI-PATTERN DETECTED: You've called status {count} times for operation '{operation_id}'. \
+                    This is inefficient! Instead of repeatedly polling, use 'wait' with the operation ID \
+                    to get automatic completion notifications.\n";
 
 #[cfg(test)]
 mod tests {
