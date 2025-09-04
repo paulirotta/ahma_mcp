@@ -49,7 +49,8 @@ mod realistic_endless_notification_test {
                 "/Users/paul/github/ahma_mcp",
                 Some(30),
             )
-            .await;
+            .await
+            .expect("Failed to execute async operation");
         println!("🚀 Started async operation: {}", operation_id);
 
         // Wait for the operation to appear in the completion history
@@ -119,7 +120,8 @@ mod realistic_endless_notification_test {
                     "/Users/paul/github/ahma_mcp",
                     Some(30),
                 )
-                .await,
+                .await
+                .expect("Failed to execute first async operation"),
             adapter
                 .execute_async_in_dir(
                     "cargo",
@@ -128,7 +130,8 @@ mod realistic_endless_notification_test {
                     "/Users/paul/github/ahma_mcp",
                     Some(30),
                 )
-                .await,
+                .await
+                .expect("Failed to execute second async operation"),
         ];
         println!("🚀 Started operations: {:?}", op_ids);
 

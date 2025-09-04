@@ -110,6 +110,16 @@ pub struct OptionConfig {
     pub format: Option<String>,
     #[serde(default)]
     pub required: Option<bool>,
+    /// If true, multi-line or special character values will be written to a temporary file
+    /// and the file path will be passed as the argument instead of the raw value.
+    /// The option name will be automatically converted to use the file flag variant
+    /// (e.g., for git commit: "message" with file_arg=true becomes "-F" instead of "-m")
+    #[serde(default)]
+    pub file_arg: Option<bool>,
+    /// When file_arg is true, this specifies the flag to use for file-based input
+    /// (e.g., "-F" for git commit). If not specified, defaults to the normal flag.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_flag: Option<String>,
 }
 
 fn default_enabled() -> bool {

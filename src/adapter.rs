@@ -41,12 +41,14 @@ use crate::{
     operation_monitor::{Operation, OperationMonitor, OperationStatus},
     shell_pool::{ShellCommand, ShellPoolManager},
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::collections::{HashMap, HashSet};
+use std::io::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use tempfile::NamedTempFile;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
@@ -86,6 +88,8 @@ pub struct Adapter {
     shell_pool: Arc<ShellPoolManager>,
     /// Handles to spawned tasks for graceful shutdown.
     task_handles: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
+    /// Temporary files created for multi-line arguments - cleaned up automatically when dropped
+    temp_files: Arc<Mutex<Vec<NamedTempFile>>>,
 }
 
 impl Adapter {
@@ -95,6 +99,7 @@ impl Adapter {
             monitor,
             shell_pool,
             task_handles: Arc::new(Mutex::new(HashMap::new())),
+            temp_files: Arc::new(Mutex::new(Vec::new())),
         })
     }
 
@@ -124,8 +129,9 @@ impl Adapter {
             .await
             .ok_or_else(|| anyhow::anyhow!("Failed to get shell from pool"))?;
 
-        let (command_with_subcommand, args_vec) =
-            self.prepare_command_and_args(command, args.as_ref(), subcommand_config);
+        let (command_with_subcommand, args_vec) = self
+            .prepare_command_and_args(command, args.as_ref(), subcommand_config)
+            .await?;
 
         let shell_cmd = ShellCommand {
             id: generate_operation_id(),
@@ -180,7 +186,7 @@ impl Adapter {
         args: Option<Map<String, serde_json::Value>>,
         working_directory: &str,
         timeout: Option<u64>,
-    ) -> String {
+    ) -> Result<String> {
         self.execute_async_in_dir_with_options(
             tool_name,
             command,
@@ -205,7 +211,7 @@ impl Adapter {
         working_directory: &str,
         timeout: Option<u64>,
         callback: Option<Box<dyn crate::callback_system::CallbackSender>>,
-    ) -> String {
+    ) -> Result<String> {
         self.execute_async_in_dir_with_options(
             tool_name,
             command,
@@ -228,7 +234,7 @@ impl Adapter {
         command: &str,
         working_dir: &str,
         options: AsyncExecOptions<'a>,
-    ) -> String {
+    ) -> Result<String> {
         let AsyncExecOptions {
             operation_id,
             args,
@@ -254,8 +260,9 @@ impl Adapter {
         let command = command.to_string();
         let wd_clone = wd.clone();
 
-        let (command_with_subcommand, args_vec) =
-            self.prepare_command_and_args(&command, args.as_ref(), subcommand_config);
+        let (command_with_subcommand, args_vec) = self
+            .prepare_command_and_args(&command, args.as_ref(), subcommand_config)
+            .await?;
 
         let full_command = [command_with_subcommand]
             .iter()
@@ -394,15 +401,15 @@ impl Adapter {
             .await
             .insert(op_id_clone.clone(), handle);
 
-        op_id_clone
+        Ok(op_id_clone)
     }
 
-    fn prepare_command_and_args(
+    async fn prepare_command_and_args(
         &self,
         base_command: &str,
         args: Option<&Map<String, serde_json::Value>>,
         subcommand_config: Option<&crate::config::SubcommandConfig>,
-    ) -> (String, Vec<String>) {
+    ) -> Result<(String, Vec<String>)> {
         let mut command_parts: Vec<String> = base_command
             .split_whitespace()
             .map(|s| s.to_string())
@@ -476,8 +483,26 @@ impl Adapter {
                                 }
                                 _ => {
                                     if let Some(s) = value.as_str() {
-                                        command_args.push(flag);
-                                        command_args.push(s.to_string());
+                                        // Check if this option supports file-based arguments and the string needs special handling
+                                        if opt_config.file_arg.unwrap_or(false)
+                                            && Self::needs_file_handling(s)
+                                        {
+                                            // Use file-based argument passing
+                                            let temp_file_path =
+                                                self.create_temp_file_with_content(s).await?;
+                                            let file_flag =
+                                                opt_config.file_flag.as_ref().unwrap_or(&flag);
+                                            command_args.push(file_flag.clone());
+                                            command_args.push(temp_file_path);
+                                        } else if Self::needs_file_handling(s) {
+                                            // Fall back to safe escaping if file handling not supported
+                                            command_args.push(flag);
+                                            command_args.push(Self::escape_shell_argument(s));
+                                        } else {
+                                            // Normal argument handling
+                                            command_args.push(flag);
+                                            command_args.push(s.to_string());
+                                        }
                                     } else if !value.is_null() {
                                         command_args.push(flag);
                                         command_args
@@ -520,7 +545,12 @@ impl Adapter {
                         command_args.push(flag);
                     } else if lower_s != "false" {
                         command_args.push(flag);
-                        command_args.push(s.to_string());
+                        // For fallback arguments, use safe escaping for problematic strings
+                        if Self::needs_file_handling(s) {
+                            command_args.push(Self::escape_shell_argument(s));
+                        } else {
+                            command_args.push(s.to_string());
+                        }
                     }
                 } else if let Some(arr) = value.as_array() {
                     for item in arr {
@@ -538,6 +568,48 @@ impl Adapter {
 
         let final_command = command_parts.remove(0);
         command_parts.extend(command_args);
-        (final_command, command_parts)
+        Ok((final_command, command_parts))
+    }
+
+    /// Checks if a string contains characters that are problematic for shell argument passing
+    pub fn needs_file_handling(value: &str) -> bool {
+        value.contains('\n')
+            || value.contains('\r')
+            || value.contains('\'')
+            || value.contains('"')
+            || value.contains('\\')
+            || value.contains('`')
+            || value.contains('$')
+            || value.len() > 8192 // Also handle very long arguments via file
+    }
+
+    /// Creates a temporary file with the given content and returns the file path
+    async fn create_temp_file_with_content(&self, content: &str) -> Result<String> {
+        let mut temp_file = NamedTempFile::new()
+            .context("Failed to create temporary file for multi-line argument")?;
+
+        temp_file
+            .write_all(content.as_bytes())
+            .context("Failed to write content to temporary file")?;
+
+        let file_path = temp_file.path().to_string_lossy().to_string();
+
+        // Store the temp file so it doesn't get cleaned up until the adapter is dropped
+        {
+            let mut temp_files = self.temp_files.lock().await;
+            temp_files.push(temp_file);
+        }
+
+        Ok(file_path)
+    }
+
+    /// Safely escapes a string for shell argument passing as a fallback when file handling isn't available
+    pub fn escape_shell_argument(value: &str) -> String {
+        // Use single quotes and escape any embedded single quotes
+        if value.contains('\'') {
+            format!("'{}'", value.replace('\'', "'\"'\"'"))
+        } else {
+            format!("'{}'", value)
+        }
     }
 }
