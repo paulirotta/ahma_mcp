@@ -30,15 +30,26 @@ async fn test_gh_tool_expansion_all_synchronous() {
         expected_subcommands.len()
     );
 
+    // Check that tool has synchronous = true at tool level
+    assert_eq!(
+        gh_tool.synchronous,
+        Some(true),
+        "Tool should have synchronous=true at tool level"
+    );
+
     for expected_name in &expected_subcommands {
         let subcommand = gh_tool
             .subcommand
             .iter()
             .find(|sc| sc.name == *expected_name)
-            .expect(&format!("Should find subcommand {}", expected_name));
+            .unwrap_or_else(|| panic!("Should find subcommand {}", expected_name));
 
+        // With inheritance, subcommands should have None and inherit from tool level
         assert!(
-            subcommand.synchronous.or(gh_tool.synchronous).unwrap_or(false),
+            subcommand
+                .synchronous
+                .or(gh_tool.synchronous)
+                .unwrap_or(false),
             "Subcommand {} should be synchronous",
             expected_name
         );
@@ -72,7 +83,7 @@ async fn test_gh_cache_subcommands_schema() {
             .options
             .iter()
             .find(|opt| opt.name == expected_opt)
-            .expect(&format!("Should find option {}", expected_opt));
+            .unwrap_or_else(|| panic!("Should find option {}", expected_opt));
         assert!(!option.description.is_empty());
     }
 
@@ -111,7 +122,7 @@ async fn test_gh_run_subcommands_schema() {
             .subcommand
             .iter()
             .find(|sc| sc.name == cmd_name)
-            .expect(&format!("Should find {} subcommand", cmd_name));
+            .unwrap_or_else(|| panic!("Should find {} subcommand", cmd_name));
 
         assert_eq!(subcommand.positional_args.len(), 1);
         assert_eq!(subcommand.positional_args[0].name, "run_id");
