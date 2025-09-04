@@ -454,8 +454,15 @@ impl Adapter {
                         };
 
                         match opt_config.option_type.as_str() {
-                            "bool" => {
-                                if value.as_bool().unwrap_or(false) {
+                            "boolean" => {
+                                // Command line flag (present/absent) - like --cached, --verbose, --release
+                                let is_true = value.as_bool().unwrap_or_else(|| {
+                                    // Also handle string representations "true"/"false" from MCP client
+                                    value.as_str()
+                                        .map(|s| s.to_lowercase() == "true")
+                                        .unwrap_or(false)
+                                });
+                                if is_true {
                                     command_args.push(flag);
                                 }
                             }
@@ -520,6 +527,17 @@ impl Adapter {
                     if b {
                         command_args.push(flag);
                     }
+                } else if let Some(s) = value.as_str() {
+                    // Handle string representations of booleans
+                    let lower_s = s.to_lowercase();
+                    if lower_s == "true" {
+                        command_args.push(flag);
+                    } else if lower_s != "false" {
+                        // Only add as key-value if it's not a boolean string
+                        command_args.push(flag);
+                        command_args.push(s.to_string());
+                    }
+                    // If it's "false", we don't add anything (flag is not set)
                 } else if let Some(arr) = value.as_array() {
                     for item in arr {
                         command_args.push(flag.clone());
@@ -527,9 +545,6 @@ impl Adapter {
                             command_args.push(s.to_string());
                         }
                     }
-                } else if let Some(s) = value.as_str() {
-                    command_args.push(flag);
-                    command_args.push(s.to_string());
                 } else if !value.is_null() {
                     command_args.push(flag);
                     command_args.push(value.to_string().trim_matches('"').to_string());

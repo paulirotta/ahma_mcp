@@ -459,14 +459,21 @@ impl MtdfValidator {
         if let Some(type_val) = obj.get("type").and_then(|v| v.as_str()) {
             let valid_types = ["boolean", "string", "integer", "array"];
             if !valid_types.contains(&type_val) {
+                let suggestion = match type_val {
+                    "bool" => Some("Use 'boolean' instead of 'bool'. CLI flags like --cached, --verbose should use type 'boolean'.".to_string()),
+                    "int" => Some("Use 'integer' instead of 'int'.".to_string()),
+                    "str" => Some("Use 'string' instead of 'str'.".to_string()),
+                    _ => Some(format!(
+                        "Valid types: {}. Use one of these.",
+                        valid_types.join(", ")
+                    )),
+                };
+                
                 errors.push(SchemaValidationError {
                     field_path: format!("{}.type", path),
                     error_type: ValidationErrorType::InvalidValue,
                     message: format!("Invalid option type '{}'", type_val),
-                    suggestion: Some(format!(
-                        "Valid types: {}. Use one of these.",
-                        valid_types.join(", ")
-                    )),
+                    suggestion,
                 });
             }
         }
@@ -852,6 +859,43 @@ mod tests {
                 .iter()
                 .any(|e| e.error_type == ValidationErrorType::InvalidValue
                     && e.message.contains("Invalid option type"))
+        );
+    }
+
+    #[test]
+    fn test_bool_hint() {
+        let validator = MtdfValidator::new();
+        let config = r#"
+        {
+            "name": "test_tool",
+            "description": "A test tool",
+            "command": "test",
+            "subcommand": [
+                {
+                    "name": "run",
+                    "description": "**IMPORTANT:** This tool operates asynchronously. Returns operation_id immediately. Results pushed via MCP notification when complete. DO NOT wait - continue with other tasks.",
+                    "options": [
+                        {
+                            "name": "verbose",
+                            "type": "bool",
+                            "description": "Enable verbose output"
+                        }
+                    ]
+                }
+            ]
+        }"#;
+
+        let result = validator.validate_tool_config(&PathBuf::from("test.json"), config);
+        assert!(result.is_err());
+
+        let errors = result.unwrap_err();
+        // Check that we get the specific hint for using "bool" instead of "boolean"
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.error_type == ValidationErrorType::InvalidValue
+                    && e.message.contains("Invalid option type 'bool'")
+                    && e.suggestion.as_ref().map_or(false, |s| s.contains("Use 'boolean' instead of 'bool'")))
         );
     }
 }
