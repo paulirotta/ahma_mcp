@@ -46,8 +46,11 @@ async fn test_gh_tool_expansion_all_synchronous() {
 
         // With inheritance, subcommands should have None and inherit from tool level
         assert!(
-            subcommand.synchronous.is_none(),
-            "Subcommand {} should inherit synchronous from tool level (should be None)",
+            subcommand
+                .synchronous
+                .or(gh_tool.synchronous)
+                .unwrap_or(false),
+            "Subcommand {} should be synchronous",
             expected_name
         );
 
