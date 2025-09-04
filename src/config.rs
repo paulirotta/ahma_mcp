@@ -52,8 +52,8 @@ pub struct ToolConfig {
     pub name: String,
     pub description: String,
     pub command: String,
-    #[serde(default)]
-    pub subcommand: Vec<SubcommandConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subcommand: Option<Vec<SubcommandConfig>>,
     /// Generated input schema (optional - auto-generated from subcommands)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub input_schema: Option<Value>,
@@ -76,10 +76,10 @@ pub struct ToolConfig {
 pub struct SubcommandConfig {
     pub name: String,
     pub description: String,
-    #[serde(default)]
-    pub options: Vec<OptionConfig>,
-    #[serde(default)]
-    pub positional_args: Vec<OptionConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options: Option<Vec<OptionConfig>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub positional_args: Option<Vec<OptionConfig>>,
     /// If true, this subcommand runs synchronously instead of async
     pub synchronous: Option<bool>,
     /// Override timeout for this specific subcommand
@@ -90,6 +90,9 @@ pub struct SubcommandConfig {
     /// Key to look up guidance in tool_guidance.json
     #[serde(skip_serializing_if = "Option::is_none")]
     pub guidance_key: Option<String>,
+    /// Nested subcommands for recursive command structures
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subcommand: Option<Vec<SubcommandConfig>>,
 }
 
 /// Configuration for an option within a subcommand

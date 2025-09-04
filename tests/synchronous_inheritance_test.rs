@@ -31,11 +31,13 @@ fn test_synchronous_inheritance_loading() -> Result<()> {
     // Tool-level synchronous should be loaded
     assert_eq!(config.synchronous, Some(true));
 
+    let subcommands = config.subcommand.as_ref().expect("Should have subcommands");
+
     // First subcommand should have None (will inherit tool-level)
-    assert_eq!(config.subcommand[0].synchronous, None);
+    assert_eq!(subcommands[0].synchronous, None);
 
     // Second subcommand should have explicit override
-    assert_eq!(config.subcommand[1].synchronous, Some(false));
+    assert_eq!(subcommands[1].synchronous, Some(false));
 
     Ok(())
 }
@@ -69,17 +71,18 @@ fn test_gh_tool_optimized_format() -> Result<()> {
     let gh_json = std::fs::read_to_string("tools/gh.json")?;
     let config: ToolConfig = serde_json::from_str(&gh_json)?;
 
-    // Should have tool-level synchronous = false (GitHub operations are async)
-    assert_eq!(config.synchronous, Some(false));
+    // Should NOT have tool-level synchronous field (async is default, no redundant declaration)
+    assert_eq!(config.synchronous, None);
 
-    // All subcommands should have explicit synchronous = false for async behavior
-    for subcommand in &config.subcommand {
-        assert_eq!(
-            subcommand.synchronous,
-            Some(false),
-            "Subcommand '{}' should have explicit synchronous=false for async behavior",
-            subcommand.name
-        );
+    // Subcommands should also NOT have redundant synchronous = false for async behavior
+    if let Some(subcommands) = &config.subcommand {
+        for subcommand in subcommands {
+            assert_eq!(
+                subcommand.synchronous, None,
+                "Subcommand '{}' should not have redundant synchronous=false (async is default)",
+                subcommand.name
+            );
+        }
     }
 
     Ok(())

@@ -12,7 +12,11 @@ mod config_tests {
             Ok(configs) => {
                 println!("Successfully loaded {} configurations:", configs.len());
                 for (name, config) in configs.iter() {
-                    println!("  - {}: {} subcommands", name, config.subcommand.len());
+                    println!(
+                        "  - {}: {} subcommands",
+                        name,
+                        config.subcommand.as_deref().unwrap_or_default().len()
+                    );
                 }
             }
             Err(e) => {

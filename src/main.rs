@@ -304,7 +304,7 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         anyhow::bail!("Invalid tool name format. Expected 'tool_subcommand'.");
     }
     let base_tool = parts[0];
-    let subcommand_name = parts[1..].join("_");
+    let subcommand_parts = &parts[1..];
 
     // Initialize adapter and monitor for CLI mode
     let monitor_config = MonitorConfig::with_timeout(std::time::Duration::from_secs(cli.timeout));
@@ -328,18 +328,33 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         .get(base_tool)
         .ok_or_else(|| anyhow::anyhow!("Tool '{}' not found in configurations", base_tool))?;
 
-    // Find the subcommand configuration
-    let subcommand_config = config
-        .subcommand
-        .iter()
-        .find(|sc| sc.name == subcommand_name)
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "Subcommand '{}' not found for tool '{}'",
-                subcommand_name,
-                base_tool
-            )
-        })?;
+    // Find the subcommand configuration recursively
+    let mut current_subcommands = config.subcommand.as_deref();
+    let mut found_subcommand = None;
+
+    for (i, part) in subcommand_parts.iter().enumerate() {
+        if let Some(subcommands) = current_subcommands {
+            if let Some(sub) = subcommands.iter().find(|s| s.name == *part) {
+                if i == subcommand_parts.len() - 1 {
+                    found_subcommand = Some(sub);
+                    break;
+                }
+                current_subcommands = sub.subcommand.as_deref();
+            } else {
+                break; // not found
+            }
+        } else {
+            break; // no more subcommands to search
+        }
+    }
+
+    let subcommand_config = found_subcommand.ok_or_else(|| {
+        anyhow::anyhow!(
+            "Subcommand '{}' not found for tool '{}'",
+            subcommand_parts.join("_"),
+            base_tool
+        )
+    })?;
 
     // Construct arguments - start with subcommand name, then add config args, then runtime args
     let mut raw_args = Vec::new();
@@ -413,7 +428,7 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     // Add subcommand as the first positional argument
     args_map.insert(
         "_subcommand".to_string(),
-        Value::String(subcommand_name.clone()),
+        Value::String(subcommand_parts.join("_")),
     );
 
     // Add any additional arguments from command line
@@ -453,7 +468,32 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
 async fn run_validation_mode(cli: Cli) -> Result<()> {
     use ahma_mcp::schema_validation::MtdfValidator;
 
-    let validation_target = cli.validate.unwrap_or_else(|| "all".to_string());
+    fn validate_subcommands(
+        subcommands: &[ahma_mcp::config::SubcommandConfig],
+        guidance: &Option<GuidanceConfig>,
+        cli: &Cli,
+        warnings: &mut usize,
+    ) {
+        for subcommand in subcommands {
+            if let Some(guidance_key) = &subcommand.guidance_key {
+                if let Some(g) = guidance {
+                    if !g.guidance_blocks.contains_key(guidance_key) {
+                        println!(
+                            "   ⚠️  Warning: subcommand guidance_key '{}' not found in {}",
+                            guidance_key,
+                            cli.guidance_file.display()
+                        );
+                        *warnings += 1;
+                    }
+                }
+            }
+            if let Some(nested_subcommands) = &subcommand.subcommand {
+                validate_subcommands(nested_subcommands, guidance, cli, warnings);
+            }
+        }
+    }
+
+    let validation_target = cli.validate.clone().unwrap_or_else(|| "all".to_string());
 
     info!("🔍 Validating tool configurations...");
     info!("Target: {}", validation_target);
@@ -555,18 +595,14 @@ async fn run_validation_mode(cli: Cli) -> Result<()> {
                                     }
                                 }
 
-                                // Check subcommand guidance keys
-                                for subcommand in &tool_config.subcommand {
-                                    if let Some(guidance_key) = &subcommand.guidance_key {
-                                        if !guidance.guidance_blocks.contains_key(guidance_key) {
-                                            println!(
-                                                "   ⚠️  Warning: subcommand guidance_key '{}' not found in {}",
-                                                guidance_key,
-                                                cli.guidance_file.display()
-                                            );
-                                            validation_warnings += 1;
-                                        }
-                                    }
+                                // Check subcommand guidance keys recursively
+                                if let Some(subcommands) = &tool_config.subcommand {
+                                    validate_subcommands(
+                                        subcommands,
+                                        &guidance_config,
+                                        &cli,
+                                        &mut validation_warnings,
+                                    );
                                 }
                             }
                         }

@@ -298,6 +298,11 @@ impl MtdfValidator {
                 "Key to reference shared guidance from tool_guidance.json",
             ),
             ("options", "array", "Array of command-line options"),
+            (
+                "subcommand",
+                "array",
+                "Array of nested subcommand definitions",
+            ),
         ];
 
         // Check required fields
@@ -335,6 +340,11 @@ impl MtdfValidator {
                     errors,
                 );
             }
+        }
+
+        // Validate nested subcommands array if present
+        if let Some(subcommands) = obj.get("subcommand") {
+            self.validate_subcommands_array(subcommands, errors);
         }
 
         // Validate options array if present
@@ -503,6 +513,12 @@ impl MtdfValidator {
         obj: &serde_json::Map<String, Value>,
         errors: &mut Vec<SchemaValidationError>,
     ) {
+        // If a subcommand has nested subcommands, it's a namespace, not a runnable command.
+        // Don't validate its description for async guidance.
+        if obj.contains_key("subcommand") {
+            return;
+        }
+
         let is_synchronous = obj
             .get("synchronous")
             .and_then(|v| v.as_bool())
