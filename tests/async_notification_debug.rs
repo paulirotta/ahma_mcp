@@ -55,7 +55,8 @@ mod async_notification_test {
                 "/Users/paul/github/ahma_mcp",
                 Some(10),
             )
-            .await;
+            .await
+            .expect("Failed to execute async operation");
 
         println!("Started operation with job ID: {}", job_id);
 

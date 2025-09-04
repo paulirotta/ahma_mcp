@@ -39,6 +39,7 @@
 //!   synchronously or asynchronously, can be controlled directly from the configuration files.
 
 use anyhow::{Context, Result};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -46,7 +47,7 @@ use std::fs;
 use std::path::Path;
 
 /// Represents the complete configuration for a command-line tool.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ToolConfig {
     pub name: String,
@@ -71,7 +72,7 @@ pub struct ToolConfig {
 }
 
 /// Configuration for a subcommand within a tool
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SubcommandConfig {
     pub name: String,
@@ -96,7 +97,7 @@ pub struct SubcommandConfig {
 }
 
 /// Configuration for an option within a subcommand
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct OptionConfig {
     pub name: String,
@@ -109,6 +110,16 @@ pub struct OptionConfig {
     pub format: Option<String>,
     #[serde(default)]
     pub required: Option<bool>,
+    /// If true, multi-line or special character values will be written to a temporary file
+    /// and the file path will be passed as the argument instead of the raw value.
+    /// The option name will be automatically converted to use the file flag variant
+    /// (e.g., for git commit: "message" with file_arg=true becomes "-F" instead of "-m")
+    #[serde(default)]
+    pub file_arg: Option<bool>,
+    /// When file_arg is true, this specifies the flag to use for file-based input
+    /// (e.g., "-F" for git commit). If not specified, defaults to the normal flag.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_flag: Option<String>,
 }
 
 fn default_enabled() -> bool {
@@ -116,7 +127,7 @@ fn default_enabled() -> bool {
 }
 
 /// A collection of hints for AI clients using this tool.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema)]
 pub struct ToolHints {
     /// Default hint for any operation with this tool
     pub default: Option<String>,

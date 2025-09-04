@@ -73,7 +73,9 @@
                     "name": "message",
                     "alias": "m",
                     "type": "string",
-                    "description": "Use the given message as the commit message"
+                    "description": "Use the given message as the commit message",
+                    "file_arg": true,
+                    "file_flag": "-F"
                 },
                 {
                     "name": "all",

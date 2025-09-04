@@ -25,9 +25,11 @@ MTDF is ahma_mcp's JSON-based tool configuration format that enables dynamic too
 
 - **Dynamic Tool Registration**: Add new tools by creating JSON files in `tools/` directory
 - **Zero-Compilation Integration**: No Rust code changes needed to add CLI tools
+- **Recursive Subcommand Support**: Model complex CLI tools with nested subcommands (e.g., `cargo nextest run`, `gh cache delete`)
 - **Centralized Guidance System**: Reusable AI guidance blocks via `tool_guidance.json`
 - **Schema Validation**: Built-in MtdfValidator ensures configuration correctness
 - **Synchronous/Asynchronous Control**: Fine-grained execution mode control per subcommand
+- **JSON Schema Export**: Auto-generated schema at [`docs/mtdf-schema.json`](./docs/mtdf-schema.json) for validation and IDE support
 
 **Example: Claude Sonnet 4 never stops, simultaneously using tools and thinking**
 
@@ -147,8 +149,8 @@ Internal tools implemented in ahama_mcp:
 
 Common command line tool definitions are included. Copy and edit those you want, or add your own:
 
-- `cargo.json` - Rust package manager with guidance_key references (11+ subcommands)
-- `gh.json` - GitHub CLI with synchronous cache, run, and workflow operations
+- `cargo.json` - Rust package manager with recursive subcommands like `nextest run` (11+ subcommands)
+- `gh.json` - GitHub CLI with nested operations like `cache delete` and `run cancel`
 - `git.json` - Git version control (22 subcommands)
 - `grep.json` - Text search with regex support
 - `ls.json` - File listing with positional arguments
@@ -156,9 +158,9 @@ Common command line tool definitions are included. Copy and edit those you want,
 - `pwd.json` - Current directory
 - `sed.json` - Stream editor for filtering and transforming text
 
-Each MTDF file can reference guidance blocks from `tool_guidance.json` using `guidance_key` fields, eliminating guidance duplication and ensuring consistency.
+**Recursive Subcommand Example**: The `cargo.json` tool demonstrates recursive subcommands where `nextest` is a subcommand that contains its own `run` subcommand, creating tools like `mcp_ahma_mcp_cargo_nextest_run`.
 
-To add your own tools, create a `tools/<tool_name>.json` file following the MTDF specification and guidance.
+Each MTDF file can reference guidance blocks from `tool_guidance.json` using `guidance_key` fields, eliminating guidance duplication and ensuring consistency. For detailed schema information and validation, see [`docs/mtdf-schema.json`](./docs/mtdf-schema.json).
 
 ### Testing the Installation
 
