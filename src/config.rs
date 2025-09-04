@@ -39,6 +39,7 @@
 //!   synchronously or asynchronously, can be controlled directly from the configuration files.
 
 use anyhow::{Context, Result};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -46,7 +47,7 @@ use std::fs;
 use std::path::Path;
 
 /// Represents the complete configuration for a command-line tool.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ToolConfig {
     pub name: String,
@@ -71,7 +72,7 @@ pub struct ToolConfig {
 }
 
 /// Configuration for a subcommand within a tool
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SubcommandConfig {
     pub name: String,
@@ -96,7 +97,7 @@ pub struct SubcommandConfig {
 }
 
 /// Configuration for an option within a subcommand
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct OptionConfig {
     pub name: String,
@@ -116,7 +117,7 @@ fn default_enabled() -> bool {
 }
 
 /// A collection of hints for AI clients using this tool.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema)]
 pub struct ToolHints {
     /// Default hint for any operation with this tool
     pub default: Option<String>,

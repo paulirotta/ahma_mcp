@@ -118,6 +118,87 @@ The MTDF integrates with a centralized guidance system via `tool_guidance.json`:
 
 The server automatically prepends the guidance block to the description when generating the final tool schema.
 
+### Recursive Subcommands
+
+MTDF supports recursive subcommand structures, allowing you to model complex CLI tools with nested subcommands like `cargo nextest run` or `gh cache delete`. This enables precise tool modeling without flattening the command structure.
+
+#### Basic Recursive Structure
+
+```json
+{
+  "name": "cargo",
+  "description": "Rust package manager",
+  "command": "cargo",
+  "subcommand": [
+    {
+      "name": "nextest",
+      "description": "Next-generation testing framework",
+      "subcommand": [
+        {
+          "name": "run",
+          "description": "Run tests with nextest",
+          "synchronous": false,
+          "guidance_key": "async_behavior",
+          "options": [
+            {
+              "name": "workspace",
+              "type": "string",
+              "description": "Run tests for all packages in workspace"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+#### Tool Name Generation
+
+Recursive subcommands generate hierarchical tool names using the pattern:
+`mcp_{server_name}_{tool_name}_{subcommand}_{nested_subcommand}`
+
+Examples:
+
+- `cargo nextest run` → `mcp_ahma_mcp_cargo_nextest_run`
+- `gh cache delete` → `mcp_ahma_mcp_gh_cache_delete`
+- `git log --oneline` → `mcp_ahma_mcp_git_log`
+
+#### Benefits of Recursive Structure
+
+1. **Semantic Clarity**: Tool names reflect the actual command structure
+2. **Logical Organization**: Related subcommands are grouped naturally
+3. **Inheritance**: Parent commands can define default behaviors inherited by nested subcommands
+4. **Scalability**: Add new nested subcommands without restructuring existing definitions
+
+#### Inheritance Patterns
+
+Nested subcommands inherit properties from their parent unless explicitly overridden:
+
+```json
+{
+  "name": "gh",
+  "synchronous": true, // All subcommands inherit synchronous behavior
+  "subcommand": [
+    {
+      "name": "cache",
+      "subcommand": [
+        {
+          "name": "delete",
+          // Inherits synchronous: true from parent tool
+          "description": "Delete GitHub Actions caches"
+        },
+        {
+          "name": "list",
+          "synchronous": false, // Override parent setting
+          "description": "List GitHub Actions caches"
+        }
+      ]
+    }
+  ]
+}
+```
+
 ### Advanced Schema Features
 
 #### Enums for Constrained Values
@@ -424,5 +505,16 @@ When adding new schema features:
 3. Ensure backward compatibility
 4. Update error message templates
 5. Consider performance implications
+
+## JSON Schema Reference
+
+The complete MTDF JSON schema is available at [`mtdf-schema.json`](./mtdf-schema.json). This auto-generated schema file:
+
+- Provides precise validation rules for all MTDF properties
+- Enables IDE support with autocomplete and validation
+- Documents all supported field types and constraints
+- Reflects the current recursive subcommand structure
+
+Use this schema file to validate your MTDF tool definitions and for IDE integration.
 
 For questions or suggestions, please refer to the main project documentation or create an issue in the repository.

@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ToolConfig",
+  "description": "Represents the complete configuration for a command-line tool.",
+  "type": "object",
+  "properties": {
+    "command": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "guidance_key": {
+      "description": "Key to look up guidance in tool_guidance.json",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "hints": {
+      "$ref": "#/$defs/ToolHints",
+      "default": {
+        "default": null
+      }
+    },
+    "input_schema": {
+      "description": "Generated input schema (optional - auto-generated from subcommands)"
+    },
+    "name": {
+      "type": "string"
+    },
+    "subcommand": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/SubcommandConfig"
+      }
+    },
+    "synchronous": {
+      "description": "Default synchronous behavior for all subcommands (can be overridden per subcommand)",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "timeout_seconds": {
+      "description": "Default timeout for operations in seconds",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "description",
+    "command"
+  ],
+  "$defs": {
+    "OptionConfig": {
+      "description": "Configuration for an option within a subcommand",
+      "type": "object",
+      "properties": {
+        "alias": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "format": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "required": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "description"
+      ]
+    },
+    "SubcommandConfig": {
+      "description": "Configuration for a subcommand within a tool",
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "enabled": {
+          "description": "Whether this subcommand is enabled (defaults to true)",
+          "type": "boolean",
+          "default": true
+        },
+        "guidance_key": {
+          "description": "Key to look up guidance in tool_guidance.json",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "options": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/OptionConfig"
+          }
+        },
+        "positional_args": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/OptionConfig"
+          }
+        },
+        "subcommand": {
+          "description": "Nested subcommands for recursive command structures",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/SubcommandConfig"
+          }
+        },
+        "synchronous": {
+          "description": "If true, this subcommand runs synchronously instead of async",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "timeout_seconds": {
+          "description": "Override timeout for this specific subcommand",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "description"
+      ]
+    },
+    "ToolHints": {
+      "description": "A collection of hints for AI clients using this tool.",
+      "type": "object",
+      "properties": {
+        "default": {
+          "description": "Default hint for any operation with this tool",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  }
+}
