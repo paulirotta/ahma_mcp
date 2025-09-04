@@ -165,6 +165,11 @@ impl ServerHandler for AhmaMcpService {
                 } else {
                     // Register each subcommand as a separate tool
                     for subcommand in &config.subcommand {
+                        // Skip disabled subcommands
+                        if !subcommand.enabled {
+                            continue;
+                        }
+
                         let tool_name = format!("{}_{}", config.name, subcommand.name);
                         let input_schema =
                             self.generate_input_schema_for_subcommand(config, subcommand);

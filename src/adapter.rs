@@ -458,7 +458,8 @@ impl Adapter {
                                 // Command line flag (present/absent) - like --cached, --verbose, --release
                                 let is_true = value.as_bool().unwrap_or_else(|| {
                                     // Also handle string representations "true"/"false" from MCP client
-                                    value.as_str()
+                                    value
+                                        .as_str()
                                         .map(|s| s.to_lowercase() == "true")
                                         .unwrap_or(false)
                                 });
@@ -552,12 +553,12 @@ impl Adapter {
             }
         }
 
-        // Special handling for `cargo nextest run`
+        // Special handling for `cargo nextest`
+        // It's a separate binary that cargo knows how to invoke.
+        // The command from MCP is `cargo nextest ...`, which is the correct invocation.
+        // No special transformation is needed. The previous logic was creating an incorrect command.
         if base_command == "cargo" && command_args.first().is_some_and(|s| s == "nextest") {
-            // Transform `cargo nextest ...` to `cargo-nextest run ...`
-            let mut new_args = vec!["run".to_string()];
-            new_args.extend(command_args.into_iter().skip(1));
-            return ("cargo-nextest".to_string(), new_args);
+            return (base_command.to_string(), command_args);
         }
 
         (base_command.to_string(), command_args)

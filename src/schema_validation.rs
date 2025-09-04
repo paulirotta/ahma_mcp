@@ -283,6 +283,11 @@ impl MtdfValidator {
 
         let optional_fields = vec![
             (
+                "enabled",
+                "boolean",
+                "Whether this subcommand is enabled (default: true)",
+            ),
+            (
                 "synchronous",
                 "boolean",
                 "Whether this subcommand runs synchronously (default: false)",
@@ -621,6 +626,26 @@ impl MtdfValidator {
                 });
             }
         }
+
+        // Validate enablement logic consistency
+        let tool_enabled = obj.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+
+        if let Some(subcommands) = obj.get("subcommand").and_then(|v| v.as_array()) {
+            for (index, subcommand) in subcommands.iter().enumerate() {
+                if let Some(sub_obj) = subcommand.as_object() {
+                    if let Some(enabled) = sub_obj.get("enabled").and_then(|v| v.as_bool()) {
+                        if enabled && !tool_enabled {
+                            errors.push(SchemaValidationError {
+                                field_path: format!("subcommand[{}].enabled", index),
+                                error_type: ValidationErrorType::LogicalInconsistency,
+                                message: "Subcommand has 'enabled: true' but tool is disabled at root level".to_string(),
+                                suggestion: Some("Remove 'enabled: true' from subcommand (it's the default) or enable the tool at root level".to_string()),
+                            });
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn validate_field_type(
@@ -895,7 +920,7 @@ mod tests {
                 && e.message.contains("Invalid option type 'bool'")
                 && e.suggestion
                     .as_ref()
-                    .map_or(false, |s| s.contains("Use 'boolean' instead of 'bool'"))
+                    .is_some_and(|s| s.contains("Use 'boolean' instead of 'bool'"))
         }));
     }
 }

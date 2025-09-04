@@ -84,6 +84,9 @@ pub struct SubcommandConfig {
     pub synchronous: Option<bool>,
     /// Override timeout for this specific subcommand
     pub timeout_seconds: Option<u64>,
+    /// Whether this subcommand is enabled (defaults to true)
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
     /// Key to look up guidance in tool_guidance.json
     #[serde(skip_serializing_if = "Option::is_none")]
     pub guidance_key: Option<String>,

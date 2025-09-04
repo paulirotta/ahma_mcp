@@ -30,11 +30,11 @@ async fn test_gh_tool_expansion_all_synchronous() {
         expected_subcommands.len()
     );
 
-    // Check that tool has synchronous = false at tool level (GitHub operations are async)
+    // Check that tool does NOT have redundant synchronous = false at tool level
+    // (async is the default, so this should not be specified)
     assert_eq!(
-        gh_tool.synchronous,
-        Some(false),
-        "Tool should have synchronous=false at tool level for GitHub operations"
+        gh_tool.synchronous, None,
+        "Tool should not have redundant synchronous=false declaration (async is default)"
     );
 
     for expected_name in &expected_subcommands {
@@ -44,11 +44,11 @@ async fn test_gh_tool_expansion_all_synchronous() {
             .find(|sc| sc.name == *expected_name)
             .unwrap_or_else(|| panic!("Should find subcommand {}", expected_name));
 
-        // With explicit async behavior, subcommands should have synchronous = false
+        // With redundant declarations removed, subcommands should NOT have synchronous = false
+        // (since false is the default for async operations)
         assert_eq!(
-            subcommand.synchronous,
-            Some(false),
-            "Subcommand {} should have explicit synchronous=false for async behavior",
+            subcommand.synchronous, None,
+            "Subcommand {} should not have redundant synchronous=false declaration (async is default)",
             expected_name
         );
 

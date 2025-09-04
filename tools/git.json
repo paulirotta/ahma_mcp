@@ -2,7 +2,6 @@
     "name": "git",
     "command": "git",
     "description": "Git version control system",
-    "synchronous": false,
     "guidance_key": "git_operations",
     "subcommand": [
         {
@@ -92,7 +91,6 @@
         {
             "name": "push",
             "description": "Update remote refs along with associated objects",
-            "synchronous": false,
             "guidance_key": "async_behavior",
             "options": [
                 {
@@ -131,7 +129,6 @@
         {
             "name": "pull",
             "description": "Fetch from and integrate with another repository or a local branch",
-            "synchronous": false,
             "guidance_key": "async_behavior",
             "options": [
                 {
@@ -163,7 +160,6 @@
         {
             "name": "fetch",
             "description": "Download objects and refs from another repository",
-            "synchronous": false,
             "guidance_key": "async_behavior",
             "options": [
                 {

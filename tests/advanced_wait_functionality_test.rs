@@ -8,7 +8,6 @@ use ahma_mcp::operation_monitor::{MonitorConfig, Operation, OperationMonitor, Op
 use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio;
 
 #[cfg(test)]
 mod advanced_wait_functionality_test {
@@ -24,8 +23,8 @@ mod advanced_wait_functionality_test {
         )));
 
         // Create multiple operations with different tool names
-        let op_ids = vec!["wait_test_op_1", "wait_test_op_2", "wait_test_op_3"];
-        let tool_names = vec!["cargo", "cargo", "npm"]; // Two cargo, one npm
+        let op_ids = ["wait_test_op_1", "wait_test_op_2", "wait_test_op_3"];
+        let tool_names = ["cargo", "cargo", "npm"]; // Two cargo, one npm
 
         // Add operations to monitor
         for (i, op_id) in op_ids.iter().enumerate() {
