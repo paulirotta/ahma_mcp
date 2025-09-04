@@ -19,18 +19,18 @@
     },
     "legacy_guidance": {
         "general_guidance": {
-            "default": "Select a tool to begin. Use 'status' to monitor ongoing operations.",
+            "default": "Select a tool to begin. Use 'wait' for async operations when needed.",
             "completion": "Task completed. Review the output and plan your next action.",
-            "error": "An error occurred. Check the error message for details and use 'status' to check other operations."
+            "error": "An error occurred. Check the error message for details and use 'wait' for pending operations if needed."
         },
         "tool_specific_guidance": {
             "cargo_build": {
-                "start": "Cargo build started. You can monitor progress with 'status' or work on other tasks.",
+                "start": "Cargo build started. Use 'wait' to collect results when needed, or work on other tasks.",
                 "completion": "Build successful. Artifacts are located in the target directory.",
                 "error": "Build failed. Review the compilation errors to identify the issue."
             },
             "cargo_test": {
-                "start": "Running tests...",
+                "start": "Running tests. Use 'wait' to collect results when needed.",
                 "completion": "All tests passed.",
                 "error": "Some tests failed. Review the test output to debug."
             },
