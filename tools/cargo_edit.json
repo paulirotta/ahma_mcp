@@ -1,0 +1,121 @@
+{
+    "name": "cargo_edit",
+    "description": "Add, remove, and upgrade dependencies in Cargo.toml",
+    "command": "cargo",
+    "enabled": true,
+    "timeout_seconds": 600,
+    "hints": {
+        "default": "Managing dependencies with cargo-edit... keeping your project up-to-date."
+    },
+    "subcommand": [
+        {
+            "name": "add",
+            "description": "Add a dependency to Cargo.toml.",
+            "synchronous": true,
+            "options": [
+                {
+                    "name": "dependency",
+                    "type": "string",
+                    "description": "The dependency to add"
+                },
+                {
+                    "name": "dev",
+                    "type": "boolean",
+                    "description": "Add as a dev-dependency"
+                },
+                {
+                    "name": "build",
+                    "type": "boolean",
+                    "description": "Add as a build-dependency"
+                },
+                {
+                    "name": "version",
+                    "type": "string",
+                    "description": "Specify a version to add"
+                },
+                {
+                    "name": "git",
+                    "type": "string",
+                    "description": "Specify a git repository to add"
+                },
+                {
+                    "name": "path",
+                    "type": "string",
+                    "description": "Specify a path to a local crate to add",
+                    "format": "path"
+                },
+                {
+                    "name": "features",
+                    "type": "string",
+                    "description": "Specify features to add"
+                },
+                {
+                    "name": "optional",
+                    "type": "boolean",
+                    "description": "Add as an optional dependency"
+                },
+                {
+                    "name": "no-default-features",
+                    "type": "boolean",
+                    "description": "Disable the default features"
+                }
+            ]
+        },
+        {
+            "name": "rm",
+            "description": "Remove a dependency from Cargo.toml.",
+            "synchronous": true,
+            "options": [
+                {
+                    "name": "dependency",
+                    "type": "string",
+                    "description": "The dependency to remove"
+                },
+                {
+                    "name": "dev",
+                    "type": "boolean",
+                    "description": "Remove from dev-dependencies"
+                },
+                {
+                    "name": "build",
+                    "type": "boolean",
+                    "description": "Remove from build-dependencies"
+                }
+            ]
+        },
+        {
+            "name": "upgrade",
+            "description": "Upgrade a dependency in Cargo.toml.",
+            "synchronous": true,
+            "options": [
+                {
+                    "name": "dependency",
+                    "type": "string",
+                    "description": "The dependency to upgrade"
+                },
+                {
+                    "name": "all",
+                    "type": "boolean",
+                    "description": "Upgrade all dependencies"
+                },
+                {
+                    "name": "dry-run",
+                    "type": "boolean",
+                    "description": "Don't actually write to Cargo.toml"
+                }
+            ]
+        },
+        {
+            "name": "set-version",
+            "description": "Set the version of a dependency in Cargo.toml.",
+            "synchronous": true,
+            "options": [
+                {
+                    "name": "version",
+                    "type": "string",
+                    "description": "The version to set"
+                }
+            ]
+        }
+    ]
+}

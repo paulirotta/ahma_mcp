@@ -20,7 +20,7 @@ async fn test_list_tools() -> Result<()> {
     assert!(!result.is_empty());
     let tool_names: Vec<_> = result.iter().map(|t| t.name.as_ref()).collect();
     assert!(tool_names.contains(&"wait"));
-    assert!(tool_names.contains(&"ls_default"));
+    assert!(tool_names.contains(&"ls"));
 
     client.cancel().await?;
     Ok(())
@@ -37,7 +37,7 @@ async fn test_call_tool_basic() -> Result<()> {
     );
 
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("ls_default"),
+        name: Cow::Borrowed("ls"),
         arguments: Some(params),
     };
 

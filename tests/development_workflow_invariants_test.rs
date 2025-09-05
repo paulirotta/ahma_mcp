@@ -117,14 +117,15 @@ fn test_json_tool_configuration_count_invariant() {
 
     // CRITICAL: These are CLI tool adapters only. MCP tools (status, wait) are hardwired.
     // Expected core tools: cargo.json, ls.json, python3.json, git.json, gh.json
-    // Complete tool set: wait.json, status.json (MCP tools), echo.json, cat.json, grep.json, sed.json (Unix utils)
+    // Complete tool set includes modular cargo tools: cargo_audit, cargo_bench, cargo_clippy,
+    // cargo_edit, cargo_fmt, cargo_llvm_cov, cargo_nextest + Unix utils: echo, cat, grep, sed
     assert!(
         json_files.len() >= 3,
         "Should have core CLI tool configurations (got {})",
         json_files.len()
     );
     assert!(
-        json_files.len() <= 15,
+        json_files.len() <= 25,
         "Should not have excessive tool configurations (got {})",
         json_files.len()
     );

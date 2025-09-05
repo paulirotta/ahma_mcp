@@ -47,10 +47,10 @@ async fn test_tools_are_loaded_after_json_migration() -> Result<()> {
         tool_names
     );
 
-    // Should have ls subcommand tools
+    // Should have ls tool (using default subcommand pattern)
     assert!(
-        tool_names.iter().any(|name| name.starts_with("ls_")),
-        "Expected ls subcommand tools but found: {:?}",
+        tool_names.contains(&"ls"),
+        "Expected ls tool but found: {:?}",
         tool_names
     );
 

@@ -74,6 +74,7 @@ use tracing_subscriber::EnvFilter;
 
 3. Validation Mode: Validates tool configurations without starting the server.
    Example: ahma_mcp --validate
+   Example: ahma_mcp --validate tools/
    Example: ahma_mcp --validate tools/cargo.json,tools/git.json"
 )]
 struct Cli {
@@ -81,8 +82,8 @@ struct Cli {
     #[arg(long)]
     server: bool,
 
-    /// Validate tool configurations. Use 'all' to validate all tools, or specify specific files.
-    #[arg(long, value_name = "FILES", num_args = 0..=1, default_missing_value = "all")]
+    /// Validate tool configurations. Can be a directory, a comma-separated list of files, or 'all' to use the --tools-dir.
+    #[arg(long, value_name = "PATH", num_args = 0..=1, default_missing_value = "all")]
     validate: Option<String>,
 
     /// Path to the directory containing tool JSON configuration files.
@@ -494,6 +495,7 @@ async fn run_validation_mode(cli: Cli) -> Result<()> {
     }
 
     let validation_target = cli.validate.clone().unwrap_or_else(|| "all".to_string());
+    let path = PathBuf::from(&validation_target);
 
     info!("🔍 Validating tool configurations...");
     info!("Target: {}", validation_target);
@@ -509,16 +511,9 @@ async fn run_validation_mode(cli: Cli) -> Result<()> {
         if !tools_dir.exists() {
             anyhow::bail!("Tools directory {:?} does not exist", tools_dir);
         }
-
-        let mut files = Vec::new();
-        for entry in fs::read_dir(tools_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                files.push(path);
-            }
-        }
-        files
+        get_json_files(tools_dir)?
+    } else if path.is_dir() {
+        get_json_files(&path)?
     } else {
         // Validate specific files
         validation_target
@@ -528,7 +523,10 @@ async fn run_validation_mode(cli: Cli) -> Result<()> {
     };
 
     if files_to_validate.is_empty() {
-        println!("❌ No tool configuration files found to validate");
+        println!(
+            "❌ No tool configuration files found to validate in '{}'",
+            validation_target
+        );
         return Ok(());
     }
 
@@ -646,4 +644,16 @@ async fn run_validation_mode(cli: Cli) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn get_json_files(dir: &PathBuf) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
+            files.push(path);
+        }
+    }
+    Ok(files)
 }

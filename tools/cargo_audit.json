@@ -1,0 +1,49 @@
+{
+    "name": "cargo_audit",
+    "description": "Audit Cargo.lock for crates with security vulnerabilities",
+    "command": "cargo",
+    "enabled": true,
+    "timeout_seconds": 600,
+    "hints": {
+        "default": "Auditing dependencies for security vulnerabilities... an important step for secure software."
+    },
+    "subcommand": [
+        {
+            "name": "default",
+            "description": "Audit Cargo.lock for crates with security vulnerabilities (if installed).",
+            "synchronous": true,
+            "options": [
+                {
+                    "name": "json",
+                    "type": "boolean",
+                    "description": "Output report in JSON format"
+                },
+                {
+                    "name": "fix",
+                    "type": "boolean",
+                    "description": "Automatically try to fix vulnerabilities"
+                },
+                {
+                    "name": "stale",
+                    "type": "boolean",
+                    "description": "Check for stale advisory database"
+                },
+                {
+                    "name": "ignore",
+                    "type": "array",
+                    "description": "Advisory id to ignore (can be specified multiple times)"
+                },
+                {
+                    "name": "target-arch",
+                    "type": "array",
+                    "description": "filter vulnerabilities by CPU (default: no filter). Can be specified multiple times"
+                },
+                {
+                    "name": "target-os",
+                    "type": "array",
+                    "description": "filter vulnerabilities by OS (default: no filter). Can be specified multiple times"
+                }
+            ]
+        }
+    ]
+}

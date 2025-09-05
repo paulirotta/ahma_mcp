@@ -1,0 +1,24 @@
+{
+    "name": "cargo_fmt",
+    "description": "Format code using rustfmt",
+    "command": "cargo",
+    "enabled": true,
+    "timeout_seconds": 600,
+    "hints": {
+        "default": "Formatting your code... a great time to think about code style and consistency."
+    },
+    "subcommand": [
+        {
+            "name": "default",
+            "synchronous": true,
+            "description": "Format code using rustfmt.",
+            "options": [
+                {
+                    "name": "check",
+                    "type": "boolean",
+                    "description": "Check if files are formatted without changing them"
+                }
+            ]
+        }
+    ]
+}

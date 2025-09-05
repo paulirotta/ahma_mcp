@@ -109,7 +109,11 @@ impl AhmaMcpService {
             return;
         }
 
-        let tool_name = format!("{}_{}", parent_name, subcommand.name);
+        let tool_name = if subcommand.name == "default" {
+            parent_name.to_string()
+        } else {
+            format!("{}_{}", parent_name, subcommand.name)
+        };
 
         // If there are nested subcommands, this is a "namespace" node. Recurse deeper.
         if let Some(nested_subcommands) = &subcommand.subcommand {
@@ -156,45 +160,80 @@ impl AhmaMcpService {
         &self,
         tool_name: &str,
     ) -> Option<(&ToolConfig, &SubcommandConfig, Vec<String>)> {
-        let parts: Vec<&str> = tool_name.split('_').collect();
-        if parts.is_empty() {
-            return None;
-        }
-
-        let base_command_name = parts[0];
-        let tool_config = self.configs.get(base_command_name)?;
-
-        let mut current_subcommands = tool_config.subcommand.as_ref()?;
-        let mut found_subcommand = None;
-        let mut command_parts = vec![tool_config.command.clone()];
-
-        // Start iterating from the first subcommand part of the name
-        for (i, part) in parts.iter().enumerate().skip(1) {
-            if let Some(sub) = current_subcommands.iter().find(|s| s.name == *part) {
-                // Only add non-"default" subcommands to the command parts
-                // "default" is a configuration identifier, not a real subcommand
-                if sub.name != "default" {
-                    command_parts.push(sub.name.clone());
-                }
-                // If this is the last part of the tool name, we found our target
-                if i == parts.len() - 1 {
-                    found_subcommand = Some(sub);
-                    break;
-                }
-                // If there are more parts, we need to go deeper
-                if let Some(nested) = &sub.subcommand {
-                    current_subcommands = nested;
-                } else {
-                    // We have more parts in the name, but no more subcommands in the config.
-                    return None;
-                }
-            } else {
-                // A part of the name did not match any subcommand at this level.
-                return None;
+        // Find the longest matching tool config key from the start of the tool_name
+        let mut best_match: Option<(&str, &ToolConfig)> = None;
+        for (key, config) in self.configs.iter() {
+            if tool_name.starts_with(key)
+                && (best_match.is_none() || key.len() > best_match.unwrap().0.len())
+            {
+                best_match = Some((key, config));
             }
         }
 
-        found_subcommand.map(|sc| (tool_config, sc, command_parts))
+        if let Some((config_key, tool_config)) = best_match {
+            let subcommand_part_str = tool_name.strip_prefix(config_key).unwrap_or("");
+
+            // If there are no parts after the config_key, it implies a 'default' subcommand.
+            // e.g. tool_name is "cargo_audit", config_key is "cargo_audit"
+            let is_default_call = subcommand_part_str.is_empty();
+
+            let subcommand_parts: Vec<&str> = if is_default_call {
+                vec!["default"]
+            } else {
+                // e.g. tool_name is "cargo_build", config_key is "cargo", subcommand_part_str is "_build"
+                subcommand_part_str
+                    .strip_prefix('_')
+                    .unwrap_or("")
+                    .split('_')
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            };
+
+            if subcommand_parts.is_empty() {
+                // This could happen if tool_name was "cargo_"
+                return None;
+            }
+
+            let mut current_subcommands = tool_config.subcommand.as_ref()?;
+            let mut found_subcommand: Option<&SubcommandConfig> = None;
+
+            // The base command from the tool's config (e.g., "cargo")
+            let mut command_parts = vec![tool_config.command.clone()];
+
+            for (i, part) in subcommand_parts.iter().enumerate() {
+                if let Some(sub) = current_subcommands.iter().find(|s| s.name == *part) {
+                    if is_default_call && sub.name == "default" {
+                        // This is a default call, derive subcommand from config_key
+                        // e.g., config_key "cargo_audit" -> subcommand "audit"
+                        let derived_subcommand = config_key.split('_').next_back().unwrap_or("");
+                        if !derived_subcommand.is_empty()
+                            && derived_subcommand != tool_config.command
+                        {
+                            command_parts.push(derived_subcommand.to_string());
+                        }
+                    } else if sub.name != "default" {
+                        command_parts.push(sub.name.clone());
+                    }
+
+                    if i == subcommand_parts.len() - 1 {
+                        found_subcommand = Some(sub);
+                        break;
+                    }
+
+                    if let Some(nested) = &sub.subcommand {
+                        current_subcommands = nested;
+                    } else {
+                        return None; // More parts in name, but no more nested subcommands
+                    }
+                } else {
+                    return None; // Subcommand part not found
+                }
+            }
+
+            return found_subcommand.map(|sc| (tool_config, sc, command_parts));
+        }
+
+        None
     }
 }
 
