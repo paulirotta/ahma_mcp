@@ -79,6 +79,21 @@
         "description": {
           "type": "string"
         },
+        "file_arg": {
+          "description": "If true, multi-line or special character values will be written to a temporary file\nand the file path will be passed as the argument instead of the raw value.\nThe option name will be automatically converted to use the file flag variant\n(e.g., for git commit: \"message\" with file_arg=true becomes \"-F\" instead of \"-m\")",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "file_flag": {
+          "description": "When file_arg is true, this specifies the flag to use for file-based input\n(e.g., \"-F\" for git commit). If not specified, defaults to the normal flag.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "format": {
           "type": [
             "string",
