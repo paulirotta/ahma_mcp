@@ -297,6 +297,26 @@ impl Adapter {
                         Some(Value::String("Operation was cancelled".to_string())),
                     )
                     .await;
+                // Notify LLM about cancellation with reason if available
+                if let Some(callback) = &callback {
+                    // Best effort: retrieve reason string from current operation state
+                    let reason_owned = match monitor.get_operation(&op_id).await {
+                        Some(op) => {
+                            let val = op.result.clone();
+                            val.and_then(|v| v.get("reason").cloned())
+                                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                                .unwrap_or_else(|| "Operation was cancelled".to_string())
+                        }
+                        None => "Operation was cancelled".to_string(),
+                    };
+                    let _ = callback
+                        .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
+                            operation_id: op_id.clone(),
+                            message: reason_owned,
+                            duration_ms: 0,
+                        })
+                        .await;
+                }
                 return;
             }
 
@@ -353,6 +373,25 @@ impl Adapter {
                         Some(Value::String("Operation was cancelled".to_string())),
                     )
                     .await;
+                if let Some(callback) = &callback {
+                    let elapsed = start_time.elapsed().as_millis() as u64;
+                    let reason_owned = match monitor.get_operation(&op_id).await {
+                        Some(op) => {
+                            let val = op.result.clone();
+                            val.and_then(|v| v.get("reason").cloned())
+                                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                                .unwrap_or_else(|| "Operation was cancelled".to_string())
+                        }
+                        None => "Operation was cancelled".to_string(),
+                    };
+                    let _ = callback
+                        .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
+                            operation_id: op_id.clone(),
+                            message: reason_owned,
+                            duration_ms: elapsed,
+                        })
+                        .await;
+                }
                 shell_pool.return_shell(shell).await;
                 return;
             }
@@ -371,11 +410,60 @@ impl Adapter {
                         Some(Value::String("Operation was cancelled".to_string())),
                     )
                     .await;
+                if let Some(callback) = &callback {
+                    let reason_owned = match monitor.get_operation(&op_id).await {
+                        Some(op) => {
+                            let val = op.result.clone();
+                            val.and_then(|v| v.get("reason").cloned())
+                                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                                .unwrap_or_else(|| "Operation was cancelled".to_string())
+                        }
+                        None => "Operation was cancelled".to_string(),
+                    };
+                    let _ = callback
+                        .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
+                            operation_id: op_id.clone(),
+                            message: reason_owned,
+                            duration_ms: duration_ms,
+                        })
+                        .await;
+                }
                 return;
             }
 
             match result {
                 Ok(output) => {
+                    // Check if the output indicates cancellation (common in cargo/nextest)
+                    let is_cancelled_output = output.stdout.trim() == "Canceled"
+                        || output.stderr.trim() == "Canceled"
+                        || output.stdout.contains("Canceled: Canceled")
+                        || output.stderr.contains("Canceled: Canceled");
+
+                    if is_cancelled_output {
+                        // Override the raw cancellation output with enhanced notification
+                        tracing::info!("Detected cancelled process output for operation {}", op_id);
+                        monitor
+                            .update_status(
+                                &op_id,
+                                OperationStatus::Cancelled,
+                                Some(Value::String("Process was cancelled".to_string())),
+                            )
+                            .await;
+
+                        if let Some(callback) = &callback {
+                            let _ = callback
+                                .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
+                                    operation_id: op_id.clone(),
+                                    message:
+                                        "Process was cancelled - consider restarting if needed"
+                                            .to_string(),
+                                    duration_ms,
+                                })
+                                .await;
+                        }
+                        return;
+                    }
+
                     let final_output = json!({
                         "stdout": output.stdout,
                         "stderr": output.stderr,

@@ -6,7 +6,8 @@
         "coordination_tool": "**WARNING:** This is a blocking coordination tool. Use ONLY for final project validation when no other productive work remains.",
         "python_async": "**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- DO NOT wait for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.",
         "python_sync": "This tool runs synchronously and returns results immediately.",
-        "git_operations": "This tool runs synchronously and returns results immediately."
+        "git_operations": "This tool runs synchronously and returns results immediately.",
+        "cancellation_restart_hint": "An operation was cancelled. Include the cancellation reason back to the user, and suggest a tool hint to restart or check status: 1) Call 'status' with the operation_id to confirm state; 2) If appropriate, restart the tool with the same parameters; 3) Consider 'wait' only when results are actually needed."
     },
     "templates": {
         "working_progress": "While {tool} operations run, consider reviewing {suggestions}",

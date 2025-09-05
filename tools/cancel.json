@@ -15,6 +15,12 @@
                     "type": "string",
                     "description": "The ID of the operation to cancel",
                     "required": true
+                },
+                {
+                    "name": "reason",
+                    "type": "string",
+                    "description": "Optional reason for cancellation (for debugging and LLM feedback)",
+                    "required": false
                 }
             ]
         }

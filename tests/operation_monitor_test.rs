@@ -112,7 +112,7 @@ fn test_monitor_config_with_timeout() {
     let config = MonitorConfig::with_timeout(timeout);
 
     assert_eq!(config.default_timeout, timeout);
-    assert_eq!(config.shutdown_timeout, Duration::from_secs(15)); // Default shutdown timeout
+    assert_eq!(config.shutdown_timeout, Duration::from_secs(120)); // Default shutdown timeout
 }
 
 #[test]

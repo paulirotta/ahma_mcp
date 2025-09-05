@@ -199,7 +199,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     // LESSON LEARNED: cargo watch sends SIGTERM during file changes, causing
     // abrupt termination of ongoing operations. This implementation provides:
     // 1. Signal handling for SIGTERM (cargo watch) and SIGINT (Ctrl+C)
-    // 2. 10-second grace period for operations to complete naturally
+    // 2. 120-second grace period for operations to complete naturally
     // 3. Progress monitoring with user feedback during shutdown
     // 4. Forced exit if service doesn't shutdown within 5 additional seconds
     //

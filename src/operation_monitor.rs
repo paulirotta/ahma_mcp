@@ -94,7 +94,7 @@ impl MonitorConfig {
     pub fn with_timeout(timeout: Duration) -> Self {
         Self {
             default_timeout: timeout,
-            shutdown_timeout: Duration::from_secs(15), // Default 15 second shutdown timeout
+            shutdown_timeout: Duration::from_secs(120), // Default 120 second shutdown timeout
         }
     }
 
@@ -181,9 +181,13 @@ impl OperationMonitor {
         }
     }
 
-    /// Cancel an operation by ID
+    /// Cancel an operation by ID with an optional reason string.
     /// Returns true if the operation was found and cancelled, false if not found
-    pub async fn cancel_operation(&self, operation_id: &str) -> bool {
+    pub async fn cancel_operation_with_reason(
+        &self,
+        operation_id: &str,
+        reason: Option<String>,
+    ) -> bool {
         let mut ops = self.operations.write().await;
         if let Some(op) = ops.get_mut(operation_id) {
             // Only cancel if the operation is not already terminal
@@ -192,6 +196,19 @@ impl OperationMonitor {
                 op.state = OperationStatus::Cancelled;
                 op.end_time = Some(std::time::SystemTime::now());
                 op.cancellation_token.cancel();
+
+                // Store structured cancellation info in result for debugging/LLM visibility
+                let mut data = serde_json::Map::new();
+                data.insert("cancelled".to_string(), serde_json::Value::Bool(true));
+                if let Some(r) = reason.clone() {
+                    data.insert("reason".to_string(), serde_json::Value::String(r));
+                } else {
+                    data.insert(
+                        "reason".to_string(),
+                        serde_json::Value::String("Cancelled by user".to_string()),
+                    );
+                }
+                op.result = Some(serde_json::Value::Object(data));
 
                 // Move to completion history
                 let cancelled_op = op.clone();
@@ -223,6 +240,11 @@ impl OperationMonitor {
             );
             false
         }
+    }
+
+    /// Backward-compatible helper without explicit reason
+    pub async fn cancel_operation(&self, operation_id: &str) -> bool {
+        self.cancel_operation_with_reason(operation_id, None).await
     }
 
     pub async fn get_active_operations(&self) -> Vec<Operation> {

@@ -877,13 +877,25 @@ impl ServerHandler for AhmaMcpService {
                     ));
                 };
 
+                // Optional cancellation reason to aid debugging
+                let reason: Option<String> = args
+                    .get("reason")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+
                 // Attempt to cancel the operation
-                let cancelled = self.operation_monitor.cancel_operation(&operation_id).await;
+                let cancelled = self
+                    .operation_monitor
+                    .cancel_operation_with_reason(&operation_id, reason.clone())
+                    .await;
 
                 let result_message = if cancelled {
+                    let why = reason
+                        .as_deref()
+                        .unwrap_or("No reason provided (default: user-initiated)");
                     format!(
-                        "✓ Operation '{}' has been cancelled successfully.",
-                        operation_id
+                        "✓ Operation '{}' has been cancelled successfully.\nString: reason='{}'.\nHint: Consider restarting the operation if needed.",
+                        operation_id, why
                     )
                 } else {
                     // Check if operation exists but is already terminal
@@ -909,7 +921,22 @@ impl ServerHandler for AhmaMcpService {
                     }
                 };
 
-                return Ok(CallToolResult::success(vec![Content::text(result_message)]));
+                // Add a machine-parseable suggestion block to encourage restart via tool hint
+                let suggestion = serde_json::json!({
+                    "tool_hint": {
+                        "suggested_tool": "status",
+                        "reason": "Operation cancelled; check status and consider restarting",
+                        "next_steps": [
+                            {"tool": "status", "args": {"operation_id": operation_id}},
+                            {"tool": "wait", "args": {"tools": "", "timeout_seconds": 120}}
+                        ]
+                    }
+                });
+
+                return Ok(CallToolResult::success(vec![
+                    Content::text(result_message),
+                    Content::text(suggestion.to_string()),
+                ]));
             }
 
             // Parse tool name to extract base command and subcommand parts
