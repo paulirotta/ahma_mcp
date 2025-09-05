@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 use tracing;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,6 +51,9 @@ pub struct Operation {
     pub end_time: Option<std::time::SystemTime>,
     /// When wait_for_operation was first called for this operation (None if never waited for)
     pub first_wait_time: Option<std::time::SystemTime>,
+    /// Cancellation token for this operation (not serialized)
+    #[serde(skip)]
+    pub cancellation_token: CancellationToken,
 }
 
 impl Operation {
@@ -64,6 +68,7 @@ impl Operation {
             start_time: std::time::SystemTime::now(),
             end_time: None,
             first_wait_time: None,
+            cancellation_token: CancellationToken::new(),
         }
     }
 }
@@ -173,6 +178,50 @@ impl OperationMonitor {
                 history.insert(operation_id.to_string(), op);
                 tracing::debug!("Moved operation {} to completion history.", operation_id);
             }
+        }
+    }
+
+    /// Cancel an operation by ID
+    /// Returns true if the operation was found and cancelled, false if not found
+    pub async fn cancel_operation(&self, operation_id: &str) -> bool {
+        let mut ops = self.operations.write().await;
+        if let Some(op) = ops.get_mut(operation_id) {
+            // Only cancel if the operation is not already terminal
+            if !op.state.is_terminal() {
+                tracing::info!("Cancelling operation: {}", operation_id);
+                op.state = OperationStatus::Cancelled;
+                op.end_time = Some(std::time::SystemTime::now());
+                op.cancellation_token.cancel();
+
+                // Move to completion history
+                let cancelled_op = op.clone();
+                drop(ops); // Release the write lock early
+
+                let mut history = self.completion_history.write().await;
+                history.insert(operation_id.to_string(), cancelled_op);
+                tracing::debug!(
+                    "Moved cancelled operation {} to completion history.",
+                    operation_id
+                );
+
+                // Remove from active operations
+                let mut ops = self.operations.write().await;
+                ops.remove(operation_id);
+
+                true
+            } else {
+                tracing::warn!(
+                    "Attempted to cancel already terminal operation: {}",
+                    operation_id
+                );
+                false
+            }
+        } else {
+            tracing::warn!(
+                "Attempted to cancel non-existent operation: {}",
+                operation_id
+            );
+            false
         }
     }
 

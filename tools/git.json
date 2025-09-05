@@ -96,6 +96,11 @@
             "guidance_key": "async_behavior",
             "options": [
                 {
+                    "name": "timeout_seconds",
+                    "type": "integer",
+                    "description": "Maximum time to wait in seconds (default: 240, min: 10, max: 1800)"
+                },
+                {
                     "name": "set-upstream",
                     "alias": "u",
                     "type": "boolean",
@@ -134,6 +139,11 @@
             "guidance_key": "async_behavior",
             "options": [
                 {
+                    "name": "timeout_seconds",
+                    "type": "integer",
+                    "description": "Maximum time to wait in seconds (default: 240, min: 10, max: 1800)"
+                },
+                {
                     "name": "rebase",
                     "type": "boolean",
                     "description": "Rebase the current branch on top of the upstream branch after fetching"
@@ -164,6 +174,11 @@
             "description": "Download objects and refs from another repository",
             "guidance_key": "async_behavior",
             "options": [
+                {
+                    "name": "timeout_seconds",
+                    "type": "integer",
+                    "description": "Maximum time to wait in seconds (default: 240, min: 10, max: 1800)"
+                },
                 {
                     "name": "all",
                     "type": "boolean",
