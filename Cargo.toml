@@ -36,3 +36,8 @@ futures = "0.3"
 
 [features]
 testing = []
+
+[profile.coverage]
+inherits = "dev"
+opt-level = 0
+debug = true

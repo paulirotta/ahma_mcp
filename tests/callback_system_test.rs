@@ -280,7 +280,7 @@ async fn test_progress_update_operation_id() {
         },
     ];
 
-    let expected_ids = vec![
+    let expected_ids = [
         "op_123", "op_456", "op_789", "op_abc", "op_def", "op_ghi", "op_jkl",
     ];
 

@@ -1,8 +1,13 @@
 #[cfg(test)]
 mod mcp_service_tests {
+    use ahma_mcp::adapter::Adapter;
     use ahma_mcp::config::{OptionConfig, SubcommandConfig, ToolConfig};
-    use ahma_mcp::mcp_service::{GuidanceConfig, LegacyGuidanceConfig};
+    use ahma_mcp::mcp_service::{AhmaMcpService, GuidanceConfig, LegacyGuidanceConfig};
+    use ahma_mcp::operation_monitor::OperationMonitor;
+    use rmcp::model::ProtocolVersion;
     use serde_json::json;
+    use std::collections::HashMap;
+    use std::sync::Arc;
 
     #[test]
     fn test_guidance_config_deserialization() {
@@ -184,5 +189,89 @@ mod mcp_service_tests {
                 assert_eq!(features[0].as_str(), Some("serde"));
             }
         }
+    }
+
+    #[tokio::test]
+    async fn test_service_creation() {
+        // Test that AhmaMcpService can be created successfully
+        use ahma_mcp::operation_monitor::MonitorConfig;
+        use ahma_mcp::shell_pool::ShellPoolManager;
+        use std::time::Duration;
+
+        let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(300));
+        let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
+        let shell_pool = Arc::new(ShellPoolManager::new(Default::default()));
+        let adapter = Arc::new(
+            Adapter::new(Arc::clone(&operation_monitor), Arc::clone(&shell_pool)).unwrap(),
+        );
+        let configs = Arc::new(HashMap::new());
+        let guidance = Arc::new(None);
+
+        let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance).await;
+
+        assert!(service.is_ok());
+        let service = service.unwrap();
+
+        // Verify the service has the expected initial state
+        assert!(service.peer.read().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_get_info() {
+        // Test the get_info method returns correct server information
+        use ahma_mcp::operation_monitor::MonitorConfig;
+        use ahma_mcp::shell_pool::ShellPoolManager;
+        use rmcp::handler::server::ServerHandler;
+        use std::time::Duration;
+
+        let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(300));
+        let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
+        let shell_pool = Arc::new(ShellPoolManager::new(Default::default()));
+        let adapter = Arc::new(
+            Adapter::new(Arc::clone(&operation_monitor), Arc::clone(&shell_pool)).unwrap(),
+        );
+        let configs = Arc::new(HashMap::new());
+        let guidance = Arc::new(None);
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let service = rt.block_on(async {
+            AhmaMcpService::new(adapter, operation_monitor, configs, guidance)
+                .await
+                .unwrap()
+        });
+
+        let info = service.get_info();
+
+        assert_eq!(info.protocol_version, ProtocolVersion::V_2024_11_05);
+        assert!(info.capabilities.tools.is_some());
+        assert_eq!(info.server_info.name, env!("CARGO_PKG_NAME"));
+        assert_eq!(info.server_info.version, env!("CARGO_PKG_VERSION"));
+    }
+
+    #[tokio::test]
+    async fn test_list_tools_empty_config() {
+        // Test list_tools with empty configuration
+        use ahma_mcp::operation_monitor::MonitorConfig;
+        use ahma_mcp::shell_pool::ShellPoolManager;
+
+        use std::time::Duration;
+
+        let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(300));
+        let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
+        let shell_pool = Arc::new(ShellPoolManager::new(Default::default()));
+        let adapter = Arc::new(
+            Adapter::new(Arc::clone(&operation_monitor), Arc::clone(&shell_pool)).unwrap(),
+        );
+        let configs = Arc::new(HashMap::new());
+        let guidance = Arc::new(None);
+
+        let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance)
+            .await
+            .unwrap();
+
+        // Test that service was created successfully with empty config
+        // The actual list_tools call requires complex MCP context setup
+        // which is better tested in integration tests
+        assert!(service.configs.is_empty());
     }
 }

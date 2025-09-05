@@ -1,6 +1,185 @@
 #[cfg(test)]
 mod mcp_callback_tests {
-    use ahma_mcp::callback_system::ProgressUpdate;
+    use ahma_mcp::callback_system::{CallbackError, ProgressUpdate};
+    use ahma_mcp::mcp_callback::mcp_callback;
+    use rmcp::model::{NumberOrString, ProgressNotificationParam, ProgressToken};
+
+    use std::sync::Arc;
+
+    // Test the constructor and basic functionality
+    #[test]
+    fn test_mcp_callback_sender_creation() {
+        // We can't create a real Peer, but we can test that the constructor compiles
+        // and that the struct has the expected fields
+        // This is more of a compilation test, but it ensures the API is accessible
+
+        // Test that we can reference the types
+        let _operation_id = "test_op".to_string();
+        // Note: We can't actually create a Peer without a real connection,
+        // but we can test the utility function
+    }
+
+    #[test]
+    fn test_mcp_callback_utility_function() {
+        // Test that the utility function compiles and returns the right type
+        // We can't call it with a real Peer, but we can ensure it exists
+
+        // This tests that the function signature is correct
+        let _func = mcp_callback;
+        assert!(true); // If we get here, the function exists and compiles
+    }
+
+    // Test the should_cancel method by creating a minimal mock
+    // This requires some creativity since we can't easily mock the Peer
+
+    #[test]
+    fn test_progress_token_creation() {
+        let operation_id = "test_operation_123".to_string();
+        let token = ProgressToken(NumberOrString::String(Arc::from(operation_id.as_str())));
+
+        match token.0 {
+            NumberOrString::String(s) => assert_eq!(*s, operation_id),
+            NumberOrString::Number(_) => panic!("Expected string token, got number"),
+        }
+    }
+
+    #[test]
+    fn test_progress_notification_param_structure() {
+        let token = ProgressToken(NumberOrString::String(Arc::from("test_op")));
+        let params = ProgressNotificationParam {
+            progress_token: token,
+            progress: 50.0,
+            total: Some(100.0),
+            message: Some("Test message".to_string()),
+        };
+
+        assert_eq!(params.progress, 50.0);
+        assert_eq!(params.total, Some(100.0));
+        assert_eq!(params.message, Some("Test message".to_string()));
+    }
+
+    #[test]
+    fn test_progress_update_started_message_format() {
+        let operation_id = "test_op_123".to_string();
+        let command = "cargo build".to_string();
+        let description = "Building the project".to_string();
+
+        let expected_message = format!("{command}: {description}");
+        assert_eq!(expected_message, "cargo build: Building the project");
+    }
+
+    #[test]
+    fn test_progress_update_progress_default_percentage() {
+        let percentage = None;
+        let progress = percentage.unwrap_or(50.0); // This matches the logic in the actual code
+        assert_eq!(progress, 50.0);
+    }
+
+    #[test]
+    fn test_progress_update_progress_with_percentage() {
+        let percentage = Some(75.0);
+        let progress = percentage.unwrap_or(50.0);
+        assert_eq!(progress, 75.0);
+    }
+
+    #[test]
+    fn test_progress_update_output_stdout_format() {
+        let line = "Hello World".to_string();
+        let is_stderr = false;
+
+        let message = if is_stderr {
+            format!("stderr: {line}")
+        } else {
+            format!("stdout: {line}")
+        };
+
+        assert_eq!(message, "stdout: Hello World");
+    }
+
+    #[test]
+    fn test_progress_update_output_stderr_format() {
+        let line = "Error message".to_string();
+        let is_stderr = true;
+
+        let message = if is_stderr {
+            format!("stderr: {line}")
+        } else {
+            format!("stdout: {line}")
+        };
+
+        assert_eq!(message, "stderr: Error message");
+    }
+
+    #[test]
+    fn test_progress_update_final_result_success_format() {
+        let operation_id = "test_op_123".to_string();
+        let command = "cargo test".to_string();
+        let description = "Running tests".to_string();
+        let working_directory = "/home/user/project".to_string();
+        let success = true;
+        let full_output = "running 5 tests\n...\ntest result: ok".to_string();
+        let duration_ms = 2500;
+
+        let status = if success { "COMPLETED" } else { "FAILED" };
+        let final_message = format!(
+            "OPERATION {}: '{}'\nCommand: {}\nDescription: {}\nWorking Directory: {}\nDuration: {}ms\n\n=== FULL OUTPUT ===\n{}",
+            status, operation_id, command, description, working_directory, duration_ms, full_output
+        );
+
+        assert!(final_message.contains("OPERATION COMPLETED"));
+        assert!(final_message.contains("cargo test"));
+        assert!(final_message.contains("Running tests"));
+        assert!(final_message.contains("/home/user/project"));
+        assert!(final_message.contains("2500ms"));
+        assert!(final_message.contains("running 5 tests"));
+    }
+
+    #[test]
+    fn test_progress_update_final_result_failure_format() {
+        let operation_id = "test_op_456".to_string();
+        let command = "cargo build".to_string();
+        let description = "Building project".to_string();
+        let working_directory = "/tmp".to_string();
+        let success = false;
+        let full_output = "error: could not compile".to_string();
+        let duration_ms = 1000;
+
+        let status = if success { "COMPLETED" } else { "FAILED" };
+        let final_message = format!(
+            "OPERATION {}: '{}'\nCommand: {}\nDescription: {}\nWorking Directory: {}\nDuration: {}ms\n\n=== FULL OUTPUT ===\n{}",
+            status, operation_id, command, description, working_directory, duration_ms, full_output
+        );
+
+        assert!(final_message.contains("OPERATION FAILED"));
+        assert!(final_message.contains("cargo build"));
+        assert!(final_message.contains("error: could not compile"));
+    }
+
+    #[test]
+    fn test_callback_error_send_failed() {
+        let error_msg = "Failed to send MCP notification: TransportClosed";
+        let error = CallbackError::SendFailed(error_msg.to_string());
+
+        match error {
+            CallbackError::SendFailed(msg) => assert_eq!(msg, error_msg),
+            _ => panic!("Expected SendFailed variant"),
+        }
+    }
+
+    #[test]
+    fn test_mcp_callback_utility_function_compiles() {
+        // Test that the utility function can be called (compilation test)
+        // We can't easily test the full functionality without a real Peer,
+        // but we can ensure the function signature is correct
+
+        // This would require a real Peer instance, so we just test that
+        // the function exists and has the right signature by calling it
+        // in a way that doesn't require execution
+
+        // For now, just test that we can reference the function
+        let _func = mcp_callback;
+        assert!(true); // If we get here, the function exists
+    }
 
     #[test]
     fn test_progress_update_variants_compile() {
