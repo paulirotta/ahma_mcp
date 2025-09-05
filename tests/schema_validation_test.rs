@@ -326,7 +326,7 @@ fn test_validate_tool_config_valid_complete() {
     assert_eq!(config.name, "cargo");
     assert_eq!(config.description, "Rust package manager");
     assert_eq!(config.command, "cargo");
-    assert_eq!(config.enabled, true);
+    assert!(config.enabled);
     assert_eq!(config.timeout_seconds, Some(300));
 }
 
@@ -350,7 +350,7 @@ fn test_validate_subcommands_invalid_array() {
         .filter(|e| e.field_path == "subcommand")
         .collect();
 
-    assert!(subcommand_errors.len() >= 1);
+    assert!(!subcommand_errors.is_empty());
     assert_eq!(
         subcommand_errors[0].error_type,
         ValidationErrorType::InvalidType
@@ -468,7 +468,7 @@ fn test_validate_options_array_invalid() {
         .filter(|e| e.field_path.contains("options"))
         .collect();
 
-    assert!(option_errors.len() >= 1);
+    assert!(!option_errors.is_empty());
 }
 
 #[test]
