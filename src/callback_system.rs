@@ -79,7 +79,7 @@ pub enum ProgressUpdate {
         message: String,
         duration_ms: u64,
     },
-    /// Final comprehensive result with all details (like wait command output)
+    /// Final comprehensive result with all details (like await command output)
     FinalResult {
         operation_id: String,
         command: String,

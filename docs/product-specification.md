@@ -96,7 +96,7 @@ The JSON file is the central point of configuration, defining a tool's structure
   "subcommand": [
     {
       "name": "build",
-      "description": "Compile the current package.\n\n**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- **DO NOT** wait for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.",
+      "description": "Compile the current package.\n\n**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- **DO NOT** await for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.",
       "options": [
         {
           "name": "release",
@@ -122,14 +122,14 @@ The JSON file is the central point of configuration, defining a tool's structure
       "options": []
     },
     {
-      "name": "wait",
+      "name": "await",
       "description": "Wait for previously started asynchronous operations to complete.\n\n**WARNING:** This is a blocking tool and makes you inefficient.\n- **ONLY** use this if you have NO other tasks and cannot proceed until completion.\n- It is **ALWAYS** better to perform other work and let results be pushed to you.\n- Use this ONLY for final project validation when all work is complete.",
       "synchronous": true,
       "options": [
         {
           "name": "operation_ids",
           "type": "array",
-          "description": "Specific operation IDs to wait for"
+          "description": "Specific operation IDs to await for"
         }
       ]
     }
@@ -198,7 +198,7 @@ This enables rapid development and debugging of new tool integrations.
 ## 6. Future Enhancements
 
 - **Interactive Tool Support**: Develop a mechanism for handling interactive commands that prompt for user input.
-- **Server-Side Operation Tracking**: Re-introduce a server-side `OperationMonitor` to track the status of async jobs, allowing for `wait` and `status` tools to query job progress from the server itself, rather than relying on the client.
+- **Server-Side Operation Tracking**: Re-introduce a server-side `OperationMonitor` to track the status of async jobs, allowing for `await` and `status` tools to query job progress from the server itself, rather than relying on the client.
 - **Automatic Callback on Completion**: Implement a true callback system where the server proactively pushes results to the client upon async completion, removing the need for client-side polling.
 - **Schema Evolution**: Support for versioned schemas and backward compatibility
 - **Dynamic Schema Updates**: Hot-reloading of tool configurations without server restart

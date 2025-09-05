@@ -1,7 +1,7 @@
 /// Enhanced Wait Tool Test Suite
 ///
-/// PURPOSE: Validates the enhanced wait tool functionality implemented to address:
-/// "I think 'wait' should have an optional timeout, and a default timeout of 240sec"
+/// PURPOSE: Validates the enhanced await tool functionality implemented to address:
+/// "I think 'await' should have an optional timeout, and a default timeout of 240sec"
 ///
 /// CRITICAL INVARIANTS TESTED:
 /// - Default 240s timeout (changed from 300s per user request)
@@ -20,9 +20,9 @@ use tokio::time::timeout;
 async fn test_wait_tool_timeout_functionality() -> Result<()> {
     let client = new_client(Some("tools")).await?;
 
-    // Test that wait tool has proper timeout parameter
+    // Test that await tool has proper timeout parameter
     let call_param = rmcp::model::CallToolRequestParam {
-        name: "wait".into(),
+        name: "await".into(),
         arguments: Some({
             let mut args = serde_json::Map::new();
             args.insert("timeout_seconds".to_string(), serde_json::json!(1));
@@ -61,7 +61,7 @@ async fn test_wait_tool_timeout_validation() -> Result<()> {
 
     // Test timeout too small (should clamp to minimum)
     let call_param = rmcp::model::CallToolRequestParam {
-        name: "wait".into(),
+        name: "await".into(),
         arguments: Some({
             let mut args = serde_json::Map::new();
             args.insert("timeout_seconds".to_string(), serde_json::json!(0)); // Below 1s minimum
@@ -74,7 +74,7 @@ async fn test_wait_tool_timeout_validation() -> Result<()> {
 
     // Test timeout too large (should clamp to maximum)
     let call_param = rmcp::model::CallToolRequestParam {
-        name: "wait".into(),
+        name: "await".into(),
         arguments: Some({
             let mut args = serde_json::Map::new();
             args.insert("timeout_seconds".to_string(), serde_json::json!(3600)); // Above 1800s maximum
@@ -125,17 +125,17 @@ async fn test_status_tool_functionality() -> Result<()> {
 
 /// TEST: Tool-specific filtering capability
 ///
-/// PURPOSE: Validates ability to wait for specific tool types (e.g., "cargo")
+/// PURPOSE: Validates ability to await for specific tool types (e.g., "cargo")
 /// rather than all operations. Improves efficiency by avoiding unnecessary waits.
 ///
-/// USAGE PATTERN: wait --tools cargo,npm (waits only for these tool types)
+/// USAGE PATTERN: await --tools cargo,npm (waits only for these tool types)
 #[tokio::test]
 async fn test_wait_tool_with_tool_filter() -> Result<()> {
     let client = new_client(Some("tools")).await?;
 
-    // Test wait tool with tool filter
+    // Test await tool with tool filter
     let call_param = rmcp::model::CallToolRequestParam {
-        name: "wait".into(),
+        name: "await".into(),
         arguments: Some({
             let mut args = serde_json::Map::new();
             args.insert("tools".to_string(), serde_json::json!("cargo"));

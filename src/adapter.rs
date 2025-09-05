@@ -174,7 +174,22 @@ impl Adapter {
                     ))
                 }
             }
-            Err(e) => Err(anyhow::anyhow!("Command execution failed: {}", e)),
+            Err(e) => {
+                let error_message = e.to_string();
+
+                // TIMEOUT FIX: Detect shell timeout errors and provide descriptive message
+                if error_message.contains("Shell communication timeout")
+                    || error_message.contains("timeout")
+                    || error_message.contains("Timeout")
+                {
+                    Err(anyhow::anyhow!(
+                        "Operation timed out (exceeded timeout limit): {}",
+                        error_message
+                    ))
+                } else {
+                    Err(anyhow::anyhow!("Command execution failed: {}", e))
+                }
+            }
         }
     }
 
@@ -396,7 +411,30 @@ impl Adapter {
                 return;
             }
 
+            // DEBUGGING: Log shell command execution start
+            tracing::debug!(
+                "Starting shell execution for operation {} with command: {:?}",
+                op_id,
+                shell_cmd
+            );
+
             let result = shell.execute_command(shell_cmd).await;
+
+            // DEBUGGING: Log shell command execution completion
+            tracing::debug!(
+                "Shell execution completed for operation {} with result: {:?}",
+                op_id,
+                match &result {
+                    Ok(output) => format!(
+                        "Success(exit_code={}, stdout_len={}, stderr_len={})",
+                        output.exit_code,
+                        output.stdout.len(),
+                        output.stderr.len()
+                    ),
+                    Err(e) => format!("Error: {}", e),
+                }
+            );
+
             let duration_ms = start_time.elapsed().as_millis() as u64;
             shell_pool.return_shell(shell).await;
 
@@ -424,7 +462,7 @@ impl Adapter {
                         .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
                             operation_id: op_id.clone(),
                             message: reason_owned,
-                            duration_ms: duration_ms,
+                            duration_ms,
                         })
                         .await;
                 }
@@ -433,20 +471,85 @@ impl Adapter {
 
             match result {
                 Ok(output) => {
-                    // Check if the output indicates cancellation (common in cargo/nextest)
-                    let is_cancelled_output = output.stdout.trim() == "Canceled"
-                        || output.stderr.trim() == "Canceled"
+                    // DEBUGGING: Log all process output to trace cancellation source
+                    tracing::debug!(
+                        "Process output for operation {}: stdout='{}', stderr='{}', exit_code={}",
+                        op_id,
+                        output.stdout,
+                        output.stderr,
+                        output.exit_code
+                    );
+
+                    // Check if the output indicates cancellation - enhanced detection for rmcp library errors
+                    let stdout_trimmed = output.stdout.trim();
+                    let stderr_trimmed = output.stderr.trim();
+
+                    let is_cancelled_output = stdout_trimmed == "Canceled"
+                        || stderr_trimmed == "Canceled"
                         || output.stdout.contains("Canceled: Canceled")
-                        || output.stderr.contains("Canceled: Canceled");
+                        || output.stderr.contains("Canceled: Canceled")
+                        || output.stdout.contains("task cancelled for reason")
+                        || output.stderr.contains("task cancelled for reason");
 
                     if is_cancelled_output {
-                        // Override the raw cancellation output with enhanced notification
+                        // DEBUGGING: Log exactly what cancellation output was detected
+                        tracing::debug!(
+                            "CANCELLATION DETECTED for operation {}: stdout_contains_canceled_canceled={}, stderr_contains_canceled_canceled={}, stdout_contains_task_cancelled={}, stderr_contains_task_cancelled={}, stdout_exact_canceled={}, stderr_exact_canceled={}",
+                            op_id,
+                            output.stdout.contains("Canceled: Canceled"),
+                            output.stderr.contains("Canceled: Canceled"),
+                            output.stdout.contains("task cancelled for reason"),
+                            output.stderr.contains("task cancelled for reason"),
+                            stdout_trimmed == "Canceled",
+                            stderr_trimmed == "Canceled"
+                        );
+
+                        // Enhanced cancellation handling: detect and transform rmcp library cancellation messages
                         tracing::info!("Detected cancelled process output for operation {}", op_id);
+
+                        // First check if the operation already has a cancellation reason
+                        let enhanced_reason = match monitor.get_operation(&op_id).await {
+                            Some(op) if op.result.is_some() => {
+                                // Operation already has a structured cancellation reason
+                                if let Some(result) = &op.result {
+                                    if let Some(reason) =
+                                        result.get("reason").and_then(|v| v.as_str())
+                                    {
+                                        format!("Process cancelled: {}", reason)
+                                    } else {
+                                        "Process cancelled by external signal or user request"
+                                            .to_string()
+                                    }
+                                } else {
+                                    "Process cancelled by external signal or user request"
+                                        .to_string()
+                                }
+                            }
+                            _ => {
+                                // No structured reason available, enhance based on output patterns
+                                if output.stdout.contains("Canceled: Canceled")
+                                    || output.stderr.contains("Canceled: Canceled")
+                                {
+                                    // This is the classic rmcp library "Canceled: Canceled" message
+                                    "Operation cancelled by user request or system signal (was: Canceled: Canceled from rmcp library)".to_string()
+                                } else if output.stdout.contains("task cancelled for reason")
+                                    || output.stderr.contains("task cancelled for reason")
+                                {
+                                    // This is another rmcp library cancellation format
+                                    "Operation cancelled by user request or system signal (detected rmcp library cancellation)".to_string()
+                                } else {
+                                    // Simple "Canceled" output from external process
+                                    "Process cancelled by external signal or user request"
+                                        .to_string()
+                                }
+                            }
+                        };
+
                         monitor
                             .update_status(
                                 &op_id,
                                 OperationStatus::Cancelled,
-                                Some(Value::String("Process was cancelled".to_string())),
+                                Some(Value::String(enhanced_reason.clone())),
                             )
                             .await;
 
@@ -454,9 +557,7 @@ impl Adapter {
                             let _ = callback
                                 .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
                                     operation_id: op_id.clone(),
-                                    message:
-                                        "Process was cancelled - consider restarting if needed"
-                                            .to_string(),
+                                    message: enhanced_reason,
                                     duration_ms,
                                 })
                                 .await;
@@ -503,29 +604,73 @@ impl Adapter {
                 }
                 Err(e) => {
                     let error_message = e.to_string();
-                    monitor
-                        .update_status(
-                            &op_id,
-                            OperationStatus::Failed,
-                            Some(Value::String(error_message.clone())),
-                        )
-                        .await;
 
-                    // Send failure notification if callback is provided
-                    if let Some(callback) = &callback {
-                        let failure_update = crate::callback_system::ProgressUpdate::FinalResult {
-                            operation_id: op_id.clone(),
-                            command: command.clone(),
-                            description: format!("Execute {} in {}", command, wd_clone),
-                            working_directory: wd_clone.clone(),
-                            success: false,
-                            duration_ms,
-                            full_output: format!("Error: {}", error_message),
-                        };
-                        if let Err(e) = callback.send_progress(failure_update).await {
-                            tracing::error!("Failed to send failure notification: {:?}", e);
-                        } else {
-                            tracing::info!("Sent failure notification for operation: {}", op_id);
+                    // TIMEOUT FIX: Detect shell timeout errors and handle them as cancellations
+                    let is_timeout_error = error_message.contains("Shell communication timeout")
+                        || error_message.contains("timeout")
+                        || error_message.contains("Timeout");
+
+                    if is_timeout_error {
+                        // Handle timeout as a cancellation with descriptive reason
+                        let timeout_reason = format!(
+                            "Operation timed out after {}ms (exceeded shell timeout limit)",
+                            duration_ms
+                        );
+
+                        tracing::info!(
+                            "Detected timeout for operation {}: {}",
+                            op_id,
+                            timeout_reason
+                        );
+
+                        monitor
+                            .update_status(
+                                &op_id,
+                                OperationStatus::Cancelled,
+                                Some(Value::String(timeout_reason.clone())),
+                            )
+                            .await;
+
+                        // Send cancellation notification if callback is provided
+                        if let Some(callback) = &callback {
+                            let _ = callback
+                                .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
+                                    operation_id: op_id.clone(),
+                                    message: timeout_reason,
+                                    duration_ms,
+                                })
+                                .await;
+                        }
+                    } else {
+                        // Handle other errors as failures
+                        monitor
+                            .update_status(
+                                &op_id,
+                                OperationStatus::Failed,
+                                Some(Value::String(error_message.clone())),
+                            )
+                            .await;
+
+                        // Send failure notification if callback is provided
+                        if let Some(callback) = &callback {
+                            let failure_update =
+                                crate::callback_system::ProgressUpdate::FinalResult {
+                                    operation_id: op_id.clone(),
+                                    command: command.clone(),
+                                    description: format!("Execute {} in {}", command, wd_clone),
+                                    working_directory: wd_clone.clone(),
+                                    success: false,
+                                    duration_ms,
+                                    full_output: format!("Error: {}", error_message),
+                                };
+                            if let Err(e) = callback.send_progress(failure_update).await {
+                                tracing::error!("Failed to send failure notification: {:?}", e);
+                            } else {
+                                tracing::info!(
+                                    "Sent failure notification for operation: {}",
+                                    op_id
+                                );
+                            }
                         }
                     }
                 }

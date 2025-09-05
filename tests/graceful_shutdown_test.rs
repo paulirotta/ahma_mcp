@@ -34,10 +34,10 @@ async fn test_graceful_shutdown_infrastructure() -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
-/// Test the wait tool timeout functionality with real operations
+/// Test the await tool timeout functionality with real operations
 #[tokio::test]
 async fn test_wait_tool_timeout_scenarios() -> Result<(), Box<dyn std::error::Error>> {
-    println!("🧪 Testing wait tool timeout scenarios...");
+    println!("🧪 Testing await tool timeout scenarios...");
 
     let temp_dir = TempDir::new()?;
     let tools_dir = temp_dir.path().join("tools");
@@ -70,7 +70,7 @@ async fn test_wait_tool_timeout_scenarios() -> Result<(), Box<dyn std::error::Er
     println!("📁 Created test tools with various duration scenarios");
 
     // Note: This test would need to use MCP client libraries to properly test
-    // the wait tool functionality. For now, we verify the infrastructure is there.
+    // the await tool functionality. For now, we verify the infrastructure is there.
 
     println!("✅ Wait tool timeout infrastructure verified through unit tests");
     println!("   (Full integration testing would require MCP client implementation)");
@@ -83,7 +83,7 @@ async fn test_wait_tool_timeout_scenarios() -> Result<(), Box<dyn std::error::Er
 async fn test_lock_file_remediation_suggestions() {
     println!("🧪 Testing lock file detection and remediation suggestions...");
 
-    // This test verifies that our wait tool can detect common lock file patterns
+    // This test verifies that our await tool can detect common lock file patterns
     // and provide appropriate remediation suggestions
 
     let temp_dir = TempDir::new().unwrap();

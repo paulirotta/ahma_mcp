@@ -550,8 +550,8 @@ impl MtdfValidator {
                     "Should mention that results are pushed via MCP notification",
                 ),
                 (
-                    "DO NOT wait",
-                    "Should instruct AI not to wait for completion",
+                    "DO NOT await",
+                    "Should instruct AI not to await for completion",
                 ),
                 (
                     "continue with other tasks",
@@ -568,7 +568,7 @@ impl MtdfValidator {
                         field_path: format!("{}.description", path),
                         error_type: ValidationErrorType::ConstraintViolation,
                         message: format!("Async subcommand description missing guidance about '{}'", pattern),
-                        suggestion: Some(format!("{}\n\nRecommended template:\n\"**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- **DO NOT** wait for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.\"", guidance)),
+                        suggestion: Some(format!("{}\n\nRecommended template:\n\"**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- **DO NOT** await for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.\"", guidance)),
                     });
                 }
             }
@@ -770,7 +770,7 @@ mod tests {
             "subcommand": [
                 {
                     "name": "run",
-                    "description": "**IMPORTANT:** This tool operates asynchronously. Returns operation_id immediately. Results pushed automatically via MCP notification when complete. DO NOT wait for the final result. DO continue with other tasks that don't depend on this operation.",
+                    "description": "**IMPORTANT:** This tool operates asynchronously. Returns operation_id immediately. Results pushed automatically via MCP notification when complete. DO NOT await for the final result. DO continue with other tasks that don't depend on this operation.",
                     "options": [
                         {
                             "name": "verbose",
@@ -881,7 +881,7 @@ mod tests {
             "subcommand": [
                 {
                     "name": "run",
-                    "description": "**IMPORTANT:** This tool operates asynchronously. Returns operation_id immediately. Results pushed via MCP notification when complete. DO NOT wait - continue with other tasks.",
+                    "description": "**IMPORTANT:** This tool operates asynchronously. Returns operation_id immediately. Results pushed via MCP notification when complete. DO NOT await - continue with other tasks.",
                     "options": [
                         {
                             "name": "count",
@@ -916,7 +916,7 @@ mod tests {
             "subcommand": [
                 {
                     "name": "run",
-                    "description": "**IMPORTANT:** This tool operates asynchronously. Returns operation_id immediately. Results pushed via MCP notification when complete. DO NOT wait - continue with other tasks.",
+                    "description": "**IMPORTANT:** This tool operates asynchronously. Returns operation_id immediately. Results pushed via MCP notification when complete. DO NOT await - continue with other tasks.",
                     "options": [
                         {
                             "name": "verbose",

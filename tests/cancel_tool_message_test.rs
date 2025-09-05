@@ -9,7 +9,7 @@ fn test_cancel_tool_message_suggestion_block_shape() {
             "reason": "Operation cancelled; check status and consider restarting",
             "next_steps": [
                 {"tool": "status", "args": {"operation_id": "op_123"}},
-                {"tool": "wait", "args": {"tools": "", "timeout_seconds": 120}}
+                {"tool": "await", "args": {"tools": "", "timeout_seconds": 120}}
             ]
         }
     });

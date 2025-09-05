@@ -28,7 +28,7 @@ This document outlines the high-level requirements for `ahma_mcp`, a universal, 
 - **R4.1**: In asynchronous mode (default), invoking a tool shall immediately return a unique operation ID and started status to the AI client.
 - **R4.2**: The system shall automatically push operation results back to the AI client via MCP progress notifications upon completion, eliminating the need for client polling.
 - **R4.3**: Tool descriptions shall include explicit guidance to AI clients about asynchronous behavior, instructing them to continue productive work rather than waiting for results.
-- **R4.4**: The system shall strongly discourage the use of "wait" tools, making them available only for final project validation when no other productive work remains.
+- **R4.4**: The system shall strongly discourage the use of "await" tools, making them available only for final project validation when no other productive work remains.
 
 ## 5. Synchronous Operation
 

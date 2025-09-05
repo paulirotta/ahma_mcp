@@ -11,7 +11,7 @@ mod endless_notification_test {
     #[tokio::test]
     async fn test_completed_operations_are_persistent_in_history() {
         // NEW TEST: Verify that completed operations are moved to completion_history
-        // and remain accessible for wait operations while preventing duplicates
+        // and remain accessible for await operations while preventing duplicates
 
         let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
         let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));

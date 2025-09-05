@@ -42,7 +42,7 @@
 
 use ahma_mcp::{
     adapter::Adapter,
-    config::load_tool_configs,
+    config::{ToolConfig, load_tool_configs},
     mcp_service::{AhmaMcpService, GuidanceConfig},
     operation_monitor::{MonitorConfig, OperationMonitor},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
@@ -199,7 +199,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     // LESSON LEARNED: cargo watch sends SIGTERM during file changes, causing
     // abrupt termination of ongoing operations. This implementation provides:
     // 1. Signal handling for SIGTERM (cargo watch) and SIGINT (Ctrl+C)
-    // 2. 120-second grace period for operations to complete naturally
+    // 2. 360-second grace period for operations to complete naturally
     // 3. Progress monitoring with user feedback during shutdown
     // 4. Forced exit if service doesn't shutdown within 5 additional seconds
     //
@@ -210,10 +210,10 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     let adapter_for_signal = adapter.clone();
     let operation_monitor_for_signal = operation_monitor.clone();
     tokio::spawn(async move {
-        // Wait for SIGTERM (sent by cargo watch) or SIGINT (Ctrl+C)
-        tokio::select! {
+        let shutdown_reason = tokio::select! {
             _ = signal::ctrl_c() => {
                 info!("Received SIGINT, initiating graceful shutdown...");
+                "Cancelled due to SIGINT (Ctrl+C) - user interrupt"
             }
             _ = async {
                 #[cfg(unix)]
@@ -224,14 +224,15 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
                 }
                 #[cfg(not(unix))]
                 {
-                    // On non-Unix systems, just wait indefinitely
+                    // On non-Unix systems, just await indefinitely
                     // The ctrl_c signal above will handle shutdown
                     std::future::pending::<()>().await;
                 }
             } => {
                 info!("Received SIGTERM (likely from cargo watch), initiating graceful shutdown...");
+                "Cancelled due to SIGTERM from cargo watch - source code reload"
             }
-        }
+        };
 
         // Check for active operations and provide progress feedback
         info!("🛑 Shutdown initiated - checking for active operations...");
@@ -267,12 +268,38 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
             let final_summary = operation_monitor_for_signal.get_shutdown_summary().await;
 
             if final_summary.total_active > 0 {
-                tracing::warn!(
-                    "⚠️  Proceeding with shutdown - {} operation(s) still running",
-                    final_summary.total_active
+                info!(
+                    "⏱️  Shutdown timeout reached - cancelling {} remaining operation(s) with reason: {}",
+                    final_summary.total_active, shutdown_reason
                 );
+
+                // Cancel remaining operations with descriptive reason
                 for op in final_summary.operations.iter() {
-                    tracing::warn!("   - {} ({})", op.id, op.tool_name);
+                    tracing::debug!(
+                        "Attempting to cancel operation '{}' ({}) with reason: '{}'",
+                        op.id,
+                        op.tool_name,
+                        shutdown_reason
+                    );
+
+                    let cancelled = operation_monitor_for_signal
+                        .cancel_operation_with_reason(&op.id, Some(shutdown_reason.to_string()))
+                        .await;
+
+                    if cancelled {
+                        info!("   ✓ Cancelled operation '{}' ({})", op.id, op.tool_name);
+                        tracing::debug!("Successfully cancelled operation '{}' with reason", op.id);
+                    } else {
+                        tracing::warn!(
+                            "   ⚠ Failed to cancel operation '{}' ({})",
+                            op.id,
+                            op.tool_name
+                        );
+                        tracing::debug!(
+                            "Failed to cancel operation '{}' - it may have already completed",
+                            op.id
+                        );
+                    }
                 }
             }
         } else {
@@ -299,14 +326,6 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
 async fn run_cli_mode(cli: Cli) -> Result<()> {
     let tool_name = cli.tool_name.unwrap(); // Safe due to check in main()
 
-    // Parse tool name (e.g., "cargo_check" -> base_tool: "cargo", subcommand: "check")
-    let parts: Vec<&str> = tool_name.split('_').collect();
-    if parts.len() < 2 {
-        anyhow::bail!("Invalid tool name format. Expected 'tool_subcommand'.");
-    }
-    let base_tool = parts[0];
-    let subcommand_parts = &parts[1..];
-
     // Initialize adapter and monitor for CLI mode
     let monitor_config = MonitorConfig::with_timeout(std::time::Duration::from_secs(cli.timeout));
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
@@ -324,18 +343,58 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         anyhow::bail!("No tool configurations found");
     }
 
-    // Get the specific tool config
-    let config = configs
-        .get(base_tool)
-        .ok_or_else(|| anyhow::anyhow!("Tool '{}' not found in configurations", base_tool))?;
+    // Use the same longest-matching logic as the MCP service to find the tool config
+    let mut best_match: Option<(&str, &ToolConfig)> = None;
+    for (key, config) in configs.iter() {
+        if tool_name.starts_with(key)
+            && (best_match.is_none() || key.len() > best_match.unwrap().0.len())
+        {
+            best_match = Some((key, config));
+        }
+    }
 
-    // Find the subcommand configuration recursively
+    let (config_key, config) = best_match.ok_or_else(|| {
+        anyhow::anyhow!("No matching tool configuration found for '{}'", tool_name)
+    })?;
+
+    // Parse subcommand parts from the remaining tool name after the config key
+    let subcommand_part_str = tool_name.strip_prefix(config_key).unwrap_or("");
+    let is_default_call = subcommand_part_str.is_empty();
+
+    let subcommand_parts: Vec<&str> = if is_default_call {
+        vec!["default"]
+    } else {
+        subcommand_part_str
+            .strip_prefix('_')
+            .unwrap_or("")
+            .split('_')
+            .filter(|s| !s.is_empty())
+            .collect()
+    };
+
+    if subcommand_parts.is_empty() {
+        anyhow::bail!("Invalid tool name format. Expected 'tool_subcommand'.");
+    }
+
+    // Find the subcommand configuration recursively and build command parts like MCP service
     let mut current_subcommands = config.subcommand.as_deref();
     let mut found_subcommand = None;
+    let mut command_parts = vec![config.command.clone()];
 
     for (i, part) in subcommand_parts.iter().enumerate() {
         if let Some(subcommands) = current_subcommands {
             if let Some(sub) = subcommands.iter().find(|s| s.name == *part) {
+                if is_default_call && sub.name == "default" {
+                    // This is a default call, derive subcommand from config_key
+                    // e.g., config_key "cargo_audit" -> subcommand "audit"
+                    let derived_subcommand = config_key.split('_').next_back().unwrap_or("");
+                    if !derived_subcommand.is_empty() && derived_subcommand != config.command {
+                        command_parts.push(derived_subcommand.to_string());
+                    }
+                } else if sub.name != "default" {
+                    command_parts.push(sub.name.clone());
+                }
+
                 if i == subcommand_parts.len() - 1 {
                     found_subcommand = Some(sub);
                     break;
@@ -353,7 +412,7 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         anyhow::anyhow!(
             "Subcommand '{}' not found for tool '{}'",
             subcommand_parts.join("_"),
-            base_tool
+            config_key
         )
     })?;
 
@@ -426,11 +485,7 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     // Build arguments from subcommand options and user input
     let mut args_map = serde_json::Map::new();
 
-    // Add subcommand as the first positional argument
-    args_map.insert(
-        "_subcommand".to_string(),
-        Value::String(subcommand_parts.join("_")),
-    );
+    // Do NOT add _subcommand here - the command_parts already handle the subcommand structure
 
     // Add any additional arguments from command line
     for arg in &raw_args {
@@ -442,10 +497,13 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         }
     }
 
+    // Build the full command like the MCP service does
+    let base_command = command_parts.join(" ");
+
     // Execute the tool
     let result = adapter
         .execute_sync_in_dir(
-            base_tool,
+            &base_command,
             Some(args_map),
             &final_working_dir.unwrap_or_else(|| ".".to_string()),
             subcommand_config.timeout_seconds,
@@ -460,7 +518,22 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
             Ok(())
         }
         Err(e) => {
-            eprintln!("Error executing tool: {}", e);
+            // Enhanced error handling: detect and transform rmcp cancellation errors
+            let error_message = e.to_string();
+            if error_message.contains("Canceled: Canceled") {
+                eprintln!(
+                    "Operation cancelled by user request (was: {})",
+                    error_message
+                );
+            } else if error_message.contains("task cancelled for reason") {
+                eprintln!(
+                    "Operation cancelled by user request or system signal (detected MCP cancellation)"
+                );
+            } else if error_message.to_lowercase().contains("cancel") {
+                eprintln!("Operation cancelled: {}", error_message);
+            } else {
+                eprintln!("Error executing tool: {}", e);
+            }
             Err(anyhow::anyhow!("Tool execution failed"))
         }
     }

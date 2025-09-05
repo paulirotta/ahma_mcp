@@ -16,10 +16,10 @@ async fn test_list_tools() -> Result<()> {
     let client = new_client(Some("tools")).await?;
     let result = client.list_all_tools().await?;
 
-    // Should have at least the built-in 'wait' tool
+    // Should have at least the built-in 'await' tool
     assert!(!result.is_empty());
     let tool_names: Vec<_> = result.iter().map(|t| t.name.as_ref()).collect();
-    assert!(tool_names.contains(&"wait"));
+    assert!(tool_names.contains(&"await"));
     assert!(tool_names.contains(&"ls"));
 
     client.cancel().await?;
@@ -56,6 +56,7 @@ async fn test_call_tool_basic() -> Result<()> {
 }
 
 mod adapter_test;
+mod async_notification_delivery_test;
 mod callback_system_test;
 mod config_test;
 mod generate_schema_test;

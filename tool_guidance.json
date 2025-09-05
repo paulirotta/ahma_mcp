@@ -1,13 +1,13 @@
 {
     "guidance_blocks": {
-        "async_behavior": "**IMPORTANT:** This tool operates asynchronously\n1. **Immediate Response:** Returns operation_id and status 'started'. This is NOT YET success\n2. **Final Result:** Result pushed automatically via MCP notification when complete\n\n**Your Instructions:**\n- DO NOT wait for the final result unless you are at end of all tasks and have already updated the user with 'assume success but verify' results.\n- **DO** continue with other tasks that don't depend on this operation\n- You **MUST** process the future result notification to know if operation succeeded",
+        "async_behavior": "**IMPORTANT:** This tool operates asynchronously\n1. **Immediate Response:** Returns operation_id and status 'started'. This is NOT YET success\n2. **Final Result:** Result pushed automatically via MCP notification when complete\n\n**Your Instructions:**\n- DO NOT await for the final result unless you are at end of all tasks and have already updated the user with 'assume success but verify' results.\n- **DO** continue with other tasks that don't depend on this operation\n- You **MUST** process the future result notification to know if operation succeeded",
         "sync_behavior": "This tool runs synchronously and returns results immediately",
         "blocking_warning": "**WARNING:** This is a blocking tool and makes you inefficient\n**ONLY** use this after you have NO other summarizing to user, thinking or planning tasks and cannot proceed until completion.",
         "coordination_tool": "**WARNING:** This is a blocking coordination tool. Use ONLY for final project validation when no other productive work remains.",
-        "python_async": "**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- DO NOT wait for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.",
+        "python_async": "**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- DO NOT await for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.",
         "python_sync": "This tool runs synchronously and returns results immediately.",
         "git_operations": "This tool runs synchronously and returns results immediately.",
-        "cancellation_restart_hint": "An operation was cancelled. Include the cancellation reason back to the user, and suggest a tool hint to restart or check status: 1) Call 'status' with the operation_id to confirm state; 2) If appropriate, restart the tool with the same parameters; 3) Consider 'wait' only when results are actually needed."
+        "cancellation_restart_hint": "An operation was cancelled. Include the cancellation reason back to the user, and suggest a tool hint to restart or check status: 1) Call 'status' with the operation_id to confirm state; 2) If appropriate, restart the tool with the same parameters; 3) Consider 'await' only when results are actually needed."
     },
     "templates": {
         "working_progress": "While {tool} operations run, consider reviewing {suggestions}",
@@ -22,20 +22,20 @@
         "general_guidance": {
             "default": "Always use ahma_mcp for supported tools.",
             "completion": "Task completed. Review the output and plan your next action.",
-            "error": "An error occurred. Check the error message for details and use 'wait' for pending operations if needed."
+            "error": "An error occurred. Check the error message for details and use 'await' for pending operations if needed."
         },
         "tool_specific_guidance": {
             "cargo_build": {
-                "start": "Cargo build started. Use 'wait' to collect results when needed, or work on other tasks.",
+                "start": "Cargo build started. Use 'await' to collect results when needed, or work on other tasks.",
                 "completion": "Build successful. Artifacts are located in the target directory.",
                 "error": "Build failed. Review the compilation errors to identify the issue."
             },
             "cargo_test": {
-                "start": "Running tests. Use 'wait' to collect results when needed.",
+                "start": "Running tests. Use 'await' to collect results when needed.",
                 "completion": "All tests passed.",
                 "error": "Some tests failed. Review the test output to debug."
             },
-            "wait": {
+            "await": {
                 "start": "Waiting for operations to complete. This is a blocking call.",
                 "completion": "Wait complete. All specified operations have finished.",
                 "error": "Wait timed out. Some operations may still be running."

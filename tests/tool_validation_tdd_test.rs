@@ -125,21 +125,48 @@ mod tool_validation_tdd_tests {
             let entry = entry.expect("Failed to read directory entry");
             let path = entry.path();
 
+            // Security: Validate path is safe and within current directory
+            if !path.starts_with(".") {
+                continue;
+            }
+
             if let Some(name) = path.file_name() {
                 let name_str = name.to_string_lossy();
                 if name_str.ends_with(".toml") && name_str != "Cargo.toml" {
-                    let content = std::fs::read_to_string(&path)
-                        .unwrap_or_else(|_| panic!("Failed to read file: {:?}", path));
+                    // Security: Additional validation - ensure path is a regular file
+                    if !path.is_file() {
+                        continue;
+                    }
+
+                    // Security: Canonicalize path to prevent traversal attacks
+                    let canonical_path = match path.canonicalize() {
+                        Ok(p) => p,
+                        Err(_) => continue, // Skip if path cannot be canonicalized
+                    };
+
+                    // Security: Ensure canonical path is still within current directory
+                    let current_dir =
+                        std::env::current_dir().expect("Failed to get current directory");
+                    let canonical_current = current_dir
+                        .canonicalize()
+                        .expect("Failed to canonicalize current directory");
+
+                    if !canonical_path.starts_with(&canonical_current) {
+                        continue; // Skip paths outside current directory
+                    }
+
+                    let content = std::fs::read_to_string(&canonical_path)
+                        .unwrap_or_else(|_| panic!("Failed to read file: {:?}", canonical_path));
 
                     // Check if it's actually JSON disguised as TOML
                     if content.trim().starts_with('{') && content.trim().ends_with('}') {
-                        problematic_files.push(path.clone());
+                        problematic_files.push(canonical_path.clone());
                     }
 
                     // Try to parse as TOML
                     let toml_result = toml::from_str::<toml::Value>(&content);
                     if toml_result.is_err() {
-                        problematic_files.push(path.clone());
+                        problematic_files.push(canonical_path.clone());
                     }
                 }
             }

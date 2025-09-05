@@ -1,8 +1,8 @@
-//! Test for advanced wait functionality with multiple operations
+//! Test for advanced await functionality with multiple operations
 //!
 //! This test verifies that when multiple asynchronous operations are started
-//! and then followed by a wait call, all operation results are delivered
-//! before the wait operation completes.
+//! and then followed by a await call, all operation results are delivered
+//! before the await operation completes.
 
 use ahma_mcp::operation_monitor::{MonitorConfig, Operation, OperationMonitor, OperationStatus};
 use serde_json::Value;
@@ -13,10 +13,10 @@ use std::time::Duration;
 mod advanced_wait_functionality_test {
     use super::*;
 
-    /// Test that advanced wait functionality works correctly with multiple operations
+    /// Test that advanced await functionality works correctly with multiple operations
     #[tokio::test]
     async fn test_advanced_wait_with_multiple_operations() {
-        println!("🔄 Testing advanced wait functionality with multiple operations...");
+        println!("🔄 Testing advanced await functionality with multiple operations...");
 
         let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
             Duration::from_secs(30),
@@ -38,7 +38,7 @@ mod advanced_wait_functionality_test {
             println!("📝 Added operation: {}", op_id);
         }
 
-        // Start the wait operation in a background task (simulating async behavior)
+        // Start the await operation in a background task (simulating async behavior)
         let monitor_clone = monitor.clone();
         let wait_task = tokio::spawn(async move {
             monitor_clone
@@ -46,7 +46,7 @@ mod advanced_wait_functionality_test {
                 .await
         });
 
-        // Give wait operation time to start
+        // Give await operation time to start
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         // Complete operations one by one (simulating async completion)
@@ -63,7 +63,7 @@ mod advanced_wait_functionality_test {
             println!("✅ Completed operation: {}", op_id);
         }
 
-        // Wait for the wait operation to complete
+        // Wait for the await operation to complete
         let completed_operations = wait_task.await.unwrap();
 
         // Verify results
@@ -81,7 +81,7 @@ mod advanced_wait_functionality_test {
         }
 
         println!(
-            "✅ Advanced wait test passed - {} cargo operations completed",
+            "✅ Advanced await test passed - {} cargo operations completed",
             completed_operations.len()
         );
     }
@@ -89,7 +89,7 @@ mod advanced_wait_functionality_test {
     /// Test timeout warnings and timeout behavior
     #[tokio::test]
     async fn test_advanced_wait_timeout_warnings() {
-        println!("⏰ Testing advanced wait timeout warnings...");
+        println!("⏰ Testing advanced await timeout warnings...");
 
         let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
             Duration::from_secs(30),
@@ -118,11 +118,11 @@ mod advanced_wait_functionality_test {
         );
         assert!(
             elapsed.as_secs() >= 2,
-            "Should wait at least the timeout duration"
+            "Should await at least the timeout duration"
         );
         assert!(
             elapsed.as_secs() < 12,
-            "Should not wait much longer than timeout"
+            "Should not await much longer than timeout"
         );
 
         println!("✅ Timeout behavior test passed - elapsed: {:?}", elapsed);
@@ -131,7 +131,7 @@ mod advanced_wait_functionality_test {
     /// Test with no operations (should return immediately)
     #[tokio::test]
     async fn test_advanced_wait_with_no_operations() {
-        println!("🔄 Testing advanced wait with no operations...");
+        println!("🔄 Testing advanced await with no operations...");
 
         let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
             Duration::from_secs(30),
@@ -157,7 +157,7 @@ mod advanced_wait_functionality_test {
     /// Test tool filtering functionality
     #[tokio::test]
     async fn test_advanced_wait_tool_filtering() {
-        println!("🔍 Testing advanced wait tool filtering...");
+        println!("🔍 Testing advanced await tool filtering...");
 
         let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
             Duration::from_secs(30),

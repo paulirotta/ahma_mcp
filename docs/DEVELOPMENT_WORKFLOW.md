@@ -8,10 +8,10 @@ AHMA MCP is designed around **async-first, non-blocking workflows** that enable 
 
 ### Key Principles
 
-1. **Start operations and continue working** - Don't wait for results unless absolutely necessary
+1. **Start operations and continue working** - Don't await for results unless absolutely necessary
 2. **Use status monitoring** - Check progress without blocking your workflow
 3. **Trust graceful shutdown** - File changes won't abruptly terminate operations
-4. **Monitor, don't wait** - Use status tool instead of wait tool for productivity
+4. **Monitor, don't await** - Use status tool instead of await tool for productivity
 
 ## Optimal Development Workflow
 
@@ -68,16 +68,16 @@ status --operation_id op_123
 
 ### 4. Strategic Waiting
 
-Use wait tool only when results are critical path:
+Use await tool only when results are critical path:
 
 ```bash
-# ✅ Good use cases for wait:
-wait --tools cargo --timeout_seconds 120    # Before deployment
-wait --operation_id op_build --timeout_seconds 60  # Before dependent task
+# ✅ Good use cases for await:
+await --tools cargo --timeout_seconds 120    # Before deployment
+await --operation_id op_build --timeout_seconds 60  # Before dependent task
 
 # ❌ Avoid waiting for:
-wait --tools cargo                           # Routine builds
-wait --timeout_seconds 300                   # Long timeouts that block work
+await --tools cargo                           # Routine builds
+await --timeout_seconds 300                   # Long timeouts that block work
 ```
 
 ## Advanced Development Patterns
@@ -95,7 +95,7 @@ cargo doc --all-features       # Full documentation
 
 # Work on implementation while validation runs
 # Monitor progress with: status --tools cargo
-# Only wait if deployment/PR submission is next step
+# Only await if deployment/PR submission is next step
 ```
 
 ### Code Quality Workflow
@@ -196,7 +196,7 @@ AHMA MCP's pre-warmed shell pool provides 10x performance improvement:
 
 ```bash
 # Check shell pool efficiency
-status    # Shows concurrency analysis and wait time metrics
+status    # Shows concurrency analysis and await time metrics
 
 # Example output:
 # Operations status: 2 active, 5 completed (total: 7)
@@ -231,13 +231,13 @@ cargo fmt --check &
 
 ```bash
 # Quick feedback operations
-wait --timeout_seconds 30 --tools cargo_check
+await --timeout_seconds 30 --tools cargo_check
 
 # Standard development operations
-wait --timeout_seconds 240 --tools cargo
+await --timeout_seconds 240 --tools cargo
 
 # Complex release operations
-wait --timeout_seconds 900 --tools cargo_build,cargo_test
+await --timeout_seconds 900 --tools cargo_build,cargo_test
 ```
 
 ## Error Recovery and Debugging
@@ -268,7 +268,7 @@ AHMA MCP provides intelligent timeout remediation:
 
    ```bash
    status --tools cargo                    # Check operation status
-   wait --timeout_seconds 60 --tools cargo # Short timeout for debugging
+   await --timeout_seconds 60 --tools cargo # Short timeout for debugging
    ```
 
 2. **Resource Conflicts:**
@@ -291,7 +291,7 @@ AHMA MCP provides intelligent timeout remediation:
 1. **Async-First Development:**
 
    - Start operations and continue working
-   - Use status for monitoring, not wait for blocking
+   - Use status for monitoring, not await for blocking
    - Trust graceful shutdown during file changes
 
 2. **Strategic Operation Management:**
@@ -338,8 +338,8 @@ cargo test &
 git add .
 git status
 
-# Only wait if validation is required for commit
-wait --tools cargo --timeout_seconds 120
+# Only await if validation is required for commit
+await --tools cargo --timeout_seconds 120
 git commit -m "feature: implement new functionality"
 ```
 

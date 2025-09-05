@@ -274,7 +274,7 @@ fn test_guidance_config_with_legacy_fallback() {
         },
         "legacy_guidance": {
             "general_guidance": {
-                "wait": "Wait guidance"
+                "await": "Wait guidance"
             },
             "tool_specific_guidance": {
                 "cargo": {
@@ -288,7 +288,7 @@ fn test_guidance_config_with_legacy_fallback() {
     assert!(config.guidance_blocks.contains_key("test_key"));
     assert!(config.legacy_guidance.is_some());
     let legacy = config.legacy_guidance.as_ref().unwrap();
-    assert!(legacy.general_guidance.contains_key("wait"));
+    assert!(legacy.general_guidance.contains_key("await"));
     assert!(legacy.tool_specific_guidance.contains_key("cargo"));
 }
 

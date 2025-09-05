@@ -98,7 +98,7 @@
                 {
                     "name": "timeout_seconds",
                     "type": "integer",
-                    "description": "Maximum time to wait in seconds (default: 240, min: 10, max: 1800)"
+                    "description": "Maximum time to await in seconds (default: 240, min: 10, max: 1800)"
                 },
                 {
                     "name": "set-upstream",
@@ -141,7 +141,7 @@
                 {
                     "name": "timeout_seconds",
                     "type": "integer",
-                    "description": "Maximum time to wait in seconds (default: 240, min: 10, max: 1800)"
+                    "description": "Maximum time to await in seconds (default: 240, min: 10, max: 1800)"
                 },
                 {
                     "name": "rebase",
@@ -177,7 +177,7 @@
                 {
                     "name": "timeout_seconds",
                     "type": "integer",
-                    "description": "Maximum time to wait in seconds (default: 240, min: 10, max: 1800)"
+                    "description": "Maximum time to await in seconds (default: 240, min: 10, max: 1800)"
                 },
                 {
                     "name": "all",

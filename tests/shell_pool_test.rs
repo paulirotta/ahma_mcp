@@ -56,8 +56,10 @@ async fn test_shell_pool_manager_creation() {
 
 #[tokio::test]
 async fn test_shell_pool_manager_with_disabled_config() {
-    let mut config = ShellPoolConfig::default();
-    config.enabled = false;
+    let config = ShellPoolConfig {
+        enabled: false,
+        ..Default::default()
+    };
 
     let manager = ShellPoolManager::new(config);
 
@@ -236,8 +238,10 @@ async fn test_shell_error_display() {
 
 #[tokio::test]
 async fn test_shell_pool_manager_get_shell_disabled() {
-    let mut config = ShellPoolConfig::default();
-    config.enabled = false;
+    let config = ShellPoolConfig {
+        enabled: false,
+        ..Default::default()
+    };
 
     let manager = Arc::new(ShellPoolManager::new(config));
     let temp_dir = tempdir().unwrap();
@@ -250,8 +254,10 @@ async fn test_shell_pool_manager_get_shell_disabled() {
 
 #[tokio::test]
 async fn test_shell_pool_manager_background_tasks_disabled() {
-    let mut config = ShellPoolConfig::default();
-    config.enabled = false;
+    let config = ShellPoolConfig {
+        enabled: false,
+        ..Default::default()
+    };
 
     let manager = Arc::new(ShellPoolManager::new(config));
 

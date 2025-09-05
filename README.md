@@ -9,7 +9,7 @@ _Create agents from your command line tools with one JSON file, then watch them 
 [![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org/)
 
-`ahma_mcp` rapdily adapts command-line tools for AI consumption. AI calls a gets rapid confirmation the background process has started and can continue to plan and analyze, automatically receiving tool results as each operation completes. Multiple concurrent tool calls execute in parallel. Individual tools and subcommands can be tagged as **`synchronous: true`** to become a traditional blocking MCP tool call as need. Generally the AI does not need to `wait` for async tool completion as it gets the result when the tool completes, but it can when needed.
+`ahma_mcp` rapdily adapts command-line tools for AI consumption. AI calls a gets rapid confirmation the background process has started and can continue to plan and analyze, automatically receiving tool results as each operation completes. Multiple concurrent tool calls execute in parallel. Individual tools and subcommands can be tagged as **`synchronous: true`** to become a traditional blocking MCP tool call as need. Generally the AI does not need to `await` for async tool completion as it gets the result when the tool completes, but it can when needed.
 
 **Ahma** (Finnish for wolverine) is a tenacious and agile tool, speeding your workflow to rapidly consume complex tasks in less time than common synchonous tools.
 
@@ -103,7 +103,7 @@ Then copy the contents into your VS Code MCP configuration file (per-OS location
 Ahma MCP provides sophisticated operation tracking and management capabilities:
 
 - **Real-time Operation Monitoring**: Track the status of all running operations with the `status` tool
-- **Intelligent Wait Functionality**: Use the `wait` tool to monitor operations with configurable timeouts (1-1800 seconds, default 240s)
+- **Intelligent Wait Functionality**: Use the `await` tool to monitor operations with configurable timeouts (1-1800 seconds, default 240s)
 - **Progressive Timeout Warnings**: Receive warnings at 50%, 75%, and 90% of timeout duration to track long-running operations
 - **Automatic Error Remediation**: Get specific suggestions when operations timeout, including:
   - Detection of stale lock files (Cargo.lock, package-lock.json, yarn.lock, composer.lock, etc.)
@@ -333,7 +333,7 @@ Once connected, you'll have access to ~44 dynamically generated MCP tools:
 
 - Default timeout is 240 seconds (4 minutes) - sufficient for most operations
 - Use the `status` tool to check which operations are still running
-- Use the `wait` tool with custom timeout: timeout range is 1-1800 seconds (30 minutes max)
+- Use the `await` tool with custom timeout: timeout range is 1-1800 seconds (30 minutes max)
 - Common timeout causes include network issues, locked files, or resource contention
 - Check for stale lock files (Cargo.lock, package-lock.json, yarn.lock, etc.)
 - Verify network connectivity for download operations
@@ -386,7 +386,7 @@ Use the centralized guidance system to maintain consistent AI instructions:
 
 - Reference guidance blocks: `"guidance_key": "async_behavior"` for long-running operations
 - Reference guidance blocks: `"guidance_key": "sync_behavior"` for fast operations
-- Reference guidance blocks: `"guidance_key": "coordination_tool"` for wait/status tools
+- Reference guidance blocks: `"guidance_key": "coordination_tool"` for await/status tools
 - Custom guidance: Define reusable blocks in `tool_guidance.json`
 
 ### Documentation and Examples

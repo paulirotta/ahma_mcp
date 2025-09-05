@@ -1,11 +1,11 @@
 //! Tool Loading Compatibility Test
 //!
 //! PURPOSE: Validates JSON tool configuration loading after discovering critical bug
-//! where adding extra JSON files (status.json, wait.json) broke test expectations.
+//! where adding extra JSON files (status.json, await.json) broke test expectations.
 //!
 //! LESSON LEARNED: Tool loading tests are brittle to configuration changes.
 //! - Only external CLI tools should have JSON configurations
-//! - Hardwired MCP tools (status, wait) don't need JSON files  
+//! - Hardwired MCP tools (status, await) don't need JSON files  
 //! - But users may add them anyway for documentation/IDE support
 //!
 //! MAINTENANCE: Update expected counts when adding new CLI tool integrations
@@ -18,10 +18,10 @@ use common::test_client::new_client;
 /// TEST: Validates core CLI tool configurations are loaded
 ///
 /// CRITICAL REQUIREMENT: Must load cargo.json, ls.json, python3.json (minimum 3)
-/// FLEXIBILITY: May also load status.json, wait.json if user added them
+/// FLEXIBILITY: May also load status.json, await.json if user added them
 ///
 /// LESSON LEARNED: Don't hard-code exact counts - use minimum expectations
-/// This test previously failed when status.json/wait.json were temporarily added
+/// This test previously failed when status.json/await.json were temporarily added
 #[tokio::test]
 async fn test_tools_are_loaded_after_json_migration() -> Result<()> {
     // Test that all 3 JSON tool configurations are properly loaded

@@ -67,7 +67,7 @@ mod race_condition_bug_test {
         assert_eq!(
             second_access.len(),
             1,
-            "Operation should persist in completion history for wait operations"
+            "Operation should persist in completion history for await operations"
         );
         assert_eq!(second_access[0].id, test_op_id);
         println!("✅ Second access finds same operation in completion history");

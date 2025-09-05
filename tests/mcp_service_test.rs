@@ -22,7 +22,7 @@ mod mcp_service_tests {
             },
             "legacy_guidance": {
                 "general_guidance": {
-                    "wait": "Wait guidance"
+                    "await": "Wait guidance"
                 },
                 "tool_specific_guidance": {
                     "cargo": {
@@ -48,7 +48,7 @@ mod mcp_service_tests {
         assert!(config.legacy_guidance.is_some());
         let legacy = config.legacy_guidance.unwrap();
         assert_eq!(legacy.general_guidance.len(), 1);
-        assert!(legacy.general_guidance.contains_key("wait"));
+        assert!(legacy.general_guidance.contains_key("await"));
     }
 
     #[test]
@@ -73,7 +73,7 @@ mod mcp_service_tests {
         // Test LegacyGuidanceConfig structure
         let json_str = r#"{
             "general_guidance": {
-                "wait": "Wait for operations",
+                "await": "Wait for operations",
                 "status": "Check status"
             },
             "tool_specific_guidance": {

@@ -1,16 +1,16 @@
 {
     "name": "await",
-    "command": "wait",
-    "description": "Await for previously started asynchronous operations to complete. **IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- DO NOT wait for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.\n- Use this sparingly and only when absolutely necessary before stopping work.",
-    "guidance_key": "async_behavior",
+    "command": "await",
+    "synchronous": true,
+    "description": "Waits for other tasks to finish. **WARNING:** This is a blocking tool and makes you inefficient. **ONLY** use this if you have NO other tasks and cannot proceed until completion. It is **ALWAYS** better to perform other work and let results be pushed to you.",
     "subcommand": [
         {
             "name": "default",
-            "description": "Await for previously started asynchronous operations to complete. **IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- DO NOT wait for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.\n- Use this sparingly and only when absolutely necessary before stopping work.",
+            "description": "Waits for other tasks to finish. **WARNING:** This is a blocking tool and makes you inefficient. **ONLY** use this if you have NO other tasks and cannot proceed until completion. It is **ALWAYS** better to perform other work and let results be pushed to you.",
             "options": [
                 {
                     "name": "timeout_seconds",
-                    "type": "integer",
+                    "type": "number",
                     "description": "Maximum time to wait in seconds (default: 240, min: 10, max: 1800)"
                 },
                 {
