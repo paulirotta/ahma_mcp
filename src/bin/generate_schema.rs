@@ -5,8 +5,9 @@
 //! and writes it to docs/mtdf-schema.json
 
 use ahma_mcp::config::ToolConfig;
+use std::env;
 use std::fs;
-use std::path::Path;
+use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Generate schema for the root ToolConfig type
@@ -15,11 +16,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Convert to pretty JSON
     let schema_json = serde_json::to_string_pretty(&schema)?;
 
+    // Allow overriding the output directory via command-line argument
+    let output_dir = env::args()
+        .nth(1)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("docs"));
+
     // Ensure docs directory exists
-    fs::create_dir_all("docs")?;
+    fs::create_dir_all(&output_dir)?;
 
     // Write to docs directory
-    let docs_path = Path::new("docs").join("mtdf-schema.json");
+    let docs_path = output_dir.join("mtdf-schema.json");
     fs::write(&docs_path, &schema_json)?;
 
     println!("✓ Generated MTDF JSON Schema at: {}", docs_path.display());

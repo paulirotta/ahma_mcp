@@ -54,3 +54,16 @@ async fn test_call_tool_basic() -> Result<()> {
     client.cancel().await?;
     Ok(())
 }
+
+mod adapter_test;
+mod callback_system_test;
+mod config_test;
+mod generate_schema_test;
+mod logging_test;
+mod main_test;
+mod mcp_callback_test;
+mod mcp_service_test;
+mod operation_monitor_test;
+mod schema_validation_test;
+mod shell_pool_test;
+mod terminal_output_test;
