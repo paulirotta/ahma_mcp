@@ -273,9 +273,32 @@ impl Adapter {
         let task_handles = self.task_handles.clone();
 
         let handle = tokio::spawn(async move {
+            // Get the cancellation token from the operation
+            let cancellation_token = {
+                if let Some(operation) = monitor.get_operation(&op_id).await {
+                    operation.cancellation_token.clone()
+                } else {
+                    tracing::error!("Could not find operation {} for cancellation token", op_id);
+                    return;
+                }
+            };
+
             monitor
                 .update_status(&op_id, OperationStatus::InProgress, None)
                 .await;
+
+            // Check for cancellation before starting
+            if cancellation_token.is_cancelled() {
+                tracing::info!("Operation {} was cancelled before execution started", op_id);
+                monitor
+                    .update_status(
+                        &op_id,
+                        OperationStatus::Cancelled,
+                        Some(Value::String("Operation was cancelled".to_string())),
+                    )
+                    .await;
+                return;
+            }
 
             let mut shell = match shell_pool.get_shell(&wd_clone).await {
                 Some(s) => s,
@@ -319,9 +342,37 @@ impl Adapter {
             };
 
             let start_time = std::time::Instant::now();
+
+            // Check for cancellation before executing the command
+            if cancellation_token.is_cancelled() {
+                tracing::info!("Operation {} was cancelled before shell execution", op_id);
+                monitor
+                    .update_status(
+                        &op_id,
+                        OperationStatus::Cancelled,
+                        Some(Value::String("Operation was cancelled".to_string())),
+                    )
+                    .await;
+                shell_pool.return_shell(shell).await;
+                return;
+            }
+
             let result = shell.execute_command(shell_cmd).await;
             let duration_ms = start_time.elapsed().as_millis() as u64;
             shell_pool.return_shell(shell).await;
+
+            // Check for cancellation after command execution
+            if cancellation_token.is_cancelled() {
+                tracing::info!("Operation {} was cancelled after shell execution", op_id);
+                monitor
+                    .update_status(
+                        &op_id,
+                        OperationStatus::Cancelled,
+                        Some(Value::String("Operation was cancelled".to_string())),
+                    )
+                    .await;
+                return;
+            }
 
             match result {
                 Ok(output) => {

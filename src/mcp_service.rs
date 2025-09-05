@@ -818,6 +818,61 @@ impl ServerHandler for AhmaMcpService {
                 }
             }
 
+            if tool_name == "cancel" {
+                let args = params.arguments.unwrap_or_default();
+
+                // Parse operation_id parameter (required)
+                let operation_id = if let Some(v) = args.get("operation_id") {
+                    if let Some(s) = v.as_str() {
+                        s.to_string()
+                    } else {
+                        return Err(McpError::invalid_params(
+                            "operation_id must be a string".to_string(),
+                            Some(serde_json::json!({ "operation_id": v })),
+                        ));
+                    }
+                } else {
+                    return Err(McpError::invalid_params(
+                        "operation_id parameter is required".to_string(),
+                        Some(serde_json::json!({ "missing_param": "operation_id" })),
+                    ));
+                };
+
+                // Attempt to cancel the operation
+                let cancelled = self.operation_monitor.cancel_operation(&operation_id).await;
+
+                let result_message = if cancelled {
+                    format!(
+                        "✓ Operation '{}' has been cancelled successfully.",
+                        operation_id
+                    )
+                } else {
+                    // Check if operation exists but is already terminal
+                    if let Some(operation) =
+                        self.operation_monitor.get_operation(&operation_id).await
+                    {
+                        format!(
+                            "⚠ Operation '{}' is already {} and cannot be cancelled.",
+                            operation_id,
+                            match operation.state {
+                                crate::operation_monitor::OperationStatus::Completed => "completed",
+                                crate::operation_monitor::OperationStatus::Failed => "failed",
+                                crate::operation_monitor::OperationStatus::Cancelled => "cancelled",
+                                crate::operation_monitor::OperationStatus::TimedOut => "timed out",
+                                _ => "in a terminal state",
+                            }
+                        )
+                    } else {
+                        format!(
+                            "❌ Operation '{}' not found. It may have already completed or never existed.",
+                            operation_id
+                        )
+                    }
+                };
+
+                return Ok(CallToolResult::success(vec![Content::text(result_message)]));
+            }
+
             // Parse tool name to extract base command and subcommand parts
             let (config, subcommand_config, command_parts) =
                 match self.find_subcommand_config(tool_name) {
