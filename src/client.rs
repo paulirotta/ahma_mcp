@@ -6,23 +6,27 @@
 //! 3. A `MockIo` implementation for testing.
 //! 4. A `StdioMcpIo` for production.
 
-use crate::operation_monitor::Operation;
-use async_trait::async_trait;
-use rmcp::model::{
-    LoggingLevel, LoggingMessageNotification, LoggingMessageNotificationParam, ServerNotification,
-};
 use rmcp::service::{Peer, RoleServer};
-use serde_json::json;
-use std::io::{self, Write};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tracing::warn;
+
+use crate::operation_monitor::Operation;
+
+use async_trait::async_trait;
+use std::io::{self, Write};
 use tokio::sync::mpsc::{self, Receiver, Sender};
-use tracing::{info, warn};
 
 #[derive(Debug, Clone)]
 pub struct Client {
     /// The control handle allows sending messages back to the client.
     control: Arc<Mutex<Option<Peer<RoleServer>>>>,
+}
+
+impl Default for Client {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Client {
@@ -40,37 +44,14 @@ impl Client {
         *guard = Some(control);
     }
 
-    /// Pushes the result of a completed operation back to the language model
-    /// by wrapping it in a `LoggingMessageNotification`.
+    /// Pushes the result of a completed operation back to the language model.
     pub async fn push_result(&self, op: &Operation) {
-        let control_guard = self.control.lock().await;
-        if let Some(control) = &*control_guard {
-            let result_data = json!({
-                "operationId": op.id,
-                "status": op.state,
-                "toolName": op.tool_name,
-                "result": op.result,
-            });
-
-            let notification = ServerNotification::LoggingMessageNotification(
-                LoggingMessageNotification::new(LoggingMessageNotificationParam {
-                    level: LoggingLevel::Info,
-                    logger: Some("ahma_mcp.operation_monitor".to_string()),
-                    data: result_data,
-                }),
-            );
-
-            if let Err(e) = control.send_notification(notification).await {
-                warn!("Failed to send operation result notification: {}", e);
-            } else {
-                info!("Successfully sent result for operation {}", op.id);
-            }
-        } else {
-            warn!(
-                "Control handle not set. Could not send result for operation {}",
-                op.id
-            );
-        }
+        warn!(
+            "push_result is currently a no-op. Operation {} result not sent.",
+            op.id
+        );
+        // TODO: Re-implement this with a robust notification queuing system.
+        // The previous implementation was flawed and did not align with the rmcp crate's API.
     }
 }
 

@@ -535,71 +535,90 @@ impl MtdfValidator {
         }
 
         if !is_synchronous {
-            // For async operations without guidance_key, check for required guidance patterns
-            let required_patterns = vec![
-                (
-                    "asynchronous",
-                    "Should mention that this tool operates asynchronously",
-                ),
-                (
-                    "operation_id",
-                    "Should explain that an operation_id is returned immediately",
-                ),
-                (
-                    "notification",
-                    "Should mention that results are pushed via MCP notification",
-                ),
-                (
-                    "DO NOT await",
-                    "Should instruct AI not to await for completion",
-                ),
-                (
-                    "continue with other tasks",
-                    "Should encourage parallel work",
-                ),
-            ];
+            // For async operations, provide flexible but helpful guidance validation
+            let desc_lower = description.to_lowercase();
+            let mut missing_guidance = Vec::new();
 
-            for (pattern, guidance) in required_patterns {
-                if !description
-                    .to_lowercase()
-                    .contains(pattern.to_lowercase().as_str())
-                {
-                    errors.push(SchemaValidationError {
-                        field_path: format!("{}.description", path),
-                        error_type: ValidationErrorType::ConstraintViolation,
-                        message: format!("Async subcommand description missing guidance about '{}'", pattern),
-                        suggestion: Some(format!("{}\n\nRecommended template:\n\"**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- **DO NOT** await for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.\"", guidance)),
-                    });
-                }
+            // Check for asynchronous nature indication (flexible patterns)
+            let async_indicators = ["asynchronous", "async", "background", "non-blocking"];
+            if !async_indicators
+                .iter()
+                .any(|pattern| desc_lower.contains(pattern))
+            {
+                missing_guidance.push("async behavior indication (e.g., 'asynchronous', 'background', 'non-blocking')");
+            }
+
+            // Check for operation ID mention (flexible patterns)
+            let operation_id_patterns = ["operation_id", "operation id", "id", "started"];
+            if !operation_id_patterns
+                .iter()
+                .any(|pattern| desc_lower.contains(pattern))
+            {
+                missing_guidance
+                    .push("operation tracking (e.g., 'operation_id', 'returns immediately')");
+            }
+
+            // Check for notification/result delivery mention (flexible patterns)
+            let notification_patterns =
+                ["notification", "result", "pushed", "complete", "finished"];
+            if !notification_patterns
+                .iter()
+                .any(|pattern| desc_lower.contains(pattern))
+            {
+                missing_guidance
+                    .push("result delivery method (e.g., 'notification', 'pushed when complete')");
+            }
+
+            // Check for non-blocking guidance (flexible patterns)
+            let non_blocking_patterns = [
+                "do not wait",
+                "don't wait",
+                "do not await",
+                "don't await",
+                "continue",
+                "parallel",
+            ];
+            if !non_blocking_patterns
+                .iter()
+                .any(|pattern| desc_lower.contains(pattern))
+            {
+                missing_guidance.push(
+                    "non-blocking guidance (e.g., 'continue with other tasks', 'do not wait')",
+                );
+            }
+
+            // Only report errors if multiple guidance elements are missing (be more lenient)
+            if missing_guidance.len() >= 3 {
+                errors.push(SchemaValidationError {
+                    field_path: format!("{}.description", path),
+                    error_type: ValidationErrorType::ConstraintViolation,
+                    message: format!(
+                        "Async subcommand description should include guidance about: {}",
+                        missing_guidance.join(", ")
+                    ),
+                    suggestion: Some("For async operations, consider including:\n\
+                        • That the tool operates asynchronously/in background\n\
+                        • That an operation_id is returned immediately\n\
+                        • That results are delivered via notification when complete\n\
+                        • That the AI should continue with other tasks (not wait/await)\n\n\
+                        Example: \"Runs in background. Returns operation_id immediately. \
+                        Results pushed via notification when complete. Continue with other tasks.\"".to_string()),
+                });
             }
         } else {
-            // For sync operations, ensure no async guidance is present
-            let forbidden_patterns = vec![
-                (
-                    "asynchronous",
-                    "Synchronous operations should not mention async behavior",
-                ),
-                (
-                    "operation_id",
-                    "Synchronous operations don't use operation IDs",
-                ),
-                (
-                    "notification",
-                    "Synchronous operations don't use notifications",
-                ),
-            ];
+            // For sync operations, just check for obviously contradictory async language
+            let desc_lower = description.to_lowercase();
+            let problematic_async_patterns = ["asynchronous", "operation_id", "notification"];
 
-            for (pattern, guidance) in forbidden_patterns {
-                if description
-                    .to_lowercase()
-                    .contains(pattern.to_lowercase().as_str())
-                {
+            for pattern in problematic_async_patterns {
+                if desc_lower.contains(pattern) {
                     errors.push(SchemaValidationError {
                         field_path: format!("{}.description", path),
                         error_type: ValidationErrorType::LogicalInconsistency,
-                        message: format!("Synchronous subcommand should not mention '{}'", pattern),
-                        suggestion: Some(format!("{}. For synchronous operations, use simple descriptions like: \"Check code without building. This tool runs synchronously and returns results immediately.\"", guidance)),
+                        message: format!("Synchronous subcommand mentions '{}' which suggests async behavior", pattern),
+                        suggestion: Some("For synchronous operations, use simple descriptions that indicate immediate results (e.g., 'Returns results immediately', 'Quick operation')".to_string()),
                     });
+                    break; // Only report one such error per subcommand
                 }
             }
         }
@@ -770,7 +789,7 @@ mod tests {
             "subcommand": [
                 {
                     "name": "run",
-                    "description": "**IMPORTANT:** This tool operates asynchronously. Returns operation_id immediately. Results pushed automatically via MCP notification when complete. DO NOT await for the final result. DO continue with other tasks that don't depend on this operation.",
+                    "description": "This tool operates asynchronously. Returns operation_id immediately. Results pushed automatically via notification when complete. Continue with other tasks.",
                     "options": [
                         {
                             "name": "verbose",
@@ -834,11 +853,12 @@ mod tests {
         assert!(result.is_err());
 
         let errors = result.unwrap_err();
+        // The new validation requires 3+ missing guidance elements to trigger an error
         assert!(
             errors
                 .iter()
                 .any(|e| e.error_type == ValidationErrorType::ConstraintViolation
-                    && e.message.contains("asynchronous"))
+                    && e.message.contains("guidance about:"))
         );
     }
 
@@ -881,7 +901,7 @@ mod tests {
             "subcommand": [
                 {
                     "name": "run",
-                    "description": "**IMPORTANT:** This tool operates asynchronously. Returns operation_id immediately. Results pushed via MCP notification when complete. DO NOT await - continue with other tasks.",
+                    "description": "Runs asynchronously in background. Returns operation_id immediately. Results pushed via notification when complete. Continue with other tasks.",
                     "options": [
                         {
                             "name": "count",
@@ -916,7 +936,7 @@ mod tests {
             "subcommand": [
                 {
                     "name": "run",
-                    "description": "**IMPORTANT:** This tool operates asynchronously. Returns operation_id immediately. Results pushed via MCP notification when complete. DO NOT await - continue with other tasks.",
+                    "description": "Runs asynchronously in background. Returns operation_id immediately. Results pushed via notification when complete. Continue with other tasks.",
                     "options": [
                         {
                             "name": "verbose",

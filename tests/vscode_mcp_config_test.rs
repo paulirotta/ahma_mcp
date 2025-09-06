@@ -4,7 +4,7 @@ use serde_json::Value;
 use std::fs;
 
 #[tokio::test]
-async fn test_vscode_mcp_config_watches_json_files() -> Result<()> {
+async fn test_vscode_mcp_config_watches_binary_only() -> Result<()> {
     // Read the VS Code MCP configuration
     let mcp_config_content = fs::read_to_string(".vscode/mcp.json")?;
     let mcp_config: Value = serde_json::from_str(&mcp_config_content)?;
@@ -14,7 +14,14 @@ async fn test_vscode_mcp_config_watches_json_files() -> Result<()> {
         .as_array()
         .expect("Watch patterns should be an array");
 
-    // Check that we're watching JSON files, not TOML files
+    // Check that we're only watching the binary, not tool config files
+    let has_binary_pattern = watch_patterns.iter().any(|pattern| {
+        pattern
+            .as_str()
+            .unwrap_or("")
+            .contains("target/release/ahma_mcp")
+    });
+
     let has_json_pattern = watch_patterns
         .iter()
         .any(|pattern| pattern.as_str().unwrap_or("").contains("tools/*.json"));
@@ -23,10 +30,16 @@ async fn test_vscode_mcp_config_watches_json_files() -> Result<()> {
         .iter()
         .any(|pattern| pattern.as_str().unwrap_or("").contains("tools/*.toml"));
 
-    // This should pass: we should be watching JSON files
+    // This should pass: we should be watching the binary
     assert!(
-        has_json_pattern,
-        "VS Code MCP config should watch tools/*.json files"
+        has_binary_pattern,
+        "VS Code MCP config should watch the binary target/release/ahma_mcp"
+    );
+
+    // This should pass: we should NOT be watching JSON files (causes too many restarts)
+    assert!(
+        !has_json_pattern,
+        "VS Code MCP config should not watch tools/*.json files (causes restart issues)"
     );
 
     // This should pass: we should NOT be watching TOML files

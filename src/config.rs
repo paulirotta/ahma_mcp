@@ -147,6 +147,10 @@ pub fn load_tool_configs(tools_dir: &Path) -> Result<HashMap<String, ToolConfig>
         return Ok(configs);
     }
 
+    // Track hardcoded tools to detect conflicts
+    let hardcoded_tools = ["await", "status", "cancel"];
+    let mut detected_conflicts = Vec::new();
+
     for entry in fs::read_dir(tools_dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -157,6 +161,22 @@ pub fn load_tool_configs(tools_dir: &Path) -> Result<HashMap<String, ToolConfig>
             // First validate with our schema validator
             match validator.validate_tool_config(&path, &contents) {
                 Ok(config) => {
+                    // CRITICAL: Check for hardcoded tool conflicts
+                    if hardcoded_tools.contains(&config.name.as_str()) {
+                        detected_conflicts.push((config.name.clone(), path.clone()));
+                        eprintln!(
+                            "⚠️  CRITICAL: JSON configuration found for hardcoded tool '{}'",
+                            config.name
+                        );
+                        eprintln!("   File: {}", path.display());
+                        eprintln!(
+                            "   This will cause the tool to be processed as a command-line tool instead of using hardcoded MCP logic!"
+                        );
+                        eprintln!(
+                            "   Please remove this JSON file or rename the tool to avoid conflicts.\n"
+                        );
+                    }
+
                     if config.enabled {
                         configs.insert(config.name.clone(), config);
                     }
@@ -192,6 +212,28 @@ pub fn load_tool_configs(tools_dir: &Path) -> Result<HashMap<String, ToolConfig>
                 }
             }
         }
+    }
+
+    // Return error if hardcoded tool conflicts were detected
+    if !detected_conflicts.is_empty() {
+        return Err(anyhow::anyhow!(
+            "❌ Tool configuration conflicts detected!\n\n\
+            Found JSON files for hardcoded tools: {}\n\n\
+            These tools are hardcoded in the MCP service and should NOT have JSON configuration files.\n\
+            Please move these files to tools_backup/ or rename them to resolve the conflict.\n\n\
+            The affected files are:\n{}\n\n\
+            For more information, see docs/tool-configuration-conflicts.md",
+            detected_conflicts
+                .iter()
+                .map(|(name, _)| name.as_str())
+                .collect::<Vec<_>>()
+                .join(", "),
+            detected_conflicts
+                .iter()
+                .map(|(_, path)| format!("  - {}", path.display()))
+                .collect::<Vec<_>>()
+                .join("\n")
+        ));
     }
 
     Ok(configs)

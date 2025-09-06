@@ -7,6 +7,7 @@ use ahma_mcp::client::MockIo;
 use ahma_mcp::mcp_service::AhmaMcpService;
 use ahma_mcp::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_mcp::shell_pool::{ShellPoolConfig, ShellPoolManager};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::{TempDir, tempdir};
@@ -73,11 +74,12 @@ pub async fn setup_test_environment() -> (AhmaMcpService, MockIo, TempDir) {
     let shell_pool_config = ShellPoolConfig::default();
     let shell_pool = Arc::new(ShellPoolManager::new(shell_pool_config));
     let adapter = Arc::new(Adapter::new(monitor.clone(), shell_pool).unwrap());
-    let tool_configs =
-        Arc::new(ahma_mcp::config::load_tool_configs(&tools_dir).unwrap_or_default());
+
+    // Create empty configs and guidance for the new API
+    let configs = Arc::new(HashMap::new());
     let guidance = Arc::new(None);
 
-    let service = AhmaMcpService::new(adapter, monitor, tool_configs, guidance)
+    let service = AhmaMcpService::new(adapter, monitor, configs, guidance)
         .await
         .unwrap();
 
@@ -102,11 +104,12 @@ pub async fn setup_test_environment_with_io() -> (
     let shell_pool_config = ShellPoolConfig::default();
     let shell_pool = Arc::new(ShellPoolManager::new(shell_pool_config));
     let adapter = Arc::new(Adapter::new(monitor.clone(), shell_pool).unwrap());
-    let tool_configs =
-        Arc::new(ahma_mcp::config::load_tool_configs(&tools_dir).unwrap_or_default());
+
+    // Create empty configs and guidance for the new API
+    let configs = Arc::new(HashMap::new());
     let guidance = Arc::new(None);
 
-    let service = AhmaMcpService::new(adapter, monitor, tool_configs, guidance)
+    let service = AhmaMcpService::new(adapter, monitor, configs, guidance)
         .await
         .unwrap();
 

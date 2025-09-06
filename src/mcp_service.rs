@@ -203,17 +203,29 @@ impl AhmaMcpService {
             for (i, part) in subcommand_parts.iter().enumerate() {
                 if let Some(sub) = current_subcommands.iter().find(|s| s.name == *part) {
                     if is_default_call && sub.name == "default" {
-                        // This is a default call, derive subcommand from config_key
-                        // e.g., config_key "cargo_audit" -> subcommand "audit"
+                        // For default subcommands, only derive if this looks like a real command pattern
+                        // e.g., "cargo_audit" -> derive "audit" because it's a real cargo subcommand
+                        // But "long_running_async" should NOT derive "async" because sleep has no "async" subcommand
                         let derived_subcommand = config_key.split('_').next_back().unwrap_or("");
 
                         // If the command is a script with args, don't append derived subcommand.
                         let is_script_like = tool_config.command.contains(' ');
 
-                        if !derived_subcommand.is_empty()
+                        // Only derive if the config key looks like "command_subcommand" pattern
+                        // and the derived part is not just a descriptive suffix
+                        let base_command = tool_config
+                            .command
+                            .split_whitespace()
+                            .next()
+                            .unwrap_or(&tool_config.command);
+                        let should_derive = !derived_subcommand.is_empty()
                             && derived_subcommand != tool_config.command
+                            && derived_subcommand != base_command
                             && !is_script_like
-                        {
+                            && config_key.starts_with(base_command)  // e.g., "cargo_audit" starts with "cargo"
+                            && config_key != base_command; // e.g., not just "cargo" but "cargo_something"
+
+                        if should_derive {
                             command_parts.push(derived_subcommand.to_string());
                         }
                     } else if sub.name != "default" {
@@ -295,49 +307,63 @@ impl ServerHandler for AhmaMcpService {
                 reason
             );
 
-            // Try to find and cancel any operation that matches this request
-            // The challenge is mapping MCP request IDs to our operation IDs
-            // For now, we'll log this and potentially enhance our operation tracking
-            // to store MCP request IDs in the future.
+            // CRITICAL FIX: Only cancel background operations, not synchronous MCP calls
+            // This prevents the rmcp library from generating "Canceled: Canceled" messages
+            // that get incorrectly processed as process cancellations.
 
-            // Check if we can find any running operations and cancel them with enhanced reason
             let active_ops = self.operation_monitor.get_all_operations().await;
             let active_count = active_ops.len();
 
             if active_count > 0 {
-                tracing::info!(
-                    "Found {} active operations during MCP cancellation. Cancelling most recent...",
-                    active_count
-                );
+                // Filter for operations that are actually background processes
+                // vs. synchronous MCP tools like 'await' that don't have processes
+                let background_ops: Vec<_> = active_ops
+                    .iter()
+                    .filter(|op| {
+                        // Only cancel operations that represent actual background processes
+                        // NOT synchronous tools like 'await', 'status', 'cancel'
+                        !matches!(op.tool_name.as_str(), "await" | "status" | "cancel")
+                    })
+                    .collect();
 
-                // For now, cancel the most recent operation with enhanced reason
-                // This is a heuristic since we don't have direct request ID mapping
-                if let Some(most_recent_op) = active_ops.last() {
-                    let enhanced_reason = format!(
-                        "MCP protocol cancellation (request_id: {}, reason: '{}')",
-                        request_id, reason
+                if !background_ops.is_empty() {
+                    tracing::info!(
+                        "Found {} background operations during MCP cancellation. Cancelling most recent background operation...",
+                        background_ops.len()
                     );
 
-                    let cancelled = self
-                        .operation_monitor
-                        .cancel_operation_with_reason(
-                            &most_recent_op.id,
-                            Some(enhanced_reason.clone()),
-                        )
-                        .await;
+                    if let Some(most_recent_bg_op) = background_ops.last() {
+                        let enhanced_reason = format!(
+                            "MCP protocol cancellation (request_id: {}, reason: '{}')",
+                            request_id, reason
+                        );
 
-                    if cancelled {
-                        tracing::info!(
-                            "Successfully cancelled operation '{}' due to MCP protocol cancellation: {}",
-                            most_recent_op.id,
-                            enhanced_reason
-                        );
-                    } else {
-                        tracing::warn!(
-                            "Failed to cancel operation '{}' for MCP protocol cancellation",
-                            most_recent_op.id
-                        );
+                        let cancelled = self
+                            .operation_monitor
+                            .cancel_operation_with_reason(
+                                &most_recent_bg_op.id,
+                                Some(enhanced_reason.clone()),
+                            )
+                            .await;
+
+                        if cancelled {
+                            tracing::info!(
+                                "Successfully cancelled background operation '{}' due to MCP protocol cancellation: {}",
+                                most_recent_bg_op.id,
+                                enhanced_reason
+                            );
+                        } else {
+                            tracing::warn!(
+                                "Failed to cancel background operation '{}' for MCP protocol cancellation",
+                                most_recent_bg_op.id
+                            );
+                        }
                     }
+                } else {
+                    tracing::info!(
+                        "Found {} operations during MCP cancellation, but none are background processes. No cancellation needed.",
+                        active_count
+                    );
                 }
             } else {
                 tracing::info!(

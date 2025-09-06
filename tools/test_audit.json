@@ -5,7 +5,7 @@
     "subcommand": [
         {
             "name": "default",
-            "description": "Run the test audit script.",
+            "description": "**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- **DO NOT** await for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.\n\nRun the test audit script.",
             "enabled": true
         }
     ]
