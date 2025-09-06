@@ -1,36 +1,37 @@
 #!/bin/bash
-# mcp-inspector.sh is a test script for launching the MCP Inspector Web UI
-# It launches the MCP Inspector Web UI for direct interaction with async_cargo_mcp
-#
-# Ensure the script is run from the correct directory
-# This script assumes it is located in the root of a cargo project directory.
+set -euo pipefail
 
-# Print current directory message
-echo "Starting MCP Inspector from directory: $(pwd)"
+# Resolve script directory and project root (assumes script lives in <project>/scripts/)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+echo "Starting MCP Inspector from script dir: $SCRIPT_DIR"
+echo "Project root detected as: $PROJECT_ROOT"
 
 # Kill any existing MCP inspector processes
 echo "Checking for existing MCP inspector processes..."
 if pgrep -f "@modelcontextprotocol/inspector" > /dev/null; then
     echo "Killing existing MCP inspector processes..."
-    pkill -f "@modelcontextprotocol/inspector"
-    sleep 2  # Give processes time to terminate
+    pkill -f "@modelcontextprotocol/inspector" || true
+    sleep 2
     echo "Existing processes terminated."
 else
     echo "No existing MCP inspector processes found."
 fi
 
-# Build the project in release mode
+# Build the project in release mode from project root
+cd "$PROJECT_ROOT"
 echo "Building Rust project with cargo build --release..."
 cargo build --release
 
-# Check if build was successful
-if [ $? -eq 0 ]; then
+# Path to the built binary
+BIN="$PROJECT_ROOT/target/release/async_cargo_mcp"
+
+if [ -x "$BIN" ]; then
     echo "Build successful! Launching MCP Inspector..."
     echo "You can now interact directly with your MCP server tools."
-    
-    # Run the MCP inspector
-    npx @modelcontextprotocol/inspector /Users/paul/github/async_cargo_mcp/target/release/async_cargo_mcp
+    npx @modelcontextprotocol/inspector "$BIN"
 else
-    echo "Build failed! Please check the build errors above."
+    echo "Build failed or binary missing: $BIN"
     exit 1
 fi

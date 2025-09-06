@@ -17,7 +17,7 @@ use std::time::Duration;
 use tokio::time::timeout;
 
 #[tokio::test]
-async fn test_wait_tool_timeout_functionality() -> Result<()> {
+async fn test_await_tool_timeout_functionality() -> Result<()> {
     let client = new_client(Some("tools")).await?;
 
     // Test that await tool has proper timeout parameter
@@ -56,7 +56,7 @@ async fn test_wait_tool_timeout_functionality() -> Result<()> {
 ///
 /// DO NOT CHANGE: These bounds were established through user testing
 #[tokio::test]
-async fn test_wait_tool_timeout_validation() -> Result<()> {
+async fn test_await_tool_timeout_validation() -> Result<()> {
     let client = new_client(Some("tools")).await?;
 
     // Test timeout too small (should clamp to minimum)
@@ -130,7 +130,7 @@ async fn test_status_tool_functionality() -> Result<()> {
 ///
 /// USAGE PATTERN: await --tools cargo,npm (waits only for these tool types)
 #[tokio::test]
-async fn test_wait_tool_with_tool_filter() -> Result<()> {
+async fn test_await_tool_with_tool_filter() -> Result<()> {
     let client = new_client(Some("tools")).await?;
 
     // Test await tool with tool filter

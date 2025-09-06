@@ -19,7 +19,7 @@ async fn create_test_adapter() -> Adapter {
 async fn test_adapter_creation() {
     let _adapter = create_test_adapter().await;
     // Basic creation test - if it doesn't panic, it works
-    assert!(true);
+    // Test passed if we reach this point
 }
 
 #[tokio::test]
@@ -317,7 +317,7 @@ async fn test_shutdown_graceful() {
     match tokio::time::timeout(timeout_duration, shutdown_future).await {
         Ok(_) => {
             // Shutdown completed successfully
-            assert!(true);
+            // Test passed
         }
         Err(_) => {
             panic!(

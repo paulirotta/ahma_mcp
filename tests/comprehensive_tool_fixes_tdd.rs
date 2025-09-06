@@ -144,6 +144,6 @@ mod comprehensive_tool_fixes_tdd {
         // 4. cargo check (syntax check)
 
         // This test defines what should work - actual execution will be done after fixes
-        assert!(true, "Quality check sequence defined");
+        // Quality check sequence defined
     }
 }

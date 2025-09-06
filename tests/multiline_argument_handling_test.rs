@@ -276,7 +276,6 @@ async fn test_multiline_git_commit_with_real_tool() {
 }
 
 #[tokio::test]
-#[ignore] // This test uses a custom config that doesn't work properly, use test_multiline_git_commit_with_real_tool instead
 async fn test_multiline_git_commit_message() {
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let repo_path = temp_dir.path();
@@ -337,7 +336,7 @@ async fn test_multiline_git_commit_message() {
             file_flag: Some("-F".to_string()),
         }]),
         positional_args: None,
-        synchronous: Some(true),
+        synchronous: Some(false), // Changed to async for proper operation tracking
         timeout_seconds: None,
         enabled: true,
         guidance_key: None,
@@ -355,7 +354,7 @@ async fn test_multiline_git_commit_message() {
     let result = adapter
         .execute_async_in_dir_with_options(
             "git_commit",
-            "git",
+            "git commit", // Use full command like the working test
             repo_path.to_str().unwrap(),
             AsyncExecOptions {
                 operation_id: Some("test_multiline_commit".to_string()),
@@ -371,6 +370,13 @@ async fn test_multiline_git_commit_message() {
     if let Err(e) = &result {
         eprintln!("Git commit failed with error: {:?}", e);
     }
+    println!("Git commit result: {:?}", result);
+    
+    // Check what operations exist in the monitor
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let all_operations = monitor.get_all_operations().await;
+    println!("All operations after execution: {:?}", all_operations);
+    
     assert!(
         result.is_ok(),
         "Git commit with multi-line message failed: {:?}",
@@ -380,7 +386,7 @@ async fn test_multiline_git_commit_message() {
     // Wait for the operation to complete
     let mut wait_time = 0;
     let mut completed = false;
-    while wait_time < 10 && !completed {
+    while wait_time < 50 && !completed {
         tokio::time::sleep(Duration::from_millis(100)).await;
         if let Some(operation) = monitor.get_operation("test_multiline_commit").await {
             println!("Operation status: {:?}", operation.state);
@@ -390,6 +396,10 @@ async fn test_multiline_git_commit_message() {
                     | ahma_mcp::operation_monitor::OperationStatus::Failed
             ) {
                 completed = true;
+                println!("Operation completed with status: {:?}", operation.state);
+                if let Some(result_data) = &operation.result {
+                    println!("Operation result: {:?}", result_data);
+                }
                 if matches!(
                     operation.state,
                     ahma_mcp::operation_monitor::OperationStatus::Failed

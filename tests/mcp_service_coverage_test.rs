@@ -34,7 +34,7 @@ fn test_guidance_config_deserialization() {
 fn test_mtdf_validator_creation() {
     let _validator = MtdfValidator::new();
     // Just test that it can be created
-    assert!(true);
+    // Test passed if we reach this point
 }
 
 #[test]

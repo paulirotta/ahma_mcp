@@ -36,7 +36,7 @@ async fn test_graceful_shutdown_infrastructure() -> Result<(), Box<dyn std::erro
 
 /// Test the await tool timeout functionality with real operations
 #[tokio::test]
-async fn test_wait_tool_timeout_scenarios() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_await_tool_timeout_scenarios() -> Result<(), Box<dyn std::error::Error>> {
     println!("🧪 Testing await tool timeout scenarios...");
 
     let temp_dir = TempDir::new()?;

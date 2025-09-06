@@ -12,6 +12,171 @@
     },
     "subcommand": [
         {
+            "name": "llvm-cov",
+            "guidance_key": "async_behavior",
+            "description": "Run tests and collect coverage data via cargo llvm-cov.",
+            "options": [
+                {
+                    "name": "html",
+                    "type": "boolean",
+                    "description": "Generate HTML coverage report"
+                },
+                {
+                    "name": "json",
+                    "type": "boolean",
+                    "description": "Generate JSON coverage report"
+                },
+                {
+                    "name": "lcov",
+                    "type": "boolean",
+                    "description": "Generate LCOV coverage report"
+                },
+                {
+                    "name": "text",
+                    "type": "boolean",
+                    "description": "Generate text coverage report"
+                },
+                {
+                    "name": "open",
+                    "type": "boolean",
+                    "description": "Open HTML report in browser"
+                },
+                {
+                    "name": "output-path",
+                    "type": "string",
+                    "description": "Output path for coverage reports (legacy)",
+                    "format": "path"
+                },
+                {
+                    "name": "output-dir",
+                    "type": "string",
+                    "description": "Output directory for coverage reports (preferred for --html)",
+                    "format": "path"
+                },
+                {
+                    "name": "ignore-filename-regex",
+                    "type": "string",
+                    "description": "Ignore files matching regex pattern"
+                },
+                {
+                    "name": "include-llvm-sources",
+                    "type": "boolean",
+                    "description": "Include LLVM sources in coverage"
+                },
+                {
+                    "name": "workspace",
+                    "type": "boolean",
+                    "description": "Run coverage for all packages in workspace"
+                },
+                {
+                    "name": "package",
+                    "type": "string",
+                    "description": "Package to run coverage for"
+                },
+                {
+                    "name": "exclude",
+                    "type": "array",
+                    "description": "Exclude packages from coverage (can be specified multiple times)"
+                },
+                {
+                    "name": "features",
+                    "type": "string",
+                    "description": "Space or comma separated list of features to activate"
+                },
+                {
+                    "name": "all-features",
+                    "type": "boolean",
+                    "description": "Activate all available features"
+                },
+                {
+                    "name": "no-default-features",
+                    "type": "boolean",
+                    "description": "Do not activate the default feature"
+                },
+                {
+                    "name": "manifest-path",
+                    "type": "string",
+                    "description": "Path to Cargo.toml",
+                    "format": "path"
+                },
+                {
+                    "name": "target-dir",
+                    "type": "string",
+                    "description": "Directory for all generated artifacts",
+                    "format": "path"
+                },
+                {
+                    "name": "release",
+                    "type": "boolean",
+                    "description": "Build artifacts in release mode, with optimizations"
+                },
+                {
+                    "name": "verbose",
+                    "type": "boolean",
+                    "description": "Use verbose output"
+                },
+                {
+                    "name": "quiet",
+                    "type": "boolean",
+                    "description": "Do not print cargo log messages"
+                }
+            ]
+        },
+        {
+            "name": "default",
+            "guidance_key": "async_behavior",
+            "description": "Alias for 'llvm-cov' subcommand (run tests and collect coverage data).",
+            "options": [
+                {
+                    "name": "html",
+                    "type": "boolean",
+                    "description": "Generate HTML coverage report"
+                },
+                {
+                    "name": "json",
+                    "type": "boolean",
+                    "description": "Generate JSON coverage report"
+                },
+                {
+                    "name": "lcov",
+                    "type": "boolean",
+                    "description": "Generate LCOV coverage report"
+                },
+                {
+                    "name": "text",
+                    "type": "boolean",
+                    "description": "Generate text coverage report"
+                },
+                {
+                    "name": "open",
+                    "type": "boolean",
+                    "description": "Open HTML report in browser"
+                },
+                {
+                    "name": "output-path",
+                    "type": "string",
+                    "description": "Output path for coverage reports (legacy)",
+                    "format": "path"
+                },
+                {
+                    "name": "output-dir",
+                    "type": "string",
+                    "description": "Output directory for coverage reports (preferred for --html)",
+                    "format": "path"
+                },
+                {
+                    "name": "workspace",
+                    "type": "boolean",
+                    "description": "Run coverage for all packages in workspace"
+                },
+                {
+                    "name": "package",
+                    "type": "string",
+                    "description": "Package to run coverage for"
+                }
+            ]
+        },
+        {
             "name": "test",
             "guidance_key": "async_behavior",
             "description": "Run tests and collect coverage data.",
