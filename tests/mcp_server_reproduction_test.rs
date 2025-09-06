@@ -10,7 +10,7 @@ mod mcp_server_reproduction_test {
     /// This test validates the new persistent completion history design:
     /// 1. Add operations
     /// 2. Complete them via update_status (moves to completion_history)
-    /// 3. Verify that completed operations remain accessible for wait operations
+    /// 3. Verify that completed operations remain accessible for await operations
     /// 4. Verify that MCP notifications prevent duplicates through proper tracking
     #[tokio::test]
     async fn test_persistent_completion_history_behavior() {
@@ -106,7 +106,7 @@ mod mcp_server_reproduction_test {
 
         println!("\n✅ Persistent completion history test PASSED");
         println!("  - Operations moved to completion_history on completion");
-        println!("  - Operations remain accessible for wait operations");
+        println!("  - Operations remain accessible for await operations");
         println!("  - Duplicate notifications prevented by MCP callback system");
     }
 }

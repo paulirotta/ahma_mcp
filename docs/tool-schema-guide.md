@@ -92,7 +92,7 @@ The MTDF integrates with a centralized guidance system via `tool_guidance.json`:
 2. **Final Result:** Result pushed automatically via MCP notification when complete.
 
 **Your Instructions:**
-- **DO NOT** wait for the final result.
+- **DO NOT** await for the final result.
 - **DO** continue with other tasks that don't depend on this operation.
 - You **MUST** process the future result notification to know if operation succeeded."
   }

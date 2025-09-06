@@ -78,7 +78,7 @@ impl Operation {
 pub struct MonitorConfig {
     /// Default timeout for operations
     pub default_timeout: Duration,
-    /// Maximum time to wait for graceful shutdown
+    /// Maximum time to await for graceful shutdown
     pub shutdown_timeout: Duration,
 }
 
@@ -94,7 +94,7 @@ impl MonitorConfig {
     pub fn with_timeout(timeout: Duration) -> Self {
         Self {
             default_timeout: timeout,
-            shutdown_timeout: Duration::from_secs(15), // Default 15 second shutdown timeout
+            shutdown_timeout: Duration::from_secs(360), // Default 360 second shutdown timeout
         }
     }
 
@@ -181,17 +181,43 @@ impl OperationMonitor {
         }
     }
 
-    /// Cancel an operation by ID
+    /// Cancel an operation by ID with an optional reason string.
     /// Returns true if the operation was found and cancelled, false if not found
-    pub async fn cancel_operation(&self, operation_id: &str) -> bool {
+    pub async fn cancel_operation_with_reason(
+        &self,
+        operation_id: &str,
+        reason: Option<String>,
+    ) -> bool {
         let mut ops = self.operations.write().await;
         if let Some(op) = ops.get_mut(operation_id) {
             // Only cancel if the operation is not already terminal
             if !op.state.is_terminal() {
                 tracing::info!("Cancelling operation: {}", operation_id);
+                tracing::debug!(
+                    "CANCEL_OPERATION_WITH_REASON: operation_id='{}', reason={:?}, current_state={:?}",
+                    operation_id,
+                    reason,
+                    op.state
+                );
+
                 op.state = OperationStatus::Cancelled;
                 op.end_time = Some(std::time::SystemTime::now());
                 op.cancellation_token.cancel();
+
+                // Store structured cancellation info in result for debugging/LLM visibility
+                let mut data = serde_json::Map::new();
+                data.insert("cancelled".to_string(), serde_json::Value::Bool(true));
+                if let Some(r) = reason.clone() {
+                    tracing::debug!("Storing cancellation reason: '{}'", r);
+                    data.insert("reason".to_string(), serde_json::Value::String(r));
+                } else {
+                    tracing::debug!("No specific cancellation reason provided, using default");
+                    data.insert(
+                        "reason".to_string(),
+                        serde_json::Value::String("Cancelled by user".to_string()),
+                    );
+                }
+                op.result = Some(serde_json::Value::Object(data));
 
                 // Move to completion history
                 let cancelled_op = op.clone();
@@ -223,6 +249,11 @@ impl OperationMonitor {
             );
             false
         }
+    }
+
+    /// Backward-compatible helper without explicit reason
+    pub async fn cancel_operation(&self, operation_id: &str) -> bool {
+        self.cancel_operation_with_reason(operation_id, None).await
     }
 
     pub async fn get_active_operations(&self) -> Vec<Operation> {
@@ -263,28 +294,15 @@ impl OperationMonitor {
             }
         }
 
-        // First, do an initial check to see if operation exists at all
-        let exists_in_active = {
-            let ops = self.operations.read().await;
-            ops.contains_key(operation_id)
-        };
-
-        let exists_in_history = {
-            let history = self.completion_history.read().await;
-            history.contains_key(operation_id)
-        };
-
-        // If operation doesn't exist anywhere, return None immediately
-        if !exists_in_active && !exists_in_history {
-            tracing::warn!(
-                "Operation {} not found in active operations or completion history",
-                operation_id
-            );
-            return None;
-        }
-
         loop {
-            // Check active operations first
+            // Check completion history first. This is the most common case for a waiting operation.
+            let history = self.completion_history.read().await;
+            if let Some(op) = history.get(operation_id) {
+                return Some(op.clone());
+            }
+            drop(history);
+
+            // Then check active operations.
             let ops = self.operations.read().await;
             if let Some(op) = ops.get(operation_id) {
                 if op.state.is_terminal() {
@@ -292,15 +310,11 @@ impl OperationMonitor {
                     // but hasn't been moved to history yet.
                     return Some(op.clone());
                 }
+            } else {
+                // If it's not in active ops, and wasn't in history, it's gone.
+                return None;
             }
             drop(ops); // Release read lock
-
-            // If not in active, check completion history. This is the primary path for completed ops.
-            let history = self.completion_history.read().await;
-            if let Some(op) = history.get(operation_id) {
-                return Some(op.clone());
-            }
-            drop(history);
 
             // If we've been waiting for too long, give up.
             if start.elapsed() > timeout {
@@ -313,12 +327,12 @@ impl OperationMonitor {
         }
     }
 
-    /// Advanced wait functionality that waits for multiple operations with progressive timeout warnings.
-    /// This method implements the enhanced wait functionality with timeout validation, tool filtering,
+    /// Advanced await functionality that waits for multiple operations with progressive timeout warnings.
+    /// This method implements the enhanced await functionality with timeout validation, tool filtering,
     /// and progressive user feedback.
     ///
     /// # Arguments
-    /// * `tool_filter` - Optional comma-separated list of tool prefixes to wait for
+    /// * `tool_filter` - Optional comma-separated list of tool prefixes to await for
     /// * `timeout_seconds` - Timeout in seconds (1-1800 range, defaults to 240)
     ///
     /// # Returns
@@ -342,7 +356,7 @@ impl OperationMonitor {
         });
 
         tracing::info!(
-            "Starting advanced wait operation: timeout={}s, tool_filter={:?}",
+            "Starting advanced await operation: timeout={}s, tool_filter={:?}",
             timeout_secs,
             tool_filters
         );
@@ -359,7 +373,7 @@ impl OperationMonitor {
 
             // Check for timeout
             if elapsed >= timeout {
-                tracing::warn!("Advanced wait operation timed out after {}s", timeout_secs);
+                tracing::warn!("Advanced await operation timed out after {}s", timeout_secs);
                 break;
             }
 
@@ -423,7 +437,7 @@ impl OperationMonitor {
                     .collect();
 
                 tracing::info!(
-                    "Advanced wait completed: {} operations finished, no active operations remaining",
+                    "Advanced await completed: {} operations finished, no active operations remaining",
                     completed_operations.len()
                 );
                 break;
@@ -471,7 +485,7 @@ mod tests {
     use std::time::Duration;
 
     /// This test simulates the race condition where an operation completes
-    /// so quickly that a `wait` call might miss it. By using the `completion_history`
+    /// so quickly that a `await` call might miss it. By using the `completion_history`
     /// map, the monitor should now correctly retrieve the status of already-completed
     /// operations.
     #[tokio::test]
@@ -497,7 +511,7 @@ mod tests {
             )
             .await;
 
-        // 3. Now, try to wait for it. The old system might have failed here.
+        // 3. Now, try to await for it. The old system might have failed here.
         let result = monitor.wait_for_operation(&op_id).await;
 
         // 4. Assert that we correctly found the completed operation.

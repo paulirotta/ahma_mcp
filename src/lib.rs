@@ -45,6 +45,7 @@
 // Public modules
 pub mod adapter;
 pub mod callback_system;
+pub mod client;
 pub mod config;
 pub mod constants;
 pub mod logging;

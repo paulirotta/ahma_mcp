@@ -1,0 +1,38 @@
+{
+    "name": "shell_async",
+    "description": "Execute shell commands asynchronously with full bash capabilities",
+    "command": "bash",
+    "enabled": true,
+    "timeout_seconds": 300,
+    "synchronous": false,
+    "hints": {
+        "default": "Shell command running asynchronously - consider planning next steps, reviewing output patterns, or working on other tasks while the command executes."
+    },
+    "subcommand": [
+        {
+            "name": "default",
+            "guidance_key": "async_behavior",
+            "description": "Execute a shell command asynchronously using bash",
+            "enabled": true,
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "command",
+                    "type": "string",
+                    "description": "The shell command to execute (supports pipes, redirects, variables, etc.)",
+                    "required": true
+                },
+                {
+                    "name": "timeout_seconds",
+                    "type": "integer",
+                    "description": "Maximum time to allow the command to run (default: 300s)"
+                }
+            ]
+        }
+    ]
+}

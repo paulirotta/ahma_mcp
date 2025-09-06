@@ -6,7 +6,7 @@ This guide provides solutions for common issues encountered when using AHMA MCP,
 
 ### Default Timeout Behavior
 
-- **Default timeout**: 240 seconds (4 minutes) for wait operations
+- **Default timeout**: 240 seconds (4 minutes) for await operations
 - **Timeout range**: 10 seconds (minimum) to 1800 seconds (30 minutes maximum)
 - **Progress warnings**: Automatic warnings at 50%, 75%, and 90% of timeout duration
 - **Remediation detection**: Automatic analysis of common timeout causes
@@ -35,7 +35,7 @@ AHMA MCP automatically detects common lock file patterns:
 
 1. Check for stale lock files: `find . -name "*.lock" -o -name ".cargo-lock" -o -name ".lock"`
 2. Identify blocking processes: `lsof [lockfile_path]`
-3. Safely terminate blocking processes or wait for completion
+3. Safely terminate blocking processes or await for completion
 4. Remove stale lock files only if processes have terminated
 5. Retry the operation
 
@@ -107,13 +107,13 @@ AHMA MCP suggests checking for competing processes.
 
 ```bash
 # Short timeout for quick operations
-wait --timeout_seconds 30
+await --timeout_seconds 30
 
 # Extended timeout for complex builds
-wait --timeout_seconds 900  # 15 minutes
+await --timeout_seconds 900  # 15 minutes
 
 # Tool-specific waiting
-wait --tools cargo --timeout_seconds 600
+await --tools cargo --timeout_seconds 600
 
 # Status monitoring without timeout
 status --tools cargo,npm
@@ -149,7 +149,7 @@ For a 240-second (4-minute) default timeout:
 2. **Monitor progress** with `status` tool without blocking
 3. **Make file changes** - ongoing operations complete gracefully
 4. **Receive automatic notifications** when operations finish
-5. **Use wait tool sparingly** - only when you cannot proceed without results
+5. **Use await tool sparingly** - only when you cannot proceed without results
 
 ### VS Code Integration Issues
 
@@ -232,13 +232,13 @@ status --tools cargo,npm
 
 #### Strategic Wait Usage
 
-**When to use wait:**
+**When to use await:**
 
 - ✅ Critical path operations that block further progress
 - ✅ Final validation before deployment/submission
 - ✅ Coordination between dependent operations
 
-**When NOT to use wait:**
+**When NOT to use await:**
 
 - ❌ Routine builds that can run in background
 - ❌ Tests that don't affect current work
@@ -261,8 +261,8 @@ cargo doc --no-deps # Background docs
 # Check status periodically
 status --tools cargo
 
-# Only wait if results are needed for next steps
-wait --tools cargo --timeout_seconds 300
+# Only await if results are needed for next steps
+await --tools cargo --timeout_seconds 300
 ```
 
 ### Error Recovery Strategies
@@ -335,7 +335,7 @@ top -l 1 | head -20       # CPU/Memory (macOS)
 status --operation_id op_123
 
 # Wait with verbose feedback
-wait --timeout_seconds 60 --tools cargo
+await --timeout_seconds 60 --tools cargo
 
 # Monitor active processes
 ps aux | grep -E "(cargo|npm|node)"

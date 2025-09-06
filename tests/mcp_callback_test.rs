@@ -60,7 +60,7 @@ mod mcp_callback_tests {
 
     #[test]
     fn test_progress_update_started_message_format() {
-        let operation_id = "test_op_123".to_string();
+        let _operation_id = "test_op_123".to_string();
         let command = "cargo build".to_string();
         let description = "Building the project".to_string();
 
@@ -77,8 +77,7 @@ mod mcp_callback_tests {
 
     #[test]
     fn test_progress_update_progress_with_percentage() {
-        let percentage = Some(75.0);
-        let progress = percentage.unwrap_or(50.0);
+        let progress = 75.0; // Direct assignment since value is known
         assert_eq!(progress, 75.0);
     }
 

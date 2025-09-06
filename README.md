@@ -9,7 +9,7 @@ _Create agents from your command line tools with one JSON file, then watch them 
 [![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org/)
 
-`ahma_mcp` rapdily adapts command-line tools for AI consumption. AI calls a gets rapid confirmation the background process has started and can continue to plan and analyze, automatically receiving tool results as each operation completes. Multiple concurrent tool calls execute in parallel. Individual tools and subcommands can be tagged as **`synchronous: true`** to become a traditional blocking MCP tool call as need. Generally the AI does not need to `wait` for async tool completion as it gets the result when the tool completes, but it can when needed.
+`ahma_mcp` rapdily adapts command-line tools for AI consumption. AI calls a gets rapid confirmation the background process has started and can continue to plan and analyze, automatically receiving tool results as each operation completes. Multiple concurrent tool calls execute in parallel. Individual tools and subcommands can be tagged as **`synchronous: true`** to become a traditional blocking MCP tool call as need. Generally the AI does not need to `await` for async tool completion as it gets the result when the tool completes, but it can when needed.
 
 **Ahma** (Finnish for wolverine) is a tenacious and agile tool, speeding your workflow to rapidly consume complex tasks in less time than common synchonous tools.
 
@@ -26,6 +26,8 @@ MTDF is ahma_mcp's JSON-based tool configuration format that enables dynamic too
 - **Dynamic Tool Registration**: Add new tools by creating JSON files in `tools/` directory
 - **Zero-Compilation Integration**: No Rust code changes needed to add CLI tools
 - **Recursive Subcommand Support**: Model complex CLI tools with nested subcommands (e.g., `cargo nextest run`, `gh cache delete`)
+- **Clean Tool Naming**: "Default" subcommand pattern provides clean tool names (e.g., `cargo_fmt` instead of `cargo_fmt_default`)
+- **Modular Architecture**: Optional tools in separate JSON files for improved maintainability
 - **Centralized Guidance System**: Reusable AI guidance blocks via `tool_guidance.json`
 - **Schema Validation**: Built-in MtdfValidator ensures configuration correctness
 - **Synchronous/Asynchronous Control**: Fine-grained execution mode control per subcommand
@@ -58,6 +60,10 @@ Ahma MCP is the next-generation successor to `async_cargo_mcp`, providing:
 - **Universal CLI Adaptation**: Works with any command-line tool via MTDF JSON configurations
 - **Async-First Architecture**: Operations execute asynchronously by default with automatic result push back to the AI, reducing AI blocking downtime and enabling concurrent workflows
 - **Multi-Tool Support**: Single server handles multiple CLI tools simultaneously, one MTDF JSON file per tool
+- **Test-Driven Development**: Comprehensive test coverage using `cargo nextest` with over 70 tests ensuring reliability
+- **Code Coverage Integration**: Built-in `cargo llvm-cov` support for detailed test coverage analysis and reporting
+- **Clean Tool Naming**: "Default" subcommand pattern provides intuitive tool names without redundant suffixes
+- **Modular Tool Architecture**: Optional tools in separate JSON files for improved maintainability and organization
 - **Centralized Guidance System**: Reusable guidance blocks in `tool_guidance.json` ensure consistent AI instructions across tools with `guidance_key` references
 - **MtdfValidator**: Built-in schema validation ensures MTDF configuration correctness and prevents common errors
 - **AI-Optimized Guidance**: Tool descriptions include explicit suggestions encouraging productive concurrent work
@@ -97,7 +103,7 @@ Then copy the contents into your VS Code MCP configuration file (per-OS location
 Ahma MCP provides sophisticated operation tracking and management capabilities:
 
 - **Real-time Operation Monitoring**: Track the status of all running operations with the `status` tool
-- **Intelligent Wait Functionality**: Use the `wait` tool to monitor operations with configurable timeouts (1-1800 seconds, default 240s)
+- **Intelligent Wait Functionality**: Use the `await` tool to monitor operations with configurable timeouts (1-1800 seconds, default 240s)
 - **Progressive Timeout Warnings**: Receive warnings at 50%, 75%, and 90% of timeout duration to track long-running operations
 - **Automatic Error Remediation**: Get specific suggestions when operations timeout, including:
   - Detection of stale lock files (Cargo.lock, package-lock.json, yarn.lock, composer.lock, etc.)
@@ -150,6 +156,13 @@ Internal tools implemented in ahama_mcp:
 Common command line tool definitions are included. Copy and edit those you want, or add your own:
 
 - `cargo.json` - Rust package manager with recursive subcommands like `nextest run` (11+ subcommands)
+- `cargo_audit.json` - Audit Cargo.lock for security vulnerabilities
+- `cargo_bench.json` - Run benchmarks for a Rust project
+- `cargo_clippy.json` - Enhanced linting and code quality checks for Rust
+- `cargo_edit.json` - Tools for editing Cargo.toml files
+- `cargo_fmt.json` - Formats Rust code according to style guidelines
+- `cargo_llvm_cov.json` - LLVM source-based code coverage for Rust projects (6 subcommands)
+- `cargo_nextest.json` - Next-generation test runner for Rust
 - `gh.json` - GitHub CLI with nested operations like `cache delete` and `run cancel`
 - `git.json` - Git version control (22 subcommands)
 - `grep.json` - Text search with regex support
@@ -164,17 +177,26 @@ Each MTDF file can reference guidance blocks from `tool_guidance.json` using `gu
 
 ### Testing the Installation
 
-Run the test suite to verify everything works:
+Run the comprehensive test suite to verify everything works:
 
 ```bash
+# Run all tests with nextest (faster test runner)
+cargo nextest run
+
+# Run tests with coverage analysis
+cargo llvm-cov nextest --html --open
+
+# Alternative: standard cargo test
 cargo test
 ```
 
 You should see output like:
 
 ```
-test result: ok. 76 passed; 0 failed; 0 ignored; 0 measured
+✓ Finished running 76 tests across 45 binaries (2.34s)
 ```
+
+The project follows **test-driven development (TDD)** practices with comprehensive test coverage including unit tests, integration tests, and system-level tests. See [`docs/DEVELOPMENT_WORKFLOW.md`](docs/DEVELOPMENT_WORKFLOW.md) for detailed testing strategies and development patterns.
 
 ## VS Code MCP Integration
 
@@ -227,7 +249,7 @@ After saving the `mcp.json` file, restart VS Code to activate the MCP server.
 
 ### Available Tools
 
-Once connected, you'll have access to ~38 dynamically generated MCP tools:
+Once connected, you'll have access to ~44 dynamically generated MCP tools:
 
 **Git Operations:**
 
@@ -255,6 +277,21 @@ Once connected, you'll have access to ~38 dynamically generated MCP tools:
 - `mcp_ahma_mcp_cargo_version` - Cargo version
 - `mcp_ahma_mcp_cargo_rustc` - Custom rustc
 - `mcp_ahma_mcp_cargo_metadata` - Package metadata
+- `mcp_ahma_mcp_cargo_audit_audit` - Audit dependencies for vulnerabilities
+- `mcp_ahma_mcp_cargo_bench_bench` - Run benchmarks
+- `mcp_ahma_mcp_cargo_clippy_clippy` - Lint code with clippy
+- `mcp_ahma_mcp_cargo_edit_add` - Add dependency with cargo-edit
+- `mcp_ahma_mcp_cargo_edit_remove` - Remove dependency with cargo-edit
+- `mcp_ahma_mcp_cargo_edit_upgrade` - Upgrade dependencies with cargo-edit
+- `mcp_ahma_mcp_cargo_edit_bump_version` - Bump package version with cargo-edit
+- `mcp_ahma_mcp_cargo_fmt_fmt` - Format code with rustfmt
+- `mcp_ahma_mcp_cargo_nextest_run` - Run tests with nextest
+- `mcp_ahma_mcp_cargo_llvm_cov_test` - Run tests with LLVM coverage
+- `mcp_ahma_mcp_cargo_llvm_cov_run` - Run binary with LLVM coverage
+- `mcp_ahma_mcp_cargo_llvm_cov_report` - Generate coverage reports
+- `mcp_ahma_mcp_cargo_llvm_cov_show_env` - Show coverage environment
+- `mcp_ahma_mcp_cargo_llvm_cov_clean` - Clean coverage data
+- `mcp_ahma_mcp_cargo_llvm_cov_nextest` - Run nextest with LLVM coverage
 - Optional if installed: `clippy`, `nextest`, `fmt`, `audit`, `upgrade`, `bump_version`, `bench`
 
 **File Operations:**
@@ -296,7 +333,7 @@ Once connected, you'll have access to ~38 dynamically generated MCP tools:
 
 - Default timeout is 240 seconds (4 minutes) - sufficient for most operations
 - Use the `status` tool to check which operations are still running
-- Use the `wait` tool with custom timeout: timeout range is 1-1800 seconds (30 minutes max)
+- Use the `await` tool with custom timeout: timeout range is 1-1800 seconds (30 minutes max)
 - Common timeout causes include network issues, locked files, or resource contention
 - Check for stale lock files (Cargo.lock, package-lock.json, yarn.lock, etc.)
 - Verify network connectivity for download operations
@@ -349,7 +386,7 @@ Use the centralized guidance system to maintain consistent AI instructions:
 
 - Reference guidance blocks: `"guidance_key": "async_behavior"` for long-running operations
 - Reference guidance blocks: `"guidance_key": "sync_behavior"` for fast operations
-- Reference guidance blocks: `"guidance_key": "coordination_tool"` for wait/status tools
+- Reference guidance blocks: `"guidance_key": "coordination_tool"` for await/status tools
 - Custom guidance: Define reusable blocks in `tool_guidance.json`
 
 ### Documentation and Examples

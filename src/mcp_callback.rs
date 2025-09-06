@@ -150,11 +150,25 @@ impl CallbackSender for McpCallbackSender {
                 ..
             } => {
                 tracing::warn!("Cancelled operation {}: {}", operation_id, message);
+
+                // Enhanced cancellation message formatting to avoid "Cancelled: Canceled" repetition
+                let formatted_message = if message.to_lowercase().starts_with("cancel") {
+                    // Message already indicates cancellation, don't prepend "Cancelled:"
+                    if message == "Canceled" {
+                        "Operation cancelled by user request".to_string()
+                    } else {
+                        message.clone()
+                    }
+                } else {
+                    // Message doesn't indicate cancellation, prepend "Cancelled:"
+                    format!("Cancelled: {message}")
+                };
+
                 ProgressNotificationParam {
                     progress_token: progress_token.clone(),
                     progress: 100.0, // Mark as complete even when cancelled
                     total: Some(100.0),
-                    message: Some(format!("Cancelled: {message}")),
+                    message: Some(formatted_message),
                 }
             }
             ProgressUpdate::FinalResult {

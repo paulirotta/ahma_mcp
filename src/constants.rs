@@ -9,7 +9,7 @@
 //!
 //! - **`ASYNC_ADDENDUM`**: A standard piece of text appended to the description of any tool
 //!   that supports asynchronous execution. It instructs the agent on the correct protocol
-//!   for handling async operations, emphasizing the use of `wait` and `operation_ids`.
+//!   for handling async operations, emphasizing the use of `await` and `operation_ids`.
 //!
 //! - **`SYNC_ADDENDUM`**: A simpler addendum for tools that are synchronous or very fast,
 //!   reminding the agent to use the provided MCP tools instead of raw shell commands.
@@ -29,14 +29,15 @@
 //!
 //! - **`STATUS_POLLING_HINT_TEMPLATE`**: A message that detects when the agent is repeatedly
 //!   checking the status of an operation. It suggests a more efficient pattern, such as
-//!   using `wait` with notifications, to avoid unnecessary polling.
+//!   using `await` with notifications, to avoid unnecessary polling.
 //!
 //! By using these standardized templates, the system can provide consistent, high-quality
 //! feedback to the agent, helping it learn and adopt best practices for interacting with
 //! the asynchronous tool server.
 
 /// Standardized addendum for async-capable tools' descriptions used in documentation and help text.
-pub const ASYNC_ADDENDUM: &str = "Always use ahma_mcp MCP tools; do not run cargo in a terminal. For operations >1s, set enable_async_notification=true and call mcp_async_cargo_m_wait with specific operation_ids to collect results.";
+pub const ASYNC_ADDENDUM: &str =
+    "Always use ahma_mcp MCP tools; do not run any supported tools in the terminal";
 
 /// Standardized addendum for synchronous or fast tools where async guidance is not emphasized.
 pub const SYNC_ADDENDUM: &str = "Always use ahma_mcp MCP tools; do not run cargo in a terminal.";
@@ -46,18 +47,17 @@ pub const SYNC_ADDENDUM: &str = "Always use ahma_mcp MCP tools; do not run cargo
 /// - {operation_type}
 /// - {operation_id}
 pub const TOOL_HINT_TEMPLATE: &str = "\n\n### ASYNC AHMA OPERATION: {operation_type} (ID: {operation_id})\n\
-1. The operation is running in the background — do not assume it’s complete.\n\
+1. The operation is running in the background — do not assume it is complete.\n\
 2. What to do now (pick one):\n\
- - Update the plan with what’s already achieved and list the next concrete steps.\n\
- - Do unrelated code, tests, or docs not blocked by this `{operation_type}`.\n\
+ - Update the plan with current achievements and list the next concrete steps.\n\
+ - Do unrelated work (code, tests, documentation, user summary..) not blocked by this `{operation_type}`.\n\
  - If you’ll need these results soon, schedule a later `status` check instead of polling.\n\
- - If you have nothing else to do and need results to proceed, use `wait` with operation_ids=['{operation_id}'].\n\
+ - If you have nothing else to do and need results to proceed, use `await`.\n\
 3. Tips:\n\
  - **AVOID POLLING:** Do not repeatedly call `status` - this is inefficient and wastes resources.\n\
- - **Use `wait` with specific operation ID(s) to block until completion.**\n\
- - Batch actions: start other needed tools first, then wait for all IDs at once.\n\
- - Prefer specifying explicit operation IDs; an empty list works too but blocks until all operations are complete.\n\n\
-Next: Continue useful work now. Use `wait` when you actually need the results.\n\n";
+ - **Use `await` to block until operation ID(s) complete.**\n\
+ - Batch actions: start multiple concurrent tools, then await for all IDs at once.\n\
+Next: Continue useful work now. Use `await` when you actually need the results.\n\n";
 
 /// Template used when detecting premature waits that harm concurrency.
 /// Placeholders: {operation_id}, {gap_seconds}, {efficiency_percent}
@@ -66,9 +66,8 @@ pub const CONCURRENCY_HINT_TEMPLATE: &str = "CONCURRENCY HINT: You waited for '{
 
 /// Template for the status polling detection guidance.
 /// Placeholders: {count}, {operation_id}
-pub const STATUS_POLLING_HINT_TEMPLATE: &str = "⚠️  STATUS POLLING ANTI-PATTERN DETECTED: You've called status {count} times for operation '{operation_id}'. \
-                    This is inefficient! Instead of repeatedly polling, use 'wait' with the operation ID \
-                    to get automatic completion notifications.\n";
+pub const STATUS_POLLING_HINT_TEMPLATE: &str = "**STATUS POLLING ANTI-PATTERN DETECTED:** You've called status {count} times for operation '{operation_id}'. \
+  This is inefficient! Instead of repeatedly polling, use 'await' with the operation ID to get automatic completion notifications.\n";
 
 #[cfg(test)]
 mod tests {
@@ -77,8 +76,8 @@ mod tests {
     #[test]
     fn async_addendum_contains_key_guidance() {
         assert!(ASYNC_ADDENDUM.contains("ahma_mcp"));
-        assert!(ASYNC_ADDENDUM.contains("enable_async_notification"));
-        assert!(ASYNC_ADDENDUM.contains("wait"));
+        assert!(ASYNC_ADDENDUM.contains("MCP tools"));
+        assert!(ASYNC_ADDENDUM.contains("terminal")); // Key guidance to avoid direct terminal usage
     }
 
     #[test]

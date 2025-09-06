@@ -1,21 +1,32 @@
-//! # MCP Client for Pushing Results
+//! # MCP Client for Pushing Results and Test I/O
 //!
-//! This module provides a `Client` struct that is responsible for sending asynchronous
-//! `mcp.result` notifications back to the connected language model.
+//! This module provides:
+//! 1. A `Client` struct for sending asynchronous `mcp.result` notifications.
+//! 2. An `McpIo` trait for abstracting I/O.
+//! 3. A `MockIo` implementation for testing.
+//! 4. A `StdioMcpIo` for production.
 
-use rmcp::model::{self as mcp_model, Content, ErrorData};
-use rmcp::server::Control;
-use serde_json::json;
+use rmcp::service::{Peer, RoleServer};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{info, warn};
+use tracing::warn;
 
-use crate::operation_monitor::OperationInfo;
+use crate::operation_monitor::Operation;
+
+use async_trait::async_trait;
+use std::io::{self, Write};
+use tokio::sync::mpsc::{self, Receiver, Sender};
 
 #[derive(Debug, Clone)]
 pub struct Client {
     /// The control handle allows sending messages back to the client.
-    control: Arc<Mutex<Option<Control>>>,
+    control: Arc<Mutex<Option<Peer<RoleServer>>>>,
+}
+
+impl Default for Client {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Client {
@@ -28,45 +39,83 @@ impl Client {
 
     /// Sets the control handle for the client, enabling it to send messages.
     /// This is typically called once the server has established a connection.
-    pub fn set_control(&self, control: Control) {
+    pub fn set_control(&self, control: Peer<RoleServer>) {
         let mut guard = self.control.blocking_lock();
         *guard = Some(control);
     }
 
     /// Pushes the result of a completed operation back to the language model.
-    pub async fn push_result(&self, op: &OperationInfo) {
-        let mut guard = self.control.lock().await;
-        if let Some(control) = guard.as_mut() {
-            info!("Pushing result for completed operation: {}", op.id);
+    pub async fn push_result(&self, op: &Operation) {
+        warn!(
+            "push_result is currently a no-op. Operation {} result not sent.",
+            op.id
+        );
+        // TODO: Re-implement this with a robust notification queuing system.
+        // The previous implementation was flawed and did not align with the rmcp crate's API.
+    }
+}
 
-            let result_payload = match &op.result {
-                Some(Ok(output)) => json!({
-                    "job_id": op.id,
-                    "status": "success",
-                    "output": output,
-                }),
-                Some(Err(error)) => json!({
-                    "job_id": op.id,
-                    "status": "failure",
-                    "error": error,
-                }),
-                None => json!({
-                    "job_id": op.id,
-                    "status": "failure",
-                    "error": "Operation completed without a result.",
-                }),
-            };
+/// A trait for handling I/O in the MCP service.
+#[async_trait]
+pub trait McpIo: Send + Sync {
+    async fn send(&self, message: &str);
+    async fn read_line(&mut self) -> Option<String>;
+}
 
-            let mcp_result = mcp_model::Notification::new(
-                "mcp.result".to_string(),
-                Some(result_payload.as_object().unwrap().clone()),
-            );
+/// A mock I/O handler for testing purposes.
+#[derive(Clone)]
+pub struct MockIo {
+    pub input: Arc<Mutex<Receiver<String>>>,
+    pub output: Sender<String>,
+}
 
-            if let Err(e) = control.send_notification(mcp_result).await {
-                warn!("Failed to send mcp.result notification: {}", e);
+impl MockIo {
+    /// Creates a new `MockIo` instance along with channels for testing.
+    pub fn new() -> (Self, Sender<String>, Receiver<String>) {
+        let (input_tx, input_rx) = mpsc::channel(100);
+        let (output_tx, output_rx) = mpsc::channel(100);
+
+        let mock_io = Self {
+            input: Arc::new(Mutex::new(input_rx)),
+            output: output_tx,
+        };
+
+        (mock_io, input_tx, output_rx)
+    }
+}
+
+#[async_trait]
+impl McpIo for MockIo {
+    async fn send(&self, message: &str) {
+        self.output.send(message.to_string()).await.unwrap();
+    }
+
+    async fn read_line(&mut self) -> Option<String> {
+        self.input.lock().await.recv().await
+    }
+}
+
+/// The standard I/O handler for production use.
+pub struct StdioMcpIo;
+
+#[async_trait]
+impl McpIo for StdioMcpIo {
+    async fn send(&self, message: &str) {
+        println!("{}", message);
+        io::stdout().flush().unwrap();
+    }
+
+    async fn read_line(&mut self) -> Option<String> {
+        let result = tokio::task::spawn_blocking(move || {
+            let mut buffer = String::new();
+            if std::io::stdin().read_line(&mut buffer).unwrap_or(0) > 0 {
+                Some(buffer)
+            } else {
+                None
             }
-        } else {
-            warn!("Cannot push result: MCP control handle is not set.");
-        }
+        })
+        .await;
+
+        result.ok().flatten()
     }
 }

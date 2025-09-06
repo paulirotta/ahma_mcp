@@ -5,7 +5,7 @@ This document captures the key lessons learned during implementation of graceful
 ## 🎯 Original Requirements
 
 1. **"Does the ahma_mcp server shut down gracefully when .vscode/mcp.json watch triggers a restart?"**
-2. **"I think 'wait' should have an optional timeout, and a default timeout of 240sec"**
+2. **"I think 'await' should have an optional timeout, and a default timeout of 240sec"**
 
 ## 🔑 Critical Implementation Decisions
 
@@ -45,7 +45,7 @@ This document captures the key lessons learned during implementation of graceful
 
 ### 2. Hardwired vs JSON Tools
 
-**Insight**: MCP tools (status, wait) don't need JSON configs - they're hardwired in the service.
+**Insight**: MCP tools (status, await) don't need JSON configs - they're hardwired in the service.
 **Exception**: Users may add JSON files for IDE/documentation support.
 
 ### 3. Test Guidance Comments

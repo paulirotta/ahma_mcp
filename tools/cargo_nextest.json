@@ -1,0 +1,68 @@
+{
+    "name": "cargo_nextest",
+    "description": "Run tests with cargo-nextest run command.",
+    "command": "cargo",
+    "enabled": true,
+    "timeout_seconds": 600,
+    "guidance_key": "async_behavior",
+    "hints": {
+        "default": "Running tests with nextest... a good moment to review your test coverage."
+    },
+    "subcommand": [
+        {
+            "name": "nextest",
+            "description": "**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- **DO NOT** await for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.\n\nRun tests using cargo nextest.",
+            "subcommand": [
+                {
+                    "name": "run",
+                    "description": "Run tests using nextest. Operates asynchronously - returns operation_id immediately, results delivered via notification when complete. Continue with other tasks.",
+                    "options": [
+                        {
+                            "name": "verbose",
+                            "type": "boolean",
+                            "description": "Verbose output [env: NEXTEST_VERBOSE=]"
+                        },
+                        {
+                            "name": "color",
+                            "type": "string",
+                            "description": "Produce color output: auto, always, never [env: CARGO_TERM_COLOR=] [default: auto]"
+                        },
+                        {
+                            "name": "manifest-path",
+                            "type": "string",
+                            "description": "Path to Cargo.toml",
+                            "format": "path"
+                        },
+                        {
+                            "name": "config-file",
+                            "type": "string",
+                            "description": "Config file [default: workspace-root/.config/nextest.toml]",
+                            "format": "path"
+                        },
+                        {
+                            "name": "tool-config-file",
+                            "type": "string",
+                            "description": "Tool-specific config files in the format 'tool:abs_path'. May be specified multiple times; later files are lower priority.",
+                            "format": "path"
+                        },
+                        {
+                            "name": "override-version-check",
+                            "type": "boolean",
+                            "description": "Override checks for the minimum version defined in nextest's config"
+                        },
+                        {
+                            "name": "profile",
+                            "type": "string",
+                            "description": "The nextest profile to use [env: NEXTEST_PROFILE=]"
+                        },
+                        {
+                            "name": "workspace",
+                            "type": "boolean",
+                            "description": "Run tests for all packages in workspace"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

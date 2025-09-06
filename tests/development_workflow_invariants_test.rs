@@ -5,7 +5,7 @@
 ///
 /// CONTEXT: Originally implemented to solve:
 /// 1. "Does the ahma_mcp server shut down gracefully when .vscode/mcp.json watch triggers a restart?"
-/// 2. "I think 'wait' should have an optional timeout, and a default timeout of 240sec"
+/// 2. "I think 'await' should have an optional timeout, and a default timeout of 240sec"
 use std::time::Duration;
 
 /// INVARIANT 1: Wait tool timeout defaults and validation bounds
@@ -86,7 +86,7 @@ fn test_graceful_shutdown_timing_invariant() {
 /// INVARIANT 3: Tool configuration count stability
 ///
 /// LESSON LEARNED: Tool loading tests expect exactly the right number of JSON configs.
-/// This test failed when we temporarily added status.json/wait.json (which are hardwired).
+/// This test failed when we temporarily added status.json/await.json (which are hardwired).
 ///
 /// GUIDANCE: Only add JSON configs for external CLI tools, not for hardwired MCP tools.
 #[test]
@@ -115,16 +115,17 @@ fn test_json_tool_configuration_count_invariant() {
 
     println!("📁 Found JSON tool configurations: {:?}", json_files);
 
-    // CRITICAL: These are CLI tool adapters only. MCP tools (status, wait) are hardwired.
+    // CRITICAL: These are CLI tool adapters only. MCP tools (status, await) are hardwired.
     // Expected core tools: cargo.json, ls.json, python3.json, git.json, gh.json
-    // Complete tool set: wait.json, status.json (MCP tools), echo.json, cat.json, grep.json, sed.json (Unix utils)
+    // Complete tool set includes modular cargo tools: cargo_audit, cargo_bench, cargo_clippy,
+    // cargo_edit, cargo_fmt, cargo_llvm_cov, cargo_nextest + Unix utils: echo, cat, grep, sed
     assert!(
         json_files.len() >= 3,
         "Should have core CLI tool configurations (got {})",
         json_files.len()
     );
     assert!(
-        json_files.len() <= 15,
+        json_files.len() <= 25,
         "Should not have excessive tool configurations (got {})",
         json_files.len()
     );

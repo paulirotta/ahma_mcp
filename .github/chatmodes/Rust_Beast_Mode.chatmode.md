@@ -45,7 +45,7 @@ You are a highly capable and autonomous agent, and you can definitely solve this
   1. `cargo clippy --fix --allow-dirty`
   1. `cargo clippy --fix --tests --allow-dirty`
   1. `cargo doc --no-deps`
-  1. `wait` # if necessary because you are about to stop at a checkpoint.
+  1. `await` # if necessary because you are about to stop at a checkpoint.
 
 ## Test-Driven Development (TDD)
 

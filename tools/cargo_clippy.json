@@ -1,0 +1,34 @@
+{
+    "name": "cargo_clippy",
+    "description": "Enhanced linting and code quality checks",
+    "command": "cargo",
+    "enabled": true,
+    "timeout_seconds": 600,
+    "hints": {
+        "default": "Clippy is checking your code... time to review the lints and plan your next refactoring."
+    },
+    "subcommand": [
+        {
+            "name": "default",
+            "synchronous": true,
+            "description": "Enhanced linting and code quality checks - returns immediately for incremental checks.",
+            "options": [
+                {
+                    "name": "fix",
+                    "type": "boolean",
+                    "description": "Automatically fix warnings"
+                },
+                {
+                    "name": "allow-dirty",
+                    "type": "boolean",
+                    "description": "Allow fixing when working directory is dirty"
+                },
+                {
+                    "name": "tests",
+                    "type": "boolean",
+                    "description": "Run clippy on tests as well"
+                }
+            ]
+        }
+    ]
+}
