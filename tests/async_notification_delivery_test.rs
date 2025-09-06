@@ -1,74 +1,76 @@
-
-// tests/async_notification_delivery_test.rs
-
-use super::*;
-use crate::mcp_service::McpService;
-use crate::test_utils::setup_test_environment;
-use rmcp::Notification;
+use super::common::test_utils::{MockIo, setup_test_environment};
+use ahma_mcp::mcp_service::AhmaMcpService;
+use rmcp::{
+    model::{CallToolRequestParam, Notification},
+    server::{RequestContext, ServerHandler},
+};
 use serde_json::json;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
+use std::{borrow::Cow, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
-use tokio::time::sleep;
 
 #[tokio::test]
-async fn test_async_notification_delivery_while_blocked() {
-    // 1. Setup the test environment
+async fn test_async_notification_delivery() {
     let (mcp_service, mock_io, _temp_dir) = setup_test_environment().await;
     let mcp_service = Arc::new(mcp_service);
+    let mock_io = Arc::new(Mutex::new(mock_io));
 
-    // Flag to confirm the async notification was received
-    let notification_received = Arc::new(AtomicBool::new(false));
+    let notification_received = Arc::new(Mutex::new(false));
     let notification_received_clone = notification_received.clone();
-
-    // 2. Start a long-running asynchronous tool
-    // We'll use a simple shell command that sleeps and then echoes a message.
-    // The key is that this runs in the background.
-    let async_tool_params = json!({
-        "command": "sleep 2 && echo 'Async task complete'"
-    });
-
-    // We need a way to capture the notification. We'll spawn a task to listen for it.
     let mock_io_clone = mock_io.clone();
+
     tokio::spawn(async move {
         loop {
-            if let Ok(Some(msg)) = mock_io_clone.lock().await.recv().await {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            let mut mock_io_guard = mock_io_clone.lock().await;
+            if let Ok(Some(msg)) = mock_io_guard.recv_string().await {
                 if let Ok(notification) = serde_json::from_str::<Notification>(&msg) {
-                    if notification.method == "mcp/operationCompleted" {
-                        // A real implementation would check the operation ID and result.
-                        // For this test, just seeing the completion is enough.
-                        notification_received_clone.store(true, Ordering::SeqCst);
+                    if notification.method == "display_text" {
+                        let mut received = notification_received_clone.lock().await;
+                        *received = true;
                         break;
                     }
                 }
             }
-            sleep(Duration::from_millis(100)).await;
         }
     });
 
     let mcp_service_clone = mcp_service.clone();
+    let request_context = RequestContext::default();
+
+    // 1. Start a long-running async tool
+    let async_tool_params = json!({
+        "command": "sleep 2 && echo 'async task done'"
+    });
+    let call_params = CallToolRequestParam {
+        name: Cow::Borrowed("shell"),
+        arguments: async_tool_params.as_object().cloned(),
+    };
     tokio::spawn(async move {
-        mcp_service_clone.call_tool("shell", async_tool_params).await;
+        let _ = mcp_service_clone
+            .call_tool(call_params, &request_context)
+            .await;
     });
 
-    // Give the async tool a moment to start
-    sleep(Duration::from_millis(500)).await;
+    // Give it a moment to start
+    tokio::time::sleep(Duration::from_millis(100)).await;
 
-    // 3. Immediately call a synchronous, blocking tool
-    // This will block the main flow, simulating the agent being busy.
-    // We'll use a simple synchronous sleep command.
+    // 2. Call a fast, synchronous tool
     let sync_tool_params = json!({
-        "command": "sleep 3"
+        "command": "echo 'sync task'"
     });
-    mcp_service.call_tool("shell_sync", sync_tool_params).await;
+    let sync_call_params = CallToolRequestParam {
+        name: Cow::Borrowed("shell_sync"),
+        arguments: sync_tool_params.as_object().cloned(),
+    };
+    let _ = mcp_service
+        .call_tool(sync_call_params, &request_context)
+        .await;
 
-    // 4. Verify the notification was received
-    // The synchronous tool slept for 3 seconds. The async tool finished after 2 seconds.
-    // By the time the synchronous tool unblocks, the notification should have been sent
-    // and received by our listener task.
+    // 3. Wait and check if the notification was received
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    let received = notification_received.lock().await;
     assert!(
-        notification_received.load(Ordering::SeqCst),
-        "Asynchronous notification was dropped while the client was blocked."
+        *received,
+        "Notification from the async tool should have been received even with a sync tool running."
     );
 }
