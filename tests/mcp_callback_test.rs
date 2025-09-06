@@ -26,7 +26,7 @@ mod mcp_callback_tests {
 
         // This tests that the function signature is correct
         let _func = mcp_callback;
-        assert!(true); // If we get here, the function exists and compiles
+        // If we get here, the function exists and compiles
     }
 
     // Test the should_cancel method by creating a minimal mock
@@ -70,8 +70,7 @@ mod mcp_callback_tests {
 
     #[test]
     fn test_progress_update_progress_default_percentage() {
-        let percentage = None;
-        let progress = percentage.unwrap_or(50.0); // This matches the logic in the actual code
+        let progress = 50.0; // Default percentage when None is provided
         assert_eq!(progress, 50.0);
     }
 
@@ -177,7 +176,7 @@ mod mcp_callback_tests {
 
         // For now, just test that we can reference the function
         let _func = mcp_callback;
-        assert!(true); // If we get here, the function exists
+        // If we get here, the function exists
     }
 
     #[test]
@@ -233,7 +232,7 @@ mod mcp_callback_tests {
         };
 
         // If we get here, all variants compile correctly
-        assert!(true);
+        // Test passed
     }
 
     #[test]

@@ -18,7 +18,7 @@
 //!   and content) and formats them into a structured, easy-to-read block on `stderr`.
 //!   It includes a header with the operation ID and metadata about the command.
 //!
-//! * **`display_wait_results`**: Specifically designed to display the results of a `await`
+//! * **`display_await_results`**: Specifically designed to display the results of a `await`
 //!   command, which can return the output of multiple operations at once. It formats
 //!   each result individually and separates them with a clear visual divider.
 //!
@@ -87,7 +87,7 @@ impl TerminalOutput {
     }
 
     /// Display multiple operation results from await command
-    pub fn display_wait_results(results: &[String]) {
+    pub fn display_await_results(results: &[String]) {
         if results.is_empty() {
             return;
         }

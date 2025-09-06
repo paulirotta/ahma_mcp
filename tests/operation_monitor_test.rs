@@ -380,7 +380,7 @@ async fn test_operation_monitor_get_shutdown_summary() {
 }
 
 #[tokio::test]
-async fn test_operation_monitor_wait_for_operation_completed() {
+async fn test_operation_monitor_await_operation_completed() {
     let config = MonitorConfig::with_timeout(Duration::from_secs(60));
     let monitor = OperationMonitor::new(config);
 

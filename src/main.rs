@@ -385,11 +385,16 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         if let Some(subcommands) = current_subcommands {
             if let Some(sub) = subcommands.iter().find(|s| s.name == *part) {
                 if is_default_call && sub.name == "default" {
-                    // This is a default call, derive subcommand from config_key
-                    // e.g., config_key "cargo_audit" -> subcommand "audit"
-                    let derived_subcommand = config_key.split('_').next_back().unwrap_or("");
+                    // This is a default call, derive subcommand from config_key.
+                    // For keys like `cargo_llvm_cov`, derive `llvm-cov` (join parts after the first underscore with '-')
+                    let parts: Vec<&str> = config_key.split('_').collect();
+                    let derived_subcommand = if parts.len() > 2 {
+                        parts[1..].join("-")
+                    } else {
+                        parts.last().unwrap_or(&"").to_string()
+                    };
                     if !derived_subcommand.is_empty() && derived_subcommand != config.command {
-                        command_parts.push(derived_subcommand.to_string());
+                        command_parts.push(derived_subcommand);
                     }
                 } else if sub.name != "default" {
                     command_parts.push(sub.name.clone());
@@ -436,7 +441,7 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         }
     } else {
         // Manual parsing for CLI invocation
-        let mut iter = cli.tool_args.into_iter();
+        let mut iter = cli.tool_args.into_iter().peekable();
         while let Some(arg) = iter.next() {
             if arg == "--" {
                 raw_args.extend(iter.map(|s| s.to_string()));
@@ -444,13 +449,25 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
             }
             if arg.starts_with("--") {
                 let key = arg.trim_start_matches("--").to_string();
-                if let Some(val) = iter.next() {
-                    if key == "working-directory" {
-                        working_directory = Some(val);
+                // Peek to see if next token is another flag
+                if let Some(next) = iter.peek() {
+                    if next.starts_with('-') {
+                        // Treat as boolean flag
+                        tool_args_map.insert(key, serde_json::Value::Bool(true));
                     } else {
-                        tool_args_map.insert(key, serde_json::Value::String(val));
+                        // Consume the next value as this flag's value
+                        if let Some(val) = iter.next() {
+                            if key == "working-directory" {
+                                working_directory = Some(val);
+                            } else {
+                                tool_args_map.insert(key, serde_json::Value::String(val));
+                            }
+                        } else {
+                            tool_args_map.insert(key, serde_json::Value::Bool(true));
+                        }
                     }
                 } else {
+                    // No next token, treat as boolean
                     tool_args_map.insert(key, serde_json::Value::Bool(true));
                 }
             } else {
@@ -488,6 +505,16 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     // Do NOT add _subcommand here - the command_parts already handle the subcommand structure
 
     // Add any additional arguments from command line
+    // If the user passed 'default' explicitly as a positional arg (e.g., `cargo_llvm_cov default ...`), strip it
+    if raw_args.first().map(|s| s.as_str()) == Some("default") {
+        raw_args.remove(0);
+    }
+
+    // Merge any parsed --key value pairs from tool_args_map into args_map so they are not lost
+    for (k, v) in tool_args_map.iter() {
+        args_map.insert(k.clone(), v.clone());
+    }
+
     for arg in &raw_args {
         if let Some((key, value)) = arg.split_once('=') {
             args_map.insert(key.to_string(), Value::String(value.to_string()));

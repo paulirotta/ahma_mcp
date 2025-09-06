@@ -206,13 +206,20 @@ impl AhmaMcpService {
                         // For default subcommands, only derive if this looks like a real command pattern
                         // e.g., "cargo_audit" -> derive "audit" because it's a real cargo subcommand
                         // But "long_running_async" should NOT derive "async" because sleep has no "async" subcommand
-                        let derived_subcommand = config_key.split('_').next_back().unwrap_or("");
+                        // Derive a likely subcommand from the config key when a 'default' subcommand is used.
+                        // For keys like `cargo_llvm_cov`, prefer deriving `llvm-cov` (join the parts after the first underscore
+                        // with '-') instead of only `cov`. This handles multi-segment subcommands like `llvm-cov`.
+                        let parts: Vec<&str> = config_key.split('_').collect();
+                        let derived_subcommand = if parts.len() > 2 {
+                            parts[1..].join("-")
+                        } else {
+                            parts.last().unwrap_or(&"").to_string()
+                        };
 
                         // If the command is a script with args, don't append derived subcommand.
                         let is_script_like = tool_config.command.contains(' ');
 
-                        // Only derive if the config key looks like "command_subcommand" pattern
-                        // and the derived part is not just a descriptive suffix
+                        // Only derive if it looks sensible for the base command
                         let base_command = tool_config
                             .command
                             .split_whitespace()
@@ -222,11 +229,11 @@ impl AhmaMcpService {
                             && derived_subcommand != tool_config.command
                             && derived_subcommand != base_command
                             && !is_script_like
-                            && config_key.starts_with(base_command)  // e.g., "cargo_audit" starts with "cargo"
-                            && config_key != base_command; // e.g., not just "cargo" but "cargo_something"
+                            && config_key.starts_with(base_command)
+                            && config_key != base_command;
 
                         if should_derive {
-                            command_parts.push(derived_subcommand.to_string());
+                            command_parts.push(derived_subcommand);
                         }
                     } else if sub.name != "default" {
                         command_parts.push(sub.name.clone());

@@ -596,13 +596,16 @@ impl MtdfValidator {
                         "Async subcommand description should include guidance about: {}",
                         missing_guidance.join(", ")
                     ),
-                    suggestion: Some("For async operations, consider including:\n\
+                    suggestion: Some(
+                        "For async operations, consider including:\n\
                         • That the tool operates asynchronously/in background\n\
                         • That an operation_id is returned immediately\n\
                         • That results are delivered via notification when complete\n\
                         • That the AI should continue with other tasks (not wait/await)\n\n\
                         Example: \"Runs in background. Returns operation_id immediately. \
-                        Results pushed via notification when complete. Continue with other tasks.\"".to_string()),
+                        Results pushed via notification when complete. Continue with other tasks.\""
+                            .to_string(),
+                    ),
                 });
             }
         } else {

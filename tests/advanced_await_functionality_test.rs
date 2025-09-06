@@ -10,12 +10,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 #[cfg(test)]
-mod advanced_wait_functionality_test {
+mod advanced_await_functionality_test {
     use super::*;
 
     /// Test that advanced await functionality works correctly with multiple operations
     #[tokio::test]
-    async fn test_advanced_wait_with_multiple_operations() {
+    async fn test_advanced_await_with_multiple_operations() {
         println!("🔄 Testing advanced await functionality with multiple operations...");
 
         let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
@@ -88,7 +88,7 @@ mod advanced_wait_functionality_test {
 
     /// Test timeout warnings and timeout behavior
     #[tokio::test]
-    async fn test_advanced_wait_timeout_warnings() {
+    async fn test_advanced_await_timeout_warnings() {
         println!("⏰ Testing advanced await timeout warnings...");
 
         let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
@@ -130,7 +130,7 @@ mod advanced_wait_functionality_test {
 
     /// Test with no operations (should return immediately)
     #[tokio::test]
-    async fn test_advanced_wait_with_no_operations() {
+    async fn test_advanced_await_with_no_operations() {
         println!("🔄 Testing advanced await with no operations...");
 
         let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(

@@ -46,11 +46,11 @@ mod main_tests {
 
         // Server mode detection
         if server_mode || (tool_name.is_none() && validate.is_none()) {
-            assert!(true, "Should run in server mode");
+            // Should run in server mode - this is correct
         } else if validate.is_some() {
-            assert!(false, "Should not run in validation mode");
+            panic!("Should not run in validation mode");
         } else {
-            assert!(false, "Should not run in CLI mode");
+            panic!("Should not run in CLI mode");
         }
     }
 
@@ -62,11 +62,11 @@ mod main_tests {
         let validate = Some("all".to_string());
 
         if server_mode || (tool_name.is_none() && validate.is_none()) {
-            assert!(false, "Should not run in server mode");
+            panic!("Should not run in server mode");
         } else if validate.is_some() {
-            assert!(true, "Should run in validation mode");
+            // Should run in validation mode - this is correct
         } else {
-            assert!(false, "Should not run in CLI mode");
+            panic!("Should not run in CLI mode");
         }
     }
 
@@ -78,11 +78,11 @@ mod main_tests {
         let validate: Option<String> = None;
 
         if server_mode || (tool_name.is_none() && validate.is_none()) {
-            assert!(false, "Should not run in server mode");
+            panic!("Should not run in server mode");
         } else if validate.is_some() {
-            assert!(false, "Should not run in validation mode");
+            panic!("Should not run in validation mode");
         } else {
-            assert!(true, "Should run in CLI mode");
+            // Should run in CLI mode - this is correct
         }
     }
 

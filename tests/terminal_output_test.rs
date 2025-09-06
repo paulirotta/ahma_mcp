@@ -147,7 +147,7 @@ fn test_format_content_complex_json() {
     assert!(formatted.contains("            \"urgent\""));
 }
 
-// Note: Testing display_result and display_wait_results requires capturing stderr
+// Note: Testing display_result and display_await_results requires capturing stderr
 // which is more complex. These functions primarily format and write to stderr,
 // so their core logic is tested through format_content and should_display.
 
@@ -160,16 +160,16 @@ fn test_display_result_with_empty_content() {
 }
 
 #[test]
-fn test_display_wait_results_with_empty_results() {
+fn test_display_await_results_with_empty_results() {
     // Should handle empty results vector gracefully
-    TerminalOutput::display_wait_results(&[]);
+    TerminalOutput::display_await_results(&[]);
 
     // Should handle vector with empty strings
-    TerminalOutput::display_wait_results(&[String::new(), "  ".to_string()]);
+    TerminalOutput::display_await_results(&[String::new(), "  ".to_string()]);
 }
 
 #[test]
-fn test_display_wait_results_with_content() {
+fn test_display_await_results_with_content() {
     // Should handle multiple results
     let results = vec![
         r#"{"result": "first"}"#.to_string(),
@@ -178,5 +178,5 @@ fn test_display_wait_results_with_content() {
     ];
 
     // This mainly tests that the function doesn't panic with valid input
-    TerminalOutput::display_wait_results(&results);
+    TerminalOutput::display_await_results(&results);
 }
