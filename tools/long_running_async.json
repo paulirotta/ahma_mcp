@@ -1,0 +1,16 @@
+{
+    "name": "long_running_async",
+    "description": "A tool that runs a long-running asynchronous command.",
+    "arguments": {
+        "type": "object",
+        "properties": {
+            "duration": {
+                "type": "string",
+                "description": "The duration to sleep."
+            }
+        },
+        "required": [
+            "duration"
+        ]
+    }
+}

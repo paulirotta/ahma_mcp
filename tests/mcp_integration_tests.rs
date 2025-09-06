@@ -55,6 +55,8 @@ async fn test_call_tool_basic() -> Result<()> {
     Ok(())
 }
 
+mod integration_tests;
+
 mod adapter_test;
 mod async_notification_delivery_test;
 mod callback_system_test;

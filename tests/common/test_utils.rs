@@ -2,6 +2,15 @@
 /// Test utilities for ahma_mcp testing
 use std::path::Path;
 
+use ahma_mcp::adapter::Adapter;
+use ahma_mcp::client::MockIo;
+use ahma_mcp::mcp_service::AhmaMcpService;
+use ahma_mcp::operation_monitor::{MonitorConfig, OperationMonitor};
+use ahma_mcp::shell_pool::{ShellPoolConfig, ShellPoolManager};
+use std::sync::Arc;
+use std::time::Duration;
+use tempfile::{TempDir, tempdir};
+
 /// Check if output contains any of the expected patterns
 #[allow(dead_code)]
 pub fn contains_any(output: &str, patterns: &[&str]) -> bool {
@@ -50,4 +59,57 @@ pub async fn read_file_contents(path: &Path) -> anyhow::Result<String> {
 /// Write contents to a file
 pub async fn write_file_contents(path: &Path, contents: &str) -> anyhow::Result<()> {
     Ok(tokio::fs::write(path, contents).await?)
+}
+
+use tokio::sync::mpsc::{Receiver, Sender};
+
+pub async fn setup_test_environment() -> (AhmaMcpService, MockIo, TempDir) {
+    let temp_dir = tempdir().unwrap();
+    let tools_dir = temp_dir.path().join("tools");
+    std::fs::create_dir_all(&tools_dir).unwrap();
+
+    let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
+    let monitor = Arc::new(OperationMonitor::new(monitor_config));
+    let shell_pool_config = ShellPoolConfig::default();
+    let shell_pool = Arc::new(ShellPoolManager::new(shell_pool_config));
+    let adapter = Arc::new(Adapter::new(monitor.clone(), shell_pool).unwrap());
+    let tool_configs =
+        Arc::new(ahma_mcp::config::load_tool_configs(&tools_dir).unwrap_or_default());
+    let guidance = Arc::new(None);
+
+    let service = AhmaMcpService::new(adapter, monitor, tool_configs, guidance)
+        .await
+        .unwrap();
+
+    let (mock_io, _, _) = MockIo::new();
+    (service, mock_io, temp_dir)
+}
+
+#[allow(dead_code)]
+pub async fn setup_test_environment_with_io() -> (
+    AhmaMcpService,
+    MockIo,
+    Sender<String>,
+    Receiver<String>,
+    TempDir,
+) {
+    let temp_dir = tempdir().unwrap();
+    let tools_dir = temp_dir.path().join("tools");
+    std::fs::create_dir_all(&tools_dir).unwrap();
+
+    let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
+    let monitor = Arc::new(OperationMonitor::new(monitor_config));
+    let shell_pool_config = ShellPoolConfig::default();
+    let shell_pool = Arc::new(ShellPoolManager::new(shell_pool_config));
+    let adapter = Arc::new(Adapter::new(monitor.clone(), shell_pool).unwrap());
+    let tool_configs =
+        Arc::new(ahma_mcp::config::load_tool_configs(&tools_dir).unwrap_or_default());
+    let guidance = Arc::new(None);
+
+    let service = AhmaMcpService::new(adapter, monitor, tool_configs, guidance)
+        .await
+        .unwrap();
+
+    let (mock_io, input_tx, output_rx) = MockIo::new();
+    (service, mock_io, input_tx, output_rx, temp_dir)
 }
