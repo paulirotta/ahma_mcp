@@ -845,8 +845,11 @@ impl ShellPoolManager {
             pool.shutdown().await;
         }
 
-        self.shell_semaphore
-            .add_permits(self.config.max_total_shells - self.shell_semaphore.available_permits());
+        self.shell_semaphore.add_permits(
+            self.config
+                .max_total_shells
+                .saturating_sub(self.shell_semaphore.available_permits()),
+        );
 
         tracing::info!("Shut down {} shell pools", pool_count);
     }
@@ -860,7 +863,10 @@ impl ShellPoolManager {
     pub async fn get_stats(&self) -> ShellPoolStats {
         let pools = self.pools.read().await;
         let available_permits = self.shell_semaphore.available_permits();
-        let total_shells = self.config.max_total_shells - available_permits;
+        let total_shells = self
+            .config
+            .max_total_shells
+            .saturating_sub(available_permits);
 
         ShellPoolStats {
             total_pools: pools.len(),
