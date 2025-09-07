@@ -94,7 +94,7 @@ fn test_json_tool_configuration_count_invariant() {
     use std::fs;
 
     // Count actual JSON files in tools directory
-    let tools_dir = std::path::Path::new("tools");
+    let tools_dir = std::path::Path::new(".ahma/tools");
     if !tools_dir.exists() {
         println!("⚠️  Tools directory not found - test skipped");
         return;

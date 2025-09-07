@@ -187,7 +187,7 @@ async fn test_multiline_git_commit_with_real_tool() {
     let adapter = Adapter::new(monitor.clone(), shell_pool).expect("Failed to create adapter");
 
     // Load the real git tool configuration
-    let git_tool_path = "tools/git.json";
+    let git_tool_path = ".ahma/tools/git.json";
     let git_config_str =
         std::fs::read_to_string(git_tool_path).expect("Failed to read git tool config");
     let git_tool: ahma_mcp::config::ToolConfig =
@@ -371,12 +371,12 @@ async fn test_multiline_git_commit_message() {
         eprintln!("Git commit failed with error: {:?}", e);
     }
     println!("Git commit result: {:?}", result);
-    
+
     // Check what operations exist in the monitor
     tokio::time::sleep(Duration::from_millis(100)).await;
     let all_operations = monitor.get_all_operations().await;
     println!("All operations after execution: {:?}", all_operations);
-    
+
     assert!(
         result.is_ok(),
         "Git commit with multi-line message failed: {:?}",

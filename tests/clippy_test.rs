@@ -8,7 +8,7 @@ use common::test_client::new_client;
 
 #[tokio::test]
 async fn test_run_clippy() -> Result<()> {
-    let client = new_client(Some("tools")).await?;
+    let client = new_client(Some(".ahma/tools")).await?;
 
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("cargo_clippy"),

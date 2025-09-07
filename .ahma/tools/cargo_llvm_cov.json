@@ -3,7 +3,7 @@
     "description": "LLVM source-based code coverage for Rust projects",
     "command": "cargo",
     "enabled": true,
-    "timeout_seconds": 600,
+    "timeout_seconds": 3600,
     "hints": {
         "default": "Coverage analysis running - consider reviewing test coverage gaps, planning additional tests, or analyzing code quality metrics.",
         "test": "Running tests with coverage - analyze coverage results, identify uncovered code paths, or plan test improvements.",

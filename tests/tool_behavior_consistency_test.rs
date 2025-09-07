@@ -11,7 +11,7 @@ async fn test_synchronous_cargo_check_returns_actual_results() -> Result<()> {
     // This test identifies the issue where cargo_check marked as synchronous
     // returns empty results instead of actual cargo check output
 
-    let client = new_client(Some("tools")).await?;
+    let client = new_client(Some(".ahma/tools")).await?;
 
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("cargo_check"),
@@ -64,7 +64,7 @@ async fn test_ls_tool_command_structure() -> Result<()> {
     // This test identifies the issue where ls_ls tool fails with command structure
     // The tool appears to be running "ls ls" instead of just "ls"
 
-    let client = new_client(Some("tools")).await?;
+    let client = new_client(Some(".ahma/tools")).await?;
 
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("ls_default"),
@@ -111,7 +111,7 @@ async fn test_tool_descriptions_match_actual_behavior() -> Result<()> {
     // This test identifies inconsistencies between tool descriptions and actual behavior
     // Specifically checking if synchronous tools are properly described
 
-    let client = new_client(Some("tools")).await?;
+    let client = new_client(Some(".ahma/tools")).await?;
     let tools_result = client.list_tools(None).await?;
 
     // Find cargo_check tool

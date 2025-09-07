@@ -74,8 +74,8 @@ use tracing_subscriber::EnvFilter;
 
 3. Validation Mode: Validates tool configurations without starting the server.
    Example: ahma_mcp --validate
-   Example: ahma_mcp --validate tools/
-   Example: ahma_mcp --validate tools/cargo.json,tools/git.json"
+   Example: ahma_mcp --validate .ahma/tools/
+   Example: ahma_mcp --validate .ahma/tools/cargo.json,.ahma/tools/git.json"
 )]
 struct Cli {
     /// Run in persistent MCP server mode.
@@ -87,11 +87,11 @@ struct Cli {
     validate: Option<String>,
 
     /// Path to the directory containing tool JSON configuration files.
-    #[arg(long, global = true, default_value = "tools")]
+    #[arg(long, global = true, default_value = ".ahma/tools")]
     tools_dir: PathBuf,
 
     /// Path to the tool guidance JSON file.
-    #[arg(long, global = true, default_value = "tool_guidance.json")]
+    #[arg(long, global = true, default_value = ".ahma/tool_guidance.json")]
     guidance_file: PathBuf,
 
     /// Default timeout for commands in seconds.
@@ -337,7 +337,7 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     let adapter = Adapter::new(operation_monitor, shell_pool_manager)?;
 
     // Load tool configurations
-    let configs = Arc::new(load_tool_configs(&std::path::PathBuf::from("tools"))?);
+    let configs = Arc::new(load_tool_configs(&std::path::PathBuf::from(".ahma/tools"))?);
     if configs.is_empty() {
         tracing::error!("No valid tool configurations found");
         anyhow::bail!("No tool configurations found");

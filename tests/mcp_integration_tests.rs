@@ -25,7 +25,7 @@ use std::borrow::Cow;
 
 #[tokio::test]
 async fn test_list_tools() -> Result<()> {
-    let client = new_client(Some("tools")).await?;
+    let client = new_client(Some(".ahma/tools")).await?;
     let result = client.list_all_tools().await?;
 
     // Should have at least the built-in 'await' tool
@@ -40,7 +40,7 @@ async fn test_list_tools() -> Result<()> {
 
 #[tokio::test]
 async fn test_call_tool_basic() -> Result<()> {
-    let client = new_client(Some("tools")).await?;
+    let client = new_client(Some(".ahma/tools")).await?;
 
     let mut params = Map::new();
     params.insert(
@@ -67,17 +67,15 @@ async fn test_call_tool_basic() -> Result<()> {
     Ok(())
 }
 
-
-
 #[tokio::test]
 async fn test_async_notification_delivery() -> Result<()> {
     // Use the client interface like other working tests
-    let client = new_client(Some("tools")).await?;
-    
+    let client = new_client(Some(".ahma/tools")).await?;
+
     // Test that an async operation completes and we can check its status
     // This is a simpler but more reliable test of async notification delivery
-    
-    // 1. Start a long-running async operation 
+
+    // 1. Start a long-running async operation
     let async_tool_params = json!({
         "duration": "1"
     });
@@ -87,14 +85,16 @@ async fn test_async_notification_delivery() -> Result<()> {
     };
 
     let result = client.call_tool(call_params).await?;
-    
+
     // The async tool should return immediately with operation info
     assert!(!result.content.is_empty());
     if let Some(content) = result.content.first()
         && let Some(text_content) = content.as_text()
     {
         // Should contain operation ID and status info
-        assert!(text_content.text.contains("operation_id") || text_content.text.contains("started"));
+        assert!(
+            text_content.text.contains("operation_id") || text_content.text.contains("started")
+        );
     }
 
     // 2. Use the await tool to check that async operations can be tracked
@@ -107,7 +107,7 @@ async fn test_async_notification_delivery() -> Result<()> {
     };
 
     let await_result = client.call_tool(await_call_params).await?;
-    
+
     // The await should successfully track the async operation
     assert!(!await_result.content.is_empty());
 

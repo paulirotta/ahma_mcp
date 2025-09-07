@@ -15,9 +15,9 @@ mod tool_validation_tdd_tests {
                 "ahma_mcp",
                 "--",
                 "--tools-dir",
-                "tools",
+                ".ahma/tools",
                 "--validate",
-                "tools",
+                ".ahma/tools",
             ])
             .output()
             .expect("Failed to run ahma_mcp validation");
@@ -45,11 +45,11 @@ mod tool_validation_tdd_tests {
         // we verify the tool files exist
 
         assert!(
-            std::path::Path::new("tools/cargo.json").exists(),
+            std::path::Path::new(".ahma/tools/cargo.json").exists(),
             "cargo.json should exist for cargo subcommands"
         );
         assert!(
-            std::path::Path::new("tools/cargo_nextest.json").exists(),
+            std::path::Path::new(".ahma/tools/cargo_nextest.json").exists(),
             "cargo_nextest.json should exist for nextest commands"
         );
     }
@@ -57,7 +57,7 @@ mod tool_validation_tdd_tests {
     #[test]
     fn test_all_json_files_in_tools_directory_are_valid_json() {
         // TDD: Ensure all .json files in tools directory contain valid JSON
-        let tools_dir = std::path::Path::new("tools");
+        let tools_dir = std::path::Path::new(".ahma/tools");
         assert!(tools_dir.exists(), "Tools directory should exist");
 
         for entry in std::fs::read_dir(tools_dir).expect("Failed to read tools directory") {
@@ -82,7 +82,7 @@ mod tool_validation_tdd_tests {
     #[test]
     fn test_no_toml_files_exist_in_tools_directory() {
         // TDD: Ensure there are no .toml files causing formatting errors
-        let tools_dir = std::path::Path::new("tools");
+        let tools_dir = std::path::Path::new(".ahma/tools");
         assert!(tools_dir.exists(), "Tools directory should exist");
 
         let mut toml_files = Vec::new();

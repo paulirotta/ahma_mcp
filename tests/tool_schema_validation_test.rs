@@ -5,7 +5,7 @@ use std::path::Path;
 
 #[tokio::test]
 async fn test_all_tool_json_files_load_correctly() -> Result<()> {
-    let tools_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tools");
+    let tools_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(".ahma/tools");
     let tool_configs = load_tool_configs(&tools_dir);
 
     assert!(

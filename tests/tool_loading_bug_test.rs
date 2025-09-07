@@ -25,7 +25,7 @@ use common::test_client::new_client;
 #[tokio::test]
 async fn test_tools_are_loaded_after_json_migration() -> Result<()> {
     // Test that all 3 JSON tool configurations are properly loaded
-    let client = new_client(Some("tools")).await?;
+    let client = new_client(Some(".ahma/tools")).await?;
 
     let tools = client.list_tools(None).await?;
 
@@ -67,7 +67,7 @@ async fn test_tools_are_loaded_after_json_migration() -> Result<()> {
 #[tokio::test]
 async fn test_specific_json_tool_functionality() -> Result<()> {
     // Test that a specific tool from JSON config actually works
-    let client = new_client(Some("tools")).await?;
+    let client = new_client(Some(".ahma/tools")).await?;
 
     let tools = client.list_tools(None).await?;
 

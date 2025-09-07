@@ -3,7 +3,7 @@ use std::path::Path;
 
 #[tokio::test]
 async fn test_gh_tool_expansion_all_synchronous() {
-    let tools_dir = Path::new("tools");
+    let tools_dir = Path::new(".ahma/tools");
     let configs = load_tool_configs(tools_dir).expect("Should load tools config");
 
     // Find the gh tool
@@ -67,7 +67,7 @@ async fn test_gh_tool_expansion_all_synchronous() {
 
 #[tokio::test]
 async fn test_gh_cache_subcommands_schema() {
-    let tools_dir = Path::new("tools");
+    let tools_dir = Path::new(".ahma/tools");
     let configs = load_tool_configs(tools_dir).expect("Should load tools config");
     let gh_tool = configs.get("gh").expect("Should find gh tool");
 
@@ -125,7 +125,7 @@ async fn test_gh_cache_subcommands_schema() {
 
 #[tokio::test]
 async fn test_gh_run_subcommands_schema() {
-    let tools_dir = Path::new("tools");
+    let tools_dir = Path::new(".ahma/tools");
     let configs = load_tool_configs(tools_dir).expect("Should load tools config");
     let gh_tool = configs.get("gh").expect("Should find gh tool");
 
@@ -198,7 +198,7 @@ async fn test_gh_run_subcommands_schema() {
 
 #[tokio::test]
 async fn test_gh_workflow_subcommands_schema() {
-    let tools_dir = Path::new("tools");
+    let tools_dir = Path::new(".ahma/tools");
     let configs = load_tool_configs(tools_dir).expect("Should load tools config");
     let gh_tool = configs.get("gh").expect("Should find gh tool");
 
