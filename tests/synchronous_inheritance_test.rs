@@ -68,7 +68,7 @@ fn test_synchronous_inheritance_logic() {
 #[test]
 fn test_gh_tool_optimized_format() -> Result<()> {
     // Test that our optimized gh.json loads correctly with inheritance pattern
-    let gh_json = std::fs::read_to_string("tools/gh.json")?;
+    let gh_json = std::fs::read_to_string(".ahma/tools/gh.json")?;
     let config: ToolConfig = serde_json::from_str(&gh_json)?;
 
     // Should have tool-level synchronous=true for inheritance pattern

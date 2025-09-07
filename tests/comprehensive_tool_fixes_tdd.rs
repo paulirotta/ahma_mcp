@@ -13,14 +13,14 @@ mod comprehensive_tool_fixes_tdd {
         // - Apply automatic fixes (--fix)
 
         // Let's verify what ahma_mcp clippy tool supports
-        let cargo_clippy_exists = std::path::Path::new("tools/cargo_clippy.json").exists();
+        let cargo_clippy_exists = std::path::Path::new(".ahma/tools/cargo_clippy.json").exists();
         assert!(
             cargo_clippy_exists,
             "cargo_clippy.json should exist for clippy operations"
         );
 
         // Read and parse the clippy tool configuration
-        let clippy_config = std::fs::read_to_string("tools/cargo_clippy.json")
+        let clippy_config = std::fs::read_to_string(".ahma/tools/cargo_clippy.json")
             .expect("Failed to read cargo_clippy.json");
 
         let clippy_json: serde_json::Value =
@@ -63,7 +63,7 @@ mod comprehensive_tool_fixes_tdd {
     fn test_nextest_should_support_run_subcommand() {
         // TDD: nextest needs "run" subcommand to work properly
 
-        let nextest_config = std::fs::read_to_string("tools/cargo_nextest.json")
+        let nextest_config = std::fs::read_to_string(".ahma/tools/cargo_nextest.json")
             .expect("Failed to read cargo_nextest.json");
 
         let nextest_json: serde_json::Value =
@@ -93,7 +93,7 @@ mod comprehensive_tool_fixes_tdd {
     fn test_verify_tools_directory_toml_files() {
         // TDD: Check if there are any .toml files in tools directory that need validation
 
-        let tools_dir = std::path::Path::new("tools");
+        let tools_dir = std::path::Path::new(".ahma/tools");
         assert!(tools_dir.exists(), "Tools directory should exist");
 
         let mut toml_files = Vec::new();
@@ -112,7 +112,7 @@ mod comprehensive_tool_fixes_tdd {
             }
         }
 
-        println!("All files in tools/: {:?}", all_files);
+        println!("All files in .ahma/tools/: {:?}", all_files);
         println!("TOML files found: {:?}", toml_files);
 
         // Validate any .toml files found

@@ -18,7 +18,7 @@ use tokio::time::timeout;
 
 #[tokio::test]
 async fn test_await_tool_timeout_functionality() -> Result<()> {
-    let client = new_client(Some("tools")).await?;
+    let client = new_client(Some(".ahma/tools")).await?;
 
     // Test that await tool has proper timeout parameter
     let call_param = rmcp::model::CallToolRequestParam {
@@ -57,7 +57,7 @@ async fn test_await_tool_timeout_functionality() -> Result<()> {
 /// DO NOT CHANGE: These bounds were established through user testing
 #[tokio::test]
 async fn test_await_tool_timeout_validation() -> Result<()> {
-    let client = new_client(Some("tools")).await?;
+    let client = new_client(Some(".ahma/tools")).await?;
 
     // Test timeout too small (should clamp to minimum)
     let call_param = rmcp::model::CallToolRequestParam {
@@ -97,7 +97,7 @@ async fn test_await_tool_timeout_validation() -> Result<()> {
 /// CRITICAL: Status must be synchronous/immediate, never blocking
 #[tokio::test]
 async fn test_status_tool_functionality() -> Result<()> {
-    let client = new_client(Some("tools")).await?;
+    let client = new_client(Some(".ahma/tools")).await?;
 
     // Test status tool - should return current operation status
     let call_param = rmcp::model::CallToolRequestParam {
@@ -131,7 +131,7 @@ async fn test_status_tool_functionality() -> Result<()> {
 /// USAGE PATTERN: await --tools cargo,npm (waits only for these tool types)
 #[tokio::test]
 async fn test_await_tool_with_tool_filter() -> Result<()> {
-    let client = new_client(Some("tools")).await?;
+    let client = new_client(Some(".ahma/tools")).await?;
 
     // Test await tool with tool filter
     let call_param = rmcp::model::CallToolRequestParam {

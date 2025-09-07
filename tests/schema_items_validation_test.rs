@@ -12,7 +12,7 @@ use serde_json::Value;
 #[tokio::test]
 async fn test_array_parameters_must_have_items_property() -> anyhow::Result<()> {
     // Create a test client with the real tool configurations (assume new_client is now async)
-    let client = new_client(Some("tools")).await?;
+    let client = new_client(Some(".ahma/tools")).await?;
     let tools = client.list_all_tools().await?;
 
     eprintln!(

@@ -7,7 +7,7 @@
             "args": [
                 "--server",
                 "--tools-dir",
-                "tools"
+                ".ahma/tools"
             ],
             "dev": {
                 "watch": [
@@ -20,7 +20,7 @@
                     "--",
                     "--server",
                     "--tools-dir",
-                    "tools"
+                    ".ahma/tools"
                 ]
             }
         }

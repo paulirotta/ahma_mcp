@@ -2,7 +2,7 @@
 //!
 //! This module defines the data structures and logic for managing the configuration of
 //! command-line tools. All tool configurations are loaded from `.json` files
-//! located in the `tools/` directory. This approach allows for easy extension and
+//! located in the `.ahma/tools/` directory. This approach allows for easy extension and
 //! modification of supported tools without altering the core server code.
 //!
 //! ## Core Data Structures
@@ -24,7 +24,7 @@
 //! - The `load_from_file` function reads a specified JSON file and deserializes it
 //!   into a `Config` struct.
 //! - The `load_tool_config` helper function simplifies loading by constructing the path
-//!   to a tool's configuration file within the `tools/` directory.
+//!   to a tool's configuration file within the `.ahma/tools/` directory.
 //!
 //! ## Key Features
 //!

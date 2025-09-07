@@ -25,7 +25,8 @@ mod realistic_endless_notification_test {
         shell_pool_manager.clone().start_background_tasks();
         let adapter =
             Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager.clone()).unwrap());
-        let configs = Arc::new(load_tool_configs(&std::path::PathBuf::from("tools")).unwrap());
+        let configs =
+            Arc::new(load_tool_configs(&std::path::PathBuf::from(".ahma/tools")).unwrap());
         let _service = AhmaMcpService::new(
             adapter.clone(),
             operation_monitor.clone(),

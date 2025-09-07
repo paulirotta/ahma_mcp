@@ -11,7 +11,7 @@ use serde_json::Value;
 #[tokio::test]
 async fn test_array_parameters_have_items_property_fixed() -> anyhow::Result<()> {
     // Create a test client with the real tool configurations
-    let client = new_client(Some("tools")).await?;
+    let client = new_client(Some(".ahma/tools")).await?;
     let tools = client.list_all_tools().await?;
 
     println!(
@@ -99,7 +99,7 @@ async fn test_array_parameters_have_items_property_fixed() -> anyhow::Result<()>
 /// Test all tools to ensure none have the array schema issue
 #[tokio::test]
 async fn test_all_tools_array_schemas_are_valid_fixed() -> anyhow::Result<()> {
-    let client = new_client(Some("tools")).await?;
+    let client = new_client(Some(".ahma/tools")).await?;
     let tools = client.list_all_tools().await?;
 
     let mut total_tools = 0;
