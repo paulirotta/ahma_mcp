@@ -3,7 +3,7 @@
 /// PURPOSE: Preserve key architectural decisions from the graceful shutdown and timeout implementation.
 /// These tests encode the essential lessons learned that must survive future refactoring.
 ///
-/// CONTEXT: Originally implemented to solve:
+/// CONTEXT: Originally implemented to address two user requirements:
 /// 1. "Does the ahma_mcp server shut down gracefully when .vscode/mcp.json watch triggers a restart?"
 /// 2. "I think 'await' should have an optional timeout, and a default timeout of 240sec"
 use std::time::Duration;
@@ -288,7 +288,7 @@ mod documentation_requirements {
     fn test_required_documentation_exists() {
         let required_docs = [
             "README.md",
-            "TROUBLESHOOTING.md",
+            "docs/TROUBLESHOOTING.md",
             "docs/DEVELOPMENT_WORKFLOW.md",
         ];
 
