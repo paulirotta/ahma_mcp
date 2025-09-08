@@ -65,17 +65,32 @@ MTDF is ahma_mcp's JSON-based tool configuration format that enables dynamic too
 >
 > The fix for adapter_coverage_improvement_test.rs worked.
 
-Tool-calling AIs work. Note that Grok Code Fast 1 currently appears lazy with tool use.
+
+**Example: Tool file access is limited**
+
+JSON tool fields strings marked `"format": "path"` are limited to the project directory and its subdirectories. This reduces security and accident blast radius.
+
+> _Error: MPC -32602: Path validation failed for parameter 'output-dir'. The path '/users/someone' is outside the allowed workspace._
+
+### Compatibility
+
+Tested tool-calling AIs work except `Grok Code Fast 1` which prefers terminal over MCP tool calls.
+
+IDEs with STDIO MCP support should work however most testing is in VS Code.
+
+HTTP-based MCP clients are not yet supported.
+
+Issue reports and Pull Requests welcome.
 
 ### Features
 
-Ahma MCP is the next-generation successor to `async_cargo_mcp`, providing:
+Ahma MCP makes tool use faster, providing:
 
 - **Universal CLI Adaptation**: Works with any command-line tool via MTDF JSON configurations
 - **Async-First Architecture**: Operations execute asynchronously by default with automatic result push back to the AI, reducing AI blocking downtime and enabling concurrent workflows
 - **Multi-Tool Support**: Single server handles multiple CLI tools simultaneously, one MTDF JSON file per tool
 - **Test-Driven Development**: Comprehensive test coverage using `cargo nextest` with over 70 tests ensuring reliability
-- **Code Coverage Integration**: Built-in `cargo llvm-cov` support for detailed test coverage analysis and reporting
+- **Code Coverage Integration**: Built-in `cargo llvm-cov` support for detailed test coverage analysis and reporting (synchronous operation)
 - **Clean Tool Naming**: "Default" subcommand pattern provides intuitive tool names without redundant suffixes
 - **Modular Tool Architecture**: Optional tools in separate JSON files for improved maintainability and organization
 - **Centralized Guidance System**: Reusable guidance blocks in `tool_guidance.json` ensure consistent AI instructions across tools with `guidance_key` references
@@ -177,7 +192,7 @@ Ahma MCP uses **MTDF** (MCP Tool Definition Format) JSON files in the `tools/` d
 - `cargo_clippy.json` - Enhanced linting and code quality checks for Rust (1 subcommand)
 - `cargo_edit.json` - Tools for editing Cargo.toml files (4 subcommands)
 - `cargo_fmt.json` - Formats Rust code according to style guidelines (1 subcommand)
-- `cargo_llvm_cov.json` - LLVM source-based code coverage for Rust projects (8 subcommands)
+- `cargo_llvm_cov.json` - LLVM source-based code coverage for Rust projects (8 subcommands, synchronous)
 - `cargo_nextest.json` - Next-generation test runner for Rust (1 subcommand)
 
 **Version Control & CI/CD:**
@@ -191,15 +206,10 @@ Ahma MCP uses **MTDF** (MCP Tool Definition Format) JSON files in the `tools/` d
 - `gradlew.json` - Gradle wrapper for Android/Java projects (47 subcommands)
 - `shell_async.json` - Execute shell commands asynchronously (1 subcommand)
 - `long_running_async.json` - Sleep utility for testing async behavior (1 subcommand)
-- `test_coverage.json` - Run test coverage scripts (1 subcommand)
 
 **File Operations:**
 
 - `cat.json` - View file contents (single command)
-- `echo.json` - Output text (single command)
-- `grep.json` - Text search with regex support (single command)
-- `pwd.json` - Current directory (1 subcommand)
-- `sed.json` - Stream editor for filtering and transforming text (single command)
 
 Each MTDF file can reference guidance blocks from `.ahma/tool_guidance.json` using `guidance_key` fields, eliminating guidance duplication and ensuring consistency. For detailed schema information and validation, see [`docs/mtdf-schema.json`](./docs/mtdf-schema.json).
 
@@ -312,12 +322,12 @@ Once connected, you'll have access to ~44 dynamically generated MCP tools:
 - `mcp_ahma_mcp_cargo_edit_bump_version` - Bump package version with cargo-edit
 - `mcp_ahma_mcp_cargo_fmt_fmt` - Format code with rustfmt
 - `mcp_ahma_mcp_cargo_nextest_run` - Run tests with nextest
-- `mcp_ahma_mcp_cargo_llvm_cov_test` - Run tests with LLVM coverage
-- `mcp_ahma_mcp_cargo_llvm_cov_run` - Run binary with LLVM coverage
-- `mcp_ahma_mcp_cargo_llvm_cov_report` - Generate coverage reports
-- `mcp_ahma_mcp_cargo_llvm_cov_show_env` - Show coverage environment
-- `mcp_ahma_mcp_cargo_llvm_cov_clean` - Clean coverage data
-- `mcp_ahma_mcp_cargo_llvm_cov_nextest` - Run nextest with LLVM coverage
+- `mcp_ahma_mcp_cargo_llvm_cov_test` - Run tests with LLVM coverage (synchronous)
+- `mcp_ahma_mcp_cargo_llvm_cov_run` - Run binary with LLVM coverage (synchronous)
+- `mcp_ahma_mcp_cargo_llvm_cov_report` - Generate coverage reports (synchronous)
+- `mcp_ahma_mcp_cargo_llvm_cov_show_env` - Show coverage environment (synchronous)
+- `mcp_ahma_mcp_cargo_llvm_cov_clean` - Clean coverage data (synchronous)
+- `mcp_ahma_mcp_cargo_llvm_cov_nextest` - Run nextest with LLVM coverage (synchronous)
 - Optional if installed: `clippy`, `nextest`, `fmt`, `audit`, `upgrade`, `bump_version`, `bench`
 
 **File Operations (core set):**

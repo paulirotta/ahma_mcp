@@ -786,11 +786,27 @@ impl ServerHandler for AhmaMcpService {
             let config = match self.configs.get(tool_name) {
                 Some(config) => config,
                 None => {
-                    let error_message = format!("Tool '{}' not found.", tool_name);
+                    // Generate helpful error message with available tools
+                    let available_tools: Vec<String> = self.configs.keys().cloned().collect();
+                    let error_message = if available_tools.is_empty() {
+                        format!(
+                            "Tool '{}' not found. No tools are currently available.",
+                            tool_name
+                        )
+                    } else {
+                        format!(
+                            "Tool '{}' not found. Available tools: {}",
+                            tool_name,
+                            available_tools.join(", ")
+                        )
+                    };
                     tracing::error!("{}", error_message);
                     return Err(McpError::invalid_params(
                         error_message,
-                        Some(serde_json::json!({ "tool_name": tool_name })),
+                        Some(serde_json::json!({
+                            "tool_name": tool_name,
+                            "available_tools": available_tools
+                        })),
                     ));
                 }
             };
@@ -801,21 +817,108 @@ impl ServerHandler for AhmaMcpService {
                 .and_then(|v| v.as_str().map(|s| s.to_string()));
 
             // Find the subcommand config and construct the command parts
-            let (subcommand_config, command_parts) =
-                match self.find_subcommand_config_from_args(config, subcommand_name) {
-                    Some(result) => result,
-                    None => {
-                        let error_message =
-                            format!("Subcommand for tool '{}' not found or invalid.", tool_name);
+            let (subcommand_config, command_parts) = match self
+                .find_subcommand_config_from_args(config, subcommand_name.clone())
+            {
+                Some(result) => result,
+                None => {
+                    // Generate helpful error message with available subcommands
+                    let available_subcommands: Vec<String> = config
+                        .subcommand
+                        .as_ref()
+                        .map(|subs| subs.iter().map(|sub| sub.name.clone()).collect())
+                        .unwrap_or_else(Vec::new);
+
+                    let error_message = if let Some(ref provided_subcommand) = subcommand_name {
+                        if available_subcommands.is_empty() {
+                            format!(
+                                "Invalid subcommand '{}' for tool '{}'. This tool does not use subcommands.",
+                                provided_subcommand, tool_name
+                            )
+                        } else {
+                            format!(
+                                "Invalid subcommand '{}' for tool '{}'. Available subcommands: {}",
+                                provided_subcommand,
+                                tool_name,
+                                available_subcommands.join(", ")
+                            )
+                        }
+                    } else if available_subcommands.is_empty() {
+                        format!(
+                            "Tool '{}' configuration error: no subcommands available.",
+                            tool_name
+                        )
+                    } else {
+                        format!(
+                            "Missing required 'subcommand' parameter for tool '{}'. Available subcommands: {}",
+                            tool_name,
+                            available_subcommands.join(", ")
+                        )
+                    };
+
+                    tracing::error!("{}", error_message);
+                    return Err(McpError::invalid_params(
+                        error_message,
+                        Some(serde_json::json!({
+                            "tool_name": tool_name,
+                            "provided_subcommand": subcommand_name,
+                            "available_subcommands": available_subcommands
+                        })),
+                    ));
+                }
+            };
+
+            let base_command = command_parts.join(" ");
+
+            // VALIDATION: Parameter validation with helpful feedback
+            if let Some(ref args) = params.arguments {
+                // Get all valid parameter names for this subcommand
+                let valid_params: Vec<String> = subcommand_config
+                    .options
+                    .as_deref()
+                    .unwrap_or(&[])
+                    .iter()
+                    .chain(
+                        subcommand_config
+                            .positional_args
+                            .as_deref()
+                            .unwrap_or(&[])
+                            .iter(),
+                    )
+                    .map(|o| o.name.clone())
+                    .collect();
+
+                // Check for invalid parameters (excluding 'subcommand' which is already processed)
+                for key in args.keys() {
+                    if key != "subcommand" && !valid_params.contains(key) {
+                        let error_message = if valid_params.is_empty() {
+                            format!(
+                                "Invalid parameter '{}' for tool '{}' subcommand '{}'. This subcommand does not accept any parameters.",
+                                key, tool_name, subcommand_config.name
+                            )
+                        } else {
+                            format!(
+                                "Invalid parameter '{}' for tool '{}' subcommand '{}'. Available parameters: {}",
+                                key,
+                                tool_name,
+                                subcommand_config.name,
+                                valid_params.join(", ")
+                            )
+                        };
+
                         tracing::error!("{}", error_message);
                         return Err(McpError::invalid_params(
                             error_message,
-                            Some(serde_json::json!({ "tool_name": tool_name })),
+                            Some(serde_json::json!({
+                                "tool_name": tool_name,
+                                "subcommand": subcommand_config.name,
+                                "invalid_parameter": key,
+                                "available_parameters": valid_params
+                            })),
                         ));
                     }
-                };
-
-            let base_command = command_parts.join(" ");
+                }
+            }
 
             // SECURITY: Path validation
             if let Some(ref args) = params.arguments {

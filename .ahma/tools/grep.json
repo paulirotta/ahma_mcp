@@ -1,7 +1,0 @@
-{
-    "name": "grep",
-    "command": "grep",
-    "description": "Search for patterns in files",
-    "synchronous": true,
-    "guidance_key": "sync_behavior"
-}
