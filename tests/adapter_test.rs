@@ -125,6 +125,7 @@ async fn test_execute_sync_with_subcommand_config() {
             required: Some(false),
             file_arg: Some(false),
             file_flag: None,
+            positional: None,
         }]),
         positional_args: Some(vec![OptionConfig {
             name: "message".to_string(),
@@ -135,6 +136,7 @@ async fn test_execute_sync_with_subcommand_config() {
             required: Some(true),
             file_arg: Some(false),
             file_flag: None,
+            positional: Some(true),
         }]),
         synchronous: Some(true),
         timeout_seconds: None,

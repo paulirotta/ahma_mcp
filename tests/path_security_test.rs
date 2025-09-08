@@ -23,11 +23,13 @@ async fn test_path_validation_success() {
         "command": "ls",
         "subcommand": [{
             "name": "default",
-            "description": "list",
-            "options": [{
+            "description": "list files in a directory",
+            "synchronous": true,
+            "positional_args": [{
                 "name": "path",
                 "type": "string",
                 "format": "path",
+                "positional": true,
                 "description": "path to list"
             }]
         }]
@@ -38,12 +40,16 @@ async fn test_path_validation_success() {
     let client = new_client(Some(tools_dir.to_str().unwrap())).await.unwrap();
 
     let params = CallToolRequestParam {
-        name: "ls_default".into(),
+        name: "ls".into(),
         arguments: Some(serde_json::from_value(json!({ "path": "." })).unwrap()),
     };
 
     let result = client.call_tool(params).await;
-    assert!(result.is_ok());
+    assert!(
+        result.is_ok(),
+        "Expected call to succeed, but it failed: {:?}",
+        result.err()
+    );
     client.cancel().await.unwrap();
 }
 
@@ -59,11 +65,13 @@ async fn test_path_validation_failure_absolute() {
         "command": "ls",
         "subcommand": [{
             "name": "default",
-            "description": "list",
-            "options": [{
+            "description": "list files in a directory",
+            "synchronous": true,
+            "positional_args": [{
                 "name": "path",
                 "type": "string",
                 "format": "path",
+                "positional": true,
                 "description": "path to list"
             }]
         }]
@@ -74,7 +82,7 @@ async fn test_path_validation_failure_absolute() {
     let client = new_client(Some(tools_dir.to_str().unwrap())).await.unwrap();
 
     let params = CallToolRequestParam {
-        name: "ls_default".into(),
+        name: "ls".into(),
         arguments: Some(serde_json::from_value(json!({ "path": "/etc" })).unwrap()),
     };
 
@@ -107,11 +115,13 @@ async fn test_path_validation_failure_relative() {
         "command": "ls",
         "subcommand": [{
             "name": "default",
-            "description": "list",
-            "options": [{
+            "description": "list files in a directory",
+            "synchronous": true,
+            "positional_args": [{
                 "name": "path",
                 "type": "string",
                 "format": "path",
+                "positional": true,
                 "description": "path to list"
             }]
         }]
@@ -122,7 +132,7 @@ async fn test_path_validation_failure_relative() {
     let client = new_client(Some(tools_dir.to_str().unwrap())).await.unwrap();
 
     let params = CallToolRequestParam {
-        name: "ls_default".into(),
+        name: "ls".into(),
         arguments: Some(serde_json::from_value(json!({ "path": "../" })).unwrap()),
     };
 

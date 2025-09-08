@@ -511,10 +511,7 @@ async fn test_timeout_and_timing_edge_cases() -> Result<()> {
     .await;
 
     // The timeout should fire and return Err, or the wait should return None
-    let waited_op = match wait_result {
-        Ok(result) => result, // wait_for_operation completed (should be None)
-        Err(_) => None,       // tokio timeout fired, operation never completed
-    };
+    let waited_op: Option<ahma_mcp::operation_monitor::Operation> = wait_result.unwrap_or_default();
 
     // Since operation never completes, this should be None
     assert!(waited_op.is_none());

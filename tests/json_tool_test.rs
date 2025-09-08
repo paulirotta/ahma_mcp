@@ -21,13 +21,12 @@ async fn test_json_tool_definition_loading() -> Result<()> {
         "command": "echo",
         "subcommand": [
             {
-                "name": "test",
+                "name": "default",
                 "description": "A test subcommand.",
                 "options": [],
                 "synchronous": true
             }
         ],
-        "input_schema": {},
         "timeout_seconds": 5,
         "enabled": true
     }"#;
@@ -41,10 +40,9 @@ async fn test_json_tool_definition_loading() -> Result<()> {
     let tool_names: Vec<_> = tools.iter().map(|t| t.name.as_ref()).collect();
 
     // Assert that our JSON-defined tool is loaded.
-    // This will fail until JSON support is implemented.
     assert!(
-        tool_names.contains(&"json_tool_test"),
-        "The tool 'json_tool_test' was not found in the loaded tools: {:?}",
+        tool_names.contains(&"json_tool"),
+        "The tool 'json_tool' was not found in the loaded tools: {:?}",
         tool_names
     );
 

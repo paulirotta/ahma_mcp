@@ -13,9 +13,13 @@ async fn test_synchronous_cargo_check_returns_actual_results() -> Result<()> {
 
     let client = new_client(Some(".ahma/tools")).await?;
 
+    let params = serde_json::json!({
+        "subcommand": "check"
+    });
+
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("cargo_check"),
-        arguments: None,
+        name: Cow::Borrowed("cargo"),
+        arguments: Some(params.as_object().unwrap().clone()),
     };
 
     let result = client.call_tool(call_param).await?;
@@ -24,7 +28,7 @@ async fn test_synchronous_cargo_check_returns_actual_results() -> Result<()> {
     // Not empty results or async job IDs
     assert!(
         !result.content.is_empty(),
-        "Synchronous cargo_check should return non-empty results"
+        "Synchronous cargo check should return non-empty results"
     );
 
     // Check that we get actual cargo output, not async job info
@@ -123,15 +127,15 @@ async fn test_tool_descriptions_match_actual_behavior() -> Result<()> {
     let client = new_client(Some(".ahma/tools")).await?;
     let tools_result = client.list_tools(None).await?;
 
-    // Find cargo_check tool
-    let cargo_check_tool = tools_result
+    // Find cargo tool (consolidated tool instead of cargo_check)
+    let cargo_tool = tools_result
         .tools
         .iter()
-        .find(|t| t.name.as_ref() == "cargo_check")
-        .expect("cargo_check tool should exist");
+        .find(|t| t.name.as_ref() == "cargo")
+        .expect("cargo tool should exist");
 
     // Check if description matches behavior
-    let description = cargo_check_tool
+    let description = cargo_tool
         .description
         .as_ref()
         .map(|d| d.as_ref())
@@ -141,9 +145,13 @@ async fn test_tool_descriptions_match_actual_behavior() -> Result<()> {
     // This creates confusion for AI agents
     if description.contains("asynchronous") {
         // If described as async, test that it actually behaves async
+        let params = serde_json::json!({
+            "subcommand": "check"
+        });
+
         let call_param = CallToolRequestParam {
-            name: Cow::Borrowed("cargo_check"),
-            arguments: None,
+            name: Cow::Borrowed("cargo"),
+            arguments: Some(params.as_object().unwrap().clone()),
         };
 
         let result = client.call_tool(call_param).await?;

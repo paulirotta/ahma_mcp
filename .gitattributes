@@ -1,0 +1,12 @@
+# Mark test data as not part of the main codebase for language detection
+test-data/** linguist-detectable=false
+test-data/** linguist-vendored=true
+
+# Ensure Rust is properly detected as the primary language
+*.rs linguist-language=Rust
+*.toml linguist-language=TOML
+
+# Documentation and configs
+*.md linguist-documentation=true
+*.yml linguist-detectable=false
+*.yaml linguist-detectable=false

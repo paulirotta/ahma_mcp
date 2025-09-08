@@ -53,6 +53,20 @@ MTDF is ahma_mcp's JSON-based tool configuration format that enables dynamic too
 >
 > I can see the issue...
 
+**Example: Gemini 2.5 Pro**
+
+> I've fixed the compilation errors in adapter_coverage_improvement_test.rs. Now, I'll rerun the tests to check for further issues.
+>
+> _Ran cargo_nextest ahma_mcp (MCP Server)_
+>
+> I've addressed the compilation issues in adapter_coverage_improvement_test.rs and re-initiated the test suite. I'll now await the results.
+>
+> _Ran await ahma_mcp (MCP Server)_
+>
+> The fix for adapter_coverage_improvement_test.rs worked.
+
+Tool-calling AIs work. Note that Grok Code Fast 1 currently appears lazy with tool use.
+
 ### Features
 
 Ahma MCP is the next-generation successor to `async_cargo_mcp`, providing:

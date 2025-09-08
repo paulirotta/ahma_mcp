@@ -58,6 +58,7 @@ fn test_option_config_structure() {
         required: Some(false),
         file_arg: Some(false),
         file_flag: None,
+        positional: None,
     };
 
     assert_eq!(option.name, "verbose");
@@ -117,6 +118,7 @@ fn test_tool_config_serialization() {
                 required: Some(false),
                 file_arg: Some(false),
                 file_flag: None,
+                positional: None,
             }]),
             positional_args: None,
             synchronous: Some(false),
