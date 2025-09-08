@@ -1,12 +1,12 @@
 mod common;
 
-use crate::common::test_project::create_full_test_project;
+use crate::common::test_project::create_full_rust_test_project;
 use anyhow::Result;
 use serde_json::json;
 
 #[tokio::test]
 async fn test_freeform_argument_passing_ls() -> Result<()> {
-    let temp_dir = create_full_test_project().await?;
+    let temp_dir = create_full_rust_test_project().await?;
     let project_path = temp_dir.path().to_str().unwrap();
 
     // Create a dummy file to ensure `ls -l` has some output
@@ -53,8 +53,7 @@ async fn test_freeform_argument_passing_ls() -> Result<()> {
 
 #[tokio::test]
 async fn test_freeform_argument_passing_clippy() -> Result<()> {
-    let temp_dir = create_full_test_project().await?;
-
+    let temp_dir = create_full_rust_test_project().await?;
     // Create a dummy cargo project in a unique subdirectory
     let project_name = format!("test_project_{}", std::process::id());
     let cargo_project_dir = temp_dir.path().join(&project_name);

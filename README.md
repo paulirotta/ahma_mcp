@@ -4,7 +4,7 @@ _Create agents from your command line tools with one JSON file, then watch them 
 
 <img src="./assets/ahma.png" height="250" align="right" alt="Ahma MCP Logo"/>
 
-[![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/rust.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/rust.yml)
+[![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org/)
@@ -148,32 +148,46 @@ Enhanced for seamless development experience:
 
 Ahma MCP uses **MTDF** (MCP Tool Definition Format) JSON files in the `tools/` directory to define CLI tool integrations:
 
-Internal tools implemented in ahama_mcp:
+**Internal tools** (implemented in ahma_mcp):
 
-- `await.json` - (ahma_mcp internal) Operation coordination, pauses operations until one or more tools complete
-- `status.json` - (ahma_mcp_internal) Ongoing and recently completed operation(s) information
+- `await.json` - Operation coordination, pauses until one or more tools complete
+- `status.json` - Ongoing and recently completed operation(s) information
 
-Common command line tool definitions are included. Copy and edit those you want, or add your own:
+**External tool definitions** for command line tools are included in `.ahma/tools/`. Copy and edit those you want, or add your own:
 
-- `cargo.json` - Rust package manager with recursive subcommands like `nextest run` (11+ subcommands)
-- `cargo_audit.json` - Audit Cargo.lock for security vulnerabilities
-- `cargo_bench.json` - Run benchmarks for a Rust project
-- `cargo_clippy.json` - Enhanced linting and code quality checks for Rust
-- `cargo_edit.json` - Tools for editing Cargo.toml files
-- `cargo_fmt.json` - Formats Rust code according to style guidelines
-- `cargo_llvm_cov.json` - LLVM source-based code coverage for Rust projects (6 subcommands)
-- `cargo_nextest.json` - Next-generation test runner for Rust
-- `gh.json` - GitHub CLI with nested operations like `cache delete` and `run cancel`
-- `git.json` - Git version control (22 subcommands)
-- `grep.json` - Text search with regex support
-- `ls.json` - File listing with positional arguments
-- `python3.json` - Python interpreter and module execution
-- `pwd.json` - Current directory
-- `sed.json` - Stream editor for filtering and transforming text
+**Rust Ecosystem:**
 
-**Recursive Subcommand Example**: The `cargo.json` tool demonstrates recursive subcommands where `nextest` is a subcommand that contains its own `run` subcommand, creating tools like `mcp_ahma_mcp_cargo_nextest_run`.
+- `cargo.json` - Rust package manager with recursive subcommands (13 subcommands)
+- `cargo_audit.json` - Audit Cargo.lock for security vulnerabilities (2 subcommands)
+- `cargo_bench.json` - Run benchmarks for a Rust project (1 subcommand)
+- `cargo_clippy.json` - Enhanced linting and code quality checks for Rust (1 subcommand)
+- `cargo_edit.json` - Tools for editing Cargo.toml files (4 subcommands)
+- `cargo_fmt.json` - Formats Rust code according to style guidelines (1 subcommand)
+- `cargo_llvm_cov.json` - LLVM source-based code coverage for Rust projects (8 subcommands)
+- `cargo_nextest.json` - Next-generation test runner for Rust (1 subcommand)
 
-Each MTDF file can reference guidance blocks from `tool_guidance.json` using `guidance_key` fields, eliminating guidance duplication and ensuring consistency. For detailed schema information and validation, see [`docs/mtdf-schema.json`](./docs/mtdf-schema.json).
+**Version Control & CI/CD:**
+
+- `git.json` - Git version control system (10 subcommands)
+- `gh.json` - GitHub CLI with nested operations like `cache delete` and `run cancel` (10 subcommands)
+
+**General Development:**
+
+- `python3.json` - Python interpreter and module execution (7 subcommands)
+- `gradlew.json` - Gradle wrapper for Android/Java projects (47 subcommands)
+- `shell_async.json` - Execute shell commands asynchronously (1 subcommand)
+- `long_running_async.json` - Sleep utility for testing async behavior (1 subcommand)
+- `test_coverage.json` - Run test coverage scripts (1 subcommand)
+
+**File Operations:**
+
+- `cat.json` - View file contents (single command)
+- `echo.json` - Output text (single command)
+- `grep.json` - Text search with regex support (single command)
+- `pwd.json` - Current directory (1 subcommand)
+- `sed.json` - Stream editor for filtering and transforming text (single command)
+
+Each MTDF file can reference guidance blocks from `.ahma/tool_guidance.json` using `guidance_key` fields, eliminating guidance duplication and ensuring consistency. For detailed schema information and validation, see [`docs/mtdf-schema.json`](./docs/mtdf-schema.json).
 
 ### Testing the Installation
 
@@ -195,8 +209,6 @@ You should see output like:
 ```
 ✓ Finished running 76 tests across 45 binaries (2.34s)
 ```
-
-The project follows **test-driven development (TDD)** practices with comprehensive test coverage including unit tests, integration tests, and system-level tests. See [`docs/DEVELOPMENT_WORKFLOW.md`](docs/DEVELOPMENT_WORKFLOW.md) for detailed testing strategies and development patterns.
 
 ## VS Code MCP Integration
 
@@ -245,7 +257,7 @@ After saving the `mcp.json` file, restart VS Code to activate the MCP server.
 
 1. Open VS Code and start a chat with GitHub Copilot
 2. You should see "ahma_mcp" listed in the available MCP servers
-3. Test with a simple command like: "Use ahma_mcp to ls the working directory contents"
+3. Ask your AI to use the `ahma_mcp` tool, for example: "Use ahma_mcp to show the git status"
 
 ### Available Tools
 
@@ -294,13 +306,14 @@ Once connected, you'll have access to ~44 dynamically generated MCP tools:
 - `mcp_ahma_mcp_cargo_llvm_cov_nextest` - Run nextest with LLVM coverage
 - Optional if installed: `clippy`, `nextest`, `fmt`, `audit`, `upgrade`, `bump_version`, `bench`
 
-**File Operations:**
+**File Operations (core set):**
 
-- `mcp_ahma_mcp_ls_run` - List files
 - `mcp_ahma_mcp_cat_run` - View file contents
 - `mcp_ahma_mcp_grep_run` - Search text patterns
 - `mcp_ahma_mcp_sed_run` - Edit text streams
 - `mcp_ahma_mcp_echo_run` - Output text
+
+Optional (add if needed): a listing tool (`ls.json`) can be reintroduced; tests no longer assume its presence.
 
 **Operation Management:**
 
@@ -312,7 +325,7 @@ Once connected, you'll have access to ~44 dynamically generated MCP tools:
 **MCP tools not working?**
 
 1. Verify the binary path exists: `ls -la /path/to/your/ahma_mcp/target/release/ahma_mcp`
-2. Check the tools directory path: `ls -la /path/to/your/ahma_mcp/tools/`
+2. Check the tools directory path: `ls -la /path/to/your/ahma_mcp/.ahma/tools/`
 3. Restart VS Code completely
 4. Check VS Code Developer Tools (Help → Toggle Developer Tools) for MCP errors
 

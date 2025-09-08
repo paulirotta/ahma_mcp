@@ -1,0 +1,653 @@
+{
+    "name": "gradlew",
+    "description": "Android Gradle Wrapper for building and managing Android projects",
+    "command": "./gradlew",
+    "enabled": true,
+    "timeout_seconds": 600,
+    "hints": {
+        "default": "While Android Gradle operations run, consider reviewing build.gradle files, planning test strategies, or analyzing Android app architecture for optimization opportunities.",
+        "build": "Building Android project - review compilation output for warnings, plan deployment steps, or work on app documentation.",
+        "test": "Running Android tests - analyze test patterns, consider additional test cases, or review test coverage strategies.",
+        "assemble": "Assembling Android APK/AAB - consider code signing, release preparation, or app store optimization.",
+        "install": "Installing app on device - plan testing scenarios, user experience validation, or performance analysis.",
+        "lint": "Running Android lint checks - review code quality suggestions, plan refactoring, or work on accessibility improvements."
+    },
+    "subcommand": [
+        {
+            "name": "tasks",
+            "synchronous": true,
+            "guidance_key": "sync_behavior",
+            "description": "Display available Gradle tasks",
+            "options": [
+                {
+                    "name": "all",
+                    "type": "boolean",
+                    "description": "Show all tasks including those normally hidden"
+                },
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "help",
+            "synchronous": true,
+            "guidance_key": "sync_behavior",
+            "description": "Display help information",
+            "options": [
+                {
+                    "name": "task",
+                    "type": "string",
+                    "description": "Show help for a specific task"
+                },
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "dependencies",
+            "synchronous": true,
+            "guidance_key": "sync_behavior",
+            "description": "Display project dependencies",
+            "options": [
+                {
+                    "name": "configuration",
+                    "type": "string",
+                    "description": "Show dependencies for specific configuration"
+                },
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "properties",
+            "synchronous": true,
+            "guidance_key": "sync_behavior",
+            "description": "Display project properties",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "signingReport",
+            "synchronous": true,
+            "guidance_key": "sync_behavior",
+            "description": "Display signing information for build variants",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "sourceSets",
+            "synchronous": true,
+            "guidance_key": "sync_behavior",
+            "description": "Display source sets defined in the project",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "androidDependencies",
+            "synchronous": true,
+            "guidance_key": "sync_behavior",
+            "description": "Display Android dependencies of the project",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "clean",
+            "synchronous": true,
+            "guidance_key": "sync_behavior",
+            "description": "Delete the build directory",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "build",
+            "guidance_key": "async_behavior",
+            "description": "Assemble and test the project",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "assemble",
+            "guidance_key": "async_behavior",
+            "description": "Assemble main outputs for all variants",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "assembleDebug",
+            "guidance_key": "async_behavior",
+            "description": "Assemble debug variant of the app",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "assembleRelease",
+            "guidance_key": "async_behavior",
+            "description": "Assemble release variant of the app",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "assembleAndroidTest",
+            "guidance_key": "async_behavior",
+            "description": "Assemble all test applications",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "assembleUnitTest",
+            "guidance_key": "async_behavior",
+            "description": "Assemble all unit test applications",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "compileDebugSources",
+            "guidance_key": "async_behavior",
+            "description": "Compile debug sources",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "compileReleaseSources",
+            "guidance_key": "async_behavior",
+            "description": "Compile release sources",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "compileDebugAndroidTestSources",
+            "guidance_key": "async_behavior",
+            "description": "Compile debug Android test sources",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "compileDebugUnitTestSources",
+            "guidance_key": "async_behavior",
+            "description": "Compile debug unit test sources",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "compileReleaseUnitTestSources",
+            "guidance_key": "async_behavior",
+            "description": "Compile release unit test sources",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "bundle",
+            "guidance_key": "async_behavior",
+            "description": "Assemble bundles for all variants",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "buildKotlinToolingMetadata",
+            "guidance_key": "async_behavior",
+            "description": "Build metadata json file containing information about used Kotlin tooling",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "buildDependents",
+            "guidance_key": "async_behavior",
+            "description": "Assemble and test this project and all projects that depend on it",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "buildNeeded",
+            "guidance_key": "async_behavior",
+            "description": "Assemble and test this project and all projects it depends on",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "installDebug",
+            "guidance_key": "async_behavior",
+            "description": "Install the debug build on connected devices",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "installRelease",
+            "guidance_key": "async_behavior",
+            "description": "Install the release build on connected devices",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "installDebugAndroidTest",
+            "guidance_key": "async_behavior",
+            "description": "Install Android test app for debug build",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "uninstallDebug",
+            "guidance_key": "async_behavior",
+            "description": "Uninstall the debug build from connected devices",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "uninstallRelease",
+            "guidance_key": "async_behavior",
+            "description": "Uninstall the release build from connected devices",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "uninstallDebugAndroidTest",
+            "guidance_key": "async_behavior",
+            "description": "Uninstall the Android test app for debug build",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "uninstallAll",
+            "guidance_key": "async_behavior",
+            "description": "Uninstall all applications from connected devices",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "test",
+            "guidance_key": "async_behavior",
+            "description": "Run unit tests for all variants",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "testDebugUnitTest",
+            "guidance_key": "async_behavior",
+            "description": "Run unit tests for the debug build",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "testReleaseUnitTest",
+            "guidance_key": "async_behavior",
+            "description": "Run unit tests for the release build",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "connectedCheck",
+            "guidance_key": "async_behavior",
+            "description": "Run all device checks on currently connected devices",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "connectedAndroidTest",
+            "guidance_key": "async_behavior",
+            "description": "Install and run instrumentation tests for all flavors on connected devices",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "connectedDebugAndroidTest",
+            "guidance_key": "async_behavior",
+            "description": "Install and run tests for debug on connected devices",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "deviceAndroidTest",
+            "guidance_key": "async_behavior",
+            "description": "Install and run instrumentation tests using all Device Providers",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "deviceCheck",
+            "guidance_key": "async_behavior",
+            "description": "Run all device checks using Device Providers and Test Servers",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "check",
+            "guidance_key": "async_behavior",
+            "description": "Run all checks without building",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "checkJetifier",
+            "synchronous": true,
+            "guidance_key": "sync_behavior",
+            "description": "Check whether Jetifier is needed for the current project",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "checkKotlinGradlePluginConfigurationErrors",
+            "synchronous": true,
+            "guidance_key": "sync_behavior",
+            "description": "Check Kotlin Gradle Plugin configuration errors",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "lint",
+            "guidance_key": "async_behavior",
+            "description": "Run lint on the default variant",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "lintDebug",
+            "guidance_key": "async_behavior",
+            "description": "Run lint on debug variant and show text output",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "lintRelease",
+            "guidance_key": "async_behavior",
+            "description": "Run lint on release variant and show text output",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "lintVitalRelease",
+            "guidance_key": "async_behavior",
+            "description": "Run vital lint checks on release variant",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "lintFix",
+            "guidance_key": "async_behavior",
+            "description": "Run lint and apply safe suggestions to source code",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "updateLintBaseline",
+            "guidance_key": "async_behavior",
+            "description": "Update the lint baseline using the default variant",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        }
+    ]
+}

@@ -32,10 +32,10 @@ tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 tempfile = "3.21.0"
 futures = "0.3"
 
-# Removed build-dependencies - using runtime schema generation instead
-
+# Features allow local development to disable platform-specific tests. The CI will run all tests.
 [features]
-testing = []
+default = ["android"]
+android = []
 
 [profile.coverage]
 inherits = "dev"
