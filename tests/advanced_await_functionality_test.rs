@@ -11,6 +11,8 @@ use std::time::Duration;
 
 #[cfg(test)]
 mod advanced_await_functionality_test {
+    use tokio::time::Instant;
+
     use super::*;
 
     /// Test that advanced await functionality works correctly with multiple operations
@@ -105,7 +107,7 @@ mod advanced_await_functionality_test {
         monitor.add_operation(operation).await;
 
         // Test with minimum timeout to trigger warnings quickly
-        let start_time = std::time::Instant::now();
+        let start_time = Instant::now();
         let completed_operations = monitor
             .wait_for_operations_advanced(Some("test_tool"), Some(2)) // 2 second timeout
             .await;
@@ -137,7 +139,7 @@ mod advanced_await_functionality_test {
             Duration::from_secs(30),
         )));
 
-        let start_time = std::time::Instant::now();
+        let start_time = Instant::now();
         let completed_operations = monitor.wait_for_operations_advanced(None, Some(10)).await;
         let elapsed = start_time.elapsed();
 

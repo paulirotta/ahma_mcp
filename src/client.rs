@@ -6,16 +6,14 @@
 //! 3. A `MockIo` implementation for testing.
 //! 4. A `StdioMcpIo` for production.
 
+use crate::operation_monitor::Operation;
+use async_trait::async_trait;
 use rmcp::service::{Peer, RoleServer};
 use std::sync::Arc;
+use tokio::io::{AsyncWriteExt, stdout};
 use tokio::sync::Mutex;
-use tracing::warn;
-
-use crate::operation_monitor::Operation;
-
-use async_trait::async_trait;
-use std::io::{self, Write};
 use tokio::sync::mpsc::{self, Receiver, Sender};
+use tracing::warn;
 
 #[derive(Debug, Clone)]
 pub struct Client {
@@ -102,14 +100,14 @@ pub struct StdioMcpIo;
 impl McpIo for StdioMcpIo {
     async fn send(&self, message: &str) {
         println!("{}", message);
-        io::stdout().flush().unwrap();
+        stdout().flush().await.unwrap();
     }
 
     async fn read_line(&mut self) -> Option<String> {
-        let result = tokio::task::spawn_blocking(move || {
+        let result = tokio::task::spawn_blocking(|| {
             let mut buffer = String::new();
             if std::io::stdin().read_line(&mut buffer).unwrap_or(0) > 0 {
-                Some(buffer)
+                Some(buffer.trim_end().to_string())
             } else {
                 None
             }

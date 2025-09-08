@@ -151,25 +151,25 @@ fn test_format_content_complex_json() {
 // which is more complex. These functions primarily format and write to stderr,
 // so their core logic is tested through format_content and should_display.
 
-#[test]
-fn test_display_result_with_empty_content() {
+#[tokio::test]
+async fn test_display_result_with_empty_content() {
     // This should not panic and should handle empty content gracefully
     // The function returns early for empty content, so no output is produced
-    TerminalOutput::display_result("test_op", "test_cmd", "test description", "");
-    TerminalOutput::display_result("test_op", "test_cmd", "test description", "   \n\t  ");
+    TerminalOutput::display_result("test_op", "test_cmd", "test description", "").await;
+    TerminalOutput::display_result("test_op", "test_cmd", "test description", "   \n\t  ").await;
 }
 
-#[test]
-fn test_display_await_results_with_empty_results() {
+#[tokio::test]
+async fn test_display_await_results_with_empty_results() {
     // Should handle empty results vector gracefully
-    TerminalOutput::display_await_results(&[]);
+    TerminalOutput::display_await_results(&[]).await;
 
     // Should handle vector with empty strings
-    TerminalOutput::display_await_results(&[String::new(), "  ".to_string()]);
+    TerminalOutput::display_await_results(&[String::new(), "  ".to_string()]).await;
 }
 
-#[test]
-fn test_display_await_results_with_content() {
+#[tokio::test]
+async fn test_display_await_results_with_content() {
     // Should handle multiple results
     let results = vec![
         r#"{"result": "first"}"#.to_string(),
@@ -178,5 +178,5 @@ fn test_display_await_results_with_content() {
     ];
 
     // This mainly tests that the function doesn't panic with valid input
-    TerminalOutput::display_await_results(&results);
+    TerminalOutput::display_await_results(&results).await;
 }

@@ -40,31 +40,42 @@
 //! can watch the formatted output on `stderr`).
 
 use serde_json::Value;
-use std::io::{self, Write};
+use tokio::io::{AsyncWriteExt, stderr};
 
 /// Terminal output utility for formatting and displaying command results
 pub struct TerminalOutput;
 
 impl TerminalOutput {
     /// Write a formatted result to terminal with proper headers and formatting
-    pub fn display_result(operation_id: &str, command: &str, description: &str, content: &str) {
+    pub async fn display_result(
+        operation_id: &str,
+        command: &str,
+        description: &str,
+        content: &str,
+    ) {
         if content.trim().is_empty() {
             return; // Skip whitespace-only content
         }
 
         // IMPORTANT: Write human-readable diagnostics to stderr so stdout remains a pure MCP JSON transport.
-        let mut stderr = io::stderr();
-        let _ = stderr.write_all(b"\n");
-        let _ = stderr.write_all(format!("=== {} ===\n", operation_id.to_uppercase()).as_bytes());
-        let _ = stderr.write_all(format!("Command: {}\n", command).as_bytes());
-        let _ = stderr.write_all(format!("Description: {}\n", description).as_bytes());
-        let _ = stderr.write_all(b"\n");
+        let mut stderr = stderr();
+        let _ = stderr.write_all(b"\n").await;
+        let _ = stderr
+            .write_all(format!("=== {} ===\n", operation_id.to_uppercase()).as_bytes())
+            .await;
+        let _ = stderr
+            .write_all(format!("Command: {}\n", command).as_bytes())
+            .await;
+        let _ = stderr
+            .write_all(format!("Description: {}\n", description).as_bytes())
+            .await;
+        let _ = stderr.write_all(b"\n").await;
 
         // Format the content
         let formatted_content = Self::format_content(content);
-        let _ = stderr.write_all(formatted_content.as_bytes());
-        let _ = stderr.write_all(b"\n");
-        let _ = stderr.flush();
+        let _ = stderr.write_all(formatted_content.as_bytes()).await;
+        let _ = stderr.write_all(b"\n").await;
+        let _ = stderr.flush().await;
     }
 
     /// Format content with proper JSON pretty-printing and newline handling
@@ -87,36 +98,42 @@ impl TerminalOutput {
     }
 
     /// Display multiple operation results from await command
-    pub fn display_await_results(results: &[String]) {
+    pub async fn display_await_results(results: &[String]) {
         if results.is_empty() {
             return;
         }
 
-        let mut stderr = io::stderr();
-        let _ = stderr.write_all(b"\n");
-        let _ =
-            stderr.write_all(b"===============================================================\n");
-        let _ =
-            stderr.write_all(b"                    OPERATION RESULTS                         \n");
-        let _ =
-            stderr.write_all(b"===============================================================\n");
-        let _ = stderr.write_all(b"\n");
+        let mut stderr = stderr();
+        let _ = stderr.write_all(b"\n").await;
+        let _ = stderr
+            .write_all(b"===============================================================\n")
+            .await;
+        let _ = stderr
+            .write_all(b"                    OPERATION RESULTS                         \n")
+            .await;
+        let _ = stderr
+            .write_all(b"===============================================================\n")
+            .await;
+        let _ = stderr.write_all(b"\n").await;
 
         for (i, result) in results.iter().enumerate() {
             if i > 0 {
-                let _ = stderr.write_all(
-                    b"\n---------------------------------------------------------------\n\n",
-                );
+                let _ = stderr
+                    .write_all(
+                        b"\n---------------------------------------------------------------\n\n",
+                    )
+                    .await;
             }
 
             let formatted = Self::format_content(result);
-            let _ = stderr.write_all(formatted.as_bytes());
-            let _ = stderr.write_all(b"\n");
+            let _ = stderr.write_all(formatted.as_bytes()).await;
+            let _ = stderr.write_all(b"\n").await;
         }
 
-        let _ =
-            stderr.write_all(b"===============================================================\n");
-        let _ = stderr.flush();
+        let _ = stderr
+            .write_all(b"===============================================================\n")
+            .await;
+        let _ = stderr.flush().await;
     }
 
     /// Check if content should be displayed (not just whitespace)

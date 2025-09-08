@@ -44,10 +44,13 @@ use crate::{
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
-use std::collections::{HashMap, HashSet};
-use std::io::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
+use std::{
+    collections::{HashMap, HashSet},
+    io::Write,
+};
 use tempfile::NamedTempFile;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
@@ -262,11 +265,14 @@ impl Adapter {
         let op_id_clone = op_id.clone();
         let wd = working_dir.to_string();
 
-        let operation = Operation::new(
+        let timeout_duration = timeout.map(Duration::from_secs);
+
+        let operation = Operation::new_with_timeout(
             op_id.clone(),
             tool_name.to_string(),
             format!("{} {:?}", command, args),
             None,
+            timeout_duration,
         );
         self.monitor.add_operation(operation).await;
 
@@ -376,7 +382,7 @@ impl Adapter {
                 ),
             };
 
-            let start_time = std::time::Instant::now();
+            let start_time = Instant::now();
 
             // Check for cancellation before executing the command
             if cancellation_token.is_cancelled() {
@@ -872,9 +878,22 @@ impl Adapter {
         let mut temp_file = NamedTempFile::new()
             .context("Failed to create temporary file for multi-line argument")?;
 
-        temp_file
-            .write_all(content.as_bytes())
-            .context("Failed to write content to temporary file")?;
+        // Perform the blocking write on Tokio's blocking thread pool.
+        let temp_file = {
+            // Move the NamedTempFile into the blocking task and return it after write.
+            let content = content.to_owned();
+            tokio::task::spawn_blocking(move || -> Result<NamedTempFile> {
+                temp_file
+                    .write_all(content.as_bytes())
+                    .context("Failed to write content to temporary file")?;
+                temp_file
+                    .flush()
+                    .context("Failed to flush temporary file")?;
+                Ok(temp_file)
+            })
+            .await
+            .context("Failed to run blocking write in background")??
+        };
 
         let file_path = temp_file.path().to_string_lossy().to_string();
 

@@ -40,6 +40,7 @@ use std::env;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
+use tokio::time::Instant;
 use tracing;
 
 use crate::{
@@ -1090,11 +1091,11 @@ impl AhmaMcpService {
             Vec::new()
         };
 
-        // Parse timeout parameter (default 240 seconds = 4 minutes, with validation)
-        let timeout_seconds = if let Some(v) = args.get("timeout_seconds") {
+        // Parse timeout parameter and implement intelligent timeout calculation
+        let (timeout_seconds, timeout_warning) = if let Some(v) = args.get("timeout_seconds") {
             let requested_timeout = v.as_f64().unwrap_or(240.0);
             // Validate timeout: minimum 1s, maximum 1800s (30 minutes)
-            if requested_timeout < 1.0 {
+            let clamped_timeout = if requested_timeout < 1.0 {
                 tracing::warn!(
                     "Timeout too small ({}s), using minimum of 1s",
                     requested_timeout
@@ -1108,10 +1109,28 @@ impl AhmaMcpService {
                 1800.0
             } else {
                 requested_timeout
-            }
+            };
+
+            // Calculate intelligent timeout for comparison
+            let intelligent_timeout = self.calculate_intelligent_timeout(&tool_filters).await;
+
+            // Check if requested timeout is less than intelligent timeout
+            let warning = if clamped_timeout < intelligent_timeout {
+                Some(format!(
+                    "⚠️  Timeout of {}s may be insufficient. Operations have max timeout of {}s, suggested minimum: {}s",
+                    clamped_timeout as u64, intelligent_timeout as u64, intelligent_timeout as u64
+                ))
+            } else {
+                None
+            };
+
+            (clamped_timeout, warning)
         } else {
-            240.0
+            // No explicit timeout provided - use intelligent timeout calculation
+            let intelligent_timeout = self.calculate_intelligent_timeout(&tool_filters).await;
+            (intelligent_timeout, None)
         };
+
         let timeout_duration = std::time::Duration::from_secs(timeout_seconds as u64);
 
         // Build from pending ops, optionally filtered by tools
@@ -1179,7 +1198,12 @@ impl AhmaMcpService {
             pending_ops.iter().map(|op| &op.id).collect::<Vec<_>>()
         );
 
-        let wait_start = std::time::Instant::now();
+        // Log timeout warning if one was generated
+        if let Some(ref warning) = timeout_warning {
+            tracing::warn!("{}", warning);
+        }
+
+        let wait_start = Instant::now();
         let (warning_tx, mut warning_rx) = tokio::sync::mpsc::unbounded_channel();
 
         let warning_task = {
@@ -1232,12 +1256,25 @@ impl AhmaMcpService {
                         contents.len(),
                         elapsed.as_secs_f64()
                     ))];
+
+                    // Include timeout warning if present
+                    if let Some(warning) = timeout_warning {
+                        result_contents.push(Content::text(warning));
+                    }
+
                     result_contents.extend(contents);
                     Ok(CallToolResult::success(result_contents))
                 } else {
-                    Ok(CallToolResult::success(vec![Content::text(
+                    let mut result_contents = vec![Content::text(
                         "No operations completed within timeout period".to_string(),
-                    )]))
+                    )];
+
+                    // Include timeout warning if present
+                    if let Some(warning) = timeout_warning {
+                        result_contents.push(Content::text(warning));
+                    }
+
+                    Ok(CallToolResult::success(result_contents))
                 }
             }
             Err(_) => {
@@ -1363,5 +1400,50 @@ impl AhmaMcpService {
                 Ok(CallToolResult::success(vec![Content::text(error_message)]))
             }
         }
+    }
+
+    /// Calculate intelligent timeout based on operation timeouts and default await timeout
+    ///
+    /// Returns the maximum of:
+    /// 1. Default await timeout (240 seconds)
+    /// 2. Maximum timeout of all pending operations (filtered by tool if specified)
+    pub async fn calculate_intelligent_timeout(&self, tool_filters: &[String]) -> f64 {
+        const DEFAULT_AWAIT_TIMEOUT: f64 = 240.0; // 4 minutes
+        const DEFAULT_OPERATION_TIMEOUT: f64 = 300.0; // 5 minutes - fallback for operations without explicit timeout
+
+        // Get all pending operations, filtered by tools if specified
+        let pending_ops: Vec<crate::operation_monitor::Operation> = self
+            .operation_monitor
+            .get_all_operations()
+            .await
+            .into_iter()
+            .filter(|op| {
+                if op.state.is_terminal() {
+                    return false;
+                }
+                if tool_filters.is_empty() {
+                    true
+                } else {
+                    tool_filters.iter().any(|tn| op.tool_name.starts_with(tn))
+                }
+            })
+            .collect();
+
+        if pending_ops.is_empty() {
+            return DEFAULT_AWAIT_TIMEOUT;
+        }
+
+        // Find the maximum timeout among pending operations
+        let max_operation_timeout = pending_ops
+            .iter()
+            .map(|op| {
+                op.timeout_duration
+                    .map(|d| d.as_secs_f64())
+                    .unwrap_or(DEFAULT_OPERATION_TIMEOUT)
+            })
+            .fold(0.0, f64::max);
+
+        // Return the maximum of default await timeout and max operation timeout
+        DEFAULT_AWAIT_TIMEOUT.max(max_operation_timeout)
     }
 }

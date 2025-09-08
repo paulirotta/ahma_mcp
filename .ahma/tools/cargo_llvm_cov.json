@@ -5,7 +5,7 @@
     "enabled": true,
     "timeout_seconds": 3600,
     "hints": {
-        "default": "Coverage analysis running - consider reviewing test coverage gaps, planning additional tests, or analyzing code quality metrics.",
+        "default": "Coverage analysis running - VERY SLOW- consider reviewing test coverage gaps, planning additional tests, or analyzing code quality metrics.",
         "test": "Running tests with coverage - analyze coverage results, identify uncovered code paths, or plan test improvements.",
         "report": "Generating coverage reports - review coverage metrics, identify areas needing more tests, or analyze code quality.",
         "run": "Running binary with coverage - monitor execution paths, analyze performance-critical sections, or plan optimization strategies."
@@ -14,7 +14,7 @@
         {
             "name": "llvm-cov",
             "guidance_key": "async_behavior",
-            "description": "Run tests and collect coverage data via cargo llvm-cov.",
+            "description": "Run tests and collect coverage data via cargo llvm-cov- VERY SLOW.",
             "options": [
                 {
                     "name": "html",

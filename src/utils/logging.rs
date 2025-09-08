@@ -37,6 +37,7 @@
 
 use anyhow::Result;
 use directories::ProjectDirs;
+use std::io::stderr;
 use std::sync::Once;
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
@@ -73,9 +74,10 @@ pub fn init_logging() -> Result<()> {
             // Fallback to stderr if project directory is not available.
             tracing_subscriber::registry()
                 .with(env_filter)
-                .with(fmt::layer().with_writer(std::io::stderr))
+                .with(fmt::layer().with_writer(stderr))
                 .init();
         }
     });
+
     Ok(())
 }
