@@ -1,7 +1,0 @@
-{
-    "name": "echo",
-    "command": "echo",
-    "description": "Display a line of text",
-    "synchronous": true,
-    "guidance_key": "sync_behavior"
-}

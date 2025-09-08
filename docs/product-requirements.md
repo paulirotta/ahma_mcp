@@ -49,6 +49,11 @@ This document outlines the high-level requirements for `ahma_mcp`, a universal, 
 - **R7.2**: The system shall provide context-aware hints to AI clients about productive parallel work they can perform while waiting for asynchronous operations to complete.
 - **R7.3**: "Wait" functionality shall be available but strongly discouraged through tool descriptions, positioned only for final project validation when no other tasks remain.
 - **R7.4**: Tool descriptions shall use imperative language and clear formatting to guide AI behavior effectively, reducing confusion and optimizing productivity.
+- **R7.5**: The system shall provide AI-friendly schema validation feedback when tool calls fail due to invalid parameters, including:
+  - Clear identification of the specific parameter error (invalid subcommand, missing required parameter, unknown parameter)
+  - Complete list of valid options for the failed parameter (available subcommands, valid parameter names, accepted values)
+  - Structured error responses that enable AI agents to self-correct and retry with valid parameters
+  - Contextual suggestions and examples to guide proper tool usage
 
 ## 8. Extensibility and Maintainability
 

@@ -2,10 +2,10 @@
     "name": "cargo_llvm_cov",
     "description": "LLVM source-based code coverage for Rust projects",
     "command": "cargo",
+    "synchronous": true,
     "enabled": true,
-    "timeout_seconds": 3600,
     "hints": {
-        "default": "Coverage analysis running - VERY SLOW- consider reviewing test coverage gaps, planning additional tests, or analyzing code quality metrics.",
+        "default": "Coverage analysis. Review test coverage gaps, plan additional tests, or analyze code quality metrics.",
         "test": "Running tests with coverage - analyze coverage results, identify uncovered code paths, or plan test improvements.",
         "report": "Generating coverage reports - review coverage metrics, identify areas needing more tests, or analyze code quality.",
         "run": "Running binary with coverage - monitor execution paths, analyze performance-critical sections, or plan optimization strategies."
@@ -13,8 +13,7 @@
     "subcommand": [
         {
             "name": "llvm-cov",
-            "guidance_key": "async_behavior",
-            "description": "Run tests and collect coverage data via cargo llvm-cov- VERY SLOW.",
+            "description": "Run tests and collect coverage data (default behavior).",
             "options": [
                 {
                     "name": "html",
@@ -39,44 +38,39 @@
                 {
                     "name": "open",
                     "type": "boolean",
-                    "description": "Open HTML report in browser"
+                    "description": "Generate HTML report and open in browser"
                 },
                 {
                     "name": "output-path",
                     "type": "string",
-                    "description": "Output path for coverage reports (legacy)",
+                    "description": "Specify a file to write coverage data into",
                     "format": "path"
                 },
                 {
                     "name": "output-dir",
                     "type": "string",
-                    "description": "Output directory for coverage reports (preferred for --html)",
+                    "description": "Specify a directory to write coverage report into",
                     "format": "path"
                 },
                 {
                     "name": "ignore-filename-regex",
                     "type": "string",
-                    "description": "Ignore files matching regex pattern"
-                },
-                {
-                    "name": "include-llvm-sources",
-                    "type": "boolean",
-                    "description": "Include LLVM sources in coverage"
+                    "description": "Skip source code files with file paths that match the given regex"
                 },
                 {
                     "name": "workspace",
                     "type": "boolean",
-                    "description": "Run coverage for all packages in workspace"
+                    "description": "Test all packages in the workspace"
                 },
                 {
                     "name": "package",
                     "type": "string",
-                    "description": "Package to run coverage for"
+                    "description": "Package to run tests for"
                 },
                 {
                     "name": "exclude",
                     "type": "array",
-                    "description": "Exclude packages from coverage (can be specified multiple times)"
+                    "description": "Exclude packages from both the test and report"
                 },
                 {
                     "name": "features",
@@ -100,12 +94,6 @@
                     "format": "path"
                 },
                 {
-                    "name": "target-dir",
-                    "type": "string",
-                    "description": "Directory for all generated artifacts",
-                    "format": "path"
-                },
-                {
                     "name": "release",
                     "type": "boolean",
                     "description": "Build artifacts in release mode, with optimizations"
@@ -118,14 +106,13 @@
                 {
                     "name": "quiet",
                     "type": "boolean",
-                    "description": "Do not print cargo log messages"
+                    "description": "Display one character per test instead of one line"
                 }
             ]
         },
         {
-            "name": "default",
-            "guidance_key": "async_behavior",
-            "description": "Alias for 'llvm-cov' subcommand (run tests and collect coverage data).",
+            "name": "llvm-cov_test",
+            "description": "Run tests and generate coverage report (explicit test subcommand).",
             "options": [
                 {
                     "name": "html",
@@ -150,36 +137,35 @@
                 {
                     "name": "open",
                     "type": "boolean",
-                    "description": "Open HTML report in browser"
+                    "description": "Generate HTML report and open in browser"
                 },
                 {
                     "name": "output-path",
                     "type": "string",
-                    "description": "Output path for coverage reports (legacy)",
+                    "description": "Specify a file to write coverage data into",
                     "format": "path"
                 },
                 {
                     "name": "output-dir",
                     "type": "string",
-                    "description": "Output directory for coverage reports (preferred for --html)",
+                    "description": "Specify a directory to write coverage report into",
                     "format": "path"
                 },
                 {
                     "name": "workspace",
                     "type": "boolean",
-                    "description": "Run coverage for all packages in workspace"
+                    "description": "Test all packages in the workspace"
                 },
                 {
                     "name": "package",
                     "type": "string",
-                    "description": "Package to run coverage for"
+                    "description": "Package to run tests for"
                 }
             ]
         },
         {
-            "name": "test",
-            "guidance_key": "async_behavior",
-            "description": "Run tests and collect coverage data.",
+            "name": "llvm-cov_run",
+            "description": "Run a binary or example and generate coverage report.",
             "options": [
                 {
                     "name": "html",
@@ -190,246 +176,22 @@
                     "name": "json",
                     "type": "boolean",
                     "description": "Generate JSON coverage report"
-                },
-                {
-                    "name": "lcov",
-                    "type": "boolean",
-                    "description": "Generate LCOV coverage report"
-                },
-                {
-                    "name": "text",
-                    "type": "boolean",
-                    "description": "Generate text coverage report"
-                },
-                {
-                    "name": "open",
-                    "type": "boolean",
-                    "description": "Open HTML report in browser"
-                },
-                {
-                    "name": "output-path",
-                    "type": "string",
-                    "description": "Output path for coverage reports",
-                    "format": "path"
-                },
-                {
-                    "name": "ignore-filename-regex",
-                    "type": "string",
-                    "description": "Ignore files matching regex pattern"
-                },
-                {
-                    "name": "include-llvm-sources",
-                    "type": "boolean",
-                    "description": "Include LLVM sources in coverage"
-                },
-                {
-                    "name": "workspace",
-                    "type": "boolean",
-                    "description": "Run coverage for all packages in workspace"
-                },
-                {
-                    "name": "package",
-                    "type": "string",
-                    "description": "Package to run coverage for"
-                },
-                {
-                    "name": "exclude",
-                    "type": "array",
-                    "description": "Exclude packages from coverage (can be specified multiple times)"
-                },
-                {
-                    "name": "features",
-                    "type": "string",
-                    "description": "Space or comma separated list of features to activate"
-                },
-                {
-                    "name": "all-features",
-                    "type": "boolean",
-                    "description": "Activate all available features"
-                },
-                {
-                    "name": "no-default-features",
-                    "type": "boolean",
-                    "description": "Do not activate the default feature"
-                },
-                {
-                    "name": "manifest-path",
-                    "type": "string",
-                    "description": "Path to Cargo.toml",
-                    "format": "path"
-                },
-                {
-                    "name": "target-dir",
-                    "type": "string",
-                    "description": "Directory for all generated artifacts",
-                    "format": "path"
-                },
-                {
-                    "name": "release",
-                    "type": "boolean",
-                    "description": "Build artifacts in release mode, with optimizations"
-                },
-                {
-                    "name": "verbose",
-                    "type": "boolean",
-                    "description": "Use verbose output"
-                },
-                {
-                    "name": "quiet",
-                    "type": "boolean",
-                    "description": "Do not print cargo log messages"
-                },
-                {
-                    "name": "color",
-                    "type": "string",
-                    "description": "Coloring [possible values: auto, always, never]"
-                },
-                {
-                    "name": "jobs",
-                    "type": "integer",
-                    "description": "Number of parallel jobs, defaults to # of CPUs"
-                },
-                {
-                    "name": "locked",
-                    "type": "boolean",
-                    "description": "Assert that Cargo.lock will remain unchanged"
-                },
-                {
-                    "name": "offline",
-                    "type": "boolean",
-                    "description": "Run without accessing the network"
-                },
-                {
-                    "name": "frozen",
-                    "type": "boolean",
-                    "description": "Equivalent to specifying both --locked and --offline"
-                }
-            ]
-        },
-        {
-            "name": "run",
-            "guidance_key": "async_behavior",
-            "description": "Run a binary and collect coverage data.",
-            "options": [
-                {
-                    "name": "html",
-                    "type": "boolean",
-                    "description": "Generate HTML coverage report"
-                },
-                {
-                    "name": "json",
-                    "type": "boolean",
-                    "description": "Generate JSON coverage report"
-                },
-                {
-                    "name": "lcov",
-                    "type": "boolean",
-                    "description": "Generate LCOV coverage report"
-                },
-                {
-                    "name": "text",
-                    "type": "boolean",
-                    "description": "Generate text coverage report"
-                },
-                {
-                    "name": "open",
-                    "type": "boolean",
-                    "description": "Open HTML report in browser"
-                },
-                {
-                    "name": "output-path",
-                    "type": "string",
-                    "description": "Output path for coverage reports",
-                    "format": "path"
-                },
-                {
-                    "name": "ignore-filename-regex",
-                    "type": "string",
-                    "description": "Ignore files matching regex pattern"
-                },
-                {
-                    "name": "include-llvm-sources",
-                    "type": "boolean",
-                    "description": "Include LLVM sources in coverage"
                 },
                 {
                     "name": "bin",
                     "type": "string",
-                    "description": "Name of the binary to run"
+                    "description": "Test only the specified binary"
                 },
                 {
-                    "name": "package",
+                    "name": "example",
                     "type": "string",
-                    "description": "Package to run coverage for"
-                },
-                {
-                    "name": "features",
-                    "type": "string",
-                    "description": "Space or comma separated list of features to activate"
-                },
-                {
-                    "name": "all-features",
-                    "type": "boolean",
-                    "description": "Activate all available features"
-                },
-                {
-                    "name": "no-default-features",
-                    "type": "boolean",
-                    "description": "Do not activate the default feature"
-                },
-                {
-                    "name": "manifest-path",
-                    "type": "string",
-                    "description": "Path to Cargo.toml",
-                    "format": "path"
-                },
-                {
-                    "name": "target-dir",
-                    "type": "string",
-                    "description": "Directory for all generated artifacts",
-                    "format": "path"
-                },
-                {
-                    "name": "release",
-                    "type": "boolean",
-                    "description": "Build artifacts in release mode, with optimizations"
-                },
-                {
-                    "name": "verbose",
-                    "type": "boolean",
-                    "description": "Use verbose output"
-                },
-                {
-                    "name": "quiet",
-                    "type": "boolean",
-                    "description": "Do not print cargo log messages"
-                },
-                {
-                    "name": "color",
-                    "type": "string",
-                    "description": "Coloring [possible values: auto, always, never]"
-                },
-                {
-                    "name": "locked",
-                    "type": "boolean",
-                    "description": "Assert that Cargo.lock will remain unchanged"
-                },
-                {
-                    "name": "offline",
-                    "type": "boolean",
-                    "description": "Run without accessing the network"
-                },
-                {
-                    "name": "frozen",
-                    "type": "boolean",
-                    "description": "Equivalent to specifying both --locked and --offline"
+                    "description": "Test only the specified example"
                 }
             ]
         },
         {
-            "name": "report",
-            "guidance_key": "async_behavior",
-            "description": "Generate coverage reports from existing coverage data.",
+            "name": "llvm-cov_report",
+            "description": "Generate coverage report from existing coverage data.",
             "options": [
                 {
                     "name": "html",
@@ -454,84 +216,29 @@
                 {
                     "name": "open",
                     "type": "boolean",
-                    "description": "Open HTML report in browser"
-                },
-                {
-                    "name": "output-path",
-                    "type": "string",
-                    "description": "Output path for coverage reports",
-                    "format": "path"
-                },
-                {
-                    "name": "ignore-filename-regex",
-                    "type": "string",
-                    "description": "Ignore files matching regex pattern"
-                },
-                {
-                    "name": "include-llvm-sources",
-                    "type": "boolean",
-                    "description": "Include LLVM sources in coverage"
-                },
-                {
-                    "name": "package",
-                    "type": "string",
-                    "description": "Package to generate report for"
-                },
-                {
-                    "name": "manifest-path",
-                    "type": "string",
-                    "description": "Path to Cargo.toml",
-                    "format": "path"
-                },
-                {
-                    "name": "verbose",
-                    "type": "boolean",
-                    "description": "Use verbose output"
-                },
-                {
-                    "name": "quiet",
-                    "type": "boolean",
-                    "description": "Do not print cargo log messages"
-                },
-                {
-                    "name": "color",
-                    "type": "string",
-                    "description": "Coloring [possible values: auto, always, never]"
+                    "description": "Generate HTML report and open in browser"
                 }
             ]
         },
         {
-            "name": "show-env",
-            "synchronous": true,
-            "description": "Show coverage environment variables and configuration."
+            "name": "llvm-cov_show-env",
+            "description": "Output the environment set by cargo-llvm-cov to build Rust projects."
         },
         {
-            "name": "clean",
-            "synchronous": true,
-            "description": "Clean coverage data and artifacts.",
+            "name": "llvm-cov_clean",
+            "description": "Remove artifacts that cargo-llvm-cov has generated in the past.",
             "options": [
                 {
                     "name": "manifest-path",
                     "type": "string",
                     "description": "Path to Cargo.toml",
                     "format": "path"
-                },
-                {
-                    "name": "verbose",
-                    "type": "boolean",
-                    "description": "Use verbose output"
-                },
-                {
-                    "name": "quiet",
-                    "type": "boolean",
-                    "description": "Do not print cargo log messages"
                 }
             ]
         },
         {
-            "name": "nextest",
-            "guidance_key": "async_behavior",
-            "description": "Run tests with cargo-nextest and collect coverage data.",
+            "name": "llvm-cov_nextest",
+            "description": "Run tests with cargo nextest and collect coverage data.",
             "options": [
                 {
                     "name": "html",
@@ -556,105 +263,17 @@
                 {
                     "name": "open",
                     "type": "boolean",
-                    "description": "Open HTML report in browser"
-                },
-                {
-                    "name": "output-path",
-                    "type": "string",
-                    "description": "Output path for coverage reports",
-                    "format": "path"
-                },
-                {
-                    "name": "ignore-filename-regex",
-                    "type": "string",
-                    "description": "Ignore files matching regex pattern"
-                },
-                {
-                    "name": "include-llvm-sources",
-                    "type": "boolean",
-                    "description": "Include LLVM sources in coverage"
+                    "description": "Generate HTML report and open in browser"
                 },
                 {
                     "name": "workspace",
                     "type": "boolean",
-                    "description": "Run coverage for all packages in workspace"
+                    "description": "Test all packages in the workspace"
                 },
                 {
                     "name": "package",
                     "type": "string",
-                    "description": "Package to run coverage for"
-                },
-                {
-                    "name": "exclude",
-                    "type": "array",
-                    "description": "Exclude packages from coverage (can be specified multiple times)"
-                },
-                {
-                    "name": "features",
-                    "type": "string",
-                    "description": "Space or comma separated list of features to activate"
-                },
-                {
-                    "name": "all-features",
-                    "type": "boolean",
-                    "description": "Activate all available features"
-                },
-                {
-                    "name": "no-default-features",
-                    "type": "boolean",
-                    "description": "Do not activate the default feature"
-                },
-                {
-                    "name": "manifest-path",
-                    "type": "string",
-                    "description": "Path to Cargo.toml",
-                    "format": "path"
-                },
-                {
-                    "name": "target-dir",
-                    "type": "string",
-                    "description": "Directory for all generated artifacts",
-                    "format": "path"
-                },
-                {
-                    "name": "release",
-                    "type": "boolean",
-                    "description": "Build artifacts in release mode, with optimizations"
-                },
-                {
-                    "name": "verbose",
-                    "type": "boolean",
-                    "description": "Use verbose output"
-                },
-                {
-                    "name": "quiet",
-                    "type": "boolean",
-                    "description": "Do not print cargo log messages"
-                },
-                {
-                    "name": "color",
-                    "type": "string",
-                    "description": "Coloring [possible values: auto, always, never]"
-                },
-                {
-                    "name": "jobs",
-                    "type": "integer",
-                    "description": "Number of parallel jobs, defaults to # of CPUs"
-                },
-                {
-                    "name": "locked",
-                    "type": "boolean",
-                    "description": "Assert that Cargo.lock will remain unchanged"
-                },
-                {
-                    "name": "offline",
-                    "type": "boolean",
-                    "description": "Run without accessing the network"
-                },
-                {
-                    "name": "frozen",
-                    "type": "boolean",
-                    "description": "Equivalent to specifying both --locked and --offline"
+                    "description": "Package to run tests for"
                 }
             ]
         }

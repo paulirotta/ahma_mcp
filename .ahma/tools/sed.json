@@ -1,7 +1,0 @@
-{
-    "name": "sed",
-    "command": "sed",
-    "description": "Stream editor for filtering and transforming text",
-    "synchronous": true,
-    "guidance_key": "sync_behavior"
-}
