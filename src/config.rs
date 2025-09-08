@@ -222,7 +222,7 @@ pub fn load_tool_configs(tools_dir: &Path) -> Result<HashMap<String, ToolConfig>
             These tools are hardcoded in the MCP service and should NOT have JSON configuration files.\n\
             Please move these files to tools_backup/ or rename them to resolve the conflict.\n\n\
             The affected files are:\n{}\n\n\
-            For more information, see docs/tool-configuration-conflicts.md",
+            For more information, see docs/completed-issues/tool-configuration-conflicts.md",
             detected_conflicts
                 .iter()
                 .map(|(name, _)| name.as_str())
