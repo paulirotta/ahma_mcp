@@ -166,7 +166,6 @@ Common command line tool definitions are included. Copy and edit those you want,
 - `gh.json` - GitHub CLI with nested operations like `cache delete` and `run cancel`
 - `git.json` - Git version control (22 subcommands)
 - `grep.json` - Text search with regex support
-- `ls.json` - File listing with positional arguments
 - `python3.json` - Python interpreter and module execution
 - `pwd.json` - Current directory
 - `sed.json` - Stream editor for filtering and transforming text
@@ -245,7 +244,7 @@ After saving the `mcp.json` file, restart VS Code to activate the MCP server.
 
 1. Open VS Code and start a chat with GitHub Copilot
 2. You should see "ahma_mcp" listed in the available MCP servers
-3. Test with a simple command like: "Use ahma_mcp to ls the working directory contents"
+3. Ask your AI to use the `ahma_mcp` tool, for example: "Use ahma_mcp to show the git status"
 
 ### Available Tools
 
@@ -294,13 +293,14 @@ Once connected, you'll have access to ~44 dynamically generated MCP tools:
 - `mcp_ahma_mcp_cargo_llvm_cov_nextest` - Run nextest with LLVM coverage
 - Optional if installed: `clippy`, `nextest`, `fmt`, `audit`, `upgrade`, `bump_version`, `bench`
 
-**File Operations:**
+**File Operations (core set):**
 
-- `mcp_ahma_mcp_ls_run` - List files
 - `mcp_ahma_mcp_cat_run` - View file contents
 - `mcp_ahma_mcp_grep_run` - Search text patterns
 - `mcp_ahma_mcp_sed_run` - Edit text streams
 - `mcp_ahma_mcp_echo_run` - Output text
+
+Optional (add if needed): a listing tool (`ls.json`) can be reintroduced; tests no longer assume its presence.
 
 **Operation Management:**
 
@@ -312,7 +312,7 @@ Once connected, you'll have access to ~44 dynamically generated MCP tools:
 **MCP tools not working?**
 
 1. Verify the binary path exists: `ls -la /path/to/your/ahma_mcp/target/release/ahma_mcp`
-2. Check the tools directory path: `ls -la /path/to/your/ahma_mcp/tools/`
+2. Check the tools directory path: `ls -la /path/to/your/ahma_mcp/.ahma/tools/`
 3. Restart VS Code completely
 4. Check VS Code Developer Tools (Help → Toggle Developer Tools) for MCP errors
 

@@ -21,7 +21,7 @@ pub struct TestProjectOptions {
 
 /// Create a temporary project with flexible tool configurations for testing ahma_mcp.
 /// Ensures unique directory via tempfile and process ID and never writes to the repo root.
-pub async fn create_test_project(opts: TestProjectOptions) -> Result<TempDir> {
+pub async fn create_rust_test_project(opts: TestProjectOptions) -> Result<TempDir> {
     let process_id = std::process::id();
     let prefix = opts.prefix.unwrap_or_else(|| "ahma_mcp_test_".to_string());
 
@@ -126,19 +126,19 @@ usage = "curl https://example.com"
 
 /// Convenience wrappers for common project types
 pub async fn create_basic_project() -> Result<TempDir> {
-    create_test_project(TestProjectOptions::default()).await
+    create_rust_test_project(TestProjectOptions::default()).await
 }
 
 pub async fn create_cargo_project() -> Result<TempDir> {
-    create_test_project(TestProjectOptions {
+    create_rust_test_project(TestProjectOptions {
         with_cargo: true,
         ..Default::default()
     })
     .await
 }
 
-pub async fn create_full_test_project() -> Result<TempDir> {
-    create_test_project(TestProjectOptions {
+pub async fn create_full_rust_test_project() -> Result<TempDir> {
+    create_rust_test_project(TestProjectOptions {
         with_cargo: true,
         with_text_files: true,
         with_tool_configs: true,

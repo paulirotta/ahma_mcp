@@ -120,12 +120,12 @@ async fn test_tool_schema_generation_comprehensive() -> Result<()> {
         }
     }
 
-    // Verify specific known tools exist
+    // Verify specific known tools exist (ls is now optional)
     let tool_names: Vec<&str> = tools_result.iter().map(|t| t.name.as_ref()).collect();
 
     assert!(tool_names.contains(&"await"), "Should have await tool");
     assert!(tool_names.contains(&"status"), "Should have status tool");
-    assert!(tool_names.contains(&"ls"), "Should have ls tool");
+    // Note: ls tool is optional and may not be present if ls.json was removed
 
     client.cancel().await?;
     Ok(())

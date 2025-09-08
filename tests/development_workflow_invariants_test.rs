@@ -116,7 +116,8 @@ fn test_json_tool_configuration_count_invariant() {
     println!("📁 Found JSON tool configurations: {:?}", json_files);
 
     // CRITICAL: These are CLI tool adapters only. MCP tools (status, await) are hardwired.
-    // Expected core tools: cargo.json, ls.json, python3.json, git.json, gh.json
+    // Expected core tools (minimal set): cargo*.json, python3.json, git.json, gh.json
+    // NOTE: ls.json was formerly required but is now OPTIONAL. Tests must not assume its presence.
     // Complete tool set includes modular cargo tools: cargo_audit, cargo_bench, cargo_clippy,
     // cargo_edit, cargo_fmt, cargo_llvm_cov, cargo_nextest + Unix utils: echo, cat, grep, sed
     assert!(
@@ -132,11 +133,12 @@ fn test_json_tool_configuration_count_invariant() {
 
     // Verify core tools exist
     let has_cargo = json_files.iter().any(|f| f.contains("cargo"));
-    let has_ls = json_files.iter().any(|f| f.contains("ls"));
+    // ls tool is optional; do not assert its presence (legacy requirement removed)
+    let _has_ls = json_files.iter().any(|f| f.contains("ls"));
     let has_python = json_files.iter().any(|f| f.contains("python"));
 
     assert!(has_cargo, "cargo.json must exist for Rust development");
-    assert!(has_ls, "ls.json must exist for file system operations");
+    // (Optional) assert for ls removed intentionally to allow repositories without ls.json
     assert!(
         has_python,
         "python3.json must exist for Python script support"

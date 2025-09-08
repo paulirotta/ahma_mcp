@@ -66,6 +66,15 @@ async fn test_ls_tool_command_structure() -> Result<()> {
 
     let client = new_client(Some(".ahma/tools")).await?;
 
+    // Check if ls tool is available (optional since ls.json was removed)
+    let tools = client.list_tools(None).await?;
+    let has_ls_tool = tools.tools.iter().any(|t| t.name.as_ref() == "ls_default");
+
+    if !has_ls_tool {
+        println!("Skipping test: ls tool not available (ls.json removed)");
+        return Ok(());
+    }
+
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("ls_default"),
         arguments: None, // ls without arguments should list current directory

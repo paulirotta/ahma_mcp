@@ -17,7 +17,7 @@ use common::test_client::new_client;
 
 /// TEST: Validates core CLI tool configurations are loaded
 ///
-/// CRITICAL REQUIREMENT: Must load cargo.json, ls.json, python3.json (minimum 3)
+/// CRITICAL REQUIREMENT: Must load cargo.json, python3.json (minimum 2). ls.json is now OPTIONAL.
 /// FLEXIBILITY: May also load status.json, await.json if user added them
 ///
 /// LESSON LEARNED: Don't hard-code exact counts - use minimum expectations
@@ -29,7 +29,7 @@ async fn test_tools_are_loaded_after_json_migration() -> Result<()> {
 
     let tools = client.list_tools(None).await?;
 
-    // Should find tools from cargo.json, ls.json, python3.json
+    // Should find tools from cargo.json and python3.json; ls.json is optional
     assert!(
         tools.tools.len() >= 3,
         "Expected at least 3 tools loaded from JSON configs, but got {}. Tools found: {:?}",
@@ -47,12 +47,7 @@ async fn test_tools_are_loaded_after_json_migration() -> Result<()> {
         tool_names
     );
 
-    // Should have ls tool (using default subcommand pattern)
-    assert!(
-        tool_names.contains(&"ls"),
-        "Expected ls tool but found: {:?}",
-        tool_names
-    );
+    // ls tool (file listing) is optional; do not assert its presence
 
     client.cancel().await?;
     Ok(())

@@ -32,7 +32,7 @@ async fn test_list_tools() -> Result<()> {
     assert!(!result.is_empty());
     let tool_names: Vec<_> = result.iter().map(|t| t.name.as_ref()).collect();
     assert!(tool_names.contains(&"await"));
-    assert!(tool_names.contains(&"ls"));
+    // Note: ls tool is optional and may not be present if ls.json was removed
 
     client.cancel().await?;
     Ok(())
@@ -42,25 +42,31 @@ async fn test_list_tools() -> Result<()> {
 async fn test_call_tool_basic() -> Result<()> {
     let client = new_client(Some(".ahma/tools")).await?;
 
+    // Use the await tool which should always be available
     let mut params = Map::new();
     params.insert(
-        "path".to_string(),
-        serde_json::Value::String(".".to_string()),
+        "timeout_seconds".to_string(),
+        serde_json::Value::Number(1.into()),
     );
 
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("ls"),
+        name: Cow::Borrowed("await"),
         arguments: Some(params),
     };
 
     let result = client.call_tool(call_param).await?;
 
-    // The result should contain the current directory's contents.
+    // The result should contain operation status information
     assert!(!result.content.is_empty());
     if let Some(content) = result.content.first()
         && let Some(text_content) = content.as_text()
     {
-        assert!(text_content.text.contains("Cargo.toml"));
+        // Should contain information about operations or status
+        assert!(
+            text_content.text.contains("operation")
+                || text_content.text.contains("status")
+                || text_content.text.contains("completed")
+        );
     }
 
     client.cancel().await?;
