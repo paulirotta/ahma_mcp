@@ -6,7 +6,9 @@ mod android_tests {
     use crate::common::test_utils::{dir_exists, file_exists};
     use anyhow::Result;
     use serde_json::Value;
+    use std::future::Future;
     use std::path::Path;
+    use std::pin::Pin;
     use tempfile::TempDir;
     use tokio::task::spawn_blocking;
 
@@ -27,24 +29,38 @@ mod android_tests {
         Ok(temp_dir)
     }
 
-    /// Async recursive directory copy using tokio::fs with proper recursion handling
+    /// Validate that a file name is safe (no path traversal)
+    fn is_safe_filename(name: &std::ffi::OsStr) -> bool {
+        let name_str = name.to_string_lossy();
+        // Reject paths containing dangerous sequences
+        !name_str.contains("..") && !name_str.contains('/') && !name_str.contains('\\')
+    }
+
+    /// Async recursive directory copy using tokio::fs with proper recursion handling and path validation
     fn copy_dir_recursive<'a>(
         src: &'a Path,
         dst: &'a Path,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
             tokio::fs::create_dir_all(dst).await?;
             let mut entries = tokio::fs::read_dir(src).await?;
 
             while let Some(entry) = entries.next_entry().await? {
-                let path = entry.path();
                 let file_name = entry.file_name();
-                let dst_path = dst.join(file_name);
 
-                if path.is_dir() {
-                    copy_dir_recursive(&path, &dst_path).await?;
+                // Validate filename for path traversal attacks
+                if !is_safe_filename(&file_name) {
+                    eprintln!("Skipping unsafe filename: {:?}", file_name);
+                    continue;
+                }
+
+                let src_path = src.join(&file_name);
+                let dst_path = dst.join(&file_name);
+
+                if src_path.is_dir() {
+                    copy_dir_recursive(&src_path, &dst_path).await?;
                 } else {
-                    tokio::fs::copy(&path, &dst_path).await?;
+                    tokio::fs::copy(&src_path, &dst_path).await?;
                 }
             }
             Ok(())
