@@ -1,10 +1,9 @@
 name: "CodeQL Config"
 
-# Only analyze Rust code, ignore Java/Kotlin test data
-languages:
-  - rust
+# Explicitly disable auto-detection and only analyze Rust
+disable-default-path-filters: true
 
-# Exclude test data directories that contain Android/Java/Kotlin sample projects
+# Exclude all non-Rust code and test data
 paths-ignore:
   - "test-data/**"
   - "target/**"
@@ -12,9 +11,17 @@ paths-ignore:
   - "**/*.yml"
   - "**/*.yaml"
   - "**/*.toml"
+  - "**/*.json"
+  - "**/*.java"
+  - "**/*.kt"
+  - "**/*.gradle"
+  - "**/*.xml"
+  - "**/build/**"
+  - "**/gradle/**"
 
-# Include only source directories
+# Only include Rust source files
 paths:
-  - "src/**"
-  - "tests/**"
-  - ".ahma/**"
+  - "src/**/*.rs"
+  - "tests/**/*.rs"
+  - "lib.rs"
+  - "main.rs"

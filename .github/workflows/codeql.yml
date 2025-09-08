@@ -26,6 +26,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Remove Java/Kotlin files before CodeQL sees them
+      - name: Remove test data to prevent language detection issues
+        run: |
+          rm -rf test-data/
+          find . -name "*.java" -delete
+          find . -name "*.kt" -delete
+          find . -name "*.gradle" -delete
+          find . -name "build.gradle*" -delete
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
