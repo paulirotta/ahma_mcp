@@ -106,10 +106,10 @@ impl McpIo for StdioMcpIo {
     async fn read_line(&mut self) -> Option<String> {
         let result = tokio::task::spawn_blocking(|| {
             let mut buffer = String::new();
-            if std::io::stdin().read_line(&mut buffer).unwrap_or(0) > 0 {
-                Some(buffer.trim_end().to_string())
-            } else {
-                None
+            match std::io::stdin().read_line(&mut buffer) {
+                Ok(0) => None, // EOF
+                Ok(_) => Some(buffer.trim_end().to_string()),
+                Err(_) => None,
             }
         })
         .await;
