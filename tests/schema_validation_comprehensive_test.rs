@@ -10,6 +10,7 @@
 use anyhow::Result;
 use serde_json::json;
 use std::path::PathBuf;
+use tokio::time::Instant;
 
 use ahma_mcp::schema_validation::{MtdfValidator, ValidationErrorType};
 
@@ -276,7 +277,7 @@ async fn test_performance_for_large_tool_sets() -> Result<()> {
     .to_string();
 
     // Measure validation performance
-    let start_time = std::time::Instant::now();
+    let start_time = Instant::now();
     let result = validator.validate_tool_config(&PathBuf::from("large.json"), &large_config);
     let validation_time = start_time.elapsed();
 
@@ -316,7 +317,7 @@ async fn test_performance_for_large_tool_sets() -> Result<()> {
     })
     .to_string();
 
-    let error_start_time = std::time::Instant::now();
+    let error_start_time = Instant::now();
     let error_result =
         validator.validate_tool_config(&PathBuf::from("invalid_large.json"), &invalid_large_config);
     let error_validation_time = error_start_time.elapsed();

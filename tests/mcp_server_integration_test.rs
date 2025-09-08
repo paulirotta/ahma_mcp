@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::time::Instant;
 
 /// Test full MCP server lifecycle with realistic scenarios
 /// This validates the complete integration flow from service creation to basic operations
@@ -79,7 +80,7 @@ async fn test_mcp_service_stability_under_load() {
     // Test service performance under sustained load
     let service = create_test_service().await;
 
-    let start_time = std::time::Instant::now();
+    let start_time = Instant::now();
 
     // Perform many get_info operations rapidly
     for _ in 0..100 {

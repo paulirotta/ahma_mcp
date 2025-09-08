@@ -54,7 +54,7 @@ use serde_json::{Value, from_str};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::signal;
 use tracing::{info, instrument};
 use tracing_subscriber::EnvFilter;
@@ -246,7 +246,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
             );
 
             // Wait up to configured timeout for operations to complete with priority-based progress updates
-            let shutdown_start = std::time::Instant::now();
+            let shutdown_start = Instant::now();
             let shutdown_timeout = shutdown_timeout;
 
             while shutdown_start.elapsed() < shutdown_timeout {

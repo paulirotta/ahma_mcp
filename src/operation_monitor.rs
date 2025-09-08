@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing;
@@ -51,6 +51,8 @@ pub struct Operation {
     pub end_time: Option<std::time::SystemTime>,
     /// When wait_for_operation was first called for this operation (None if never waited for)
     pub first_wait_time: Option<std::time::SystemTime>,
+    /// Timeout duration for this specific operation (None means use default)
+    pub timeout_duration: Option<Duration>,
     /// Cancellation token for this operation (not serialized)
     #[serde(skip)]
     pub cancellation_token: CancellationToken,
@@ -68,6 +70,29 @@ impl Operation {
             start_time: std::time::SystemTime::now(),
             end_time: None,
             first_wait_time: None,
+            timeout_duration: None,
+            cancellation_token: CancellationToken::new(),
+        }
+    }
+
+    /// Create a new operation info with timeout
+    pub fn new_with_timeout(
+        id: String,
+        tool_name: String,
+        description: String,
+        result: Option<Value>,
+        timeout: Option<Duration>,
+    ) -> Self {
+        Self {
+            id,
+            tool_name,
+            description,
+            state: OperationStatus::Pending,
+            result,
+            start_time: std::time::SystemTime::now(),
+            end_time: None,
+            first_wait_time: None,
+            timeout_duration: timeout,
             cancellation_token: CancellationToken::new(),
         }
     }
@@ -282,7 +307,7 @@ impl OperationMonitor {
 
     pub async fn wait_for_operation(&self, operation_id: &str) -> Option<Operation> {
         let timeout = Duration::from_secs(300); // 5 minute timeout to prevent indefinite waiting
-        let start = std::time::Instant::now();
+        let start = Instant::now();
 
         // Record that someone is waiting for this operation (for metrics)
         {
@@ -345,7 +370,7 @@ impl OperationMonitor {
         // Validate and set timeout (1-1800 seconds, default 240)
         let timeout_secs = timeout_seconds.unwrap_or(240).clamp(1, 1800);
         let timeout = Duration::from_secs(timeout_secs as u64);
-        let start_time = std::time::Instant::now();
+        let start_time = Instant::now();
 
         // Parse tool filter
         let tool_filters: Option<Vec<String>> = tool_filter.map(|filters| {

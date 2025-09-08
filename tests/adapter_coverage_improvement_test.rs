@@ -12,7 +12,7 @@ use anyhow::Result;
 use serde_json::{Map, json};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 
@@ -788,7 +788,7 @@ async fn test_graceful_shutdown_scenarios() -> Result<()> {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Test graceful shutdown
-    let shutdown_start = std::time::Instant::now();
+    let shutdown_start = Instant::now();
     adapter.shutdown().await;
     let shutdown_duration = shutdown_start.elapsed();
 

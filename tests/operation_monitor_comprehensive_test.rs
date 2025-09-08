@@ -12,6 +12,7 @@ use serde_json::json;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::Barrier;
+use tokio::time::Instant;
 
 use ahma_mcp::operation_monitor::{MonitorConfig, Operation, OperationMonitor, OperationStatus};
 
@@ -199,7 +200,7 @@ async fn test_status_query_performance_under_load() -> Result<()> {
 
         let handle = tokio::spawn(async move {
             barrier_clone.wait().await;
-            let start_time = std::time::Instant::now();
+            let start_time = Instant::now();
 
             let mut query_count = 0;
 

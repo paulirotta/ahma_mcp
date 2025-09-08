@@ -18,6 +18,7 @@ use rmcp::model::{CancelledNotificationParam, RequestId};
 use serde_json::{Map, Value};
 use std::{sync::Arc, time::Duration};
 use tempfile::TempDir;
+use tokio::time::Instant;
 
 #[tokio::test]
 async fn test_mcp_cancellation_does_not_trigger_canceled_canceled_message() {
@@ -168,7 +169,7 @@ async fn test_await_tool_timeout_handling() {
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
 
     // Test the operation monitor's wait_for_operation timeout behavior
-    let start_time = std::time::Instant::now();
+    let start_time = Instant::now();
 
     // Try to wait for a non-existent operation
     let result = operation_monitor
