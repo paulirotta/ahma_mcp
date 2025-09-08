@@ -1,0 +1,20 @@
+name: "CodeQL Config"
+
+# Only analyze Rust code, ignore Java/Kotlin test data
+languages:
+  - rust
+
+# Exclude test data directories that contain Android/Java/Kotlin sample projects
+paths-ignore:
+  - "test-data/**"
+  - "target/**"
+  - "**/*.md"
+  - "**/*.yml"
+  - "**/*.yaml"
+  - "**/*.toml"
+
+# Include only source directories
+paths:
+  - "src/**"
+  - "tests/**"
+  - ".ahma/**"
