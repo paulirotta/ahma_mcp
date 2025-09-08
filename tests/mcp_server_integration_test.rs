@@ -12,7 +12,6 @@ use tokio::time::Instant;
 
 /// Test full MCP server lifecycle with realistic scenarios
 /// This validates the complete integration flow from service creation to basic operations
-
 async fn create_test_service() -> AhmaMcpService {
     let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(300));
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));

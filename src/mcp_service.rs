@@ -98,7 +98,6 @@ impl AhmaMcpService {
 
     /// Recursively collects all leaf subcommands from a tool's configuration.
     fn collect_leaf_subcommands<'a>(
-        &self,
         subcommands: &'a [SubcommandConfig],
         prefix: &str,
         leaves: &mut Vec<(String, &'a SubcommandConfig)>,
@@ -117,7 +116,7 @@ impl AhmaMcpService {
             };
 
             if let Some(nested_subcommands) = &sub.subcommand {
-                self.collect_leaf_subcommands(nested_subcommands, &current_path, leaves);
+                Self::collect_leaf_subcommands(nested_subcommands, &current_path, leaves);
             } else {
                 leaves.push((current_path, sub));
             }
@@ -172,7 +171,7 @@ impl AhmaMcpService {
     fn generate_schema_for_tool_config(&self, tool_config: &ToolConfig) -> Arc<Map<String, Value>> {
         let mut leaf_subcommands = Vec::new();
         if let Some(subcommands) = &tool_config.subcommand {
-            self.collect_leaf_subcommands(subcommands, "", &mut leaf_subcommands);
+            Self::collect_leaf_subcommands(subcommands, "", &mut leaf_subcommands);
         }
 
         // Case 1: Single default subcommand. No `subcommand` parameter needed.
