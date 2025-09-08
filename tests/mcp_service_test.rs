@@ -127,6 +127,7 @@ mod mcp_service_tests {
                     required: Some(false),
                     alias: None,
                     format: None,
+                    positional: None,
                     file_arg: None,
                     file_flag: None,
                 }]),

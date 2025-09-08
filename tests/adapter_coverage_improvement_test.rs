@@ -111,6 +111,7 @@ async fn test_command_preparation_error_paths() -> Result<()> {
                 required: Some(true),
                 file_arg: Some(false),
                 file_flag: None,
+                positional: Some(true),
             },
             OptionConfig {
                 name: "pos_array".to_string(),
@@ -121,6 +122,7 @@ async fn test_command_preparation_error_paths() -> Result<()> {
                 required: Some(false),
                 file_arg: Some(false),
                 file_flag: None,
+                positional: Some(true),
             },
         ]),
         options: Some(vec![
@@ -133,6 +135,7 @@ async fn test_command_preparation_error_paths() -> Result<()> {
                 required: Some(false),
                 file_arg: Some(true),
                 file_flag: Some("--file".to_string()),
+                positional: None,
             },
             OptionConfig {
                 name: "array-option".to_string(),
@@ -143,6 +146,7 @@ async fn test_command_preparation_error_paths() -> Result<()> {
                 required: Some(false),
                 file_arg: Some(false),
                 file_flag: None,
+                positional: None,
             },
             OptionConfig {
                 name: "bool-flag".to_string(),
@@ -153,6 +157,7 @@ async fn test_command_preparation_error_paths() -> Result<()> {
                 required: Some(false),
                 file_arg: Some(false),
                 file_flag: None,
+                positional: None,
             },
             OptionConfig {
                 name: "number".to_string(),
@@ -163,6 +168,7 @@ async fn test_command_preparation_error_paths() -> Result<()> {
                 required: Some(false),
                 file_arg: Some(false),
                 file_flag: None,
+                positional: None,
             },
         ]),
     };
@@ -277,6 +283,7 @@ async fn test_file_handling_error_scenarios() -> Result<()> {
             required: Some(false),
             file_arg: Some(true),
             file_flag: Some("--input-file".to_string()),
+            positional: None,
         }]),
     };
 
@@ -708,6 +715,7 @@ async fn test_complex_async_exec_options() -> Result<()> {
             required: Some(true),
             file_arg: Some(false),
             file_flag: None,
+            positional: Some(true),
         }]),
         options: Some(vec![OptionConfig {
             name: "verbose".to_string(),
@@ -718,6 +726,7 @@ async fn test_complex_async_exec_options() -> Result<()> {
             required: Some(false),
             file_arg: Some(false),
             file_flag: None,
+            positional: None,
         }]),
     };
 
