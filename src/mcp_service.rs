@@ -30,7 +30,7 @@ use rmcp::{
     model::{
         CallToolRequestParam, CallToolResult, CancelledNotificationParam, Content,
         ErrorData as McpError, Implementation, ListToolsResult, PaginatedRequestParam,
-        ProtocolVersion, ServerCapabilities, ServerInfo, Tool,
+        ProtocolVersion, ServerCapabilities, ServerInfo, Tool, ToolsCapability,
     },
     service::{NotificationContext, Peer, RequestContext, RoleServer},
 };
@@ -357,7 +357,12 @@ impl ServerHandler for AhmaMcpService {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             protocol_version: ProtocolVersion::V_2024_11_05,
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
+            capabilities: ServerCapabilities {
+                tools: Some(ToolsCapability {
+                    list_changed: Some(true),
+                }),
+                ..Default::default()
+            },
             server_info: Implementation {
                 name: env!("CARGO_PKG_NAME").to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
@@ -902,9 +907,8 @@ impl ServerHandler for AhmaMcpService {
                 }
             );
 
-            if config.name == "cargo" {
-                arguments.remove("working_directory");
-            }
+            // Remove working_directory from arguments since it's handled by the framework
+            arguments.remove("working_directory");
 
             if is_synchronous {
                 match self

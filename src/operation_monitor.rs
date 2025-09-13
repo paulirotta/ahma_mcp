@@ -6,9 +6,11 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant, SystemTime},
+};
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing;
@@ -46,11 +48,11 @@ pub struct Operation {
     pub state: OperationStatus,
     pub result: Option<Value>,
     /// When the operation was created
-    pub start_time: std::time::SystemTime,
+    pub start_time: SystemTime,
     /// When the operation completed (None if still running)
-    pub end_time: Option<std::time::SystemTime>,
+    pub end_time: Option<SystemTime>,
     /// When wait_for_operation was first called for this operation (None if never waited for)
-    pub first_wait_time: Option<std::time::SystemTime>,
+    pub first_wait_time: Option<SystemTime>,
     /// Timeout duration for this specific operation (None means use default)
     pub timeout_duration: Option<Duration>,
     /// Cancellation token for this operation (not serialized)
@@ -67,7 +69,7 @@ impl Operation {
             description,
             state: OperationStatus::Pending,
             result,
-            start_time: std::time::SystemTime::now(),
+            start_time: SystemTime::now(),
             end_time: None,
             first_wait_time: None,
             timeout_duration: None,
@@ -89,7 +91,7 @@ impl Operation {
             description,
             state: OperationStatus::Pending,
             result,
-            start_time: std::time::SystemTime::now(),
+            start_time: SystemTime::now(),
             end_time: None,
             first_wait_time: None,
             timeout_duration: timeout,
@@ -137,6 +139,8 @@ impl MonitorConfig {
 pub struct OperationMonitor {
     operations: Arc<RwLock<HashMap<String, Operation>>>,
     completion_history: Arc<RwLock<HashMap<String, Operation>>>,
+    /// Track status check times to detect polling patterns
+    status_check_history: Arc<RwLock<Vec<Instant>>>,
     #[allow(dead_code)]
     config: MonitorConfig,
 }
@@ -147,6 +151,7 @@ impl OperationMonitor {
         Self {
             operations: Arc::new(RwLock::new(HashMap::new())),
             completion_history: Arc::new(RwLock::new(HashMap::new())),
+            status_check_history: Arc::new(RwLock::new(Vec::new())),
             config,
         }
     }
@@ -163,8 +168,18 @@ impl OperationMonitor {
     }
 
     pub async fn get_operation(&self, operation_id: &str) -> Option<Operation> {
+        // Track status check time to detect polling patterns
+        self.track_status_check().await;
+
         let ops = self.operations.read().await;
-        ops.get(operation_id).cloned()
+        let result = ops.get(operation_id).cloned();
+
+        // Check for polling pattern and provide guidance
+        if result.is_some() {
+            self.check_for_polling_pattern().await;
+        }
+
+        result
     }
 
     pub async fn get_all_operations(&self) -> Vec<Operation> {
@@ -191,7 +206,7 @@ impl OperationMonitor {
 
             // Set end time when operation reaches terminal state
             if status.is_terminal() {
-                op.end_time = Some(std::time::SystemTime::now());
+                op.end_time = Some(SystemTime::now());
             }
         }
 
@@ -226,7 +241,7 @@ impl OperationMonitor {
                 );
 
                 op.state = OperationStatus::Cancelled;
-                op.end_time = Some(std::time::SystemTime::now());
+                op.end_time = Some(SystemTime::now());
                 op.cancellation_token.cancel();
 
                 // Store structured cancellation info in result for debugging/LLM visibility
@@ -314,7 +329,7 @@ impl OperationMonitor {
             let mut ops = self.operations.write().await;
             if let Some(op) = ops.get_mut(operation_id) {
                 if op.first_wait_time.is_none() {
-                    op.first_wait_time = Some(std::time::SystemTime::now());
+                    op.first_wait_time = Some(SystemTime::now());
                 }
             }
         }
@@ -484,7 +499,7 @@ impl OperationMonitor {
                 .filter(|op| {
                     // Only include operations completed since we started waiting
                     if let Some(end_time) = op.end_time {
-                        let wait_start_system_time = std::time::SystemTime::now() - elapsed;
+                        let wait_start_system_time = SystemTime::now() - elapsed;
                         end_time >= wait_start_system_time
                     } else {
                         false
@@ -501,6 +516,51 @@ impl OperationMonitor {
         }
 
         completed_operations
+    }
+
+    /// Track a status check to detect polling patterns
+    async fn track_status_check(&self) {
+        let mut history = self.status_check_history.write().await;
+        let now = Instant::now();
+
+        // Keep only last 10 checks to avoid unbounded growth
+        if history.len() >= 10 {
+            history.remove(0);
+        }
+        history.push(now);
+    }
+
+    /// Check if client is polling too frequently and suggest using await instead
+    async fn check_for_polling_pattern(&self) {
+        let history = self.status_check_history.read().await;
+
+        // Need at least 3 checks to detect a pattern
+        if history.len() < 3 {
+            return;
+        }
+
+        // Check if all recent checks were within a short time window (< 5 seconds apart)
+        let recent_checks = &history[history.len().saturating_sub(3)..];
+        let mut is_rapid_polling = true;
+
+        for window in recent_checks.windows(2) {
+            if let [prev, current] = window {
+                let interval = current.duration_since(*prev);
+                if interval > Duration::from_secs(5) {
+                    is_rapid_polling = false;
+                    break;
+                }
+            }
+        }
+
+        if is_rapid_polling {
+            tracing::warn!(
+                "🔄 Detected rapid status polling pattern. Consider using the 'await' tool instead of repeated status checks for better efficiency."
+            );
+            tracing::info!(
+                "💡 The 'await' tool will automatically notify you when operations complete, eliminating the need for status polling."
+            );
+        }
     }
 }
 

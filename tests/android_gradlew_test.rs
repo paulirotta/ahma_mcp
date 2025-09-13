@@ -2,13 +2,13 @@ mod common;
 
 #[cfg(feature = "android")]
 mod android_tests {
-    use crate::common::get_workspace_dir;
-    use crate::common::test_utils::{dir_exists, file_exists};
+    use crate::common::{
+        get_workspace_dir,
+        test_utils::{dir_exists, file_exists},
+    };
     use anyhow::Result;
     use serde_json::Value;
-    use std::future::Future;
-    use std::path::Path;
-    use std::pin::Pin;
+    use std::{future::Future, path::Path, pin::Pin};
     use tempfile::TempDir;
     use tokio::task::spawn_blocking;
 

@@ -1,16 +1,17 @@
 #![allow(dead_code)]
-/// Test utilities for ahma_mcp testing
-use std::path::Path;
-
-use ahma_mcp::adapter::Adapter;
-use ahma_mcp::client::MockIo;
-use ahma_mcp::mcp_service::AhmaMcpService;
-use ahma_mcp::operation_monitor::{MonitorConfig, OperationMonitor};
-use ahma_mcp::shell_pool::{ShellPoolConfig, ShellPoolManager};
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
+use ahma_mcp::{
+    adapter::Adapter,
+    client::MockIo,
+    mcp_service::AhmaMcpService,
+    operation_monitor::{MonitorConfig, OperationMonitor},
+    shell_pool::{ShellPoolConfig, ShellPoolManager},
+};
+use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
 use tempfile::{TempDir, tempdir};
+
+pub fn init_test_logging() {
+    let _ = ahma_mcp::utils::logging::init_logging("trace", false);
+}
 
 /// Check if output contains any of the expected patterns
 #[allow(dead_code)]
@@ -97,7 +98,8 @@ pub async fn setup_test_environment_with_io() -> (
 ) {
     let temp_dir = tempdir().unwrap();
     let tools_dir = temp_dir.path().join("tools");
-    std::fs::create_dir_all(&tools_dir).unwrap();
+    // Use Tokio's async filesystem API so we don't block the runtime
+    tokio::fs::create_dir_all(&tools_dir).await.unwrap();
 
     let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
     let monitor = Arc::new(OperationMonitor::new(monitor_config));

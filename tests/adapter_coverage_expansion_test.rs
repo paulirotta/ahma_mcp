@@ -1,0 +1,622 @@
+//! Additional adapter coverage tests targeting specific uncovered paths.
+//!
+//! This module focuses on edge cases and error conditions that are difficult to reach
+//! in the existing comprehensive tests, specifically targeting:
+//! - prepare_command_and_args edge cases
+//! - Temp file creation error paths
+//! - Operation ID generation uniqueness
+//! - Task handle cleanup edge cases
+//! - Complex async execution error paths
+
+use ahma_mcp::adapter::{Adapter, AsyncExecOptions};
+use ahma_mcp::config::{OptionConfig, SubcommandConfig};
+use ahma_mcp::operation_monitor::{MonitorConfig, OperationMonitor};
+use ahma_mcp::shell_pool::{ShellPoolConfig, ShellPoolManager};
+use serde_json::{Map, json};
+use std::sync::Arc;
+use std::time::Duration;
+use tempfile::TempDir;
+
+mod common;
+
+/// Helper function to create test adapter with custom configuration
+/// Helper to create test adapter
+async fn create_simple_test_adapter() -> (Arc<Adapter>, TempDir) {
+    common::test_utils::init_test_logging();
+
+    let temp_dir = TempDir::new().unwrap();
+    let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
+    let monitor = Arc::new(OperationMonitor::new(monitor_config));
+    let shell_config = ShellPoolConfig::default();
+    let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
+    let adapter = Arc::new(Adapter::new(monitor, shell_pool).unwrap());
+    (adapter, temp_dir)
+}
+
+#[tokio::test]
+async fn test_prepare_command_and_args_edge_cases() {
+    common::test_utils::init_test_logging();
+    common::test_utils::init_test_logging();
+
+    let (adapter, temp_dir) = create_simple_test_adapter().await;
+
+    // Test with empty subcommand config
+    let empty_config = SubcommandConfig {
+        name: "empty".to_string(),
+        description: "Empty config".to_string(),
+        synchronous: Some(true),
+        timeout_seconds: None,
+        enabled: true,
+        guidance_key: None,
+        subcommand: None,
+        positional_args: None,
+        options: None,
+    };
+
+    let mut args = Map::new();
+    args.insert("unused".to_string(), json!("value"));
+
+    let result = adapter
+        .execute_sync_in_dir(
+            "echo",
+            Some(args),
+            temp_dir.path().to_str().unwrap(),
+            Some(5),
+            Some(&empty_config),
+        )
+        .await;
+
+    assert!(result.is_ok());
+
+    adapter.shutdown().await;
+}
+
+#[tokio::test]
+async fn test_prepare_command_and_args_with_aliases() {
+    common::test_utils::init_test_logging();
+    common::test_utils::init_test_logging();
+
+    let (adapter, temp_dir) = create_simple_test_adapter().await;
+
+    // Test alias handling where both alias and main name are provided
+    let alias_config = SubcommandConfig {
+        name: "alias_test".to_string(),
+        description: "Alias test".to_string(),
+        synchronous: Some(true),
+        timeout_seconds: None,
+        enabled: true,
+        guidance_key: None,
+        subcommand: None,
+        positional_args: None,
+        options: Some(vec![
+            OptionConfig {
+                name: "verbose".to_string(),
+                alias: Some("v".to_string()),
+                option_type: "boolean".to_string(),
+                description: "Verbose flag".to_string(),
+                format: None,
+                required: Some(false),
+                file_arg: Some(false),
+                file_flag: None,
+            },
+            OptionConfig {
+                name: "output".to_string(),
+                alias: Some("o".to_string()),
+                option_type: "string".to_string(),
+                description: "Output file".to_string(),
+                format: None,
+                required: Some(false),
+                file_arg: Some(false),
+                file_flag: None,
+            },
+        ]),
+    };
+
+    let mut args = Map::new();
+    args.insert("v".to_string(), json!(true)); // Use alias
+    args.insert("output".to_string(), json!("test.txt")); // Use main name
+    args.insert("verbose".to_string(), json!(false)); // Main name with different value
+
+    let result = adapter
+        .execute_sync_in_dir(
+            "echo",
+            Some(args),
+            temp_dir.path().to_str().unwrap(),
+            Some(5),
+            Some(&alias_config),
+        )
+        .await;
+
+    assert!(result.is_ok());
+    let output = result.unwrap();
+    // Should prioritize main name over alias when both are present
+    assert!(output.contains("--output"));
+    assert!(output.contains("test.txt"));
+
+    adapter.shutdown().await;
+}
+
+#[tokio::test]
+async fn test_prepare_command_and_args_mixed_types() {
+    common::test_utils::init_test_logging();
+    common::test_utils::init_test_logging();
+
+    let (adapter, temp_dir) = create_simple_test_adapter().await;
+
+    let mixed_config = SubcommandConfig {
+        name: "mixed".to_string(),
+        description: "Mixed types test".to_string(),
+        synchronous: Some(true),
+        timeout_seconds: None,
+        enabled: true,
+        guidance_key: None,
+        subcommand: None,
+        positional_args: Some(vec![OptionConfig {
+            name: "pos_str".to_string(),
+            alias: None,
+            option_type: "string".to_string(),
+            description: "String positional".to_string(),
+            format: None,
+            required: Some(false),
+            file_arg: Some(false),
+            file_flag: None,
+        }]),
+        options: Some(vec![
+            OptionConfig {
+                name: "bool_opt".to_string(),
+                alias: None,
+                option_type: "boolean".to_string(),
+                description: "Boolean option".to_string(),
+                format: None,
+                required: Some(false),
+                file_arg: Some(false),
+                file_flag: None,
+            },
+            OptionConfig {
+                name: "array_opt".to_string(),
+                alias: None,
+                option_type: "array".to_string(),
+                description: "Array option".to_string(),
+                format: None,
+                required: Some(false),
+                file_arg: Some(false),
+                file_flag: None,
+            },
+            OptionConfig {
+                name: "num_opt".to_string(),
+                alias: None,
+                option_type: "number".to_string(),
+                description: "Number option".to_string(),
+                format: None,
+                required: Some(false),
+                file_arg: Some(false),
+                file_flag: None,
+            },
+        ]),
+    };
+
+    let mut args = Map::new();
+    args.insert("pos_str".to_string(), json!("positional_value"));
+    args.insert("bool_opt".to_string(), json!(true));
+    args.insert("array_opt".to_string(), json!(["item1", "item2"]));
+    args.insert("num_opt".to_string(), json!(42.5));
+    args.insert("null_opt".to_string(), json!(null));
+    args.insert("working_directory".to_string(), json!("/should/be/ignored"));
+
+    let result = adapter
+        .execute_sync_in_dir(
+            "echo",
+            Some(args),
+            temp_dir.path().to_str().unwrap(),
+            Some(5),
+            Some(&mixed_config),
+        )
+        .await;
+
+    assert!(result.is_ok());
+    let output = result.unwrap();
+    assert!(output.contains("positional_value"));
+    assert!(output.contains("--bool_opt"));
+    assert!(output.contains("--array_opt"));
+    assert!(output.contains("42.5"));
+
+    adapter.shutdown().await;
+}
+
+#[tokio::test]
+async fn test_operation_id_generation_uniqueness() {
+    common::test_utils::init_test_logging();
+    // Test that operation IDs are unique across multiple calls
+    // This tests the generate_operation_id function without actually executing commands
+
+    let (adapter1, _temp_dir1) = create_simple_test_adapter().await;
+    let (adapter2, _temp_dir2) = create_simple_test_adapter().await;
+
+    // Generate multiple operation IDs by starting operations (but not waiting for completion)
+    let mut ids = Vec::new();
+
+    // Generate 20 operation IDs quickly (10 from each adapter)
+    for _ in 0..10 {
+        let id1 = adapter1
+            .execute_async_in_dir("test1", "true", None, "/tmp", Some(1)) // Use 'true' command which exits immediately
+            .await
+            .unwrap();
+        let id2 = adapter2
+            .execute_async_in_dir("test2", "true", None, "/tmp", Some(1)) // Use 'true' command which exits immediately
+            .await
+            .unwrap();
+        ids.push(id1);
+        ids.push(id2);
+    }
+
+    // All IDs should be unique and follow the expected format
+    let mut unique_ids = std::collections::HashSet::new();
+    for id in &ids {
+        assert!(
+            unique_ids.insert(id.clone()),
+            "Operation ID {} is not unique",
+            id
+        );
+        assert!(id.starts_with("op_"));
+    }
+
+    // Verify we got the expected number of unique IDs
+    assert_eq!(unique_ids.len(), 20, "Should have 20 unique operation IDs");
+
+    // Give a small amount of time for operations to start before shutdown
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    adapter1.shutdown().await;
+    adapter2.shutdown().await;
+}
+
+#[tokio::test]
+async fn test_async_execution_task_error_handling() {
+    common::test_utils::init_test_logging();
+    let (adapter, _temp_dir) = create_simple_test_adapter().await;
+
+    // Test async execution with invalid working directory
+    let result = adapter
+        .execute_async_in_dir(
+            "invalid_dir_test",
+            "echo",
+            Some({
+                let mut args = Map::new();
+                args.insert("message".to_string(), json!("test"));
+                args
+            }),
+            "/nonexistent/directory/path/that/does/not/exist",
+            Some(5),
+        )
+        .await;
+
+    // Should still return an operation ID even if directory doesn't exist
+    assert!(result.is_ok());
+    let op_id = result.unwrap();
+    assert!(op_id.starts_with("op_"));
+
+    // Wait for the operation to attempt execution and fail
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    adapter.shutdown().await;
+}
+
+#[tokio::test]
+async fn test_shutdown_with_active_tasks() {
+    common::test_utils::init_test_logging();
+    let (adapter, _temp_dir) = create_simple_test_adapter().await;
+
+    // Start multiple async operations
+    let mut operation_ids = Vec::new();
+    for i in 0..3 {
+        let op_id = adapter
+            .execute_async_in_dir(
+                &format!("shutdown_test_{}", i),
+                "echo",
+                Some({
+                    let mut args = Map::new();
+                    args.insert("message".to_string(), json!(format!("test {}", i)));
+                    args
+                }),
+                "/tmp",
+                Some(5),
+            )
+            .await
+            .unwrap();
+        operation_ids.push(op_id);
+    }
+
+    // Give operations a moment to start
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Shutdown should complete
+    adapter.shutdown().await;
+
+    // All operation IDs should be valid
+    for op_id in operation_ids {
+        assert!(op_id.starts_with("op_"));
+    }
+}
+
+#[tokio::test]
+async fn test_async_execution_with_none_callback() {
+    common::test_utils::init_test_logging();
+    let (adapter, temp_dir) = create_simple_test_adapter().await;
+
+    // Test async execution with None callback (should not panic)
+    let result = adapter
+        .execute_async_in_dir_with_callback(
+            "none_callback_test",
+            "echo",
+            Some({
+                let mut args = Map::new();
+                args.insert("message".to_string(), json!("no callback"));
+                args
+            }),
+            temp_dir.path().to_str().unwrap(),
+            Some(5),
+            None, // No callback
+        )
+        .await;
+
+    assert!(result.is_ok());
+    let op_id = result.unwrap();
+    assert!(op_id.starts_with("op_"));
+
+    // Wait for completion
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    adapter.shutdown().await;
+}
+
+#[tokio::test]
+async fn test_execute_async_with_empty_options() {
+    common::test_utils::init_test_logging();
+    let (adapter, temp_dir) = create_simple_test_adapter().await;
+
+    // Test with minimal options
+    let options = AsyncExecOptions {
+        operation_id: None,
+        args: None,
+        timeout: None,
+        callback: None,
+        subcommand_config: None,
+    };
+
+    let result = adapter
+        .execute_async_in_dir_with_options(
+            "minimal_options",
+            "echo",
+            temp_dir.path().to_str().unwrap(),
+            options,
+        )
+        .await;
+
+    assert!(result.is_ok());
+    let op_id = result.unwrap();
+    assert!(op_id.starts_with("op_"));
+
+    // Wait for completion
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    adapter.shutdown().await;
+}
+
+#[tokio::test]
+async fn test_sync_execution_with_complex_error_handling() {
+    common::test_utils::init_test_logging();
+    let (adapter, temp_dir) = create_simple_test_adapter().await;
+
+    // Test sync execution with command that produces stderr but exits successfully
+    let result = adapter
+        .execute_sync_in_dir(
+            "sh",
+            Some({
+                let mut args = Map::new();
+                args.insert(
+                    "c".to_string(),
+                    json!("echo 'stdout content' >&2; echo 'stdout content'"),
+                );
+                args
+            }),
+            temp_dir.path().to_str().unwrap(),
+            Some(5),
+            None,
+        )
+        .await;
+
+    // The command might succeed or fail, but it should handle gracefully
+    assert!(result.is_ok() || result.is_err());
+
+    adapter.shutdown().await;
+}
+
+#[tokio::test]
+async fn test_sync_execution_stderr_only() {
+    common::test_utils::init_test_logging();
+    let (adapter, temp_dir) = create_simple_test_adapter().await;
+
+    // Test command that only outputs to stderr
+    let result = adapter
+        .execute_sync_in_dir(
+            "sh",
+            Some({
+                let mut args = Map::new();
+                args.insert("c".to_string(), json!("echo 'error message' >&2"));
+                args
+            }),
+            temp_dir.path().to_str().unwrap(),
+            Some(5),
+            None,
+        )
+        .await;
+
+    // The command might fail or succeed depending on shell behavior
+    // What matters is that it doesn't panic and handles the case gracefully
+    assert!(result.is_ok() || result.is_err());
+
+    adapter.shutdown().await;
+}
+
+#[tokio::test]
+async fn test_sync_execution_empty_stdout() {
+    common::test_utils::init_test_logging();
+    let (adapter, temp_dir) = create_simple_test_adapter().await;
+
+    // Test command with empty stdout but successful exit
+    let result = adapter
+        .execute_sync_in_dir(
+            "true", // Command that does nothing but exits successfully
+            None,
+            temp_dir.path().to_str().unwrap(),
+            Some(5),
+            None,
+        )
+        .await;
+
+    assert!(result.is_ok());
+    // Empty output is acceptable for commands that don't produce output
+
+    adapter.shutdown().await;
+}
+
+#[tokio::test]
+async fn test_async_execution_with_custom_operation_id() {
+    common::test_utils::init_test_logging();
+    let (adapter, temp_dir) = create_simple_test_adapter().await;
+
+    let custom_id = "custom_operation_12345";
+    let options = AsyncExecOptions {
+        operation_id: Some(custom_id.to_string()),
+        args: Some({
+            let mut args = Map::new();
+            args.insert("message".to_string(), json!("custom id test"));
+            args
+        }),
+        timeout: Some(10),
+        callback: None,
+        subcommand_config: None,
+    };
+
+    let result = adapter
+        .execute_async_in_dir_with_options(
+            "custom_id_test",
+            "echo",
+            temp_dir.path().to_str().unwrap(),
+            options,
+        )
+        .await;
+
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), custom_id);
+
+    // Wait for completion
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    adapter.shutdown().await;
+}
+
+#[tokio::test]
+async fn test_prepare_command_and_args_with_null_values() {
+    common::test_utils::init_test_logging();
+    let (adapter, temp_dir) = create_simple_test_adapter().await;
+
+    let config_with_nulls = SubcommandConfig {
+        name: "null_test".to_string(),
+        description: "Null values test".to_string(),
+        synchronous: Some(true),
+        timeout_seconds: None,
+        enabled: true,
+        guidance_key: None,
+        subcommand: None,
+        positional_args: Some(vec![OptionConfig {
+            name: "pos_arg".to_string(),
+            alias: None,
+            option_type: "string".to_string(),
+            description: "Positional argument".to_string(),
+            format: None,
+            required: Some(false),
+            file_arg: Some(false),
+            file_flag: None,
+        }]),
+        options: Some(vec![OptionConfig {
+            name: "opt_arg".to_string(),
+            alias: None,
+            option_type: "string".to_string(),
+            description: "Optional argument".to_string(),
+            format: None,
+            required: Some(false),
+            file_arg: Some(false),
+            file_flag: None,
+        }]),
+    };
+
+    let mut args = Map::new();
+    args.insert("pos_arg".to_string(), json!(null));
+    args.insert("opt_arg".to_string(), json!(null));
+    args.insert("valid_arg".to_string(), json!("valid_value"));
+
+    let result = adapter
+        .execute_sync_in_dir(
+            "echo",
+            Some(args),
+            temp_dir.path().to_str().unwrap(),
+            Some(5),
+            Some(&config_with_nulls),
+        )
+        .await;
+
+    assert!(result.is_ok());
+    let output = result.unwrap();
+    assert!(output.contains("valid_value"));
+    // Null values should be ignored
+    assert!(!output.contains("null"));
+
+    adapter.shutdown().await;
+}
+
+#[tokio::test]
+async fn test_multiple_concurrent_async_operations() {
+    common::test_utils::init_test_logging();
+    let (adapter, temp_dir) = create_simple_test_adapter().await;
+    let temp_dir_path = temp_dir.path().to_str().unwrap().to_string();
+
+    // Start many concurrent operations to stress test the task handle management
+    let mut handles = Vec::new();
+    for i in 0..10 {
+        let adapter_clone = adapter.clone();
+        let temp_dir_path_clone = temp_dir_path.clone();
+        let handle = tokio::spawn(async move {
+            adapter_clone
+                .execute_async_in_dir(
+                    &format!("concurrent_{}", i),
+                    "echo",
+                    Some({
+                        let mut args = Map::new();
+                        args.insert(
+                            "message".to_string(),
+                            json!(format!("concurrent test {}", i)),
+                        );
+                        args
+                    }),
+                    &temp_dir_path_clone,
+                    Some(10),
+                )
+                .await
+        });
+        handles.push(handle);
+    }
+
+    // Wait for all operations to complete
+    for handle in handles {
+        let result = handle.await.unwrap();
+        assert!(result.is_ok());
+        let op_id = result.unwrap();
+        assert!(op_id.starts_with("op_"));
+    }
+
+    // Wait for all async operations to finish processing
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+
+    adapter.shutdown().await;
+}

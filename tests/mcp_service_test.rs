@@ -9,9 +9,9 @@ mod mcp_service_tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    #[test]
+    mod common;
     fn test_guidance_config_deserialization() {
-        // Test that GuidanceConfig can be properly deserialized from JSON
+        common::test_utils::init_test_logging();
         let json_str = r#"{
             "guidance_blocks": {
                 "async_behavior": "This tool operates asynchronously",

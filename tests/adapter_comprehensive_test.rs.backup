@@ -19,8 +19,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
 
-mod common;
-
 /// Helper function to create test adapter with default configuration
 async fn create_test_adapter() -> Result<(Adapter, TempDir)> {
     let temp_dir = TempDir::new()?;
@@ -49,7 +47,7 @@ async fn create_test_adapter() -> Result<(Adapter, TempDir)> {
 /// Test command construction edge cases with various argument types
 #[tokio::test]
 async fn test_command_construction_edge_cases() -> Result<()> {
-    common::test_utils::init_test_logging();
+    common::test_utils::init_logging_for_tests();
 
     let (adapter, temp_dir) = create_test_adapter().await?;
 

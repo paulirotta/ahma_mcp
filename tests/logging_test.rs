@@ -8,8 +8,8 @@ mod logging_tests {
     fn test_init_logging_multiple_times() {
         // This test ensures that calling init_logging multiple times does not cause a panic.
         // The Once::new() in the init_logging function should prevent re-initialization.
-        assert!(init_logging().is_ok());
-        assert!(init_logging().is_ok());
+        assert!(init_logging("info", false).is_ok());
+        assert!(init_logging("info", false).is_ok());
     }
 
     #[test]
@@ -24,7 +24,7 @@ mod logging_tests {
             let c = Arc::clone(&barrier);
             handles.push(thread::spawn(move || {
                 c.wait();
-                assert!(init_logging().is_ok());
+                assert!(init_logging("info", false).is_ok());
             }));
         }
 

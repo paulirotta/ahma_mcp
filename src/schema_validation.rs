@@ -5,8 +5,7 @@
 
 use crate::config::ToolConfig;
 use serde_json::Value;
-use std::collections::HashSet;
-use std::path::Path;
+use std::{collections::HashSet, path::Path};
 
 #[derive(Debug, Clone)]
 pub struct SchemaValidationError {
