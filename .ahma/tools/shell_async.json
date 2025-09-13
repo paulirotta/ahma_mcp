@@ -1,7 +1,7 @@
 {
     "name": "shell_async",
     "description": "Execute shell commands asynchronously with full bash capabilities",
-    "command": "bash",
+    "command": "bash -c",
     "enabled": true,
     "timeout_seconds": 300,
     "synchronous": false,
@@ -14,19 +14,15 @@
             "guidance_key": "async_behavior",
             "description": "Execute a shell command asynchronously using bash",
             "enabled": true,
-            "options": [
-                {
-                    "name": "working_directory",
-                    "type": "string",
-                    "description": "Working directory for command execution",
-                    "format": "path"
-                },
+            "positional_args": [
                 {
                     "name": "command",
                     "type": "string",
                     "description": "The shell command to execute (supports pipes, redirects, variables, etc.)",
                     "required": true
-                },
+                }
+            ],
+            "options": [
                 {
                     "name": "timeout_seconds",
                     "type": "integer",

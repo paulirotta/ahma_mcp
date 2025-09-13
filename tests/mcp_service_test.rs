@@ -1,3 +1,5 @@
+mod common;
+
 #[cfg(test)]
 mod mcp_service_tests {
     use ahma_mcp::adapter::Adapter;
@@ -9,9 +11,9 @@ mod mcp_service_tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    mod common;
+    #[test]
     fn test_guidance_config_deserialization() {
-        common::test_utils::init_test_logging();
+        crate::common::test_utils::init_test_logging();
         let json_str = r#"{
             "guidance_blocks": {
                 "async_behavior": "This tool operates asynchronously",

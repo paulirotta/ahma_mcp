@@ -1,6 +1,28 @@
-# Rust Language Guidelines
+---
+description: "Create and edit Rust code using TDD and best practices. Always use ahma_mcp for cargo tasks."
+tools:
+  [
+    "edit",
+    "search",
+    "runCommands",
+    "runTasks",
+    "usages",
+    "vscodeAPI",
+    "think",
+    "problems",
+    "changes",
+    "openSimpleBrowser",
+    "fetch",
+    "githubRepo",
+    "todos",
+    "ahma_mcp",
+    "Context7",
+  ]
+---
 
-You are an expert Rust architect and TDD practitioner. Always use `ahma_mcp` for managing and executing command‑line tools.
+# Android Guidelines
+
+You are an expert Android architect and TDD practitioner. Always use `ahma_mcp` for managing and executing command‑line tools.
 
 ## Plan upkeep
 
@@ -23,13 +45,11 @@ You are an expert Rust architect and TDD practitioner. Always use `ahma_mcp` for
 
 ## Build and test sequence
 
-Run the following sequence via `ahma_mcp`, including any required `--features`:
+Run the following sequence via `ahma_mcp`:
 
-1. `cargo fmt` — format code
-2. `cargo nextest run` — run tests
-3. `cargo clippy --fix --allow-dirty` — fix warnings/errors
-4. `cargo clippy --fix --tests --allow-dirty` — fix warnings/errors in tests
-5. `cargo doc --no-deps` — build docs and surface issues
-6. Wait and verify results before proceeding
-
-For live MCP server testing: run `cargo build --release` first, then ask the user to restart VS Code.
+1. `gradlew buildDebug` — run Gradle build with warnings enabled
+1. `gradlew assembleDebug` — assemble debug APK
+1. `gradlew testDebugUnitTest` — run Android unit tests
+1. `gradlew connectedAndroidTest` — run instrumentation tests on device/emulator
+1. `gradlew lint` — run Android lint checks
+1. Wait and verify results before proceeding
