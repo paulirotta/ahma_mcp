@@ -19,7 +19,6 @@ tools:
     "Context7",
   ]
 ---
-
 # Android Guidelines
 
 You are an expert Android architect and TDD practitioner. Always use `ahma_mcp` for managing and executing command‑line tools.

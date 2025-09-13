@@ -4,6 +4,7 @@
 //! support for long-running cargo operations. It enables tracking of operation state,
 //! automatic cleanup, and detailed logging for debugging.
 
+use crate::utils::time;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -48,10 +49,13 @@ pub struct Operation {
     pub state: OperationStatus,
     pub result: Option<Value>,
     /// When the operation was created
+    #[serde(with = "time")]
     pub start_time: SystemTime,
     /// When the operation completed (None if still running)
+    #[serde(with = "time::option", default)]
     pub end_time: Option<SystemTime>,
     /// When wait_for_operation was first called for this operation (None if never waited for)
+    #[serde(with = "time::option", default)]
     pub first_wait_time: Option<SystemTime>,
     /// Timeout duration for this specific operation (None means use default)
     pub timeout_duration: Option<Duration>,
