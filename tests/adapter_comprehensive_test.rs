@@ -400,7 +400,6 @@ async fn test_subcommand_configuration_handling() -> Result<()> {
             required: Some(true),
             file_arg: None,
             file_flag: None,
-            positional: Some(true),
         }]),
         options: Some(vec![
             ahma_mcp::config::OptionConfig {
@@ -412,7 +411,6 @@ async fn test_subcommand_configuration_handling() -> Result<()> {
                 required: Some(false),
                 file_arg: None,
                 file_flag: None,
-                positional: None,
             },
             ahma_mcp::config::OptionConfig {
                 name: "count".to_string(),
@@ -423,7 +421,6 @@ async fn test_subcommand_configuration_handling() -> Result<()> {
                 required: Some(false),
                 file_arg: None,
                 file_flag: None,
-                positional: None,
             },
         ]),
     };
@@ -497,7 +494,6 @@ async fn test_file_based_argument_handling() -> Result<()> {
             required: Some(false),
             file_arg: Some(true),
             file_flag: Some("--script-file".to_string()),
-            positional: None,
         }]),
     };
 

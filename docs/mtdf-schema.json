@@ -103,13 +103,6 @@
         "name": {
           "type": "string"
         },
-        "positional": {
-          "description": "If true, this option is treated as a positional argument rather than a flag.",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
         "required": {
           "type": [
             "boolean",

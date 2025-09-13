@@ -7,83 +7,42 @@ use rmcp::{
     model::{CallToolRequestParam, ErrorCode},
 };
 use serde_json::json;
-use tempfile::tempdir;
-use tokio::fs::{self, File};
-use tokio::io::AsyncWriteExt;
 
 #[tokio::test]
 async fn test_path_validation_success() {
-    let dir = tempdir().unwrap();
-    let tools_dir = dir.path().join("tools");
-    fs::create_dir(&tools_dir).await.unwrap();
-
-    let ls_config = r#"{
-        "name": "ls",
-        "description": "list files",
-        "command": "ls",
-        "subcommand": [{
-            "name": "default",
-            "description": "list files in a directory",
-            "synchronous": true,
-            "positional_args": [{
-                "name": "path",
-                "type": "string",
-                "format": "path",
-                "positional": true,
-                "description": "path to list"
-            }]
-        }]
-    }"#;
-    let mut file = File::create(tools_dir.join("ls.json")).await.unwrap();
-    file.write_all(ls_config.as_bytes()).await.unwrap();
-
-    let client = new_client(Some(tools_dir.to_str().unwrap())).await.unwrap();
+    // Use existing shell_async tool for path validation test
+    let client = new_client(None).await.unwrap();
 
     let params = CallToolRequestParam {
-        name: "ls".into(),
-        arguments: Some(serde_json::from_value(json!({ "path": "." })).unwrap()),
+        name: "shell_async".into(),
+        arguments: Some(
+            serde_json::from_value(json!({
+                "command": "echo test",
+                "working_directory": "."
+            }))
+            .unwrap(),
+        ),
     };
 
     let result = client.call_tool(params).await;
-    assert!(
-        result.is_ok(),
-        "Expected call to succeed, but it failed: {:?}",
-        result.err()
-    );
+    assert!(result.is_ok());
     client.cancel().await.unwrap();
 }
 
 #[tokio::test]
 async fn test_path_validation_failure_absolute() {
-    let dir = tempdir().unwrap();
-    let tools_dir = dir.path().join("tools");
-    fs::create_dir(&tools_dir).await.unwrap();
-
-    let ls_config = r#"{
-        "name": "ls",
-        "description": "list files",
-        "command": "ls",
-        "subcommand": [{
-            "name": "default",
-            "description": "list files in a directory",
-            "synchronous": true,
-            "positional_args": [{
-                "name": "path",
-                "type": "string",
-                "format": "path",
-                "positional": true,
-                "description": "path to list"
-            }]
-        }]
-    }"#;
-    let mut file = File::create(tools_dir.join("ls.json")).await.unwrap();
-    file.write_all(ls_config.as_bytes()).await.unwrap();
-
-    let client = new_client(Some(tools_dir.to_str().unwrap())).await.unwrap();
+    // Use existing shell_async tool for path validation test
+    let client = new_client(None).await.unwrap();
 
     let params = CallToolRequestParam {
-        name: "ls".into(),
-        arguments: Some(serde_json::from_value(json!({ "path": "/etc" })).unwrap()),
+        name: "shell_async".into(),
+        arguments: Some(
+            serde_json::from_value(json!({
+                "command": "echo test",
+                "working_directory": "/etc"
+            }))
+            .unwrap(),
+        ),
     };
 
     let result = client.call_tool(params).await;
@@ -105,35 +64,18 @@ async fn test_path_validation_failure_absolute() {
 
 #[tokio::test]
 async fn test_path_validation_failure_relative() {
-    let dir = tempdir().unwrap();
-    let tools_dir = dir.path().join("tools");
-    fs::create_dir(&tools_dir).await.unwrap();
-
-    let ls_config = r#"{
-        "name": "ls",
-        "description": "list files",
-        "command": "ls",
-        "subcommand": [{
-            "name": "default",
-            "description": "list files in a directory",
-            "synchronous": true,
-            "positional_args": [{
-                "name": "path",
-                "type": "string",
-                "format": "path",
-                "positional": true,
-                "description": "path to list"
-            }]
-        }]
-    }"#;
-    let mut file = File::create(tools_dir.join("ls.json")).await.unwrap();
-    file.write_all(ls_config.as_bytes()).await.unwrap();
-
-    let client = new_client(Some(tools_dir.to_str().unwrap())).await.unwrap();
+    // Use existing shell_async tool for path validation test
+    let client = new_client(None).await.unwrap();
 
     let params = CallToolRequestParam {
-        name: "ls".into(),
-        arguments: Some(serde_json::from_value(json!({ "path": "../" })).unwrap()),
+        name: "shell_async".into(),
+        arguments: Some(
+            serde_json::from_value(json!({
+                "command": "echo test",
+                "working_directory": "../"
+            }))
+            .unwrap(),
+        ),
     };
 
     let result = client.call_tool(params).await;
