@@ -50,6 +50,10 @@ env:
 jobs:
   job-cargo-build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        language: ["rust"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -128,6 +132,11 @@ jobs:
           name: documentation
           path: target/doc
 
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
+
       - name: Show sccache stats
         run: sccache --show-stats
 
@@ -135,6 +144,8 @@ jobs:
 
   job-nextest:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -218,6 +229,8 @@ jobs:
 
   job-android:
     runs-on: macos-latest
+    strategy:
+      fail-fast: true
     env:
       TERM: xterm-256color
     steps:
