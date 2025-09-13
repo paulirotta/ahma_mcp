@@ -12,12 +12,15 @@
             "name": "add",
             "description": "Add a dependency to Cargo.toml.",
             "synchronous": true,
-            "options": [
+            "positional_args": [
                 {
-                    "name": "dependency",
+                    "name": "dep",
                     "type": "string",
-                    "description": "The dependency to add"
-                },
+                    "description": "The dependency to add (e.g., `serde` or `serde@1.0`).",
+                    "required": true
+                }
+            ],
+            "options": [
                 {
                     "name": "dev",
                     "type": "boolean",
@@ -27,11 +30,6 @@
                     "name": "build",
                     "type": "boolean",
                     "description": "Add as a build-dependency"
-                },
-                {
-                    "name": "version",
-                    "type": "string",
-                    "description": "Specify a version to add"
                 },
                 {
                     "name": "git",
@@ -58,6 +56,11 @@
                     "name": "no-default-features",
                     "type": "boolean",
                     "description": "Disable the default features"
+                },
+                {
+                    "name": "rename",
+                    "type": "string",
+                    "description": "Rename the dependency"
                 }
             ]
         },

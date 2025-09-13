@@ -281,6 +281,8 @@ impl AhmaMcpService {
 
         Tool {
             name: tool_name.into(),
+            title: Some(tool_config.name.clone()),
+            icons: None,
             description: Some(description.into()),
             input_schema,
             output_schema: None,
@@ -365,7 +367,10 @@ impl ServerHandler for AhmaMcpService {
             },
             server_info: Implementation {
                 name: env!("CARGO_PKG_NAME").to_string(),
+                title: Some(env!("CARGO_PKG_NAME").to_string()),
                 version: env!("CARGO_PKG_VERSION").to_string(),
+                icons: None,
+                website_url: None,
             },
             instructions: None,
         }
@@ -487,6 +492,8 @@ impl ServerHandler for AhmaMcpService {
             // Hard-wired await command - always available
             tools.push(Tool {
                 name: "await".into(),
+                title: Some("await".to_string()),
+                icons: None,
                 description: Some("Wait for previously started asynchronous operations to complete. **WARNING:** This is a blocking tool and makes you inefficient. **ONLY** use this if you have NO other tasks and cannot proceed until completion. It is **ALWAYS** better to perform other work and let results be pushed to you.".into()),
                 input_schema: self.generate_input_schema_for_wait(),
                 output_schema: None,
@@ -496,6 +503,8 @@ impl ServerHandler for AhmaMcpService {
             // Hard-wired status command - always available
             tools.push(Tool {
                 name: "status".into(),
+                title: Some("status".to_string()),
+                icons: None,
                 description: Some("Query the status of operations without blocking. Shows active and completed operations.".into()),
                 input_schema: self.generate_input_schema_for_status(),
                 output_schema: None,

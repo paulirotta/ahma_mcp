@@ -1,5 +1,5 @@
 ---
-description: "Create and edit Rust code using TDD and best practices. Always use ahma_mcp for cargo tasks."
+description: "Create and edit Android Kotlin code using TDD and best practices. Always use ahma_mcp for cargo tasks."
 tools:
   [
     "edit",
