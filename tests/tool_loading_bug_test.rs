@@ -5,7 +5,7 @@
 //! - Only external CLI tools should have JSON configurations
 //! - Hardwired MCP tools (status, await) don't need JSON files  
 //! - But users may add them anyway for documentation/IDE support
-//! MAINTENANCE: Update expected counts when adding new CLI tool integrations
+//!   MAINTENANCE: Update expected counts when adding new CLI tool integrations
 
 mod common;
 
