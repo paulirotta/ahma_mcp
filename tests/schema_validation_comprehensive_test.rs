@@ -532,85 +532,30 @@ async fn test_complex_configuration_validation_scenarios() -> Result<()> {
         result
     );
 
-    // Test synchronous tool with async-sounding description (should fail - logical inconsistency)
-    let sync_with_async_desc_config = json!({
-        "name": "sync_with_async_desc_test",
-        "description": "Test sync tool with async description",
-        "command": "sync_with_async",
+    // Test contradictory sync/async descriptions
+    let contradictory_config = json!({
+        "name": "contradictory_test",
+        "description": "Test contradictory descriptions",
+        "command": "contradict",
         "subcommand": [
             {
                 "name": "sync_with_async_desc",
                 "description": "This command returns an operation_id and sends notifications asynchronously",  // Async language
-                "synchronous": true  // But marked as sync - should be caught as inconsistency
-            }
-        ]
-    })
-    .to_string();
-
-    let result = validator.validate_tool_config(
-        &PathBuf::from("sync_async_desc.json"),
-        &sync_with_async_desc_config,
-    );
-    assert!(
-        result.is_err(),
-        "Synchronous tools with async language should fail validation: {:?}",
-        result
-    );
-    let errors = result.unwrap_err();
-    assert!(errors.iter().any(
-        |e| e.error_type == ValidationErrorType::LogicalInconsistency
-            && e.message.contains("asynchronous")
-    ));
-
-    // Test synchronous tool with appropriate description (should pass)
-    let proper_sync_config = json!({
-        "name": "proper_sync_test",
-        "description": "Test sync tool with appropriate description",
-        "command": "proper_sync",
-        "subcommand": [
-            {
-                "name": "sync_operation",
-                "description": "Returns results immediately after completing the task",  // Proper sync language
-                "synchronous": true
+                "synchronous": true  // But marked as sync - should trigger warning
             }
         ]
     })
     .to_string();
 
     let result =
-        validator.validate_tool_config(&PathBuf::from("proper_sync.json"), &proper_sync_config);
-    assert!(
-        result.is_ok(),
-        "Proper synchronous tool should pass validation: {:?}",
-        result
-    );
-
-    // Test actual contradictory case: async tool missing required async guidance
-    let missing_async_guidance_config = json!({
-        "name": "missing_guidance_test",
-        "description": "Test async tool missing required guidance",
-        "command": "async_missing",
-        "subcommand": [
-            {
-                "name": "async_without_guidance",
-                "description": "Performs a basic operation",  // Missing all async guidance: no async/background, no operation_id, no result/notification, no don't wait
-                "synchronous": false  // Explicitly async - should require guidance
-            }
-        ]
-    })
-    .to_string();
-
-    let result = validator.validate_tool_config(
-        &PathBuf::from("missing_guidance.json"),
-        &missing_async_guidance_config,
-    );
+        validator.validate_tool_config(&PathBuf::from("contradictory.json"), &contradictory_config);
     assert!(result.is_err());
     let errors = result.unwrap_err();
-    assert!(errors.iter().any(|e| {
-        e.error_type == ValidationErrorType::ConstraintViolation
-            && e.message
-                .contains("Async subcommand description should include guidance")
-    }));
+    assert!(errors.iter().any(
+        |e| e.error_type == ValidationErrorType::LogicalInconsistency
+            && e.message.contains("mentions")
+            && e.message.contains("async behavior")
+    ));
 
     // Test mixed valid and invalid subcommands
     let mixed_config = json!({

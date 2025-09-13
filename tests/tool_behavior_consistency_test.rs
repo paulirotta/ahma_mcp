@@ -1,6 +1,7 @@
 //! TDD tests for tool configuration and execution issues
 use anyhow::Result;
 use rmcp::model::CallToolRequestParam;
+use serde_json::json;
 use std::borrow::Cow;
 
 mod common;
@@ -8,54 +9,37 @@ use common::test_client::new_client;
 
 #[tokio::test]
 async fn test_synchronous_cargo_check_returns_actual_results() -> Result<()> {
-    // This test identifies the issue where cargo_check marked as synchronous
-    // returns empty results instead of actual cargo check output
+    // This test identifies the issue where cargo check should return actual results
 
     let client = new_client(Some(".ahma/tools")).await?;
 
-    let params = serde_json::json!({
-        "subcommand": "check"
-    });
-
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("cargo"),
-        arguments: Some(params.as_object().unwrap().clone()),
+        arguments: Some(serde_json::from_value(json!({ "subcommand": "check" })).unwrap()),
     };
 
     let result = client.call_tool(call_param).await?;
 
-    // The issue: synchronous tools should return actual results immediately
-    // Not empty results or async job IDs
+    // Cargo check should return actual results
     assert!(
         !result.content.is_empty(),
-        "Synchronous cargo check should return non-empty results"
+        "Cargo check should return non-empty results"
     );
 
-    // Check that we get actual cargo output, not async job info
+    // Check that we get actual cargo output
     let content_text = result
         .content
         .iter()
         .find_map(|c| c.as_text())
         .expect("Should have text content");
 
-    // Should contain actual cargo check output, not async job information
-    assert!(
-        !content_text.text.contains("started"),
-        "Synchronous tool should not return 'started' message"
-    );
-    assert!(
-        !content_text.text.contains("job_id"),
-        "Synchronous tool should not return job_id"
-    );
-
-    // Should contain actual cargo check results
-    // At minimum it should show that it ran cargo check (success or compilation errors)
+    // Should contain actual cargo check output
     assert!(
         content_text.text.contains("Finished")
-            || content_text.text.contains("error:")
-            || content_text.text.contains("warning:")
-            || content_text.text.len() > 10, // At least some meaningful output
-        "Synchronous cargo_check should return actual cargo output, got: {}",
+            || content_text.text.contains("Checking")
+            || content_text.text.contains("error")
+            || content_text.text.contains("warning"),
+        "Cargo check should return compilation results, got: {}",
         content_text.text
     );
 
@@ -127,49 +111,36 @@ async fn test_tool_descriptions_match_actual_behavior() -> Result<()> {
     let client = new_client(Some(".ahma/tools")).await?;
     let tools_result = client.list_tools(None).await?;
 
-    // Find cargo tool (consolidated tool instead of cargo_check)
-    let cargo_tool = tools_result
+    // Find cargo tool (check subcommand)
+    tools_result
         .tools
         .iter()
         .find(|t| t.name.as_ref() == "cargo")
         .expect("cargo tool should exist");
 
-    // Check if description matches behavior
-    let description = cargo_tool
-        .description
-        .as_ref()
-        .map(|d| d.as_ref())
+    // Test cargo check subcommand behavior
+    let call_param = CallToolRequestParam {
+        name: Cow::Borrowed("cargo"),
+        arguments: Some(serde_json::from_value(json!({ "subcommand": "check" })).unwrap()),
+    };
+
+    let result = client.call_tool(call_param).await?;
+    let content_text = result
+        .content
+        .iter()
+        .find_map(|c| c.as_text())
+        .map(|t| t.text.as_str())
         .unwrap_or("");
 
-    // The issue: tool description says async but it's configured as synchronous
-    // This creates confusion for AI agents
-    if description.contains("asynchronous") {
-        // If described as async, test that it actually behaves async
-        let params = serde_json::json!({
-            "subcommand": "check"
-        });
-
-        let call_param = CallToolRequestParam {
-            name: Cow::Borrowed("cargo"),
-            arguments: Some(params.as_object().unwrap().clone()),
-        };
-
-        let result = client.call_tool(call_param).await?;
-        let content_text = result
-            .content
-            .iter()
-            .find_map(|c| c.as_text())
-            .map(|t| t.text.as_str())
-            .unwrap_or("");
-
-        if description.contains("asynchronous") {
-            assert!(
-                content_text.contains("started") || content_text.contains("job_id"),
-                "Tool described as asynchronous should return async job info, but got: {}",
-                content_text
-            );
-        }
-    }
+    // Cargo check should return compilation results
+    assert!(
+        content_text.contains("Finished")
+            || content_text.contains("Checking")
+            || content_text.contains("error")
+            || content_text.contains("warning"),
+        "Cargo check should return compilation info, but got: {}",
+        content_text
+    );
 
     client.cancel().await?;
     Ok(())

@@ -93,7 +93,6 @@ async fn test_multiline_argument_with_echo() {
             description: "Text to echo".to_string(),
             format: None,
             required: Some(true),
-            positional: Some(true),
             file_arg: None, // Echo doesn't support files, should use escaping
             file_flag: None,
         }]),
@@ -333,7 +332,6 @@ async fn test_multiline_git_commit_message() {
             description: "Use the given message as the commit message".to_string(),
             format: None,
             required: None,
-            positional: None,
             file_arg: Some(true),
             file_flag: Some("-F".to_string()),
         }]),
@@ -470,7 +468,6 @@ async fn test_special_characters_in_arguments() {
             description: "Text to display".to_string(),
             format: None,
             required: Some(true),
-            positional: Some(true),
             file_arg: None, // No file support, should use escaping
             file_flag: None,
         }]),

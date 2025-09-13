@@ -91,7 +91,6 @@ fn test_tool_config_creation() {
                 format: Some("flag".to_string()),
                 file_arg: Some(false),
                 file_flag: None,
-                positional: None,
             }]),
             positional_args: None,
             synchronous: None,
@@ -145,7 +144,6 @@ fn test_option_config_creation() {
         format: Some("flag".to_string()),
         file_arg: Some(false),
         file_flag: None,
-        positional: None,
     };
 
     assert_eq!(option.name, "verbose");
@@ -231,7 +229,6 @@ async fn test_service_with_configs() {
                 format: None,
                 file_arg: Some(false),
                 file_flag: Some("--verbose".to_string()),
-                positional: None,
             }]),
             positional_args: None,
             guidance_key: Some("test_guidance".to_string()),
@@ -361,7 +358,6 @@ async fn test_service_with_tool_configs() {
                 file_arg: None,
                 file_flag: None,
                 alias: None,
-                positional: None,
             }]),
             positional_args: None,
             synchronous: None,

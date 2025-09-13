@@ -786,27 +786,11 @@ impl ServerHandler for AhmaMcpService {
             let config = match self.configs.get(tool_name) {
                 Some(config) => config,
                 None => {
-                    // Generate helpful error message with available tools
-                    let available_tools: Vec<String> = self.configs.keys().cloned().collect();
-                    let error_message = if available_tools.is_empty() {
-                        format!(
-                            "Tool '{}' not found. No tools are currently available.",
-                            tool_name
-                        )
-                    } else {
-                        format!(
-                            "Tool '{}' not found. Available tools: {}",
-                            tool_name,
-                            available_tools.join(", ")
-                        )
-                    };
+                    let error_message = format!("Tool '{}' not found.", tool_name);
                     tracing::error!("{}", error_message);
                     return Err(McpError::invalid_params(
                         error_message,
-                        Some(serde_json::json!({
-                            "tool_name": tool_name,
-                            "available_tools": available_tools
-                        })),
+                        Some(serde_json::json!({ "tool_name": tool_name })),
                     ));
                 }
             };
@@ -817,171 +801,76 @@ impl ServerHandler for AhmaMcpService {
                 .and_then(|v| v.as_str().map(|s| s.to_string()));
 
             // Find the subcommand config and construct the command parts
-            let (subcommand_config, command_parts) = match self
-                .find_subcommand_config_from_args(config, subcommand_name.clone())
-            {
-                Some(result) => result,
-                None => {
-                    // Generate helpful error message with available subcommands
-                    let available_subcommands: Vec<String> = config
-                        .subcommand
-                        .as_ref()
-                        .map(|subs| subs.iter().map(|sub| sub.name.clone()).collect())
-                        .unwrap_or_else(Vec::new);
-
-                    let error_message = if let Some(ref provided_subcommand) = subcommand_name {
-                        if available_subcommands.is_empty() {
-                            format!(
-                                "Invalid subcommand '{}' for tool '{}'. This tool does not use subcommands.",
-                                provided_subcommand, tool_name
-                            )
-                        } else {
-                            format!(
-                                "Invalid subcommand '{}' for tool '{}'. Available subcommands: {}",
-                                provided_subcommand,
-                                tool_name,
-                                available_subcommands.join(", ")
-                            )
-                        }
-                    } else if available_subcommands.is_empty() {
-                        format!(
-                            "Tool '{}' configuration error: no subcommands available.",
-                            tool_name
-                        )
-                    } else {
-                        format!(
-                            "Missing required 'subcommand' parameter for tool '{}'. Available subcommands: {}",
-                            tool_name,
-                            available_subcommands.join(", ")
-                        )
-                    };
-
-                    tracing::error!("{}", error_message);
-                    return Err(McpError::invalid_params(
-                        error_message,
-                        Some(serde_json::json!({
-                            "tool_name": tool_name,
-                            "provided_subcommand": subcommand_name,
-                            "available_subcommands": available_subcommands
-                        })),
-                    ));
-                }
-            };
-
-            let base_command = command_parts.join(" ");
-
-            // VALIDATION: Parameter validation with helpful feedback
-            if let Some(ref args) = params.arguments {
-                // Get all valid parameter names for this subcommand
-                let valid_params: Vec<String> = subcommand_config
-                    .options
-                    .as_deref()
-                    .unwrap_or(&[])
-                    .iter()
-                    .chain(
-                        subcommand_config
-                            .positional_args
-                            .as_deref()
-                            .unwrap_or(&[])
-                            .iter(),
-                    )
-                    .map(|o| o.name.clone())
-                    .collect();
-
-                // Check for invalid parameters (excluding 'subcommand' which is already processed)
-                for key in args.keys() {
-                    if key != "subcommand" && !valid_params.contains(key) {
-                        let error_message = if valid_params.is_empty() {
-                            format!(
-                                "Invalid parameter '{}' for tool '{}' subcommand '{}'. This subcommand does not accept any parameters.",
-                                key, tool_name, subcommand_config.name
-                            )
-                        } else {
-                            format!(
-                                "Invalid parameter '{}' for tool '{}' subcommand '{}'. Available parameters: {}",
-                                key,
-                                tool_name,
-                                subcommand_config.name,
-                                valid_params.join(", ")
-                            )
-                        };
-
+            let (subcommand_config, command_parts) =
+                match self.find_subcommand_config_from_args(config, subcommand_name) {
+                    Some(result) => result,
+                    None => {
+                        let error_message =
+                            format!("Subcommand for tool '{}' not found or invalid.", tool_name);
                         tracing::error!("{}", error_message);
                         return Err(McpError::invalid_params(
                             error_message,
-                            Some(serde_json::json!({
-                                "tool_name": tool_name,
-                                "subcommand": subcommand_config.name,
-                                "invalid_parameter": key,
-                                "available_parameters": valid_params
-                            })),
+                            Some(serde_json::json!({ "tool_name": tool_name })),
                         ));
                     }
-                }
-            }
+                };
+
+            let base_command = command_parts.join(" ");
 
             // SECURITY: Path validation
             if let Some(ref args) = params.arguments {
                 for (key, value) in args.iter() {
-                    let all_options = subcommand_config
-                        .options
-                        .as_deref()
-                        .unwrap_or(&[])
-                        .iter()
-                        .chain(
-                            subcommand_config
-                                .positional_args
-                                .as_deref()
-                                .unwrap_or(&[])
-                                .iter(),
-                        );
+                    if let Some(options) = &subcommand_config.options {
+                        if let Some(option_config) = options.iter().find(|o| o.name == *key) {
+                            let format = option_config.format.as_deref();
+                            if format == Some("path") || format == Some("path-or-value") {
+                                if let Some(path_str) = value.as_str() {
+                                    if format == Some("path-or-value") && path_str.contains('=') {
+                                        continue;
+                                    }
 
-                    if let Some(option_config) = all_options.clone().find(|o| o.name == *key) {
-                        let format = option_config.format.as_deref();
-                        if format == Some("path") || format == Some("path-or-value") {
-                            if let Some(path_str) = value.as_str() {
-                                if format == Some("path-or-value") && path_str.contains('=') {
-                                    continue;
-                                }
+                                    let path_to_validate = Path::new(path_str);
+                                    let workspace_root = match env::current_dir() {
+                                        Ok(dir) => dir,
+                                        Err(e) => {
+                                            return Err(McpError::internal_error(
+                                                format!("Failed to get current directory: {}", e),
+                                                None,
+                                            ));
+                                        }
+                                    };
 
-                                let path_to_validate = Path::new(path_str);
-                                let workspace_root = match env::current_dir() {
-                                    Ok(dir) => dir,
-                                    Err(e) => {
-                                        return Err(McpError::internal_error(
-                                            format!("Failed to get current directory: {}", e),
-                                            None,
+                                    let canonical_workspace = match workspace_root.canonicalize() {
+                                        Ok(path) => path,
+                                        Err(e) => {
+                                            return Err(McpError::internal_error(
+                                                format!(
+                                                    "Failed to canonicalize workspace path: {}",
+                                                    e
+                                                ),
+                                                None,
+                                            ));
+                                        }
+                                    };
+
+                                    let canonical_path = match path_to_validate.canonicalize() {
+                                        Ok(p) => p,
+                                        Err(_) => path_to_validate.to_path_buf(),
+                                    };
+
+                                    if !canonical_path.starts_with(&canonical_workspace) {
+                                        let error_message = format!(
+                                            "Path validation failed for parameter '{}'. The path '{}' is outside the allowed workspace.",
+                                            key, path_str
+                                        );
+                                        tracing::error!("{}", error_message);
+                                        return Err(McpError::invalid_params(
+                                            error_message,
+                                            Some(
+                                                serde_json::json!({ "parameter": key, "path": path_str }),
+                                            ),
                                         ));
                                     }
-                                };
-
-                                let canonical_workspace = match workspace_root.canonicalize() {
-                                    Ok(path) => path,
-                                    Err(e) => {
-                                        return Err(McpError::internal_error(
-                                            format!("Failed to canonicalize workspace path: {}", e),
-                                            None,
-                                        ));
-                                    }
-                                };
-
-                                let canonical_path = match path_to_validate.canonicalize() {
-                                    Ok(p) => p,
-                                    Err(_) => path_to_validate.to_path_buf(),
-                                };
-
-                                if !canonical_path.starts_with(&canonical_workspace) {
-                                    let error_message = format!(
-                                        "Path validation failed for parameter '{}'. The path '{}' is outside the allowed workspace.",
-                                        key, path_str
-                                    );
-                                    tracing::error!("{}", error_message);
-                                    return Err(McpError::invalid_params(
-                                        error_message,
-                                        Some(
-                                            serde_json::json!({ "parameter": key, "path": path_str }),
-                                        ),
-                                    ));
                                 }
                             }
                         }

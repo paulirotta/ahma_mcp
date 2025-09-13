@@ -110,9 +110,6 @@ pub struct OptionConfig {
     pub format: Option<String>,
     #[serde(default)]
     pub required: Option<bool>,
-    /// If true, this option is treated as a positional argument rather than a flag.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub positional: Option<bool>,
     /// If true, multi-line or special character values will be written to a temporary file
     /// and the file path will be passed as the argument instead of the raw value.
     /// The option name will be automatically converted to use the file flag variant

@@ -354,7 +354,7 @@ impl MtdfValidator {
             self.validate_options_array(options, &format!("{}.options", path), errors);
         }
 
-        // Validate async behavior guidelines (function handles sync/async logic internally)
+        // Validate async behavior guidelines
         if let Some(desc) = obj.get("description").and_then(|v| v.as_str()) {
             self.validate_async_behavior_guidance(desc, path, obj, parent_tool, errors);
         }
