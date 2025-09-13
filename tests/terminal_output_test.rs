@@ -1,8 +1,10 @@
 use ahma_mcp::terminal_output::TerminalOutput;
+use ahma_mcp::utils::logging::init_test_logging;
 use serde_json::json;
 
 #[test]
 fn test_should_display_comprehensive() {
+    init_test_logging();
     // Empty cases
     assert!(!TerminalOutput::should_display(""));
     assert!(!TerminalOutput::should_display("   "));
@@ -21,6 +23,7 @@ fn test_should_display_comprehensive() {
 
 #[test]
 fn test_format_content_json_pretty_printing() {
+    init_test_logging();
     // Simple JSON object
     let json_input = r#"{"name":"test","version":"1.0.0"}"#;
     let formatted = TerminalOutput::format_content(json_input);
@@ -46,6 +49,7 @@ fn test_format_content_json_pretty_printing() {
 
 #[test]
 fn test_format_content_invalid_json() {
+    init_test_logging();
     // Invalid JSON should be treated as regular string
     let invalid_json = r#"{"name": invalid}"#;
     let formatted = TerminalOutput::format_content(invalid_json);
@@ -59,6 +63,7 @@ fn test_format_content_invalid_json() {
 
 #[test]
 fn test_format_content_string_cleanup() {
+    init_test_logging();
     // Escaped newlines
     let input = "Line 1\\nLine 2\\nLine 3";
     let formatted = TerminalOutput::format_content(input);
@@ -87,6 +92,7 @@ fn test_format_content_string_cleanup() {
 
 #[test]
 fn test_format_content_edge_cases() {
+    init_test_logging();
     // Empty string
     let formatted = TerminalOutput::format_content("");
     assert_eq!(formatted, "");
@@ -114,6 +120,7 @@ fn test_format_content_edge_cases() {
 
 #[test]
 fn test_format_content_complex_json() {
+    init_test_logging();
     // Real-world-like JSON structure
     let complex_json = json!({
         "status": "success",
@@ -153,6 +160,7 @@ fn test_format_content_complex_json() {
 
 #[tokio::test]
 async fn test_display_result_with_empty_content() {
+    init_test_logging();
     // This should not panic and should handle empty content gracefully
     // The function returns early for empty content, so no output is produced
     TerminalOutput::display_result("test_op", "test_cmd", "test description", "").await;
@@ -161,6 +169,7 @@ async fn test_display_result_with_empty_content() {
 
 #[tokio::test]
 async fn test_display_await_results_with_empty_results() {
+    init_test_logging();
     // Should handle empty results vector gracefully
     TerminalOutput::display_await_results(&[]).await;
 
@@ -170,6 +179,7 @@ async fn test_display_await_results_with_empty_results() {
 
 #[tokio::test]
 async fn test_display_await_results_with_content() {
+    init_test_logging();
     // Should handle multiple results
     let results = vec![
         r#"{"result": "first"}"#.to_string(),

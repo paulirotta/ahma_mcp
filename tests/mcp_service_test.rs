@@ -1,17 +1,19 @@
 #[cfg(test)]
 mod mcp_service_tests {
-    use ahma_mcp::adapter::Adapter;
-    use ahma_mcp::config::{OptionConfig, SubcommandConfig, ToolConfig};
-    use ahma_mcp::mcp_service::{AhmaMcpService, GuidanceConfig, LegacyGuidanceConfig};
-    use ahma_mcp::operation_monitor::OperationMonitor;
+    use ahma_mcp::utils::logging::init_test_logging;
+    use ahma_mcp::{
+        adapter::Adapter,
+        config::{OptionConfig, SubcommandConfig, ToolConfig},
+        mcp_service::{AhmaMcpService, GuidanceConfig, LegacyGuidanceConfig},
+        operation_monitor::OperationMonitor,
+    };
     use rmcp::model::ProtocolVersion;
     use serde_json::json;
-    use std::collections::HashMap;
-    use std::sync::Arc;
+    use std::{collections::HashMap, sync::Arc};
 
     #[test]
     fn test_guidance_config_deserialization() {
-        // Test that GuidanceConfig can be properly deserialized from JSON
+        init_test_logging();
         let json_str = r#"{
             "guidance_blocks": {
                 "async_behavior": "This tool operates asynchronously",
@@ -53,6 +55,7 @@ mod mcp_service_tests {
 
     #[test]
     fn test_guidance_config_minimal() {
+        init_test_logging();
         // Test that GuidanceConfig works with minimal JSON (only required fields)
         let json_str = r#"{
             "guidance_blocks": {
@@ -70,6 +73,7 @@ mod mcp_service_tests {
 
     #[test]
     fn test_legacy_guidance_config() {
+        init_test_logging();
         // Test LegacyGuidanceConfig structure
         let json_str = r#"{
             "general_guidance": {
@@ -102,6 +106,7 @@ mod mcp_service_tests {
 
     #[test]
     fn test_tool_config_structure() {
+        init_test_logging();
         // Test that ToolConfig structures work as expected for the service
         let config = ToolConfig {
             name: "test_tool".to_string(),
@@ -156,6 +161,7 @@ mod mcp_service_tests {
 
     #[test]
     fn test_environment_variable_access() {
+        init_test_logging();
         // Test that we can access the cargo package environment variables
         // This ensures the service can get its name and version
         let pkg_name = env!("CARGO_PKG_NAME");
@@ -168,6 +174,7 @@ mod mcp_service_tests {
 
     #[test]
     fn test_json_value_parsing() {
+        init_test_logging();
         // Test that we can parse JSON values as expected for tool arguments
         let json_val = json!({
             "release": true,
@@ -193,6 +200,7 @@ mod mcp_service_tests {
 
     #[tokio::test]
     async fn test_service_creation() {
+        init_test_logging();
         // Test that AhmaMcpService can be created successfully
         use ahma_mcp::operation_monitor::MonitorConfig;
         use ahma_mcp::shell_pool::ShellPoolManager;
@@ -218,6 +226,7 @@ mod mcp_service_tests {
 
     #[test]
     fn test_get_info() {
+        init_test_logging();
         // Test the get_info method returns correct server information
         use ahma_mcp::operation_monitor::MonitorConfig;
         use ahma_mcp::shell_pool::ShellPoolManager;
@@ -250,6 +259,7 @@ mod mcp_service_tests {
 
     #[tokio::test]
     async fn test_list_tools_empty_config() {
+        init_test_logging();
         // Test list_tools with empty configuration
         use ahma_mcp::operation_monitor::MonitorConfig;
         use ahma_mcp::shell_pool::ShellPoolManager;

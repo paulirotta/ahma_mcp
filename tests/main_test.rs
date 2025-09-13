@@ -1,9 +1,11 @@
 #[cfg(test)]
 mod main_tests {
+    use ahma_mcp::utils::logging::init_test_logging;
     use std::path::PathBuf;
 
     #[test]
     fn test_default_paths() {
+        init_test_logging();
         // Test that default paths can be created
         let tools_dir = PathBuf::from(".ahma/tools");
         let guidance_file = PathBuf::from("tool_guidance.json");
@@ -14,6 +16,7 @@ mod main_tests {
 
     #[test]
     fn test_timeout_values() {
+        init_test_logging();
         // Test that timeout value parsing works
         let default_timeout: u64 = 300;
         let custom_timeout: u64 = 600;
@@ -24,6 +27,7 @@ mod main_tests {
 
     #[test]
     fn test_cli_argument_structure() {
+        init_test_logging();
         // Test that we can create and validate CLI argument types
         // This ensures our CLI structure compiles correctly
 
@@ -37,6 +41,7 @@ mod main_tests {
 
     #[test]
     fn test_mode_detection_logic() {
+        init_test_logging();
         // Test the logic for determining which mode to run in
         // This mirrors the logic in main() for mode selection
 
@@ -56,6 +61,7 @@ mod main_tests {
 
     #[test]
     fn test_validation_mode_detection() {
+        init_test_logging();
         // Test validation mode detection
         let server_mode = false;
         let tool_name: Option<String> = None;
@@ -72,6 +78,7 @@ mod main_tests {
 
     #[test]
     fn test_cli_mode_detection() {
+        init_test_logging();
         // Test CLI mode detection
         let server_mode = false;
         let tool_name = Some("cargo_build".to_string());
@@ -88,6 +95,7 @@ mod main_tests {
 
     #[test]
     fn test_tool_name_parsing_valid() {
+        init_test_logging();
         // Test parsing valid tool names
         let test_cases = vec![
             ("cargo_build", ("cargo", vec!["build"])),
@@ -115,6 +123,7 @@ mod main_tests {
 
     #[test]
     fn test_tool_name_parsing_invalid() {
+        init_test_logging();
         // Test parsing invalid tool names
         let invalid_names = vec!["cargo", "tool", "", "tool_", "_tool", "tool__name"];
 
@@ -128,6 +137,7 @@ mod main_tests {
 
     #[test]
     fn test_cli_argument_parsing() {
+        init_test_logging();
         // Test parsing of CLI arguments for tool execution
         let test_cases = vec![
             // (input_args, expected_working_dir, expected_args_map)
@@ -193,6 +203,7 @@ mod main_tests {
 
     #[test]
     fn test_environment_variable_parsing() {
+        init_test_logging();
         // Test parsing of AHMA_MCP_ARGS environment variable
         let test_json =
             r#"{"working_directory": "/tmp", "verbose": true, "args": ["file1", "file2"]}"#;
@@ -212,6 +223,7 @@ mod main_tests {
 
     #[test]
     fn test_validation_target_parsing() {
+        init_test_logging();
         // Test parsing of validation targets
         let test_cases = vec![
             ("all", vec![]), // Special case for all
@@ -245,6 +257,7 @@ mod main_tests {
 
     #[test]
     fn test_log_level_configuration() {
+        init_test_logging();
         // Test log level configuration logic
         let debug_enabled = true;
         let debug_disabled = false;
@@ -258,6 +271,7 @@ mod main_tests {
 
     #[test]
     fn test_graceful_shutdown_timeout_calculation() {
+        init_test_logging();
         // Test the shutdown timeout calculation logic
         let timeout_secs = 300;
         let shutdown_timeout = std::time::Duration::from_secs(timeout_secs);
@@ -268,6 +282,7 @@ mod main_tests {
 
     #[test]
     fn test_tool_config_lookup() {
+        init_test_logging();
         // Test the tool configuration lookup logic
         use ahma_mcp::config::ToolConfig;
         use std::collections::HashMap;
@@ -301,6 +316,7 @@ mod main_tests {
 
     #[test]
     fn test_subcommand_config_lookup() {
+        init_test_logging();
         // Test the subcommand configuration lookup logic
         use ahma_mcp::config::SubcommandConfig;
 
@@ -341,6 +357,7 @@ mod main_tests {
 
     #[test]
     fn test_args_map_construction() {
+        init_test_logging();
         // Test the construction of args_map for tool execution
         use serde_json::Value;
 
@@ -367,6 +384,7 @@ mod main_tests {
 
     #[test]
     fn test_working_directory_resolution() {
+        init_test_logging();
         // Test working directory resolution logic
         let explicit_wd = Some("/tmp/project".to_string());
         let from_args = Some("/home/user/project".to_string());

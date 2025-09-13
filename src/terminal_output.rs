@@ -145,9 +145,11 @@ impl TerminalOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::logging::init_test_logging;
 
     #[test]
     fn test_should_display() {
+        init_test_logging();
         assert!(!TerminalOutput::should_display(""));
         assert!(!TerminalOutput::should_display("   \n\t  "));
         assert!(TerminalOutput::should_display("some content"));
@@ -156,6 +158,7 @@ mod tests {
 
     #[test]
     fn test_format_content() {
+        init_test_logging();
         // Test JSON formatting
         let json_input = r#"{"name":"test","version":"1.0.0"}"#;
         let formatted = TerminalOutput::format_content(json_input);

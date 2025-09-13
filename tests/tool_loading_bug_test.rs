@@ -1,18 +1,17 @@
 //! Tool Loading Compatibility Test
-//!
 //! PURPOSE: Validates JSON tool configuration loading after discovering critical bug
 //! where adding extra JSON files (status.json, await.json) broke test expectations.
-//!
 //! LESSON LEARNED: Tool loading tests are brittle to configuration changes.
 //! - Only external CLI tools should have JSON configurations
 //! - Hardwired MCP tools (status, await) don't need JSON files  
 //! - But users may add them anyway for documentation/IDE support
-//!
-//! MAINTENANCE: Update expected counts when adding new CLI tool integrations
+//!   MAINTENANCE: Update expected counts when adding new CLI tool integrations
+
+mod common;
 
 use anyhow::Result;
 
-mod common;
+use ahma_mcp::utils::logging::init_test_logging;
 use common::test_client::new_client;
 
 /// TEST: Validates core CLI tool configurations are loaded
@@ -24,6 +23,7 @@ use common::test_client::new_client;
 /// This test previously failed when status.json/await.json were temporarily added
 #[tokio::test]
 async fn test_tools_are_loaded_after_json_migration() -> Result<()> {
+    init_test_logging();
     // Test that all 3 JSON tool configurations are properly loaded
     let client = new_client(Some(".ahma/tools")).await?;
 
@@ -61,6 +61,7 @@ async fn test_tools_are_loaded_after_json_migration() -> Result<()> {
 /// MAINTENANCE: If cargo_version is removed, update to another reliable synchronous tool
 #[tokio::test]
 async fn test_specific_json_tool_functionality() -> Result<()> {
+    init_test_logging();
     // Test that a specific tool from JSON config actually works
     let client = new_client(Some(".ahma/tools")).await?;
 

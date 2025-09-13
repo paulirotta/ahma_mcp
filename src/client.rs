@@ -10,9 +10,13 @@ use crate::operation_monitor::Operation;
 use async_trait::async_trait;
 use rmcp::service::{Peer, RoleServer};
 use std::sync::Arc;
-use tokio::io::{AsyncWriteExt, stdout};
-use tokio::sync::Mutex;
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::{
+    io::{AsyncWriteExt, stdout},
+    sync::{
+        Mutex,
+        mpsc::{self, Receiver, Sender},
+    },
+};
 use tracing::warn;
 
 #[derive(Debug, Clone)]

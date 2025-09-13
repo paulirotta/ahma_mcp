@@ -45,9 +45,11 @@ pub fn preview(operation_id: &str, operation_type: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::logging::init_test_logging;
 
     #[test]
     fn preview_replaces_placeholders() {
+        init_test_logging();
         let out = preview("abc123", "build");
         assert!(out.contains("abc123"));
         assert!(out.contains("build"));

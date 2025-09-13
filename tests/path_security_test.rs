@@ -1,6 +1,7 @@
 //! Tests for path security and sandboxing
 mod common;
 
+use ahma_mcp::utils::logging::init_test_logging;
 use common::test_client::new_client;
 use rmcp::{
     ServiceError,
@@ -10,6 +11,7 @@ use serde_json::json;
 
 #[tokio::test]
 async fn test_path_validation_success() {
+    init_test_logging();
     // Use existing shell_async tool for path validation test
     let client = new_client(None).await.unwrap();
 
@@ -31,6 +33,7 @@ async fn test_path_validation_success() {
 
 #[tokio::test]
 async fn test_path_validation_failure_absolute() {
+    init_test_logging();
     // Use existing shell_async tool for path validation test
     let client = new_client(None).await.unwrap();
 
@@ -64,6 +67,7 @@ async fn test_path_validation_failure_absolute() {
 
 #[tokio::test]
 async fn test_path_validation_failure_relative() {
+    init_test_logging();
     // Use existing shell_async tool for path validation test
     let client = new_client(None).await.unwrap();
 

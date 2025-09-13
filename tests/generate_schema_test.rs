@@ -1,11 +1,13 @@
 #[cfg(test)]
 mod generate_schema_tests {
+    use ahma_mcp::utils::logging::init_test_logging;
     use std::fs;
     use std::process::Command;
     use tempfile::tempdir;
 
     #[test]
     fn test_generate_schema_script_runs_successfully() {
+        init_test_logging();
         let temp_dir = tempdir().unwrap();
         let docs_dir = temp_dir.path().join("docs");
 
@@ -41,6 +43,7 @@ mod generate_schema_tests {
 
     #[test]
     fn test_generate_schema_default_docs_directory() {
+        init_test_logging();
         let output = Command::new("cargo")
             .args(["run", "--package", "ahma_mcp", "--bin", "generate_schema"])
             .output()
@@ -64,6 +67,7 @@ mod generate_schema_tests {
 
     #[test]
     fn test_generate_schema_creates_nested_directories() {
+        init_test_logging();
         let temp_dir = tempdir().unwrap();
         let nested_dir = temp_dir.path().join("deeply").join("nested").join("path");
 
@@ -96,6 +100,7 @@ mod generate_schema_tests {
 
     #[test]
     fn test_schema_content_structure() {
+        init_test_logging();
         let temp_dir = tempdir().unwrap();
         let docs_dir = temp_dir.path().join("docs");
 
@@ -142,6 +147,7 @@ mod generate_schema_tests {
 
     #[test]
     fn test_schema_output_format() {
+        init_test_logging();
         let temp_dir = tempdir().unwrap();
         let docs_dir = temp_dir.path().join("docs");
 
@@ -187,6 +193,7 @@ mod generate_schema_tests {
 
     #[test]
     fn test_schema_file_size_reasonable() {
+        init_test_logging();
         let temp_dir = tempdir().unwrap();
         let docs_dir = temp_dir.path().join("docs");
 

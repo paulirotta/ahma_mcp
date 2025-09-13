@@ -72,9 +72,11 @@ pub const STATUS_POLLING_HINT_TEMPLATE: &str = "**STATUS POLLING ANTI-PATTERN DE
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::logging::init_test_logging;
 
     #[test]
     fn async_addendum_contains_key_guidance() {
+        init_test_logging();
         assert!(ASYNC_ADDENDUM.contains("ahma_mcp"));
         assert!(ASYNC_ADDENDUM.contains("MCP tools"));
         assert!(ASYNC_ADDENDUM.contains("terminal")); // Key guidance to avoid direct terminal usage
@@ -82,6 +84,7 @@ mod tests {
 
     #[test]
     fn templates_include_placeholders() {
+        init_test_logging();
         assert!(TOOL_HINT_TEMPLATE.contains("{operation_type}"));
         assert!(TOOL_HINT_TEMPLATE.contains("{operation_id}"));
         assert!(CONCURRENCY_HINT_TEMPLATE.contains("{operation_id}"));

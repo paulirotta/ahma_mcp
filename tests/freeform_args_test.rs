@@ -1,5 +1,4 @@
 mod common;
-
 use crate::common::test_project::create_full_rust_test_project;
 use anyhow::Result;
 use serde_json::json;

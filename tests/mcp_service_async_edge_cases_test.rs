@@ -5,18 +5,19 @@
 //! - Async notification delivery edge cases  
 //! - Tool schema generation validation
 //! - Error handling for malformed MCP messages
-
-use anyhow::Result;
-use serde_json::json;
-use std::borrow::Cow;
-
 mod common;
+
+use ahma_mcp::utils::logging::init_test_logging;
+use anyhow::Result;
 use common::test_client::new_client;
 use rmcp::model::CallToolRequestParam;
+use serde_json::json;
+use std::borrow::Cow;
 
 /// Test async notification delivery with malformed operation IDs
 #[tokio::test]
 async fn test_async_notification_malformed_operation_ids() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Test status tool with numeric operation_id (should be handled gracefully)
@@ -46,6 +47,7 @@ async fn test_async_notification_malformed_operation_ids() -> Result<()> {
 /// Test async notification delivery with edge case timeout values
 #[tokio::test]
 async fn test_async_notification_extreme_timeout_values() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Test with zero timeout (should return immediately)
@@ -88,6 +90,7 @@ async fn test_async_notification_extreme_timeout_values() -> Result<()> {
 /// Test tool schema generation with complex tool discovery
 #[tokio::test]
 async fn test_tool_schema_generation_comprehensive() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Test list_tools generates proper schemas
@@ -134,6 +137,7 @@ async fn test_tool_schema_generation_comprehensive() -> Result<()> {
 /// Test error handling for malformed call_tool parameters
 #[tokio::test]
 async fn test_error_handling_malformed_call_tool_params() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Test with missing required parameters for cancel tool
@@ -179,6 +183,7 @@ async fn test_error_handling_malformed_call_tool_params() -> Result<()> {
 /// Test error handling for unknown tools
 #[tokio::test]
 async fn test_error_handling_unknown_tools() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     let unknown_tool_params = CallToolRequestParam {
@@ -196,6 +201,7 @@ async fn test_error_handling_unknown_tools() -> Result<()> {
 /// Test async notification system under concurrent load
 #[tokio::test]
 async fn test_async_notification_concurrent_load() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Start multiple async operations concurrently
@@ -237,6 +243,7 @@ async fn test_async_notification_concurrent_load() -> Result<()> {
 /// Test status tool with various filter combinations
 #[tokio::test]
 async fn test_status_tool_filter_combinations() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Test with tool filter
@@ -287,6 +294,7 @@ async fn test_status_tool_filter_combinations() -> Result<()> {
 /// Test async operations with real tool execution
 #[tokio::test]
 async fn test_async_operation_with_real_execution() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Start a real async operation (shell command)
@@ -294,8 +302,7 @@ async fn test_async_operation_with_real_execution() -> Result<()> {
         name: Cow::Borrowed("shell_async"),
         arguments: Some(
             json!({
-                "command": "echo 'test async execution'",
-                "timeout_seconds": 30
+                "command": "echo 'test async execution'"
             })
             .as_object()
             .unwrap()
@@ -336,6 +343,7 @@ async fn test_async_operation_with_real_execution() -> Result<()> {
 /// Test error recovery and resilience
 #[tokio::test]
 async fn test_error_recovery_and_resilience() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Test that service continues working after errors

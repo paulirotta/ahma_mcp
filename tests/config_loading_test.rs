@@ -1,11 +1,11 @@
 #[cfg(test)]
 mod config_tests {
-    use ahma_mcp::config::load_tool_configs;
-
+    use ahma_mcp::{config::load_tool_configs, utils::logging::init_test_logging};
     use std::path::Path;
 
     #[test]
     fn test_config_loading() {
+        init_test_logging();
         println!("Testing configuration loading...");
         let tools_dir = Path::new(".ahma/tools");
         match load_tool_configs(tools_dir) {

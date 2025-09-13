@@ -46,18 +46,20 @@ use ahma_mcp::{
     mcp_service::{AhmaMcpService, GuidanceConfig},
     operation_monitor::{MonitorConfig, OperationMonitor},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
+    utils::logging::init_logging,
 };
 use anyhow::Result;
 use clap::Parser;
 use rmcp::ServiceExt;
 use serde_json::{Value, from_str};
-use std::fs;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::signal;
 use tracing::{info, instrument};
-use tracing_subscriber::EnvFilter;
 
 /// Ahma MCP Server: A generic, config-driven adapter for CLI tools.
 #[derive(Parser, Debug)]
@@ -122,11 +124,14 @@ async fn main() -> Result<()> {
 
     // Initialize logging
     let log_level = if cli.debug { "debug" } else { "info" };
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::new(format!("ahma_mcp={}", log_level)))
-        .with_writer(std::io::stderr)
-        .with_ansi(false)
-        .init();
+
+    init_logging(log_level, true)?;
+    /*
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::new(format!("ahma_mcp={}", log_level)))
+            .with_writer(std::io::stderr)
+            .init();
+    */
 
     if cli.server || (cli.tool_name.is_none() && cli.validate.is_none()) {
         tracing::info!("Running in Server mode");

@@ -9,10 +9,11 @@
 
 use anyhow::Result;
 use serde_json::json;
-use std::sync::Arc;
-use std::time::{Duration, SystemTime};
-use tokio::sync::Barrier;
-use tokio::time::Instant;
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
+use tokio::{sync::Barrier, time::Instant};
 
 use ahma_mcp::operation_monitor::{MonitorConfig, Operation, OperationMonitor, OperationStatus};
 

@@ -30,7 +30,7 @@ use rmcp::{
     model::{
         CallToolRequestParam, CallToolResult, CancelledNotificationParam, Content,
         ErrorData as McpError, Implementation, ListToolsResult, PaginatedRequestParam,
-        ProtocolVersion, ServerCapabilities, ServerInfo, Tool,
+        ProtocolVersion, ServerCapabilities, ServerInfo, Tool, ToolsCapability,
     },
     service::{NotificationContext, Peer, RequestContext, RoleServer},
 };
@@ -357,7 +357,12 @@ impl ServerHandler for AhmaMcpService {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             protocol_version: ProtocolVersion::V_2024_11_05,
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
+            capabilities: ServerCapabilities {
+                tools: Some(ToolsCapability {
+                    list_changed: Some(true),
+                }),
+                ..Default::default()
+            },
             server_info: Implementation {
                 name: env!("CARGO_PKG_NAME").to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
@@ -890,6 +895,50 @@ impl ServerHandler for AhmaMcpService {
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| ".".to_string());
 
+            // SECURITY: Validate working_directory stays within the workspace
+            // Resolve workspace root and compare canonical paths
+            let workspace_root = match env::current_dir() {
+                Ok(dir) => dir,
+                Err(e) => {
+                    return Err(McpError::internal_error(
+                        format!("Failed to get current directory: {}", e),
+                        None,
+                    ));
+                }
+            };
+            let canonical_workspace = match workspace_root.canonicalize() {
+                Ok(path) => path,
+                Err(e) => {
+                    return Err(McpError::internal_error(
+                        format!("Failed to canonicalize workspace path: {}", e),
+                        None,
+                    ));
+                }
+            };
+            let proposed_path = std::path::Path::new(&working_directory);
+            let resolved_working_dir = if proposed_path.is_absolute() {
+                proposed_path
+                    .canonicalize()
+                    .unwrap_or_else(|_| proposed_path.to_path_buf())
+            } else {
+                let joined = canonical_workspace.join(proposed_path);
+                joined.canonicalize().unwrap_or(joined)
+            };
+            if !resolved_working_dir.starts_with(&canonical_workspace) {
+                let error_message = format!(
+                    "Working directory '{}' is outside the allowed workspace.",
+                    working_directory
+                );
+                tracing::error!("{}", error_message);
+                return Err(McpError::invalid_params(
+                    error_message,
+                    Some(serde_json::json!({
+                        "parameter": "working_directory",
+                        "path": working_directory
+                    })),
+                ));
+            }
+
             tracing::info!(
                 "Executing tool '{}' (command: '{}') in directory '{}' with mode: {}",
                 tool_name,
@@ -902,9 +951,8 @@ impl ServerHandler for AhmaMcpService {
                 }
             );
 
-            if config.name == "cargo" {
-                arguments.remove("working_directory");
-            }
+            // Remove working_directory from arguments since it's handled by the framework
+            arguments.remove("working_directory");
 
             if is_synchronous {
                 match self

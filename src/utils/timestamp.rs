@@ -65,11 +65,13 @@ pub fn duration_since_as_rounded_seconds(start: Instant) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::logging::init_test_logging;
     use chrono::{Local, TimeZone};
     use std::thread;
 
     #[test]
     fn test_format_time_basic() {
+        init_test_logging();
         // Test with a specific time
         let time = Local
             .with_ymd_and_hms(2023, 1, 1, 14, 30, 5)
@@ -86,6 +88,7 @@ mod tests {
 
     #[test]
     fn test_format_time_midnight() {
+        init_test_logging();
         // Test with a specific time: midnight
         let time = Local.with_ymd_and_hms(2023, 1, 1, 0, 0, 0).unwrap().into();
         let formatted = format_time(time);
@@ -94,6 +97,7 @@ mod tests {
 
     #[test]
     fn test_format_time_end_of_day() {
+        init_test_logging();
         // Test with a specific time: end of day
         let time = Local
             .with_ymd_and_hms(2023, 1, 1, 23, 59, 59)
@@ -105,6 +109,7 @@ mod tests {
 
     #[test]
     fn test_format_current_time_is_valid_format() {
+        init_test_logging();
         let formatted = format_current_time();
         // Length can be 7 (H:MM:SS) or 8 (HH:MM:SS) depending on hour
         assert!(formatted.len() >= 7 && formatted.len() <= 8);
@@ -120,6 +125,7 @@ mod tests {
 
     #[test]
     fn test_duration_as_rounded_seconds() {
+        init_test_logging();
         let start = Instant::now();
         thread::sleep(std::time::Duration::from_millis(1100)); // Just over 1 second
         let end = Instant::now();
@@ -130,6 +136,7 @@ mod tests {
 
     #[test]
     fn test_duration_since_as_rounded_seconds() {
+        init_test_logging();
         let start = Instant::now();
         thread::sleep(std::time::Duration::from_millis(500)); // Half a second
 
@@ -139,6 +146,7 @@ mod tests {
 
     #[test]
     fn test_duration_zero() {
+        init_test_logging();
         let instant = Instant::now();
         let duration = duration_as_rounded_seconds(instant, instant);
         assert_eq!(duration, 0);

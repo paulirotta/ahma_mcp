@@ -1,7 +1,7 @@
 //! Integration tests for the ahma_mcp service.
 mod adapter_test;
 mod callback_system_test;
-mod common;
+
 mod config_test;
 mod generate_schema_test;
 mod logging_test;
@@ -14,6 +14,8 @@ mod shell_pool_test;
 mod terminal_output_test;
 
 use anyhow::Result;
+mod common;
+use ahma_mcp::utils::logging::init_test_logging;
 use common::test_client::new_client;
 use rmcp::model::CallToolRequestParam;
 use serde_json::{Map, json};
@@ -25,6 +27,7 @@ use std::borrow::Cow;
 
 #[tokio::test]
 async fn test_list_tools() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
     let result = client.list_all_tools().await?;
 
@@ -40,6 +43,7 @@ async fn test_list_tools() -> Result<()> {
 
 #[tokio::test]
 async fn test_call_tool_basic() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Use the await tool which should always be available
@@ -75,6 +79,7 @@ async fn test_call_tool_basic() -> Result<()> {
 
 #[tokio::test]
 async fn test_async_notification_delivery() -> Result<()> {
+    init_test_logging();
     // Use the client interface like other working tests
     let client = new_client(Some(".ahma/tools")).await?;
 

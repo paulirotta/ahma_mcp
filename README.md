@@ -69,79 +69,14 @@ Tool-calling AIs work. Note that Grok Code Fast 1 currently appears lazy with to
 
 ### Features
 
-Ahma MCP is the next-generation successor to `async_cargo_mcp`, providing:
+Ahma MCP speeds and simplifies AI-driven workflows by letting the AI continue planning while CLI tools run. Key benefits:
 
-- **Universal CLI Adaptation**: Works with any command-line tool via MTDF JSON configurations
-- **Async-First Architecture**: Operations execute asynchronously by default with automatic result push back to the AI, reducing AI blocking downtime and enabling concurrent workflows
-- **Multi-Tool Support**: Single server handles multiple CLI tools simultaneously, one MTDF JSON file per tool
-- **Test-Driven Development**: Comprehensive test coverage using `cargo nextest` with over 70 tests ensuring reliability
-- **Code Coverage Integration**: Built-in `cargo llvm-cov` support for detailed test coverage analysis and reporting
-- **Clean Tool Naming**: "Default" subcommand pattern provides intuitive tool names without redundant suffixes
-- **Modular Tool Architecture**: Optional tools in separate JSON files for improved maintainability and organization
-- **Centralized Guidance System**: Reusable guidance blocks in `tool_guidance.json` ensure consistent AI instructions across tools with `guidance_key` references
-- **MtdfValidator**: Built-in schema validation ensures MTDF configuration correctness and prevents common errors
-- **AI-Optimized Guidance**: Tool descriptions include explicit suggestions encouraging productive concurrent work
-
-_Note: `ahma_mcp` is early stage and undergoing rapid development. It is mostly tested in VS Code. Issue reports and pull requests welcome._
-
-## Quick Start
-
-The fastest way to try ahma_mcp with VS Code MCP support.
-
-```bash
-# 1) Clone and build the release binary
-git clone https://github.com/paulirotta/ahma_mcp.git
-cd ahma_mcp
-cargo build --release
-
-# 2) Copy the `tools/`, `.vscode/` and `.gihub/chatmodes/` into your VS Code project and edit the paths, tools and AI guidance for tool use to taste.
-```
-
-Then copy the contents into your VS Code MCP configuration file (per-OS locations below), restart VS Code, and you’re ready.
-
-## Key Features
-
-- **Async-First Execution**: Operations execute asynchronously by default with automatic MCP progress notifications when complete, eliminating AI blocking and enabling concurrent workflows.
-- **Dynamic Tool Adaptation**: Uses MTDF (MCP Tool Definition Format) to automatically create MCP tool schemas from JSON configurations. Zero-compilation tool integration.
-- **High-Performance Shell Pool**: Pre-warmed shell processes provide 10x faster command startup (5-20ms vs 50-200ms), optimizing both synchronous and asynchronous operations.
-- **AI Productivity Optimization**: Centralized guidance system with reusable blocks instructs AI clients to continue productive work rather than waiting for results.
-- **Selective Synchronous Override**: Fast operations (status, version, check) can be marked `"synchronous": true` in JSON configuration for immediate results without notifications.
-- **Unified Tool Interface**: Exposes MCP tools for each CLI application subcommand, simplifying the AI's interaction model with consistent naming patterns.
-- **Automatic Result Push**: Eliminates the need for polling or waiting - results are automatically pushed to AI clients when operations complete via MCP notifications.
-- **Customizable Tool Hints**: Provides intelligent suggestions to AI clients about productive parallel work they can perform while operations execute.
-
-## Advanced Features
-
-### Operation Management and Monitoring
-
-Ahma MCP provides sophisticated operation tracking and management capabilities:
-
-- **Real-time Operation Monitoring**: Track the status of all running operations with the `status` tool
-- **Intelligent Wait Functionality**: Use the `await` tool to monitor operations with configurable timeouts (1-1800 seconds, default 240s)
-- **Progressive Timeout Warnings**: Receive warnings at 50%, 75%, and 90% of timeout duration to track long-running operations
-- **Automatic Error Remediation**: Get specific suggestions when operations timeout, including:
-  - Detection of stale lock files (Cargo.lock, package-lock.json, yarn.lock, composer.lock, etc.)
-  - Network connectivity checks and offline mode suggestions
-  - Disk space and resource usage monitoring recommendations
-  - Process conflict detection and resolution steps
-- **Partial Result Recovery**: When timeouts occur, completed operations return their results while failed operations provide detailed error context
-
-### Graceful Development Workflow
-
-Enhanced for seamless development experience:
-
-- **Signal-Aware Shutdown**: Handles SIGTERM/SIGINT signals gracefully during file changes and cargo watch restarts
-- **Operation Completion Grace Period**: Provides 10-second window for ongoing operations to complete naturally before shutdown
-- **Development-Friendly Restarts**: File changes during development don't abruptly terminate operations - they complete and deliver results first
-- **Progress Feedback**: Visual progress indicators (🔄⏳⚠️) show operation status during shutdown sequences
+- **FAST**: Async-first execution: multiple tool operations **while** AI is also working reduces wall clock time to complete tasks.
+- **EASY TOOL DEFINITION**: add a single JSON to `.ahma/tools/` to make command line tools available to AI. See [MTDF schema guide](./docs/mtdf-schema-guide.md).
+- **SCOPED TOOL USE**: Safely expose tools since file paths can not be outside the working directory.
+- **GUIDE AI TO SUCCESSFUL TOOL USE**: Guidance helps AI understand how to use your tools effectively and concurrently.
 
 ## Getting Started
-
-### Prerequisites
-
-- **Rust 1.70+**: Install from [rustup.rs](https://rustup.rs/)
-- **VS Code**: With MCP support (GitHub Copilot extension recommended)
-- **Git**: For cloning the repository
 
 ### Installation
 
@@ -151,57 +86,16 @@ Enhanced for seamless development experience:
     git clone https://github.com/paulirotta/ahma_mcp.git
     cd ahma_mcp
     cargo build --release
-    ```
-
-2.  **Verify installation**:
-    ```bash
     ./target/release/ahma_mcp --help
     ```
 
-### Tool Configuration
+2. **Choose Tools**:
 
-Ahma MCP uses **MTDF** (MCP Tool Definition Format) JSON files in the `tools/` directory to define CLI tool integrations:
+    ```bash
+    cp -r .ahma/ ~/.ahma/
+    ```
 
-**Internal tools** (implemented in ahma_mcp):
-
-- `await.json` - Operation coordination, pauses until one or more tools complete
-- `status.json` - Ongoing and recently completed operation(s) information
-
-**External tool definitions** for command line tools are included in `.ahma/tools/`. Copy and edit those you want, or add your own:
-
-**Rust Ecosystem:**
-
-- `cargo.json` - Rust package manager with recursive subcommands (13 subcommands)
-- `cargo_audit.json` - Audit Cargo.lock for security vulnerabilities (2 subcommands)
-- `cargo_bench.json` - Run benchmarks for a Rust project (1 subcommand)
-- `cargo_clippy.json` - Enhanced linting and code quality checks for Rust (1 subcommand)
-- `cargo_edit.json` - Tools for editing Cargo.toml files (4 subcommands)
-- `cargo_fmt.json` - Formats Rust code according to style guidelines (1 subcommand)
-- `cargo_llvm_cov.json` - LLVM source-based code coverage for Rust projects (8 subcommands)
-- `cargo_nextest.json` - Next-generation test runner for Rust (1 subcommand)
-
-**Version Control & CI/CD:**
-
-- `git.json` - Git version control system (10 subcommands)
-- `gh.json` - GitHub CLI with nested operations like `cache delete` and `run cancel` (10 subcommands)
-
-**General Development:**
-
-- `python3.json` - Python interpreter and module execution (7 subcommands)
-- `gradlew.json` - Gradle wrapper for Android/Java projects (47 subcommands)
-- `shell_async.json` - Execute shell commands asynchronously (1 subcommand)
-- `long_running_async.json` - Sleep utility for testing async behavior (1 subcommand)
-- `test_coverage.json` - Run test coverage scripts (1 subcommand)
-
-**File Operations:**
-
-- `cat.json` - View file contents (single command)
-- `echo.json` - Output text (single command)
-- `grep.json` - Text search with regex support (single command)
-- `pwd.json` - Current directory (1 subcommand)
-- `sed.json` - Stream editor for filtering and transforming text (single command)
-
-Each MTDF file can reference guidance blocks from `.ahma/tool_guidance.json` using `guidance_key` fields, eliminating guidance duplication and ensuring consistency. For detailed schema information and validation, see [`docs/mtdf-schema.json`](./docs/mtdf-schema.json).
+Delete any tool JSON files you don't need from `~/.ahma/tools/`.
 
 ### Testing the Installation
 

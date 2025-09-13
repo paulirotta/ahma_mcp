@@ -15,6 +15,7 @@ use tokio::sync::Mutex;
 // use std::{borrow::Cow, sync::Arc, time::Duration};
 // TODO: Re-enable after fixing RequestContext construction
 // use tokio_util::sync::CancellationToken;
+use ahma_mcp::utils::logging::init_test_logging;
 use tokio::sync::mpsc::Receiver;
 
 async fn read_output(output_rx: &mut Receiver<String>) -> Option<String> {
@@ -40,6 +41,7 @@ fn create_test_request_context() -> RequestContext<RoleServer> {
 
 #[tokio::test]
 async fn test_async_notification_delivery() {
+    init_test_logging();
     let (mcp_service, _mock_io, _input_tx, mut output_rx, _temp_dir) =
         setup_test_environment_with_io().await;
     let _mcp_service: Arc<ahma_mcp::mcp_service::AhmaMcpService> = Arc::new(mcp_service);

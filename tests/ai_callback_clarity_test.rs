@@ -1,9 +1,11 @@
 /// Test to verify that async callback messages are clear and actionable for AI agents
 /// This addresses the need for clear, structured callback messages that enable AI decision-making
 use ahma_mcp::callback_system::ProgressUpdate;
+use ahma_mcp::utils::logging::init_test_logging;
 
 #[tokio::test]
 async fn test_callback_messages_are_ai_actionable() {
+    init_test_logging();
     println!("🤖 Testing callback message clarity for AI decision-making...");
 
     // Test different types of progress updates that an AI might receive
@@ -97,6 +99,7 @@ async fn test_callback_messages_are_ai_actionable() {
 
 #[tokio::test]
 async fn test_callback_message_formatting_for_nextest() {
+    init_test_logging();
     println!("🧪 Testing specific nextest callback message formatting...");
 
     // Simulate a realistic nextest failure that an AI should understand

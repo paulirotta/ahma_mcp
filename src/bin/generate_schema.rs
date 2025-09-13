@@ -5,11 +5,14 @@
 //! and writes it to docs/mtdf-schema.json
 
 use ahma_mcp::config::ToolConfig;
+use ahma_mcp::utils::logging::init_logging;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    init_logging("info", false)?;
+
     // Generate schema for the root ToolConfig type
     let schema = schemars::schema_for!(ToolConfig);
 

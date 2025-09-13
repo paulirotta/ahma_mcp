@@ -5,8 +5,7 @@
 
 use crate::config::ToolConfig;
 use serde_json::Value;
-use std::collections::HashSet;
-use std::path::Path;
+use std::{collections::HashSet, path::Path};
 
 #[derive(Debug, Clone)]
 pub struct SchemaValidationError {
@@ -777,10 +776,12 @@ impl MtdfValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::logging::init_test_logging;
     use std::path::PathBuf;
 
     #[test]
     fn test_valid_tool_config() {
+        init_test_logging();
         let validator = MtdfValidator::new();
         let config = r#"
         {
@@ -816,6 +817,7 @@ mod tests {
 
     #[test]
     fn test_missing_required_fields() {
+        init_test_logging();
         let validator = MtdfValidator::new();
         let config = r#"
         {
@@ -837,6 +839,7 @@ mod tests {
 
     #[test]
     fn test_invalid_async_guidance() {
+        init_test_logging();
         let validator = MtdfValidator::new();
         let config = r#"
         {
@@ -867,6 +870,7 @@ mod tests {
 
     #[test]
     fn test_synchronous_tool_validation() {
+        init_test_logging();
         let validator = MtdfValidator::new();
         let config = r#"
         {
@@ -895,6 +899,7 @@ mod tests {
 
     #[test]
     fn test_invalid_option_type() {
+        init_test_logging();
         let validator = MtdfValidator::new();
         let config = r#"
         {
@@ -930,6 +935,7 @@ mod tests {
 
     #[test]
     fn test_bool_hint() {
+        init_test_logging();
         let validator = MtdfValidator::new();
         let config = r#"
         {

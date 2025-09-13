@@ -1,4 +1,5 @@
 /// Enhanced Wait Tool Test Suite
+mod common;
 ///
 /// PURPOSE: Validates the enhanced await tool functionality implemented to address:
 /// "I think 'await' should have an optional timeout, and a default timeout of 240sec"
@@ -9,8 +10,7 @@
 /// - Progressive timeout warnings at 50%, 75%, 90%
 /// - Tool filtering capability for targeted waits
 /// - Status tool integration for non-blocking operation monitoring
-mod common;
-
+use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
 use common::test_client::new_client;
 use std::time::Duration;
@@ -18,6 +18,7 @@ use tokio::time::timeout;
 
 #[tokio::test]
 async fn test_await_tool_timeout_functionality() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Test that await tool has proper timeout parameter
@@ -57,6 +58,7 @@ async fn test_await_tool_timeout_functionality() -> Result<()> {
 /// DO NOT CHANGE: These bounds were established through user testing
 #[tokio::test]
 async fn test_await_tool_timeout_validation() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Test timeout too small (should clamp to minimum)
@@ -97,6 +99,7 @@ async fn test_await_tool_timeout_validation() -> Result<()> {
 /// CRITICAL: Status must be synchronous/immediate, never blocking
 #[tokio::test]
 async fn test_status_tool_functionality() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Test status tool - should return current operation status
@@ -131,6 +134,7 @@ async fn test_status_tool_functionality() -> Result<()> {
 /// USAGE PATTERN: await --tools cargo,npm (waits only for these tool types)
 #[tokio::test]
 async fn test_await_tool_with_tool_filter() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Test await tool with tool filter
