@@ -916,10 +916,12 @@ pub struct ShellPoolStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::logging::init_test_logging;
     use tempfile::TempDir;
 
     #[tokio::test]
     async fn test_shell_pool_config_defaults() {
+        init_test_logging();
         let config = ShellPoolConfig::default();
         assert!(config.enabled); // Should be enabled by default for production use
         assert_eq!(config.shells_per_directory, 2);
@@ -928,6 +930,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_shell_command_serialization() {
+        init_test_logging();
         let command = ShellCommand {
             id: "test123".to_string(),
             command: vec!["cargo".to_string(), "build".to_string()],
@@ -944,6 +947,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_shell_pool_manager_disabled() {
+        init_test_logging();
         let config = ShellPoolConfig {
             enabled: false,
             ..Default::default()
@@ -956,6 +960,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_shell_pool_creation() {
+        init_test_logging();
         let temp_dir = TempDir::new().unwrap();
         let config = ShellPoolConfig::default();
 

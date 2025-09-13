@@ -1,4 +1,5 @@
 use ahma_mcp::config::{OptionConfig, SubcommandConfig, ToolConfig, ToolHints, load_tool_configs};
+use ahma_mcp::utils::logging::init_test_logging;
 use serde_json::json;
 use std::collections::HashMap;
 use std::fs;
@@ -6,6 +7,7 @@ use tempfile::tempdir;
 
 #[test]
 fn test_tool_config_defaults() {
+    init_test_logging();
     let config = ToolConfig {
         name: "test_tool".to_string(),
         description: "Test tool description".to_string(),
@@ -29,6 +31,7 @@ fn test_tool_config_defaults() {
 
 #[test]
 fn test_subcommand_config_defaults() {
+    init_test_logging();
     let subcommand = SubcommandConfig {
         name: "build".to_string(),
         description: "Build the project".to_string(),
@@ -49,6 +52,7 @@ fn test_subcommand_config_defaults() {
 
 #[test]
 fn test_option_config_structure() {
+    init_test_logging();
     let option = OptionConfig {
         name: "verbose".to_string(),
         alias: Some("v".to_string()),
@@ -69,6 +73,7 @@ fn test_option_config_structure() {
 
 #[test]
 fn test_tool_hints_default() {
+    init_test_logging();
     let hints = ToolHints::default();
     assert!(hints.default.is_none());
     assert!(hints.operation_hints.is_empty());
@@ -76,6 +81,7 @@ fn test_tool_hints_default() {
 
 #[test]
 fn test_tool_hints_with_operations() {
+    init_test_logging();
     let mut operation_hints = HashMap::new();
     operation_hints.insert(
         "build".to_string(),
@@ -101,6 +107,7 @@ fn test_tool_hints_with_operations() {
 
 #[test]
 fn test_tool_config_serialization() {
+    init_test_logging();
     let config = ToolConfig {
         name: "cargo".to_string(),
         description: "Rust package manager".to_string(),
@@ -159,6 +166,7 @@ fn test_tool_config_serialization() {
 
 #[test]
 fn test_tool_config_deserialization() {
+    init_test_logging();
     let json = r#"
     {
         "name": "git",
@@ -222,6 +230,7 @@ fn test_tool_config_deserialization() {
 
 #[test]
 fn test_nested_subcommands() {
+    init_test_logging();
     let json = r#"
     {
         "name": "docker",
@@ -278,6 +287,7 @@ fn test_nested_subcommands() {
 
 #[test]
 fn test_load_tool_configs_empty_directory() {
+    init_test_logging();
     let temp_dir = tempdir().unwrap();
     let configs = load_tool_configs(temp_dir.path()).unwrap();
     assert!(configs.is_empty());
@@ -285,6 +295,7 @@ fn test_load_tool_configs_empty_directory() {
 
 #[test]
 fn test_load_tool_configs_nonexistent_directory() {
+    init_test_logging();
     let temp_dir = tempdir().unwrap();
     let nonexistent_path = temp_dir.path().join("nonexistent");
     let configs = load_tool_configs(&nonexistent_path).unwrap();
@@ -293,6 +304,7 @@ fn test_load_tool_configs_nonexistent_directory() {
 
 #[test]
 fn test_load_tool_configs_valid_json() {
+    init_test_logging();
     let temp_dir = tempdir().unwrap();
     let tools_dir = temp_dir.path();
 
@@ -323,6 +335,7 @@ fn test_load_tool_configs_valid_json() {
 
 #[test]
 fn test_load_tool_configs_disabled_tool() {
+    init_test_logging();
     let temp_dir = tempdir().unwrap();
     let tools_dir = temp_dir.path();
 
@@ -346,6 +359,7 @@ fn test_load_tool_configs_disabled_tool() {
 
 #[test]
 fn test_load_tool_configs_multiple_files() {
+    init_test_logging();
     let temp_dir = tempdir().unwrap();
     let tools_dir = temp_dir.path();
 
@@ -383,6 +397,7 @@ fn test_load_tool_configs_multiple_files() {
 
 #[test]
 fn test_load_tool_configs_invalid_json() {
+    init_test_logging();
     let temp_dir = tempdir().unwrap();
     let tools_dir = temp_dir.path();
 
@@ -396,6 +411,7 @@ fn test_load_tool_configs_invalid_json() {
 
 #[test]
 fn test_tool_config_with_input_schema() {
+    init_test_logging();
     let json = r#"
     {
         "name": "test_tool",
@@ -430,6 +446,7 @@ fn test_tool_config_with_input_schema() {
 
 #[test]
 fn test_option_config_all_fields() {
+    init_test_logging();
     let json = r#"
     {
         "name": "file",
@@ -456,6 +473,7 @@ fn test_option_config_all_fields() {
 
 #[test]
 fn test_subcommand_config_with_overrides() {
+    init_test_logging();
     let json = r#"
     {
         "name": "long_task",

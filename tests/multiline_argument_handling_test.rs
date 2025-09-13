@@ -1,3 +1,4 @@
+use ahma_mcp::utils::logging::init_test_logging;
 /// Test multi-line argument handling functionality
 ///
 /// This test verifies that the adapter correctly handles multi-line strings and special characters
@@ -14,6 +15,7 @@ use tempfile::tempdir;
 
 #[tokio::test]
 async fn test_simple_git_commit_without_multiline() {
+    init_test_logging();
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let repo_path = temp_dir.path();
 
@@ -75,6 +77,7 @@ async fn test_simple_git_commit_without_multiline() {
 
 #[tokio::test]
 async fn test_multiline_argument_with_echo() {
+    init_test_logging();
     let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
         Duration::from_secs(30),
     )));
@@ -142,6 +145,7 @@ async fn test_multiline_argument_with_echo() {
 
 #[tokio::test]
 async fn test_multiline_git_commit_with_real_tool() {
+    init_test_logging();
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let repo_path = temp_dir.path();
 
@@ -277,6 +281,7 @@ async fn test_multiline_git_commit_with_real_tool() {
 
 #[tokio::test]
 async fn test_multiline_git_commit_message() {
+    init_test_logging();
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let repo_path = temp_dir.path();
 
@@ -450,6 +455,7 @@ async fn test_multiline_git_commit_message() {
 
 #[tokio::test]
 async fn test_special_characters_in_arguments() {
+    init_test_logging();
     let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
         Duration::from_secs(30),
     )));
@@ -510,6 +516,7 @@ async fn test_special_characters_in_arguments() {
 
 #[test]
 fn test_needs_file_handling_detection() {
+    init_test_logging();
     // Test the static method for detecting problematic strings
     assert!(ahma_mcp::adapter::Adapter::needs_file_handling(
         "line1\nline2"
@@ -550,6 +557,7 @@ fn test_needs_file_handling_detection() {
 
 #[test]
 fn test_shell_argument_escaping() {
+    init_test_logging();
     // Test the shell escaping functionality
     assert_eq!(
         ahma_mcp::adapter::Adapter::escape_shell_argument("simple"),

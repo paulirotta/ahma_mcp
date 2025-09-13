@@ -1,8 +1,12 @@
-use ahma_mcp::schema_validation::{MtdfValidator, SchemaValidationError, ValidationErrorType};
+use ahma_mcp::{
+    schema_validation::{MtdfValidator, SchemaValidationError, ValidationErrorType},
+    utils::logging::init_test_logging,
+};
 use std::path::Path;
 
 #[test]
 fn test_mtdf_validator_default() {
+    init_test_logging();
     let validator = MtdfValidator::default();
     assert!(validator.strict_mode);
     assert!(!validator.allow_unknown_fields);
@@ -10,6 +14,7 @@ fn test_mtdf_validator_default() {
 
 #[test]
 fn test_mtdf_validator_new() {
+    init_test_logging();
     let validator = MtdfValidator::new();
     assert!(validator.strict_mode);
     assert!(!validator.allow_unknown_fields);
@@ -17,6 +22,7 @@ fn test_mtdf_validator_new() {
 
 #[test]
 fn test_mtdf_validator_with_strict_mode() {
+    init_test_logging();
     let validator = MtdfValidator::new().with_strict_mode(false);
     assert!(!validator.strict_mode);
     assert!(!validator.allow_unknown_fields);
@@ -28,6 +34,7 @@ fn test_mtdf_validator_with_strict_mode() {
 
 #[test]
 fn test_mtdf_validator_with_unknown_fields_allowed() {
+    init_test_logging();
     let validator = MtdfValidator::new().with_unknown_fields_allowed(true);
     assert!(validator.strict_mode);
     assert!(validator.allow_unknown_fields);
@@ -39,6 +46,7 @@ fn test_mtdf_validator_with_unknown_fields_allowed() {
 
 #[test]
 fn test_mtdf_validator_builder_chain() {
+    init_test_logging();
     let validator = MtdfValidator::new()
         .with_strict_mode(false)
         .with_unknown_fields_allowed(true);
@@ -49,6 +57,7 @@ fn test_mtdf_validator_builder_chain() {
 
 #[test]
 fn test_schema_validation_error_display() {
+    init_test_logging();
     let error = SchemaValidationError {
         field_path: "test.field".to_string(),
         error_type: ValidationErrorType::MissingRequired,
@@ -64,6 +73,7 @@ fn test_schema_validation_error_display() {
 
 #[test]
 fn test_schema_validation_error_display_no_suggestion() {
+    init_test_logging();
     let error = SchemaValidationError {
         field_path: "root".to_string(),
         error_type: ValidationErrorType::InvalidType,
@@ -79,6 +89,7 @@ fn test_schema_validation_error_display_no_suggestion() {
 
 #[test]
 fn test_validation_error_type_equality() {
+    init_test_logging();
     assert_eq!(
         ValidationErrorType::MissingRequired,
         ValidationErrorType::MissingRequired
@@ -112,6 +123,7 @@ fn test_validation_error_type_equality() {
 
 #[test]
 fn test_validate_tool_config_invalid_json() {
+    init_test_logging();
     let validator = MtdfValidator::new();
     let invalid_json = r#"{ "name": "test", invalid json }"#;
     let path = Path::new("test.json");
@@ -129,6 +141,7 @@ fn test_validate_tool_config_invalid_json() {
 
 #[test]
 fn test_validate_tool_config_not_object() {
+    init_test_logging();
     let validator = MtdfValidator::new();
     let invalid_json = r#"["array", "instead", "of", "object"]"#;
     let path = Path::new("test.json");
@@ -152,6 +165,7 @@ fn test_validate_tool_config_not_object() {
 
 #[test]
 fn test_validate_tool_config_missing_required_fields() {
+    init_test_logging();
     let validator = MtdfValidator::new();
     let incomplete_json = r#"{ "enabled": true }"#;
     let path = Path::new("test.json");
@@ -175,6 +189,7 @@ fn test_validate_tool_config_missing_required_fields() {
 
 #[test]
 fn test_validate_tool_config_invalid_field_types() {
+    init_test_logging();
     let validator = MtdfValidator::new();
     let invalid_types_json = r#"{
         "name": 123,
@@ -199,6 +214,7 @@ fn test_validate_tool_config_invalid_field_types() {
 
 #[test]
 fn test_validate_tool_config_unknown_fields_strict() {
+    init_test_logging();
     let validator = MtdfValidator::new()
         .with_strict_mode(true)
         .with_unknown_fields_allowed(false);
@@ -226,6 +242,7 @@ fn test_validate_tool_config_unknown_fields_strict() {
 
 #[test]
 fn test_validate_tool_config_unknown_fields_allowed() {
+    init_test_logging();
     let validator = MtdfValidator::new()
         .with_strict_mode(true)
         .with_unknown_fields_allowed(true);
@@ -253,6 +270,7 @@ fn test_validate_tool_config_unknown_fields_allowed() {
 
 #[test]
 fn test_validate_tool_config_non_strict_mode() {
+    init_test_logging();
     let validator = MtdfValidator::new().with_strict_mode(false);
 
     let json = r#"{
@@ -277,6 +295,7 @@ fn test_validate_tool_config_non_strict_mode() {
 
 #[test]
 fn test_validate_tool_config_valid_minimal() {
+    init_test_logging();
     let validator = MtdfValidator::new();
     let valid_json = r#"{
         "name": "test",
@@ -296,6 +315,7 @@ fn test_validate_tool_config_valid_minimal() {
 
 #[test]
 fn test_validate_tool_config_valid_complete() {
+    init_test_logging();
     let validator = MtdfValidator::new();
     let valid_json = r#"{
         "name": "cargo",
@@ -332,6 +352,7 @@ fn test_validate_tool_config_valid_complete() {
 
 #[test]
 fn test_validate_subcommands_invalid_array() {
+    init_test_logging();
     let validator = MtdfValidator::new();
     let invalid_subcommands_json = r#"{
         "name": "test",
@@ -359,6 +380,7 @@ fn test_validate_subcommands_invalid_array() {
 
 #[test]
 fn test_validate_subcommands_invalid_object() {
+    init_test_logging();
     let validator = MtdfValidator::new();
     let invalid_subcommands_json = r#"{
         "name": "test",
@@ -385,6 +407,7 @@ fn test_validate_subcommands_invalid_object() {
 
 #[test]
 fn test_validate_subcommands_missing_required() {
+    init_test_logging();
     let validator = MtdfValidator::new();
     let incomplete_subcommands_json = r#"{
         "name": "test",
@@ -415,6 +438,7 @@ fn test_validate_subcommands_missing_required() {
 
 #[test]
 fn test_format_errors() {
+    init_test_logging();
     let validator = MtdfValidator::new();
     let errors = vec![
         SchemaValidationError {
@@ -444,6 +468,7 @@ fn test_format_errors() {
 
 #[test]
 fn test_validate_options_array_invalid() {
+    init_test_logging();
     let validator = MtdfValidator::new();
     let invalid_options_json = r#"{
         "name": "test",
@@ -473,6 +498,7 @@ fn test_validate_options_array_invalid() {
 
 #[test]
 fn test_clone_schema_validation_error() {
+    init_test_logging();
     let error = SchemaValidationError {
         field_path: "test".to_string(),
         error_type: ValidationErrorType::MissingRequired,
@@ -489,6 +515,7 @@ fn test_clone_schema_validation_error() {
 
 #[test]
 fn test_debug_schema_validation_error() {
+    init_test_logging();
     let error = SchemaValidationError {
         field_path: "debug_test".to_string(),
         error_type: ValidationErrorType::InvalidValue,
@@ -504,6 +531,7 @@ fn test_debug_schema_validation_error() {
 
 #[test]
 fn test_debug_validation_error_type() {
+    init_test_logging();
     let error_type = ValidationErrorType::ConstraintViolation;
     let debug_str = format!("{:?}", error_type);
     assert!(debug_str.contains("ConstraintViolation"));
@@ -511,6 +539,7 @@ fn test_debug_validation_error_type() {
 
 #[test]
 fn test_clone_validation_error_type() {
+    init_test_logging();
     let original = ValidationErrorType::LogicalInconsistency;
     let cloned = original.clone();
     assert_eq!(original, cloned);

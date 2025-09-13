@@ -12,11 +12,15 @@ use serde_json::json;
 use std::path::PathBuf;
 use tokio::time::Instant;
 
-use ahma_mcp::schema_validation::{MtdfValidator, ValidationErrorType};
+use ahma_mcp::{
+    schema_validation::{MtdfValidator, ValidationErrorType},
+    utils::logging::init_test_logging,
+};
 
 /// Test MTDF compliance edge cases
 #[tokio::test]
 async fn test_mtdf_compliance_edge_cases() -> Result<()> {
+    init_test_logging();
     let validator = MtdfValidator::new();
 
     // Test minimal valid configuration
@@ -139,6 +143,7 @@ async fn test_mtdf_compliance_edge_cases() -> Result<()> {
 /// Test recursive subcommand validation
 #[tokio::test]
 async fn test_recursive_subcommand_validation() -> Result<()> {
+    init_test_logging();
     let validator = MtdfValidator::new();
 
     // Test deeply nested subcommands
@@ -243,6 +248,7 @@ async fn test_recursive_subcommand_validation() -> Result<()> {
 /// Test performance for large tool sets
 #[tokio::test]
 async fn test_performance_for_large_tool_sets() -> Result<()> {
+    init_test_logging();
     let validator = MtdfValidator::new();
 
     // Generate a large tool configuration
@@ -349,6 +355,7 @@ async fn test_performance_for_large_tool_sets() -> Result<()> {
 /// Test error message quality and helpfulness
 #[tokio::test]
 async fn test_error_message_quality_and_helpfulness() -> Result<()> {
+    init_test_logging();
     let validator = MtdfValidator::new();
 
     // Test error messages for common mistakes
@@ -452,6 +459,7 @@ async fn test_error_message_quality_and_helpfulness() -> Result<()> {
 /// Test complex configuration validation scenarios
 #[tokio::test]
 async fn test_complex_configuration_validation_scenarios() -> Result<()> {
+    init_test_logging();
     let validator = MtdfValidator::new();
 
     // Test inheritance of synchronous behavior
@@ -615,6 +623,7 @@ async fn test_complex_configuration_validation_scenarios() -> Result<()> {
 /// Test validator configuration options
 #[tokio::test]
 async fn test_validator_configuration_options() -> Result<()> {
+    init_test_logging();
     // Test strict mode vs permissive mode
     let config_with_unknown_fields = json!({
         "name": "unknown_fields_test",
@@ -679,6 +688,7 @@ async fn test_validator_configuration_options() -> Result<()> {
 /// Test edge cases in field validation
 #[tokio::test]
 async fn test_field_validation_edge_cases() -> Result<()> {
+    init_test_logging();
     let validator = MtdfValidator::new();
 
     // Test all valid option types
@@ -778,6 +788,7 @@ async fn test_field_validation_edge_cases() -> Result<()> {
 /// Test async guidance validation edge cases
 #[tokio::test]
 async fn test_async_guidance_validation_edge_cases() -> Result<()> {
+    init_test_logging();
     let validator = MtdfValidator::new();
 
     // Test various levels of async guidance completeness

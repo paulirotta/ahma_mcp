@@ -7,13 +7,14 @@
 //! - Shell pool lifecycle and health checking
 //! - Error handling and recovery scenarios
 
+use ahma_mcp::shell_pool::{ShellCommand, ShellError, ShellPoolConfig, ShellPoolManager};
 use anyhow::Result;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tempfile::TempDir;
 use tokio::sync::Barrier;
-
-use ahma_mcp::shell_pool::{ShellCommand, ShellError, ShellPoolConfig, ShellPoolManager};
 
 /// Test shell reuse efficiency under repeated operations
 #[tokio::test]

@@ -567,6 +567,7 @@ impl OperationMonitor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::logging::init_test_logging;
     use std::time::Duration;
 
     /// This test simulates the race condition where an operation completes
@@ -575,6 +576,7 @@ mod tests {
     /// operations.
     #[tokio::test]
     async fn test_wait_for_fast_completion_race_condition() {
+        init_test_logging();
         let monitor = OperationMonitor::new(MonitorConfig::with_timeout(Duration::from_secs(5)));
         let op_id = "fast_op_1".to_string();
         let op = Operation::new(
@@ -622,6 +624,7 @@ mod tests {
     /// immediately instead of blocking indefinitely.
     #[tokio::test]
     async fn test_wait_for_nonexistent_operation() {
+        init_test_logging();
         let monitor = OperationMonitor::new(MonitorConfig::with_timeout(Duration::from_secs(5)));
 
         // Use a timeout to ensure the test completes quickly

@@ -1,10 +1,12 @@
 //! Test VS Code MCP configuration for JSON tool definitions
+use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
 use serde_json::Value;
 use std::fs;
 
 #[tokio::test]
 async fn test_vscode_mcp_config_watches_binary_only() -> Result<()> {
+    init_test_logging();
     // Read the VS Code MCP configuration
     let mcp_config_content = fs::read_to_string(".vscode/mcp.json")?;
     let mcp_config: Value = serde_json::from_str(&mcp_config_content)?;
@@ -53,6 +55,7 @@ async fn test_vscode_mcp_config_watches_binary_only() -> Result<()> {
 
 #[tokio::test]
 async fn test_vscode_mcp_config_has_valid_command_structure() -> Result<()> {
+    init_test_logging();
     // Read the VS Code MCP configuration
     let mcp_config_content = fs::read_to_string(".vscode/mcp.json")?;
     let mcp_config: Value = serde_json::from_str(&mcp_config_content)?;

@@ -1,9 +1,11 @@
 /// Test to verify that the guard rail system correctly detects hardcoded tool conflicts
 use ahma_mcp::config::load_tool_configs;
+use ahma_mcp::utils::logging::init_test_logging;
 use tempfile::TempDir;
 
 #[test]
 fn test_guard_rail_detects_hardcoded_tool_conflicts() {
+    init_test_logging();
     println!("🧪 Testing guard rail system for hardcoded tool conflicts...");
 
     // Create a temporary directory with a conflicting tool configuration
@@ -91,6 +93,7 @@ fn test_guard_rail_detects_hardcoded_tool_conflicts() {
 
 #[test]
 fn test_guard_rail_allows_valid_configurations() {
+    init_test_logging();
     println!("🧪 Testing guard rail allows valid configurations...");
 
     // Create a temporary directory with only valid tool configurations

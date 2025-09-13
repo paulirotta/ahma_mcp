@@ -6,6 +6,7 @@ use ahma_mcp::mcp_service::{AhmaMcpService, GuidanceConfig};
 use ahma_mcp::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_mcp::schema_validation::MtdfValidator;
 use ahma_mcp::shell_pool::{ShellPoolConfig, ShellPoolManager};
+use ahma_mcp::utils::logging::init_test_logging;
 use rmcp::handler::server::ServerHandler;
 use serde_json::json;
 use std::collections::HashMap;
@@ -14,6 +15,7 @@ use std::time::Duration;
 
 #[test]
 fn test_guidance_config_deserialization() {
+    init_test_logging();
     let guidance_json = json!({
         "guidance_blocks": {
             "async_behavior": "**IMPORTANT:** This tool operates asynchronously...",
@@ -32,6 +34,7 @@ fn test_guidance_config_deserialization() {
 
 #[test]
 fn test_mtdf_validator_creation() {
+    init_test_logging();
     let _validator = MtdfValidator::new();
     // Just test that it can be created
     // Test passed if we reach this point
@@ -39,6 +42,7 @@ fn test_mtdf_validator_creation() {
 
 #[test]
 fn test_guidance_config_legacy_structure() {
+    init_test_logging();
     let legacy_json = json!({
         "guidance_blocks": {},
         "legacy_guidance": {
@@ -62,6 +66,7 @@ fn test_guidance_config_legacy_structure() {
 
 #[test]
 fn test_guidance_config_empty() {
+    init_test_logging();
     let empty_json = json!({
         "guidance_blocks": {}
     });
@@ -74,6 +79,7 @@ fn test_guidance_config_empty() {
 
 #[test]
 fn test_tool_config_creation() {
+    init_test_logging();
     let tool_config = ToolConfig {
         name: "cargo".to_string(),
         description: "Cargo build tool".to_string(),
@@ -114,6 +120,7 @@ fn test_tool_config_creation() {
 
 #[test]
 fn test_subcommand_config_creation() {
+    init_test_logging();
     let subcommand = SubcommandConfig {
         name: "build".to_string(),
         description: "Build project".to_string(),
@@ -135,6 +142,7 @@ fn test_subcommand_config_creation() {
 
 #[test]
 fn test_option_config_creation() {
+    init_test_logging();
     let option = OptionConfig {
         name: "verbose".to_string(),
         alias: Some("v".to_string()),
@@ -156,6 +164,7 @@ fn test_option_config_creation() {
 
 #[test]
 fn test_tool_hints_creation() {
+    init_test_logging();
     let hints = ToolHints {
         default: Some("Default hint".to_string()),
         operation_hints: std::collections::HashMap::from([
@@ -177,6 +186,7 @@ fn test_tool_hints_creation() {
 
 #[tokio::test]
 async fn test_service_creation_and_basic_functionality() {
+    init_test_logging();
     let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(300));
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_config = ShellPoolConfig::default();
@@ -200,6 +210,7 @@ async fn test_service_creation_and_basic_functionality() {
 
 #[tokio::test]
 async fn test_service_with_configs() {
+    init_test_logging();
     let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(300));
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_config = ShellPoolConfig::default();
@@ -268,6 +279,7 @@ async fn test_service_with_configs() {
 
 #[test]
 fn test_guidance_config_with_legacy_fallback() {
+    init_test_logging();
     let guidance_json = json!({
         "guidance_blocks": {
             "test_key": "Test guidance"
@@ -294,6 +306,7 @@ fn test_guidance_config_with_legacy_fallback() {
 
 #[test]
 fn test_tool_config_with_nested_subcommands() {
+    init_test_logging();
     let tool_config = ToolConfig {
         name: "cargo".to_string(),
         command: "cargo".to_string(),
@@ -340,6 +353,7 @@ fn test_tool_config_with_nested_subcommands() {
 
 #[tokio::test]
 async fn test_service_with_tool_configs() {
+    init_test_logging();
     let mut configs = HashMap::new();
     let tool_config = ToolConfig {
         name: "cargo".to_string(),

@@ -4,8 +4,10 @@ mod race_condition_bug_test {
         MonitorConfig, Operation, OperationMonitor, OperationStatus,
     };
     use serde_json::Value;
-    use std::sync::{Arc, Mutex};
-    use std::time::Duration;
+    use std::{
+        sync::{Arc, Mutex},
+        time::Duration,
+    };
 
     /// This test specifically targets the potential race condition that could cause
     /// the endless notification loop bug. The scenario:
@@ -267,7 +269,7 @@ mod race_condition_bug_test {
                 for op in completed {
                     let mut guard = notified_ops_clone.lock().unwrap();
                     if guard.insert(op.id.clone()) {
-                        println!("   📊 Loop {}: Sent notification for {}", i, op.id);
+                        println!("   � Loop {}: Sent notification for {}", i, op.id);
                         local_notification_count += 1;
                     }
                 }

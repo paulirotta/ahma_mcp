@@ -107,15 +107,78 @@ impl Adapter {
         })
     }
 
-    /// Gracefully shuts down the adapter by waiting for all spawned tasks to complete.
+    /// Gracefully shuts down the adapter by cancelling active operations, aborting tasks,
+    /// and shutting down shell pools. Uses timeouts to avoid hanging indefinitely.
     pub async fn shutdown(&self) {
-        let mut handles = self.task_handles.lock().await;
-        for (id, handle) in handles.drain() {
-            tracing::debug!("Waiting for task {} to complete...", id);
-            if let Err(e) = handle.await {
-                tracing::error!("Error waiting for task {}: {:?}", id, e);
+        tracing::info!("Adapter shutdown initiated: cancelling operations and aborting tasks");
+
+        // 1) Cancel all known operations tracked by this adapter (best-effort)
+        // We use the task handle keys which are the operation IDs
+        {
+            let handles = self.task_handles.lock().await;
+            for op_id in handles.keys() {
+                // Provide a clear reason for downstream logs
+                let reason = Some("Adapter shutdown".to_string());
+                let _ = self
+                    .monitor
+                    .cancel_operation_with_reason(op_id, reason)
+                    .await;
             }
         }
+
+        // 2) Abort all running tasks and wait briefly for them to finish
+        // Drain handles to avoid races with task completion removing them concurrently
+        let mut drained: Vec<(String, JoinHandle<()>)> = Vec::new();
+        {
+            let mut handles = self.task_handles.lock().await;
+            for (id, handle) in handles.drain() {
+                drained.push((id, handle));
+            }
+        }
+
+        // First give a small grace period for tasks to finish naturally
+        for (id, handle) in drained.iter_mut() {
+            tracing::debug!("Waiting briefly for task {} to complete...", id);
+            match tokio::time::timeout(Duration::from_millis(250), handle).await {
+                Ok(res) => {
+                    if let Err(e) = res {
+                        tracing::debug!(
+                            "Task {} finished with join error before abort: {:?}",
+                            id,
+                            e
+                        );
+                    }
+                }
+                Err(_) => {
+                    tracing::debug!("Task {} did not complete in grace period", id);
+                }
+            }
+        }
+
+        // Abort any remaining tasks and await their termination with a bounded timeout
+        for (id, mut handle) in drained {
+            if !handle.is_finished() {
+                tracing::info!("Aborting task {} during shutdown", id);
+                handle.abort();
+                // Await aborted join to ensure cleanup
+                match tokio::time::timeout(Duration::from_secs(2), &mut handle).await {
+                    Ok(join_res) => {
+                        if let Err(e) = join_res {
+                            tracing::debug!("Task {} aborted with: {:?}", id, e);
+                        }
+                    }
+                    Err(_) => {
+                        tracing::warn!("Timed out waiting for aborted task {} to finish", id);
+                    }
+                }
+            }
+        }
+
+        // 3) Shut down all shell pools (kills any lingering shell processes)
+        tracing::info!("Shutting down shell pools");
+        self.shell_pool.shutdown_all().await;
+
+        tracing::info!("Adapter shutdown complete");
     }
 
     /// Synchronously executes a command and returns the result directly.

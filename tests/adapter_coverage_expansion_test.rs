@@ -12,17 +12,16 @@ use ahma_mcp::adapter::{Adapter, AsyncExecOptions};
 use ahma_mcp::config::{OptionConfig, SubcommandConfig};
 use ahma_mcp::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_mcp::shell_pool::{ShellPoolConfig, ShellPoolManager};
+use ahma_mcp::utils::logging::init_test_logging;
 use serde_json::{Map, json};
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
 
-mod common;
-
 /// Helper function to create test adapter with custom configuration
 /// Helper to create test adapter
 async fn create_simple_test_adapter() -> (Arc<Adapter>, TempDir) {
-    common::test_utils::init_test_logging();
+    init_test_logging();
 
     let temp_dir = TempDir::new().unwrap();
     let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
@@ -35,8 +34,8 @@ async fn create_simple_test_adapter() -> (Arc<Adapter>, TempDir) {
 
 #[tokio::test]
 async fn test_prepare_command_and_args_edge_cases() {
-    common::test_utils::init_test_logging();
-    common::test_utils::init_test_logging();
+    init_test_logging();
+    init_test_logging();
 
     let (adapter, temp_dir) = create_simple_test_adapter().await;
 
@@ -73,8 +72,8 @@ async fn test_prepare_command_and_args_edge_cases() {
 
 #[tokio::test]
 async fn test_prepare_command_and_args_with_aliases() {
-    common::test_utils::init_test_logging();
-    common::test_utils::init_test_logging();
+    init_test_logging();
+    init_test_logging();
 
     let (adapter, temp_dir) = create_simple_test_adapter().await;
 
@@ -138,8 +137,8 @@ async fn test_prepare_command_and_args_with_aliases() {
 
 #[tokio::test]
 async fn test_prepare_command_and_args_mixed_types() {
-    common::test_utils::init_test_logging();
-    common::test_utils::init_test_logging();
+    init_test_logging();
+    init_test_logging();
 
     let (adapter, temp_dir) = create_simple_test_adapter().await;
 
@@ -225,7 +224,7 @@ async fn test_prepare_command_and_args_mixed_types() {
 
 #[tokio::test]
 async fn test_operation_id_generation_uniqueness() {
-    common::test_utils::init_test_logging();
+    init_test_logging();
     // Test that operation IDs are unique across multiple calls
     // This tests the generate_operation_id function without actually executing commands
 
@@ -272,7 +271,7 @@ async fn test_operation_id_generation_uniqueness() {
 
 #[tokio::test]
 async fn test_async_execution_task_error_handling() {
-    common::test_utils::init_test_logging();
+    init_test_logging();
     let (adapter, _temp_dir) = create_simple_test_adapter().await;
 
     // Test async execution with invalid working directory
@@ -303,7 +302,7 @@ async fn test_async_execution_task_error_handling() {
 
 #[tokio::test]
 async fn test_shutdown_with_active_tasks() {
-    common::test_utils::init_test_logging();
+    init_test_logging();
     let (adapter, _temp_dir) = create_simple_test_adapter().await;
 
     // Start multiple async operations
@@ -340,7 +339,7 @@ async fn test_shutdown_with_active_tasks() {
 
 #[tokio::test]
 async fn test_async_execution_with_none_callback() {
-    common::test_utils::init_test_logging();
+    init_test_logging();
     let (adapter, temp_dir) = create_simple_test_adapter().await;
 
     // Test async execution with None callback (should not panic)
@@ -371,7 +370,7 @@ async fn test_async_execution_with_none_callback() {
 
 #[tokio::test]
 async fn test_execute_async_with_empty_options() {
-    common::test_utils::init_test_logging();
+    init_test_logging();
     let (adapter, temp_dir) = create_simple_test_adapter().await;
 
     // Test with minimal options
@@ -404,7 +403,7 @@ async fn test_execute_async_with_empty_options() {
 
 #[tokio::test]
 async fn test_sync_execution_with_complex_error_handling() {
-    common::test_utils::init_test_logging();
+    init_test_logging();
     let (adapter, temp_dir) = create_simple_test_adapter().await;
 
     // Test sync execution with command that produces stderr but exits successfully
@@ -433,7 +432,7 @@ async fn test_sync_execution_with_complex_error_handling() {
 
 #[tokio::test]
 async fn test_sync_execution_stderr_only() {
-    common::test_utils::init_test_logging();
+    init_test_logging();
     let (adapter, temp_dir) = create_simple_test_adapter().await;
 
     // Test command that only outputs to stderr
@@ -460,7 +459,7 @@ async fn test_sync_execution_stderr_only() {
 
 #[tokio::test]
 async fn test_sync_execution_empty_stdout() {
-    common::test_utils::init_test_logging();
+    init_test_logging();
     let (adapter, temp_dir) = create_simple_test_adapter().await;
 
     // Test command with empty stdout but successful exit
@@ -482,7 +481,7 @@ async fn test_sync_execution_empty_stdout() {
 
 #[tokio::test]
 async fn test_async_execution_with_custom_operation_id() {
-    common::test_utils::init_test_logging();
+    init_test_logging();
     let (adapter, temp_dir) = create_simple_test_adapter().await;
 
     let custom_id = "custom_operation_12345";
@@ -518,7 +517,7 @@ async fn test_async_execution_with_custom_operation_id() {
 
 #[tokio::test]
 async fn test_prepare_command_and_args_with_null_values() {
-    common::test_utils::init_test_logging();
+    init_test_logging();
     let (adapter, temp_dir) = create_simple_test_adapter().await;
 
     let config_with_nulls = SubcommandConfig {
@@ -577,7 +576,7 @@ async fn test_prepare_command_and_args_with_null_values() {
 
 #[tokio::test]
 async fn test_multiple_concurrent_async_operations() {
-    common::test_utils::init_test_logging();
+    init_test_logging();
     let (adapter, temp_dir) = create_simple_test_adapter().await;
     let temp_dir_path = temp_dir.path().to_str().unwrap().to_string();
 

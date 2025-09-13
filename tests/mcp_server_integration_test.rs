@@ -3,6 +3,7 @@ use ahma_mcp::config::load_tool_configs;
 use ahma_mcp::mcp_service::{AhmaMcpService, GuidanceConfig};
 use ahma_mcp::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_mcp::shell_pool::{ShellPoolConfig, ShellPoolManager};
+use ahma_mcp::utils::logging::init_test_logging;
 use rmcp::handler::server::ServerHandler;
 use std::collections::HashMap;
 use std::path::Path;
@@ -36,6 +37,7 @@ async fn create_test_service() -> AhmaMcpService {
 
 #[tokio::test]
 async fn test_mcp_service_creation_and_info() {
+    init_test_logging();
     // Create MCP service with actual tool configurations
     let service = create_test_service().await;
 
@@ -59,6 +61,7 @@ async fn test_mcp_service_creation_and_info() {
 
 #[tokio::test]
 async fn test_mcp_service_multiple_creation() {
+    init_test_logging();
     // Test that multiple service instances can be created without conflicts
     let service1 = create_test_service().await;
     let service2 = create_test_service().await;
@@ -76,6 +79,7 @@ async fn test_mcp_service_multiple_creation() {
 
 #[tokio::test]
 async fn test_mcp_service_stability_under_load() {
+    init_test_logging();
     // Test service performance under sustained load
     let service = create_test_service().await;
 
@@ -104,6 +108,7 @@ async fn test_mcp_service_stability_under_load() {
 
 #[tokio::test]
 async fn test_mcp_service_with_tool_configs() {
+    init_test_logging();
     // Test service behavior with different tool configuration scenarios
 
     // Test with no tool configs

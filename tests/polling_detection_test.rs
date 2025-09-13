@@ -1,9 +1,11 @@
 use ahma_mcp::operation_monitor::{MonitorConfig, Operation, OperationMonitor, OperationStatus};
+use ahma_mcp::utils::logging::init_test_logging;
 use std::time::Duration;
 use tokio::time::sleep;
 
 #[tokio::test]
 async fn test_polling_detection() {
+    init_test_logging();
     let monitor = OperationMonitor::new(MonitorConfig::with_timeout(Duration::from_secs(30)));
 
     // Add an operation to query
@@ -36,6 +38,7 @@ async fn test_polling_detection() {
 
 #[tokio::test]
 async fn test_normal_status_checking() {
+    init_test_logging();
     let monitor = OperationMonitor::new(MonitorConfig::with_timeout(Duration::from_secs(30)));
 
     // Add an operation to query

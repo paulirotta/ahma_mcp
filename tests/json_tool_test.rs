@@ -1,5 +1,4 @@
 //! Test for loading tool definitions from JSON files.
-
 mod common;
 
 use anyhow::Result;

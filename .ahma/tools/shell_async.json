@@ -22,13 +22,7 @@
                     "required": true
                 }
             ],
-            "options": [
-                {
-                    "name": "timeout_seconds",
-                    "type": "integer",
-                    "description": "Maximum time to allow the command to run (default: 300s)"
-                }
-            ]
+            "options": []
         }
     ]
 }

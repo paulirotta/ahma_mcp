@@ -406,10 +406,12 @@ pub fn channel_callback(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::logging::init_test_logging;
     use tokio::time::{Duration, timeout};
 
     #[tokio::test]
     async fn test_no_op_callback() {
+        init_test_logging();
         let callback = no_callback();
         let update = ProgressUpdate::Started {
             operation_id: "test".to_string(),
@@ -423,6 +425,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_channel_callback() {
+        init_test_logging();
         let token = tokio_util::sync::CancellationToken::new();
         let (callback, mut receiver) = channel_callback(token.clone());
 
@@ -457,6 +460,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cancellation() {
+        init_test_logging();
         let token = tokio_util::sync::CancellationToken::new();
         let (callback, _receiver) = channel_callback(token.clone());
 

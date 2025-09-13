@@ -1,10 +1,12 @@
 //! Validate all tool JSON files in /tools against the ToolConfig struct
 use ahma_mcp::config::load_tool_configs;
+use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
 use std::path::Path;
 
 #[tokio::test]
 async fn test_all_tool_json_files_load_correctly() -> Result<()> {
+    init_test_logging();
     let tools_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(".ahma/tools");
     let tool_configs = load_tool_configs(&tools_dir);
 

@@ -42,6 +42,10 @@ use tracing_subscriber::{EnvFilter, fmt::layer, prelude::*};
 
 static INIT: Once = Once::new();
 
+pub fn init_test_logging() {
+    init_logging("trace", false).expect("Failed to initialize test logging");
+}
+
 /// Initializes the logging system.
 ///
 /// This function sets up a global tracing subscriber. It can be configured to
@@ -51,8 +55,6 @@ static INIT: Once = Once::new();
 ///
 /// Returns an error if the project directories cannot be determined.
 pub fn init_logging(log_level: &str, log_to_file: bool) -> Result<()> {
-    println!("Initializing logging...");
-
     INIT.call_once(|| {
         let env_filter = EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| EnvFilter::new(format!("{log_level},ahma_mcp=debug")));

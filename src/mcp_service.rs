@@ -895,6 +895,50 @@ impl ServerHandler for AhmaMcpService {
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| ".".to_string());
 
+            // SECURITY: Validate working_directory stays within the workspace
+            // Resolve workspace root and compare canonical paths
+            let workspace_root = match env::current_dir() {
+                Ok(dir) => dir,
+                Err(e) => {
+                    return Err(McpError::internal_error(
+                        format!("Failed to get current directory: {}", e),
+                        None,
+                    ));
+                }
+            };
+            let canonical_workspace = match workspace_root.canonicalize() {
+                Ok(path) => path,
+                Err(e) => {
+                    return Err(McpError::internal_error(
+                        format!("Failed to canonicalize workspace path: {}", e),
+                        None,
+                    ));
+                }
+            };
+            let proposed_path = std::path::Path::new(&working_directory);
+            let resolved_working_dir = if proposed_path.is_absolute() {
+                proposed_path
+                    .canonicalize()
+                    .unwrap_or_else(|_| proposed_path.to_path_buf())
+            } else {
+                let joined = canonical_workspace.join(proposed_path);
+                joined.canonicalize().unwrap_or(joined)
+            };
+            if !resolved_working_dir.starts_with(&canonical_workspace) {
+                let error_message = format!(
+                    "Working directory '{}' is outside the allowed workspace.",
+                    working_directory
+                );
+                tracing::error!("{}", error_message);
+                return Err(McpError::invalid_params(
+                    error_message,
+                    Some(serde_json::json!({
+                        "parameter": "working_directory",
+                        "path": working_directory
+                    })),
+                ));
+            }
+
             tracing::info!(
                 "Executing tool '{}' (command: '{}') in directory '{}' with mode: {}",
                 tool_name,

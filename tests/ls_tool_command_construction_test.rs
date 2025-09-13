@@ -1,5 +1,6 @@
 mod common;
 
+use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
 use common::test_client::new_client;
 use rmcp::model::CallToolRequestParam;
@@ -8,6 +9,7 @@ use std::borrow::Cow;
 
 #[tokio::test]
 async fn test_ls_tool_should_not_add_undefined_path_parameter() -> Result<()> {
+    init_test_logging();
     // ARRANGE: Set up test client to execute ls tool
     let client = new_client(Some(".ahma/tools")).await?;
 
@@ -76,6 +78,7 @@ async fn test_ls_tool_should_not_add_undefined_path_parameter() -> Result<()> {
 
 #[tokio::test]
 async fn test_ls_tool_executes_plain_ls_command() -> Result<()> {
+    init_test_logging();
     // ARRANGE: Set up test client
     let client = new_client(Some(".ahma/tools")).await?;
 
@@ -125,6 +128,7 @@ async fn test_ls_tool_executes_plain_ls_command() -> Result<()> {
 
 #[tokio::test]
 async fn test_ls_tool_with_valid_options() -> Result<()> {
+    init_test_logging();
     // ARRANGE: Set up test client with tools directory
     let client = new_client(Some(".ahma/tools")).await?;
 

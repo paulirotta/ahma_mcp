@@ -1,14 +1,17 @@
 #[cfg(test)]
 mod mcp_callback_tests {
-    use ahma_mcp::callback_system::{CallbackError, ProgressUpdate};
-    use ahma_mcp::mcp_callback::mcp_callback;
+    use ahma_mcp::{
+        callback_system::{CallbackError, ProgressUpdate},
+        mcp_callback::mcp_callback,
+        utils::logging::init_test_logging,
+    };
     use rmcp::model::{NumberOrString, ProgressNotificationParam, ProgressToken};
-
     use std::sync::Arc;
 
     // Test the constructor and basic functionality
     #[test]
     fn test_mcp_callback_sender_creation() {
+        init_test_logging();
         // We can't create a real Peer, but we can test that the constructor compiles
         // and that the struct has the expected fields
         // This is more of a compilation test, but it ensures the API is accessible
@@ -21,6 +24,7 @@ mod mcp_callback_tests {
 
     #[test]
     fn test_mcp_callback_utility_function() {
+        init_test_logging();
         // Test that the utility function compiles and returns the right type
         // We can't call it with a real Peer, but we can ensure it exists
 
@@ -34,6 +38,7 @@ mod mcp_callback_tests {
 
     #[test]
     fn test_progress_token_creation() {
+        init_test_logging();
         let operation_id = "test_operation_123".to_string();
         let token = ProgressToken(NumberOrString::String(Arc::from(operation_id.as_str())));
 
@@ -45,6 +50,7 @@ mod mcp_callback_tests {
 
     #[test]
     fn test_progress_notification_param_structure() {
+        init_test_logging();
         let token = ProgressToken(NumberOrString::String(Arc::from("test_op")));
         let params = ProgressNotificationParam {
             progress_token: token,
@@ -60,6 +66,7 @@ mod mcp_callback_tests {
 
     #[test]
     fn test_progress_update_started_message_format() {
+        init_test_logging();
         let _operation_id = "test_op_123".to_string();
         let command = "cargo build".to_string();
         let description = "Building the project".to_string();
@@ -70,18 +77,21 @@ mod mcp_callback_tests {
 
     #[test]
     fn test_progress_update_progress_default_percentage() {
+        init_test_logging();
         let progress = 50.0; // Default percentage when None is provided
         assert_eq!(progress, 50.0);
     }
 
     #[test]
     fn test_progress_update_progress_with_percentage() {
+        init_test_logging();
         let progress = 75.0; // Direct assignment since value is known
         assert_eq!(progress, 75.0);
     }
 
     #[test]
     fn test_progress_update_output_stdout_format() {
+        init_test_logging();
         let line = "Hello World".to_string();
         let is_stderr = false;
 
@@ -96,6 +106,7 @@ mod mcp_callback_tests {
 
     #[test]
     fn test_progress_update_output_stderr_format() {
+        init_test_logging();
         let line = "Error message".to_string();
         let is_stderr = true;
 
@@ -110,6 +121,7 @@ mod mcp_callback_tests {
 
     #[test]
     fn test_progress_update_final_result_success_format() {
+        init_test_logging();
         let operation_id = "test_op_123".to_string();
         let command = "cargo test".to_string();
         let description = "Running tests".to_string();
@@ -134,6 +146,7 @@ mod mcp_callback_tests {
 
     #[test]
     fn test_progress_update_final_result_failure_format() {
+        init_test_logging();
         let operation_id = "test_op_456".to_string();
         let command = "cargo build".to_string();
         let description = "Building project".to_string();
@@ -155,6 +168,7 @@ mod mcp_callback_tests {
 
     #[test]
     fn test_callback_error_send_failed() {
+        init_test_logging();
         let error_msg = "Failed to send MCP notification: TransportClosed";
         let error = CallbackError::SendFailed(error_msg.to_string());
 
@@ -166,6 +180,7 @@ mod mcp_callback_tests {
 
     #[test]
     fn test_mcp_callback_utility_function_compiles() {
+        init_test_logging();
         // Test that the utility function can be called (compilation test)
         // We can't easily test the full functionality without a real Peer,
         // but we can ensure the function signature is correct
@@ -181,6 +196,7 @@ mod mcp_callback_tests {
 
     #[test]
     fn test_progress_update_variants_compile() {
+        init_test_logging();
         // Test that all ProgressUpdate variants can be created
         // This ensures our match arms in send_progress cover all cases
 
@@ -237,6 +253,7 @@ mod mcp_callback_tests {
 
     #[test]
     fn test_mcp_callback_basic_structure() {
+        init_test_logging();
         // Test basic structure and compilation of the mcp_callback module
         // This ensures the module exports are accessible
 

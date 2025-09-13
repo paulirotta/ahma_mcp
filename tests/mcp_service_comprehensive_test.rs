@@ -1,11 +1,10 @@
+mod common;
 /// Comprehensive integration tests for mcp_service.rs coverage improvement
 ///
 /// Target: Improve mcp_service.rs coverage from 59.44% to 85%+
 /// Focus: Hardcoded tools, schema generation, error handling, path validation
 ///
 /// Uses the integration test pattern from existing working tests
-mod common;
-
 use anyhow::Result;
 use common::test_client::new_client;
 use rmcp::model::CallToolRequestParam;

@@ -1,4 +1,5 @@
 /// Intelligent Await Timeout Test Suite
+mod common;
 ///
 /// PURPOSE: Implements TDD for the new await timeout behavior:
 /// 1. If no timeout is given, timeout is the max of 'await' default timeout and
@@ -7,8 +8,7 @@
 ///    warn the AI but obey the request.
 ///
 /// This test suite defines the expected behavior before implementation.
-mod common;
-
+use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
 use common::test_client::new_client;
 use serde_json::json;
@@ -19,6 +19,7 @@ use tokio::time::{Instant, timeout};
 /// Expected: Use await default timeout (240s)
 #[tokio::test]
 async fn test_no_timeout_no_operations_uses_default() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     let call_param = rmcp::model::CallToolRequestParam {
@@ -45,6 +46,7 @@ async fn test_no_timeout_no_operations_uses_default() -> Result<()> {
 /// Expected: Test that we can verify basic await functionality
 #[tokio::test]
 async fn test_intelligent_timeout_calculation_needed() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Test basic await functionality without explicit timeout
@@ -76,6 +78,7 @@ async fn test_intelligent_timeout_calculation_needed() -> Result<()> {
 /// Expected: Complete immediately when no operations are pending (correct behavior)
 #[tokio::test]
 async fn test_explicit_timeout_warns_when_insufficient() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Test explicit timeout behavior - even with no pending operations,
@@ -113,6 +116,7 @@ async fn test_explicit_timeout_warns_when_insufficient() -> Result<()> {
 /// Expected: Complete immediately when no matching operations are pending
 #[tokio::test]
 async fn test_tool_filtered_intelligent_timeout() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Test await with tool filtering (should complete immediately when no matching operations)
@@ -149,6 +153,7 @@ async fn test_tool_filtered_intelligent_timeout() -> Result<()> {
 /// Expected: Warning should provide actionable information to the AI
 #[tokio::test]
 async fn test_warning_message_implementation_needed() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Start operation with long timeout
@@ -157,7 +162,6 @@ async fn test_warning_message_implementation_needed() -> Result<()> {
         arguments: Some({
             let mut args = serde_json::Map::new();
             args.insert("command".to_string(), json!("sleep 600")); // 10 minutes
-            args.insert("timeout_seconds".to_string(), json!("600"));
             args
         }),
     };
@@ -191,6 +195,7 @@ async fn test_warning_message_implementation_needed() -> Result<()> {
 /// Expected: Complete immediately when no operations are pending
 #[tokio::test]
 async fn test_very_short_timeout_vs_long_operations() -> Result<()> {
+    init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Test very short timeout behavior - should complete immediately when no operations pending

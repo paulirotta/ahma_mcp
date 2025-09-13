@@ -1,14 +1,16 @@
 //! TDD tests for tool configuration and execution issues
+mod common;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParam;
 use serde_json::json;
 use std::borrow::Cow;
 
-mod common;
+use ahma_mcp::utils::logging::init_test_logging;
 use common::test_client::new_client;
 
 #[tokio::test]
 async fn test_synchronous_cargo_check_returns_actual_results() -> Result<()> {
+    init_test_logging();
     // This test identifies the issue where cargo check should return actual results
 
     let client = new_client(Some(".ahma/tools")).await?;
@@ -49,6 +51,7 @@ async fn test_synchronous_cargo_check_returns_actual_results() -> Result<()> {
 
 #[tokio::test]
 async fn test_ls_tool_command_structure() -> Result<()> {
+    init_test_logging();
     // This test identifies the issue where ls_ls tool fails with command structure
     // The tool appears to be running "ls ls" instead of just "ls"
 
@@ -105,6 +108,7 @@ async fn test_ls_tool_command_structure() -> Result<()> {
 
 #[tokio::test]
 async fn test_tool_descriptions_match_actual_behavior() -> Result<()> {
+    init_test_logging();
     // This test identifies inconsistencies between tool descriptions and actual behavior
     // Specifically checking if synchronous tools are properly described
 

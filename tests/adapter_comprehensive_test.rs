@@ -12,14 +12,13 @@ use ahma_mcp::{
     config::SubcommandConfig,
     operation_monitor::{MonitorConfig, OperationMonitor},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
+    utils::logging::init_test_logging,
 };
 use anyhow::Result;
 use serde_json::{Map, json};
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
-
-mod common;
 
 /// Helper function to create test adapter with default configuration
 async fn create_test_adapter() -> Result<(Adapter, TempDir)> {
@@ -49,7 +48,7 @@ async fn create_test_adapter() -> Result<(Adapter, TempDir)> {
 /// Test command construction edge cases with various argument types
 #[tokio::test]
 async fn test_command_construction_edge_cases() -> Result<()> {
-    common::test_utils::init_test_logging();
+    init_test_logging();
 
     let (adapter, temp_dir) = create_test_adapter().await?;
 
