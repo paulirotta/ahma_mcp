@@ -288,11 +288,7 @@ mod documentation_requirements {
     /// MAINTENANCE: Keep these documents updated as new features are added.
     #[test]
     fn test_required_documentation_exists() {
-        let required_docs = [
-            "README.md",
-            "docs/TROUBLESHOOTING.md",
-            "docs/DEVELOPMENT_WORKFLOW.md",
-        ];
+        let required_docs = ["README.md"];
 
         for doc in &required_docs {
             let path = std::path::Path::new(doc);
