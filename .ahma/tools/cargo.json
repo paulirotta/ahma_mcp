@@ -230,14 +230,19 @@
             "description": "Run the test suite.",
             "options": [
                 {
-                    "name": "testname",
-                    "type": "string",
-                    "description": "If specified, only run tests containing this string in their names (positional argument)"
-                },
-                {
                     "name": "args",
                     "type": "array",
                     "description": "Arguments for the test binary (use after '--')"
+                },
+                {
+                    "name": "nocapture",
+                    "type": "boolean",
+                    "description": "Don't capture test output (equivalent to -- --nocapture)"
+                },
+                {
+                    "name": "show-output",
+                    "type": "boolean",
+                    "description": "Show output from successful tests (equivalent to -- --show-output)"
                 },
                 {
                     "name": "no-run",
@@ -443,6 +448,20 @@
                     "type": "boolean",
                     "description": "Equivalent to specifying both --locked and --offline"
                 }
+            ],
+            "positional_args": [
+                {
+                    "name": "test",
+                    "type": "string",
+                    "description": "Name of the integration test target (corresponds to `--test <NAME>`)",
+                    "required": false
+                },
+                {
+                    "name": "testname",
+                    "type": "string",
+                    "description": "Test name or filter to run (e.g., module::test_name)",
+                    "required": false
+                }
             ]
         },
         {
@@ -477,6 +496,11 @@
                     "name": "bin",
                     "type": "string",
                     "description": "Name of the binary to run"
+                },
+                {
+                    "name": "args",
+                    "type": "array",
+                    "description": "Arguments to pass to the binary (use after '--')"
                 }
             ]
         },

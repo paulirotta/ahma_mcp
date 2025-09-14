@@ -61,6 +61,33 @@
                             "description": "Run tests for all packages in workspace"
                         }
                     ]
+                },
+                {
+                    "name": "show",
+                    "synchronous": true,
+                    "description": "Show results/logs from a previous nextest run. If no run_id is provided, shows the most recent run.",
+                    "options": [
+                        {
+                            "name": "run_id",
+                            "type": "string",
+                            "description": "ID of the nextest run to show (if omitted, show latest run)"
+                        },
+                        {
+                            "name": "json",
+                            "type": "boolean",
+                            "description": "Output results in JSON format if supported"
+                        },
+                        {
+                            "name": "open",
+                            "type": "boolean",
+                            "description": "Open the HTML report in a browser if available"
+                        },
+                        {
+                            "name": "workspace",
+                            "type": "boolean",
+                            "description": "Scope the operation to the workspace when applicable"
+                        }
+                    ]
                 }
             ]
         }

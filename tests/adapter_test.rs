@@ -272,9 +272,13 @@ async fn test_execute_async_with_callback() {
     assert!(result.is_ok());
 
     // Give the async operation time to complete and send callback
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
     let updates = callback_updates.lock().await;
+    println!("Callback updates received: {}", updates.len());
+    for (i, update) in updates.iter().enumerate() {
+        println!("Update {}: {:?}", i, update);
+    }
     assert!(!updates.is_empty());
 
     // Should have at least a final result update
