@@ -1,19 +1,19 @@
-# AHMA MCP Development Workflow Guide
+# AHMA MCP Usage Guide
 
-This guide outlines recommended development practices when using AHMA MCP, focusing on efficient concurrent operations, graceful shutdown handling, and productive development patterns.
+This guide outlines recommended practices for using AHMA MCP, focusing on efficient concurrent operations, graceful shutdown handling, and productive usage patterns.
 
-## Core Development Philosophy
+## Core Philosophy
 
 AHMA MCP is designed around **async-first, non-blocking workflows** that enable maximum productivity through intelligent concurrency and graceful operation management.
 
 ### Key Principles
 
-1. **Start operations and continue working** - Don't await for results unless absolutely necessary
-2. **Use status monitoring** - Check progress without blocking your workflow
-3. **Trust graceful shutdown** - File changes won't abruptly terminate operations
-4. **Monitor, don't await** - Use status tool instead of await tool for productivity
+1. **Start operations and continue working** - Don't `await` for results unless absolutely necessary.
+2. **Use status monitoring** - Check progress without blocking your workflow.
+3. **Trust graceful shutdown** - File changes won't abruptly terminate long-running operations.
+4. **Monitor, don't await** - Use the `status` tool instead of the `await` tool for better productivity.
 
-## Optimal Development Workflow
+## Optimal Usage Workflow
 
 ### 1. Project Setup Phase
 
@@ -24,7 +24,7 @@ When starting work on a project, initiate all foundational operations concurrent
 cargo build --release    # Background build
 cargo test               # Background test suite
 cargo doc --no-deps      # Background documentation
-cargo clippy            # Background linting
+cargo clippy             # Background linting
 
 # Continue with productive work while operations run
 # - Review code structure
@@ -35,7 +35,7 @@ cargo clippy            # Background linting
 
 ### 2. Active Development Phase
 
-During active development, leverage graceful shutdown for seamless workflow:
+During active development, leverage graceful shutdown for a seamless workflow. When you save a file, `cargo-watch` will trigger a restart, but AHMA MCP ensures a graceful shutdown.
 
 ```bash
 # Start relevant operations
@@ -53,7 +53,7 @@ cargo test -- unit      # Specific test subset
 
 ### 3. Monitoring and Coordination
 
-Use status monitoring for real-time awareness:
+Use status monitoring for real-time awareness of background tasks.
 
 ```bash
 # Check all active operations
@@ -68,12 +68,12 @@ status --operation_id op_123
 
 ### 4. Strategic Waiting
 
-Use await tool only when results are critical path:
+Use the `await` tool only when results are critical for your next step.
 
 ```bash
 # ✅ Good use cases for await:
 await --tools cargo --timeout_seconds 120    # Before deployment
-await --operation_id op_build --timeout_seconds 60  # Before dependent task
+await --operation_id op_build --timeout_seconds 60  # Before a dependent task
 
 # ❌ Avoid waiting for:
 await --tools cargo                           # Routine builds
@@ -84,7 +84,7 @@ await --timeout_seconds 300                   # Long timeouts that block work
 
 ### Concurrent Feature Development
 
-**Pattern: Parallel Feature Validation**
+#### Pattern: Parallel Feature Validation
 
 ```bash
 # Start comprehensive validation suite
@@ -100,7 +100,7 @@ cargo doc --all-features       # Full documentation
 
 ### Code Quality Workflow
 
-**Pattern: Continuous Quality Monitoring**
+#### Pattern: Continuous Quality Monitoring
 
 ```bash
 # Establish quality baseline
@@ -115,7 +115,7 @@ cargo audit                    # Security scanning
 
 ### Testing Strategy
 
-**Pattern: Layered Test Execution**
+#### Pattern: Layered Test Execution
 
 ```bash
 # Layer 1: Fast feedback loop
@@ -146,7 +146,7 @@ AHMA MCP provides sophisticated graceful shutdown during development:
 
 #### Visual Feedback During Shutdown
 
-```
+```sh
 🔄 Graceful shutdown initiated...
 ⏳ Allowing 10 seconds for operations to complete...
 📊 2 operations running: cargo_build, cargo_test
@@ -276,9 +276,8 @@ AHMA MCP provides intelligent timeout remediation:
    ```bash
    ps aux | grep cargo                     # Check competing processes
    lsof | grep $(pwd)                      # Check file locks
-   ```
+   ```3. **Network Issues:**
 
-3. **Network Issues:**
    ```bash
    cargo build --offline                   # Use offline mode
    ping 8.8.8.8                          # Test connectivity

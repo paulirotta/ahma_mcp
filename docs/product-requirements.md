@@ -69,7 +69,7 @@ This document outlines the high-level requirements for `ahma_mcp`, a universal, 
 ## 9. Extensibility and Maintainability
 
 - **R9.1**: The architecture shall be modular, with a clear separation of concerns between configuration (`config.rs`), schema validation (`schema_validation.rs`), MCP service logic (`mcp_service.rs`), and command execution (`adapter.rs`).
-- **R9.2**: Adding new tools or modifying existing ones should be achievable purely by editing JSON files, with automatic schema validation ensuring correctness.
-- **R9.3**: The system shall provide comprehensive logging and debugging capabilities to facilitate troubleshooting and performance optimization.
-- **R9.4**: Configuration schema shall support rich metadata including timeout overrides, LLM guidance hints, and performance tuning parameters.
+- **R9.2**: Adding new tools or modifying existing ones must follow the spec-driven development process, documented in `spec-driven-development.md`.
+- **R9.3**: The system shall provide comprehensive logging and debugging capabilities, as detailed in the `DEVELOPER_GUIDE.md`.
+- **R9.4**: The configuration schema (`tool-schema-guide.md`) shall support rich metadata, including timeout overrides and LLM guidance hints.
 - **R9.5**: The system shall support future schema evolution through versioning mechanisms and backward compatibility strategies.
