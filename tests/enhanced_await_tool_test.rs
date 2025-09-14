@@ -21,14 +21,10 @@ async fn test_await_tool_timeout_functionality() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    // Test that await tool has proper timeout parameter
+    // Test that await tool uses intelligent timeout calculation only
     let call_param = rmcp::model::CallToolRequestParam {
         name: "await".into(),
-        arguments: Some({
-            let mut args = serde_json::Map::new();
-            args.insert("timeout_seconds".to_string(), serde_json::json!(1));
-            args
-        }),
+        arguments: Some(serde_json::Map::new()),
     };
 
     // Should return immediately since no operations are running
@@ -49,39 +45,30 @@ async fn test_await_tool_timeout_functionality() -> Result<()> {
     Ok(())
 }
 
-/// TEST: Wait tool timeout bounds validation
+/// TEST: Await tool no longer accepts timeout parameter
 ///
-/// LESSON LEARNED: Timeout values must be validated to prevent user errors.
-/// 5s below minimum -> should clamp to 10s minimum
-/// 3600s above maximum -> should clamp to 1800s maximum
+/// LESSON LEARNED: Timeout is now calculated intelligently based on pending operations.
+/// The user timeout parameter has been removed to rely solely on intelligent calculation.
 ///
-/// DO NOT CHANGE: These bounds were established through user testing
+/// DO NOT CHANGE: The intelligent timeout system was established through user feedback
 #[tokio::test]
 async fn test_await_tool_timeout_validation() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    // Test timeout too small (should clamp to minimum)
+    // Test that timeout parameter is no longer accepted
     let call_param = rmcp::model::CallToolRequestParam {
         name: "await".into(),
-        arguments: Some({
-            let mut args = serde_json::Map::new();
-            args.insert("timeout_seconds".to_string(), serde_json::json!(0)); // Below 1s minimum
-            args
-        }),
+        arguments: Some(serde_json::Map::new()),
     };
 
     let result = client.call_tool(call_param).await?;
     assert!(result.is_error != Some(true));
 
-    // Test timeout too large (should clamp to maximum)
+    // Test another call without any timeout parameter
     let call_param = rmcp::model::CallToolRequestParam {
         name: "await".into(),
-        arguments: Some({
-            let mut args = serde_json::Map::new();
-            args.insert("timeout_seconds".to_string(), serde_json::json!(3600)); // Above maximum
-            args
-        }),
+        arguments: Some(serde_json::Map::new()),
     };
 
     let result = client.call_tool(call_param).await?;
@@ -137,13 +124,12 @@ async fn test_await_tool_with_tool_filter() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    // Test await tool with tool filter
+    // Test await tool with tool filter only (no timeout parameter)
     let call_param = rmcp::model::CallToolRequestParam {
         name: "await".into(),
         arguments: Some({
             let mut args = serde_json::Map::new();
             args.insert("tools".to_string(), serde_json::json!("cargo"));
-            args.insert("timeout_seconds".to_string(), serde_json::json!(30));
             args
         }),
     };

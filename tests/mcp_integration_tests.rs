@@ -46,12 +46,8 @@ async fn test_call_tool_basic() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    // Use the await tool which should always be available
-    let mut params = Map::new();
-    params.insert(
-        "timeout_seconds".to_string(),
-        serde_json::Value::Number(1.into()),
-    );
+    // Use the await tool which should always be available - no timeout parameter needed
+    let params = Map::new();
 
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("await"),
@@ -108,10 +104,8 @@ async fn test_async_notification_delivery() -> Result<()> {
         );
     }
 
-    // 2. Use the await tool to check that async operations can be tracked
-    let await_params = json!({
-        "timeout_seconds": 5
-    });
+    // 2. Use the await tool to check that async operations can be tracked - no timeout parameter needed
+    let await_params = json!({});
     let await_call_params = CallToolRequestParam {
         name: Cow::Borrowed("await"),
         arguments: await_params.as_object().cloned(),

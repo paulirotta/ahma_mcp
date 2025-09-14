@@ -44,34 +44,27 @@ async fn test_async_notification_malformed_operation_ids() -> Result<()> {
     Ok(())
 }
 
-/// Test async notification delivery with edge case timeout values
+/// Test async notification delivery - await tool no longer accepts timeout
 #[tokio::test]
 async fn test_async_notification_extreme_timeout_values() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    // Test with zero timeout (should return immediately)
-    let zero_timeout_params = CallToolRequestParam {
+    // Test await with no timeout parameter (uses intelligent timeout)
+    let no_timeout_params = CallToolRequestParam {
         name: Cow::Borrowed("await"),
-        arguments: Some(
-            json!({
-                "timeout_seconds": 0
-            })
-            .as_object()
-            .unwrap()
-            .clone(),
-        ),
+        arguments: Some(json!({}).as_object().unwrap().clone()),
     };
 
-    let result = client.call_tool(zero_timeout_params).await?;
+    let result = client.call_tool(no_timeout_params).await?;
     assert!(!result.content.is_empty());
 
-    // Test with negative timeout (should be handled gracefully)
-    let negative_timeout_params = CallToolRequestParam {
+    // Test await with only valid parameters
+    let valid_params = CallToolRequestParam {
         name: Cow::Borrowed("await"),
         arguments: Some(
             json!({
-                "timeout_seconds": -1
+                "tools": "cargo"
             })
             .as_object()
             .unwrap()
@@ -79,9 +72,8 @@ async fn test_async_notification_extreme_timeout_values() -> Result<()> {
         ),
     };
 
-    let result = client.call_tool(negative_timeout_params).await;
-    // Should either succeed or fail gracefully
-    assert!(result.is_ok() || result.is_err());
+    let result = client.call_tool(valid_params).await?;
+    assert!(!result.content.is_empty());
 
     client.cancel().await?;
     Ok(())
@@ -159,12 +151,12 @@ async fn test_error_handling_malformed_call_tool_params() -> Result<()> {
         "Cancel tool should require operation_id parameter"
     );
 
-    // Test with invalid parameter types for await tool
+    // Test with invalid parameter types for await tool (no timeout_seconds accepted)
     let invalid_types_params = CallToolRequestParam {
         name: Cow::Borrowed("await"),
         arguments: Some(
             json!({
-                "timeout_seconds": "not_a_number"  // String instead of number
+                "tools": 123  // Number instead of string
             })
             .as_object()
             .unwrap()

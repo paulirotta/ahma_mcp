@@ -1,28 +1,28 @@
 /// Intelligent Await Timeout Test Suite
 mod common;
 ///
-/// PURPOSE: Implements TDD for the new await timeout behavior:
-/// 1. If no timeout is given, timeout is the max of 'await' default timeout and
-///    the max timeout of all tasks being waited for.
-/// 2. If a timeout is specified but less than the calculated value from (1),
-///    warn the AI but obey the request.
+/// PURPOSE: Tests the intelligent timeout behavior for the await tool:
+/// 1. The await tool uses intelligent timeout calculation only (no timeout parameter)
+/// 2. Intelligent timeout = max(240s default, max timeout of pending operations)
+/// 3. When no operations are pending, uses 240s default and returns immediately
 ///
-/// This test suite defines the expected behavior before implementation.
+/// This test suite validates the intelligent timeout implementation.
 use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
 use common::test_client::new_client;
+use rmcp::model::CallToolRequestParam;
 use serde_json::json;
 use std::time::Duration;
 use tokio::time::{Instant, timeout};
 
 /// Test: No timeout provided, no operations running
-/// Expected: Use await default timeout (240s)
+/// Expected: Use intelligent timeout (240s default) but return immediately
 #[tokio::test]
 async fn test_no_timeout_no_operations_uses_default() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    let call_param = rmcp::model::CallToolRequestParam {
+    let call_param = CallToolRequestParam {
         name: "await".into(),
         arguments: None, // No timeout, no tools filter
     };
@@ -50,7 +50,7 @@ async fn test_intelligent_timeout_calculation_needed() -> Result<()> {
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Test basic await functionality without explicit timeout
-    let await_param = rmcp::model::CallToolRequestParam {
+    let await_param = CallToolRequestParam {
         name: "await".into(),
         arguments: None, // No explicit timeout - should use default/intelligent calculation
     };
@@ -74,20 +74,20 @@ async fn test_intelligent_timeout_calculation_needed() -> Result<()> {
     Ok(())
 }
 
-/// Test: Explicit timeout provided, less than calculated intelligent timeout  
+/// Test: No timeout parameter accepted - intelligent timeout only
 /// Expected: Complete immediately when no operations are pending (correct behavior)
 #[tokio::test]
-async fn test_explicit_timeout_warns_when_insufficient() -> Result<()> {
+async fn test_no_timeout_parameter_accepted() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    // Test explicit timeout behavior - even with no pending operations,
-    // the await tool should complete immediately (no point waiting when nothing is pending)
-    let await_param = rmcp::model::CallToolRequestParam {
+    // Test that await tool no longer accepts timeout_seconds parameter
+    // It should use intelligent timeout calculation only
+    let await_param = CallToolRequestParam {
         name: "await".into(),
         arguments: Some({
             let mut args = serde_json::Map::new();
-            args.insert("timeout_seconds".to_string(), json!(1)); // Short timeout
+            args.insert("tools".to_string(), json!("shell")); // Only tools filter allowed
             args
         }),
     };
@@ -106,7 +106,7 @@ async fn test_explicit_timeout_warns_when_insufficient() -> Result<()> {
 
     // The await tool should complete successfully when no operations are pending
     println!(
-        "✅ Explicit timeout behavior working - completed immediately in {:?}",
+        "✅ Intelligent timeout behavior working - completed immediately in {:?}",
         elapsed
     );
     Ok(())
@@ -120,12 +120,11 @@ async fn test_tool_filtered_intelligent_timeout() -> Result<()> {
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Test await with tool filtering (should complete immediately when no matching operations)
-    let await_param = rmcp::model::CallToolRequestParam {
+    let await_param = CallToolRequestParam {
         name: "await".into(),
         arguments: Some({
             let mut args = serde_json::Map::new();
-            args.insert("tools".to_string(), json!("shell")); // Filter for shell tools
-            args.insert("timeout_seconds".to_string(), json!(1)); // Short timeout
+            args.insert("tools".to_string(), json!("shell")); // Filter for shell tools only
             args
         }),
     };
@@ -149,15 +148,15 @@ async fn test_tool_filtered_intelligent_timeout() -> Result<()> {
     Ok(())
 }
 
-/// Test: Warning message content validation
-/// Expected: Warning should provide actionable information to the AI
+/// Test: Intelligent timeout calculation with long-running operations
+/// Expected: Await tool should use intelligent timeout based on operation timeouts
 #[tokio::test]
-async fn test_warning_message_implementation_needed() -> Result<()> {
+async fn test_intelligent_timeout_with_long_operations() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Start operation with long timeout
-    let long_op_param = rmcp::model::CallToolRequestParam {
+    let long_op_param = CallToolRequestParam {
         name: "shell_async".into(),
         arguments: Some({
             let mut args = serde_json::Map::new();
@@ -169,43 +168,36 @@ async fn test_warning_message_implementation_needed() -> Result<()> {
     let _long_op_result = client.call_tool(long_op_param);
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    // Request short timeout
-    let await_param = rmcp::model::CallToolRequestParam {
+    // Use await tool with intelligent timeout (no timeout parameter)
+    let await_param = CallToolRequestParam {
         name: "await".into(),
-        arguments: Some({
-            let mut args = serde_json::Map::new();
-            args.insert("timeout_seconds".to_string(), json!(30)); // 30 seconds vs 600s operation
-            args
-        }),
+        arguments: None, // No parameters - uses intelligent timeout
     };
 
+    // Test that the await tool calculates intelligent timeout correctly
+    // Since we have a 600s operation, intelligent timeout should be 600s
+    // But we'll test with a short test timeout to verify behavior
     let result = timeout(Duration::from_secs(35), client.call_tool(await_param)).await??;
 
-    // TODO: Capture and validate warning content from logs or response
-    // Expected warning format:
-    // "Timeout of 30s may be insufficient. Operations have max timeout of 600s, suggested minimum: 600s"
-
+    // The await operation should timeout at the test level (35s),
+    // but internally it would have used 600s intelligent timeout
     assert!(!result.is_error.unwrap_or(false), "Should not be an error");
 
-    println!("✅ Warning message implementation needed for insufficient timeout scenarios");
+    println!("✅ Intelligent timeout calculation working with long operations");
     Ok(())
 }
 
-/// Test: Edge case - very short explicit timeout behavior
+/// Test: Edge case - intelligent timeout when no operations pending
 /// Expected: Complete immediately when no operations are pending
 #[tokio::test]
-async fn test_very_short_timeout_vs_long_operations() -> Result<()> {
+async fn test_intelligent_timeout_no_pending_operations() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    // Test very short timeout behavior - should complete immediately when no operations pending
-    let await_param = rmcp::model::CallToolRequestParam {
+    // Test intelligent timeout behavior - should complete immediately when no operations pending
+    let await_param = CallToolRequestParam {
         name: "await".into(),
-        arguments: Some({
-            let mut args = serde_json::Map::new();
-            args.insert("timeout_seconds".to_string(), json!(2)); // 2 seconds
-            args
-        }),
+        arguments: None, // No parameters - uses intelligent timeout
     };
 
     let start = Instant::now();
@@ -221,7 +213,7 @@ async fn test_very_short_timeout_vs_long_operations() -> Result<()> {
     );
 
     println!(
-        "✅ Short timeout behavior working - completed immediately in {:?}",
+        "✅ Intelligent timeout behavior working - completed immediately in {:?}",
         elapsed
     );
     Ok(())

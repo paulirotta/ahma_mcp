@@ -1080,13 +1080,6 @@ impl AhmaMcpService {
                 "description": "Comma-separated tool name prefixes to await for (optional; waits for all if omitted)"
             }),
         );
-        properties.insert(
-            "timeout_seconds".to_string(),
-            serde_json::json!({
-                "type": "number",
-                "description": "Maximum time to await in seconds (default: 240, min: 10, max: 1800)"
-            }),
-        );
 
         let mut schema = Map::new();
         schema.insert("type".to_string(), Value::String("object".to_string()));
@@ -1136,46 +1129,8 @@ impl AhmaMcpService {
             Vec::new()
         };
 
-        // Parse timeout parameter and implement intelligent timeout calculation
-        let (timeout_seconds, timeout_warning) = if let Some(v) = args.get("timeout_seconds") {
-            let requested_timeout = v.as_f64().unwrap_or(240.0);
-            // Validate timeout: minimum 1s, maximum 1800s (30 minutes)
-            let clamped_timeout = if requested_timeout < 1.0 {
-                tracing::warn!(
-                    "Timeout too small ({}s), using minimum of 1s",
-                    requested_timeout
-                );
-                1.0
-            } else if requested_timeout > 1800.0 {
-                tracing::warn!(
-                    "Timeout too large ({}s), using maximum of 1800s",
-                    requested_timeout
-                );
-                1800.0
-            } else {
-                requested_timeout
-            };
-
-            // Calculate intelligent timeout for comparison
-            let intelligent_timeout = self.calculate_intelligent_timeout(&tool_filters).await;
-
-            // Check if requested timeout is less than intelligent timeout
-            let warning = if clamped_timeout < intelligent_timeout {
-                Some(format!(
-                    "⚠️  Timeout of {}s may be insufficient. Operations have max timeout of {}s, suggested minimum: {}s",
-                    clamped_timeout as u64, intelligent_timeout as u64, intelligent_timeout as u64
-                ))
-            } else {
-                None
-            };
-
-            (clamped_timeout, warning)
-        } else {
-            // No explicit timeout provided - use intelligent timeout calculation
-            let intelligent_timeout = self.calculate_intelligent_timeout(&tool_filters).await;
-            (intelligent_timeout, None)
-        };
-
+        // Always use intelligent timeout calculation (no user-provided timeout parameter)
+        let timeout_seconds = self.calculate_intelligent_timeout(&tool_filters).await;
         let timeout_duration = std::time::Duration::from_secs(timeout_seconds as u64);
 
         // Build from pending ops, optionally filtered by tools
@@ -1243,11 +1198,6 @@ impl AhmaMcpService {
             pending_ops.iter().map(|op| &op.id).collect::<Vec<_>>()
         );
 
-        // Log timeout warning if one was generated
-        if let Some(ref warning) = timeout_warning {
-            tracing::warn!("{}", warning);
-        }
-
         let wait_start = Instant::now();
         let (warning_tx, mut warning_rx) = tokio::sync::mpsc::unbounded_channel();
 
@@ -1302,22 +1252,12 @@ impl AhmaMcpService {
                         elapsed.as_secs_f64()
                     ))];
 
-                    // Include timeout warning if present
-                    if let Some(warning) = timeout_warning {
-                        result_contents.push(Content::text(warning));
-                    }
-
                     result_contents.extend(contents);
                     Ok(CallToolResult::success(result_contents))
                 } else {
-                    let mut result_contents = vec![Content::text(
+                    let result_contents = vec![Content::text(
                         "No operations completed within timeout period".to_string(),
                     )];
-
-                    // Include timeout warning if present
-                    if let Some(warning) = timeout_warning {
-                        result_contents.push(Content::text(warning));
-                    }
 
                     Ok(CallToolResult::success(result_contents))
                 }

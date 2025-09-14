@@ -45,9 +45,8 @@ async fn test_hardcoded_tools_listing() -> Result<()> {
 async fn test_await_tool_comprehensive() -> Result<()> {
     let client = new_client(Some(".ahma/tools")).await?;
 
-    // Test valid await call
-    let mut params = Map::new();
-    params.insert("timeout_seconds".to_string(), json!(5));
+    // Test valid await call with no timeout parameter (uses intelligent timeout)
+    let params = Map::new();
 
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("await"),
@@ -68,27 +67,17 @@ async fn test_await_tool_comprehensive() -> Result<()> {
         );
     }
 
-    // Test await with malformed arguments
-    let mut invalid_params = Map::new();
-    invalid_params.insert("timeout_seconds".to_string(), json!("not_a_number"));
-    invalid_params.insert("invalid_field".to_string(), json!("should_be_ignored"));
+    // Test await with only valid fields (no timeout_seconds)
+    let mut valid_params = Map::new();
+    valid_params.insert("tools".to_string(), json!("cargo"));
 
-    let invalid_call_param = CallToolRequestParam {
+    let valid_call_param = CallToolRequestParam {
         name: Cow::Borrowed("await"),
-        arguments: Some(invalid_params),
+        arguments: Some(valid_params),
     };
 
-    let invalid_result = client.call_tool(invalid_call_param).await;
-
-    // Should handle gracefully - either succeed with default behavior or provide clear error
-    match invalid_result {
-        Ok(tool_result) => {
-            assert!(!tool_result.content.is_empty());
-        }
-        Err(_) => {
-            // Error handling is acceptable for malformed input
-        }
-    }
+    let valid_result = client.call_tool(valid_call_param).await?;
+    assert!(!valid_result.content.is_empty());
 
     client.cancel().await?;
     Ok(())
@@ -230,7 +219,6 @@ async fn test_path_validation_security() -> Result<()> {
         "working_directory".to_string(),
         json!("/../../../../etc/passwd"),
     );
-    params.insert("timeout_seconds".to_string(), json!(5));
 
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("await"),
@@ -297,7 +285,7 @@ async fn test_service_resilience_stress() -> Result<()> {
     let operations = vec![
         ("status", json!({})),
         ("invalid_tool_123", json!({})),
-        ("await", json!({"timeout_seconds": 1})),
+        ("await", json!({})),
         ("another_invalid_tool", json!({"invalid": "args"})),
         ("status", json!({"operation_id": "stress_test"})),
     ];
@@ -349,7 +337,7 @@ async fn test_argument_parsing_edge_cases() -> Result<()> {
     let empty_result = client.call_tool(empty_call_param).await?;
     assert!(!empty_result.content.is_empty());
 
-    // Test with complex nested JSON arguments
+    // Test with complex nested JSON arguments (no timeout_seconds)
     let complex_args = json!({
         "nested": {
             "array": [1, 2, 3],
@@ -357,7 +345,7 @@ async fn test_argument_parsing_edge_cases() -> Result<()> {
                 "key": "value"
             }
         },
-        "timeout_seconds": 2
+        "tools": "cargo"
     });
 
     let complex_call_param = CallToolRequestParam {
