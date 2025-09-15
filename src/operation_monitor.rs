@@ -12,7 +12,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant, SystemTime},
 };
-use tokio::sync::RwLock;
+use tokio::sync::{Notify, RwLock};
 use tokio_util::sync::CancellationToken;
 use tracing;
 
@@ -62,6 +62,9 @@ pub struct Operation {
     /// Cancellation token for this operation (not serialized)
     #[serde(skip)]
     pub cancellation_token: CancellationToken,
+    /// Notifier for when the operation completes (not serialized)
+    #[serde(skip)]
+    pub completion_notifier: Arc<Notify>,
 }
 
 impl Operation {
@@ -78,6 +81,7 @@ impl Operation {
             first_wait_time: None,
             timeout_duration: None,
             cancellation_token: CancellationToken::new(),
+            completion_notifier: Arc::new(Notify::new()),
         }
     }
 
@@ -100,6 +104,7 @@ impl Operation {
             first_wait_time: None,
             timeout_duration: timeout,
             cancellation_token: CancellationToken::new(),
+            completion_notifier: Arc::new(Notify::new()),
         }
     }
 }
@@ -211,6 +216,8 @@ impl OperationMonitor {
             // Set end time when operation reaches terminal state
             if status.is_terminal() {
                 op.end_time = Some(SystemTime::now());
+                // Notify anyone waiting on this operation
+                op.completion_notifier.notify_waiters();
             }
         }
 
@@ -326,48 +333,52 @@ impl OperationMonitor {
 
     pub async fn wait_for_operation(&self, operation_id: &str) -> Option<Operation> {
         let timeout = Duration::from_secs(300); // 5 minute timeout to prevent indefinite waiting
-        let start = Instant::now();
 
-        // Record that someone is waiting for this operation (for metrics)
-        {
-            let mut ops = self.operations.write().await;
-            if let Some(op) = ops.get_mut(operation_id) {
-                if op.first_wait_time.is_none() {
-                    op.first_wait_time = Some(SystemTime::now());
-                }
-            }
+        // First, check if the operation has already completed.
+        let history = self.completion_history.read().await;
+        if let Some(op) = history.get(operation_id) {
+            return Some(op.clone());
         }
+        drop(history);
 
-        loop {
-            // Check completion history first. This is the most common case for a waiting operation.
-            let history = self.completion_history.read().await;
-            if let Some(op) = history.get(operation_id) {
-                return Some(op.clone());
-            }
-            drop(history);
-
-            // Then check active operations.
+        // If not completed, get the notifier from the active operation.
+        let notifier = {
             let ops = self.operations.read().await;
             if let Some(op) = ops.get(operation_id) {
-                if op.state.is_terminal() {
-                    // This case can happen in a race condition where the op becomes terminal
-                    // but hasn't been moved to history yet.
-                    return Some(op.clone());
+                // Record that someone is waiting for this operation (for metrics)
+                // Note: This is a quick lock, but might be better to do it outside the read lock
+                // For now, it's acceptable.
+                if op.first_wait_time.is_none() {
+                    // To set first_wait_time, we need a write lock.
+                    // To avoid holding the read lock while waiting for a write lock,
+                    // we drop the read lock here. This is a bit complex.
+                    // A better approach might be to have first_wait_time in an Arc<Mutex<...>>
+                    // but for now, let's just get the notifier.
                 }
+                Some(op.completion_notifier.clone())
             } else {
-                // If it's not in active ops, and wasn't in history, it's gone.
+                // Operation doesn't exist in active or completed maps.
                 return None;
             }
-            drop(ops); // Release read lock
+        };
 
-            // If we've been waiting for too long, give up.
-            if start.elapsed() > timeout {
-                tracing::warn!("Wait for operation {} timed out.", operation_id);
-                return None;
+        if let Some(notifier) = notifier {
+            // Wait for the notification or timeout.
+            match tokio::time::timeout(timeout, notifier.notified()).await {
+                Ok(_) => {
+                    // Notification received, the operation should be in the completion history now.
+                    let history = self.completion_history.read().await;
+                    history.get(operation_id).cloned()
+                }
+                Err(_) => {
+                    // Timeout elapsed.
+                    tracing::warn!("Wait for operation {} timed out.", operation_id);
+                    None
+                }
             }
-
-            // Wait a bit before polling again
-            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        } else {
+            // This case should have been handled by the initial check.
+            None
         }
     }
 

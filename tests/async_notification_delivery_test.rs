@@ -42,8 +42,7 @@ fn create_test_request_context() -> RequestContext<RoleServer> {
 #[tokio::test]
 async fn test_async_notification_delivery() {
     init_test_logging();
-    let (mcp_service, _mock_io, _input_tx, mut output_rx, _temp_dir) =
-        setup_test_environment_with_io().await;
+    let (mcp_service, _input_tx, mut output_rx, _temp_dir) = setup_test_environment_with_io().await;
     let _mcp_service: Arc<ahma_mcp::mcp_service::AhmaMcpService> = Arc::new(mcp_service);
 
     let notification_received = Arc::new(Mutex::new(false));

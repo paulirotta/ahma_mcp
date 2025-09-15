@@ -62,6 +62,9 @@ pub mod utils;
 #[cfg(test)]
 pub mod test;
 
+#[cfg(test)]
+pub mod test_utils;
+
 // Re-export main types for easier use
 pub use adapter::Adapter;
 

@@ -236,3 +236,16 @@ pub fn load_tool_configs(tools_dir: &Path) -> Result<HashMap<String, ToolConfig>
 
     Ok(configs)
 }
+
+/// Top-level configuration struct for the tool, containing all tool-specific configurations.
+#[derive(Deserialize, Debug, Clone)]
+pub struct Config {
+    pub tool: Vec<ToolConfig>,
+}
+
+impl Config {
+    /// Loads the configuration from a string containing TOML data.
+    pub fn load_from_string(s: &str) -> Result<Self, toml::de::Error> {
+        toml::from_str(s)
+    }
+}
