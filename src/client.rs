@@ -1,28 +1,21 @@
-//! # MCP Client for Pushing Results and Test I/O
+//! # MCP Client for Testing
 //!
-//! This module provides:
-//! 1. A `Client` struct for sending asynchronous `mcp.result` notifications.
-//! 2. An `McpIo` trait for abstracting I/O.
-//! 3. A `MockIo` implementation for testing.
-//! 4. A `StdioMcpIo` for production.
+//! This module provides a simple client wrapper for testing the MCP service.
 
-use crate::operation_monitor::Operation;
-use async_trait::async_trait;
-use rmcp::service::{Peer, RoleServer};
-use std::sync::Arc;
-use tokio::{
-    io::{AsyncWriteExt, stdout},
-    sync::{
-        Mutex,
-        mpsc::{self, Receiver, Sender},
-    },
+use anyhow::Result;
+use rmcp::{
+    ServiceExt,
+    model::CallToolRequestParam,
+    service::{RoleClient, RunningService},
+    transport::{ConfigureCommandExt, TokioChildProcess},
 };
-use tracing::warn;
+use serde_json::json;
+use std::borrow::Cow;
+use tokio::process::Command;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Client {
-    /// The control handle allows sending messages back to the client.
-    control: Arc<Mutex<Option<Peer<RoleServer>>>>,
+    service: Option<RunningService<RoleClient, ()>>,
 }
 
 impl Default for Client {
@@ -32,92 +25,110 @@ impl Default for Client {
 }
 
 impl Client {
-    /// Creates a new `Client`.
     pub fn new() -> Self {
-        Self {
-            control: Arc::new(Mutex::new(None)),
+        Self { service: None }
+    }
+
+    pub async fn start_process(&mut self, tools_dir: Option<&str>) -> Result<()> {
+        let client = ()
+            .serve(TokioChildProcess::new(Command::new("cargo").configure(
+                |cmd| {
+                    cmd.arg("run").arg("--bin").arg("ahma_mcp").arg("--");
+                    if let Some(dir) = tools_dir {
+                        cmd.arg("--tools-dir").arg(dir);
+                    }
+                },
+            ))?)
+            .await?;
+        self.service = Some(client);
+        Ok(())
+    }
+
+    fn get_service(&self) -> Result<&RunningService<RoleClient, ()>> {
+        self.service
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Client not initialized"))
+    }
+
+    pub async fn long_running_async(&mut self, duration: &str) -> Result<ToolCallResult> {
+        let service = self.get_service()?;
+
+        let params = CallToolRequestParam {
+            name: Cow::Borrowed("long_running_async"),
+            arguments: Some(
+                json!({
+                    "duration": duration
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            ),
+        };
+
+        let result = service.call_tool(params).await?;
+        if let Some(content) = result.content.first()
+            && let Some(text_content) = content.as_text()
+        {
+            serde_json::from_str(&text_content.text).map_err(|e| anyhow::anyhow!(e))
+        } else {
+            Err(anyhow::anyhow!("No text content in response"))
         }
     }
 
-    /// Sets the control handle for the client, enabling it to send messages.
-    /// This is typically called once the server has established a connection.
-    pub fn set_control(&self, control: Peer<RoleServer>) {
-        let mut guard = self.control.blocking_lock();
-        *guard = Some(control);
-    }
+    pub async fn await_op(&mut self, op_id: &str) -> Result<String> {
+        let service = self.get_service()?;
 
-    /// Pushes the result of a completed operation back to the language model.
-    pub async fn push_result(&self, op: &Operation) {
-        warn!(
-            "push_result is currently a no-op. Operation {} result not sent.",
-            op.id
-        );
-        // TODO: Re-implement this with a robust notification queuing system.
-        // The previous implementation was flawed and did not align with the rmcp crate's API.
-    }
-}
-
-/// A trait for handling I/O in the MCP service.
-#[async_trait]
-pub trait McpIo: Send + Sync {
-    async fn send(&self, message: &str);
-    async fn read_line(&mut self) -> Option<String>;
-}
-
-/// A mock I/O handler for testing purposes.
-#[derive(Clone)]
-pub struct MockIo {
-    pub input: Arc<Mutex<Receiver<String>>>,
-    pub output: Sender<String>,
-}
-
-impl MockIo {
-    /// Creates a new `MockIo` instance along with channels for testing.
-    pub fn new() -> (Self, Sender<String>, Receiver<String>) {
-        let (input_tx, input_rx) = mpsc::channel(100);
-        let (output_tx, output_rx) = mpsc::channel(100);
-
-        let mock_io = Self {
-            input: Arc::new(Mutex::new(input_rx)),
-            output: output_tx,
+        let params = CallToolRequestParam {
+            name: Cow::Borrowed("await"),
+            arguments: Some(
+                json!({
+                    "operation_id": op_id
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            ),
         };
 
-        (mock_io, input_tx, output_rx)
+        let result = service.call_tool(params).await?;
+        if let Some(content) = result.content.first()
+            && let Some(text_content) = content.as_text()
+        {
+            Ok(text_content.text.clone())
+        } else {
+            Err(anyhow::anyhow!("No text content in response"))
+        }
+    }
+
+    pub async fn status(&mut self, op_id: &str) -> Result<ToolCallResult> {
+        let service = self.get_service()?;
+
+        let params = CallToolRequestParam {
+            name: Cow::Borrowed("status"),
+            arguments: Some(
+                json!({
+                    "operation_id": op_id
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            ),
+        };
+
+        let result = service.call_tool(params).await?;
+        if let Some(content) = result.content.first()
+            && let Some(text_content) = content.as_text()
+        {
+            serde_json::from_str(&text_content.text).map_err(|e| anyhow::anyhow!(e))
+        } else {
+            Err(anyhow::anyhow!("No text content in response"))
+        }
     }
 }
 
-#[async_trait]
-impl McpIo for MockIo {
-    async fn send(&self, message: &str) {
-        self.output.send(message.to_string()).await.unwrap();
-    }
-
-    async fn read_line(&mut self) -> Option<String> {
-        self.input.lock().await.recv().await
-    }
-}
-
-/// The standard I/O handler for production use.
-pub struct StdioMcpIo;
-
-#[async_trait]
-impl McpIo for StdioMcpIo {
-    async fn send(&self, message: &str) {
-        println!("{}", message);
-        stdout().flush().await.unwrap();
-    }
-
-    async fn read_line(&mut self) -> Option<String> {
-        let result = tokio::task::spawn_blocking(|| {
-            let mut buffer = String::new();
-            if std::io::stdin().read_line(&mut buffer).unwrap_or(0) > 0 {
-                Some(buffer.trim_end().to_string())
-            } else {
-                None
-            }
-        })
-        .await;
-
-        result.ok().flatten()
-    }
+#[derive(serde::Deserialize, Debug)]
+pub struct ToolCallResult {
+    pub status: String,
+    pub op_id: String,
+    pub message: String,
 }

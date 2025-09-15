@@ -1225,12 +1225,17 @@ impl AhmaMcpService {
 
         let wait_result = tokio::time::timeout(timeout_duration, async {
             let mut contents = Vec::new();
+            let mut futures = Vec::new();
             for op in &pending_ops {
-                if let Some(done) = self.operation_monitor.wait_for_operation(&op.id).await {
-                    match serde_json::to_string_pretty(&done) {
-                        Ok(s) => contents.push(Content::text(s)),
-                        Err(e) => tracing::error!("Serialization error: {}", e),
-                    }
+                futures.push(self.operation_monitor.wait_for_operation(&op.id));
+            }
+
+            let results = futures::future::join_all(futures).await;
+
+            for done in results.into_iter().flatten() {
+                match serde_json::to_string_pretty(&done) {
+                    Ok(s) => contents.push(Content::text(s)),
+                    Err(e) => tracing::error!("Serialization error: {}", e),
                 }
             }
             contents

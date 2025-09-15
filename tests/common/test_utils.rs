@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use ahma_mcp::{
     adapter::Adapter,
-    client::MockIo,
+    client::Client,
     mcp_service::AhmaMcpService,
     operation_monitor::{MonitorConfig, OperationMonitor},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
@@ -65,7 +65,7 @@ pub async fn write_file_contents(path: &Path, contents: &str) -> anyhow::Result<
 
 use tokio::sync::mpsc::{Receiver, Sender};
 
-pub async fn setup_test_environment() -> (AhmaMcpService, MockIo, TempDir) {
+pub async fn setup_test_environment() -> (AhmaMcpService, TempDir) {
     let temp_dir = tempdir().unwrap();
     let tools_dir = temp_dir.path().join("tools");
     std::fs::create_dir_all(&tools_dir).unwrap();
@@ -84,18 +84,12 @@ pub async fn setup_test_environment() -> (AhmaMcpService, MockIo, TempDir) {
         .await
         .unwrap();
 
-    let (mock_io, _, _) = MockIo::new();
-    (service, mock_io, temp_dir)
+    (service, temp_dir)
 }
 
 #[allow(dead_code)]
-pub async fn setup_test_environment_with_io() -> (
-    AhmaMcpService,
-    MockIo,
-    Sender<String>,
-    Receiver<String>,
-    TempDir,
-) {
+pub async fn setup_test_environment_with_io()
+-> (AhmaMcpService, Sender<String>, Receiver<String>, TempDir) {
     let temp_dir = tempdir().unwrap();
     let tools_dir = temp_dir.path().join("tools");
     // Use Tokio's async filesystem API so we don't block the runtime
@@ -115,6 +109,20 @@ pub async fn setup_test_environment_with_io() -> (
         .await
         .unwrap();
 
-    let (mock_io, input_tx, output_rx) = MockIo::new();
-    (service, mock_io, input_tx, output_rx, temp_dir)
+    let (input_tx, output_rx) = tokio::sync::mpsc::channel(100);
+    (service, input_tx, output_rx, temp_dir)
+}
+
+/// Setup MCP service with a test client for integration testing
+pub async fn setup_mcp_service_with_client() -> anyhow::Result<(TempDir, Client)> {
+    let temp_dir = tempdir()?;
+    let tools_dir = temp_dir.path().join("tools");
+    tokio::fs::create_dir_all(&tools_dir).await?;
+
+    let mut client = Client::new();
+    client
+        .start_process(Some(tools_dir.to_str().unwrap()))
+        .await?;
+
+    Ok((temp_dir, client))
 }

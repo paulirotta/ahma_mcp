@@ -154,6 +154,32 @@
             ]
         },
         {
+            "name": "buildDebug",
+            "guidance_key": "async_behavior",
+            "description": "Assemble and test the debug variant",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "buildRelease",
+            "guidance_key": "async_behavior",
+            "description": "Assemble and test the release variant",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
             "name": "assemble",
             "guidance_key": "async_behavior",
             "description": "Assemble main outputs for all variants",
@@ -287,6 +313,32 @@
             "name": "bundle",
             "guidance_key": "async_behavior",
             "description": "Assemble bundles for all variants",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "bundleDebug",
+            "guidance_key": "async_behavior",
+            "description": "Assemble debug Android App Bundle",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
+        },
+        {
+            "name": "bundleRelease",
+            "guidance_key": "async_behavior",
+            "description": "Assemble release Android App Bundle",
             "options": [
                 {
                     "name": "working_directory",
