@@ -191,9 +191,18 @@ impl OperationMonitor {
         result
     }
 
-    pub async fn get_all_operations(&self) -> Vec<Operation> {
-        let ops = self.operations.read().await;
-        ops.values().cloned().collect()
+    /// Returns all currently active (non-terminal) operations.
+    ///
+    /// Note: Completed operations are accessible via `get_completed_operations`.
+    pub async fn get_all_active_operations(&self) -> Vec<Operation> {
+        if let Ok(ops) = self.operations.try_read() {
+            ops.values()
+                .filter(|op| !op.state.is_terminal())
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        }
     }
 
     pub async fn update_status(
@@ -203,6 +212,8 @@ impl OperationMonitor {
         result: Option<Value>,
     ) {
         let mut ops = self.operations.write().await;
+        let mut operation_to_move = None;
+
         if let Some(op) = ops.get_mut(operation_id) {
             tracing::debug!(
                 "Updating operation {} from {:?} to {:?}",
@@ -218,17 +229,20 @@ impl OperationMonitor {
                 op.end_time = Some(SystemTime::now());
                 // Notify anyone waiting on this operation
                 op.completion_notifier.notify_waiters();
+
+                // Remove from active operations now
+                operation_to_move = ops.remove(operation_id);
             }
         }
 
-        // If the operation has reached a terminal state, move it from the active map
-        // to the completion history. This is the key to preventing race conditions.
-        if status.is_terminal() {
-            if let Some(op) = ops.remove(operation_id) {
-                let mut history = self.completion_history.write().await;
-                history.insert(operation_id.to_string(), op);
-                tracing::debug!("Moved operation {} to completion history.", operation_id);
-            }
+        // Drop operations lock before acquiring history lock
+        drop(ops);
+
+        // If we removed a terminal operation, move it to completion history
+        if let Some(op) = operation_to_move {
+            let mut history = self.completion_history.write().await;
+            history.insert(operation_id.to_string(), op);
+            tracing::debug!("Moved operation {} to completion history.", operation_id);
         }
     }
 
@@ -308,26 +322,44 @@ impl OperationMonitor {
     }
 
     pub async fn get_active_operations(&self) -> Vec<Operation> {
-        let ops = self.operations.read().await;
-        ops.values()
-            .filter(|op| !op.state.is_terminal())
-            .cloned()
-            .collect()
+        // Filter out terminal operations to only return truly active operations
+        if let Ok(ops) = self.operations.try_read() {
+            ops.values()
+                .filter(|op| !op.state.is_terminal())
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        }
     }
 
     pub async fn get_completed_operations(&self) -> Vec<Operation> {
-        let history = self.completion_history.read().await;
-        history.values().cloned().collect()
+        if let Ok(history) = self.completion_history.try_read() {
+            history.values().cloned().collect()
+        } else {
+            Vec::new()
+        }
     }
 
     pub async fn get_shutdown_summary(&self) -> ShutdownSummary {
-        let ops = self.operations.read().await;
-        let active_ops: Vec<&Operation> =
-            ops.values().filter(|op| !op.state.is_terminal()).collect();
+        if let Ok(ops) = self.operations.try_read() {
+            // Filter strictly to non-terminal (active) operations for shutdown coordination
+            let operations: Vec<Operation> = ops
+                .values()
+                .filter(|op| !op.state.is_terminal())
+                .cloned()
+                .collect();
+            let total_active = operations.len();
 
-        ShutdownSummary {
-            total_active: active_ops.len(),
-            operations: active_ops.into_iter().cloned().collect(),
+            ShutdownSummary {
+                total_active,
+                operations,
+            }
+        } else {
+            ShutdownSummary {
+                total_active: 0,
+                operations: Vec::new(),
+            }
         }
     }
 
@@ -335,32 +367,51 @@ impl OperationMonitor {
         let timeout = Duration::from_secs(300); // 5 minute timeout to prevent indefinite waiting
 
         // First, check if the operation has already completed.
-        let history = self.completion_history.read().await;
-        if let Some(op) = history.get(operation_id) {
-            return Some(op.clone());
-        }
-        drop(history);
+        {
+            let history = self.completion_history.read().await;
+            if let Some(op) = history.get(operation_id) {
+                return Some(op.clone());
+            }
+        } // Drop history lock immediately
 
-        // If not completed, get the notifier from the active operation.
+        // Check if the operation exists in active operations and is already terminal
+        // This handles the case where an operation is added in a terminal state
+        {
+            let mut ops = self.operations.write().await;
+            if let Some(op) = ops.get_mut(operation_id) {
+                if op.state.is_terminal() {
+                    // Operation is already terminal, but we still need to set first_wait_time
+                    if op.first_wait_time.is_none() {
+                        op.first_wait_time = Some(SystemTime::now());
+                    }
+                    return Some(op.clone());
+                }
+            }
+        } // Drop write lock immediately
+
+        // Get the notifier and check/set first_wait_time atomically
         let notifier = {
-            let ops = self.operations.read().await;
-            if let Some(op) = ops.get(operation_id) {
-                // Record that someone is waiting for this operation (for metrics)
-                // Note: This is a quick lock, but might be better to do it outside the read lock
-                // For now, it's acceptable.
+            let mut ops = self.operations.write().await;
+            if let Some(op) = ops.get_mut(operation_id) {
+                // Double-check if it became terminal while we were waiting for the write lock
+                if op.state.is_terminal() {
+                    // Set first_wait_time if it hasn't been set yet
+                    if op.first_wait_time.is_none() {
+                        op.first_wait_time = Some(SystemTime::now());
+                    }
+                    return Some(op.clone());
+                }
+
+                // Set first_wait_time if it hasn't been set yet (atomic operation)
                 if op.first_wait_time.is_none() {
-                    // To set first_wait_time, we need a write lock.
-                    // To avoid holding the read lock while waiting for a write lock,
-                    // we drop the read lock here. This is a bit complex.
-                    // A better approach might be to have first_wait_time in an Arc<Mutex<...>>
-                    // but for now, let's just get the notifier.
+                    op.first_wait_time = Some(SystemTime::now());
                 }
                 Some(op.completion_notifier.clone())
             } else {
-                // Operation doesn't exist in active or completed maps.
-                return None;
+                // Operation doesn't exist in active operations.
+                None
             }
-        };
+        }; // Drop write lock immediately
 
         if let Some(notifier) = notifier {
             // Wait for the notification or timeout.
@@ -377,7 +428,7 @@ impl OperationMonitor {
                 }
             }
         } else {
-            // This case should have been handled by the initial check.
+            // Operation doesn't exist
             None
         }
     }
@@ -498,6 +549,19 @@ impl OperationMonitor {
                 break;
             }
 
+            // If there are active operations but none match the filter, avoid scanning history repeatedly
+            if let Some(ref filters) = tool_filters {
+                let any_match = active_ops.iter().any(|op| {
+                    let name = op.tool_name.to_lowercase();
+                    filters.iter().any(|f| name.starts_with(f))
+                });
+                if !any_match {
+                    // No matching active operations; short sleep and continue
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    continue;
+                }
+            }
+
             // Check if any operations completed and moved to history
             let history = self.completion_history.read().await;
             let newly_completed: Vec<_> = history
@@ -535,19 +599,25 @@ impl OperationMonitor {
 
     /// Track a status check to detect polling patterns
     async fn track_status_check(&self) {
-        let mut history = self.status_check_history.write().await;
-        let now = Instant::now();
-
-        // Keep only last 10 checks to avoid unbounded growth
-        if history.len() >= 10 {
-            history.remove(0);
+        // Use a non-blocking write to avoid contention on hot paths; if we can't acquire, skip.
+        if let Ok(mut history) = self.status_check_history.try_write() {
+            let now = Instant::now();
+            // Keep only the last 3 checks: sufficient for pattern detection and cheap to maintain
+            if history.len() >= 3 {
+                // Remove the oldest entry; for len <= 3 this is trivial cost
+                history.remove(0);
+            }
+            history.push(now);
         }
-        history.push(now);
     }
 
     /// Check if client is polling too frequently and suggest using await instead
     async fn check_for_polling_pattern(&self) {
-        let history = self.status_check_history.read().await;
+        let history = match self.status_check_history.try_read() {
+            Ok(h) => h,
+            // If we can't read without blocking, skip the check to avoid adding overhead
+            Err(_) => return,
+        };
 
         // Need at least 3 checks to detect a pattern
         if history.len() < 3 {

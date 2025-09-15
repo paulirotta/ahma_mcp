@@ -100,7 +100,7 @@ impl Client {
         }
     }
 
-    pub async fn status(&mut self, op_id: &str) -> Result<ToolCallResult> {
+    pub async fn status(&mut self, op_id: &str) -> Result<String> {
         let service = self.get_service()?;
 
         let params = CallToolRequestParam {
@@ -119,7 +119,7 @@ impl Client {
         if let Some(content) = result.content.first()
             && let Some(text_content) = content.as_text()
         {
-            serde_json::from_str(&text_content.text).map_err(|e| anyhow::anyhow!(e))
+            Ok(text_content.text.clone())
         } else {
             Err(anyhow::anyhow!("No text content in response"))
         }
@@ -129,6 +129,6 @@ impl Client {
 #[derive(serde::Deserialize, Debug)]
 pub struct ToolCallResult {
     pub status: String,
-    pub op_id: String,
+    pub job_id: String,
     pub message: String,
 }

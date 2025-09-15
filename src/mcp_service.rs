@@ -418,7 +418,7 @@ impl ServerHandler for AhmaMcpService {
             // This prevents the rmcp library from generating "Canceled: Canceled" messages
             // that get incorrectly processed as process cancellations.
 
-            let active_ops = self.operation_monitor.get_all_operations().await;
+            let active_ops = self.operation_monitor.get_all_active_operations().await;
             let active_count = active_ops.len();
 
             if active_count > 0 {
@@ -561,7 +561,7 @@ impl ServerHandler for AhmaMcpService {
                 // Get active operations
                 let active_ops: Vec<Operation> = self
                     .operation_monitor
-                    .get_all_operations()
+                    .get_all_active_operations()
                     .await
                     .into_iter()
                     .filter(|op| {
@@ -1136,7 +1136,7 @@ impl AhmaMcpService {
         // Build from pending ops, optionally filtered by tools
         let pending_ops: Vec<Operation> = self
             .operation_monitor
-            .get_all_operations()
+            .get_all_active_operations()
             .await
             .into_iter()
             .filter(|op| {
@@ -1271,7 +1271,7 @@ impl AhmaMcpService {
                 let elapsed = wait_start.elapsed();
                 let still_running: Vec<Operation> = self
                     .operation_monitor
-                    .get_all_operations()
+                    .get_all_active_operations()
                     .await
                     .into_iter()
                     .filter(|op| !op.state.is_terminal())
@@ -1404,7 +1404,7 @@ impl AhmaMcpService {
         // Get all pending operations, filtered by tools if specified
         let pending_ops: Vec<crate::operation_monitor::Operation> = self
             .operation_monitor
-            .get_all_operations()
+            .get_all_active_operations()
             .await
             .into_iter()
             .filter(|op| {

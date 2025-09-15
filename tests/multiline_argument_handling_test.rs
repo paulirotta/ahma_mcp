@@ -379,7 +379,7 @@ async fn test_multiline_git_commit_message() {
 
     // Check what operations exist in the monitor
     tokio::time::sleep(Duration::from_millis(100)).await;
-    let all_operations = monitor.get_all_operations().await;
+    let all_operations = monitor.get_all_active_operations().await;
     println!("All operations after execution: {:?}", all_operations);
 
     assert!(

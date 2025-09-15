@@ -159,7 +159,7 @@ async fn test_operation_monitor_new() {
     let monitor = OperationMonitor::new(config);
 
     // Should start with no operations
-    let operations = monitor.get_all_operations().await;
+    let operations = monitor.get_all_active_operations().await;
     assert!(operations.is_empty());
 }
 
@@ -214,7 +214,7 @@ async fn test_operation_monitor_get_all_operations() {
     monitor.add_operation(op1).await;
     monitor.add_operation(op2).await;
 
-    let all_ops = monitor.get_all_operations().await;
+    let all_ops = monitor.get_all_active_operations().await;
     assert_eq!(all_ops.len(), 2);
 
     let ids: Vec<&str> = all_ops.iter().map(|op| op.id.as_str()).collect();
@@ -441,7 +441,7 @@ async fn test_operation_monitor_concurrent_access() {
 
     let _ = tokio::join!(task1, task2);
 
-    let all_ops = monitor.get_all_operations().await;
+    let all_ops = monitor.get_all_active_operations().await;
     assert_eq!(all_ops.len(), 2);
 }
 
