@@ -77,11 +77,11 @@ async fn test_mcp_cancellation_does_not_trigger_canceled_canceled_message() {
     // Note: This is complex to create properly, so we'll test the logic indirectly
 
     // The key fix: check that no operations get cancelled when none are background operations
-    let initial_ops = operation_monitor.get_all_operations().await;
+    let initial_ops = operation_monitor.get_all_active_operations().await;
     assert_eq!(initial_ops.len(), 0, "Should start with no operations");
 
     // Simulate what happens in on_cancelled method
-    let active_ops = operation_monitor.get_all_operations().await;
+    let active_ops = operation_monitor.get_all_active_operations().await;
     let background_ops: Vec<_> = active_ops
         .iter()
         .filter(|op| {
@@ -121,7 +121,7 @@ async fn test_mcp_cancellation_does_not_trigger_canceled_canceled_message() {
     // Add simulated "await" operation (this would be in operation monitor in real scenario)
     // But we can't easily simulate this, so we'll test the filtering logic directly
 
-    let active_ops = operation_monitor.get_all_operations().await;
+    let active_ops = operation_monitor.get_all_active_operations().await;
     assert!(
         !active_ops.is_empty(),
         "Should have at least one active operation"

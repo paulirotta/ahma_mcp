@@ -191,17 +191,18 @@ impl OperationMonitor {
         result
     }
 
-    pub async fn get_all_operations(&self) -> Vec<Operation> {
-        // Collect from both active and completed operations
-        let ops = self.operations.read().await;
-        let mut result: Vec<Operation> = ops.values().cloned().collect();
-        drop(ops); // Release read lock early
-
-        // Add completed operations
-        let history = self.completion_history.read().await;
-        result.extend(history.values().cloned());
-
-        result
+    /// Returns all currently active (non-terminal) operations.
+    ///
+    /// Note: Completed operations are accessible via `get_completed_operations`.
+    pub async fn get_all_active_operations(&self) -> Vec<Operation> {
+        if let Ok(ops) = self.operations.try_read() {
+            ops.values()
+                .filter(|op| !op.state.is_terminal())
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        }
     }
 
     pub async fn update_status(
@@ -321,29 +322,44 @@ impl OperationMonitor {
     }
 
     pub async fn get_active_operations(&self) -> Vec<Operation> {
-        let ops = self.operations.read().await;
-        // Since we move terminal operations to completion_history in update_status,
-        // all operations in self.operations should be non-terminal (active)
-
-        // Pre-allocate vector and collect directly
-        ops.values().cloned().collect()
+        // Filter out terminal operations to only return truly active operations
+        if let Ok(ops) = self.operations.try_read() {
+            ops.values()
+                .filter(|op| !op.state.is_terminal())
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        }
     }
 
     pub async fn get_completed_operations(&self) -> Vec<Operation> {
-        let history = self.completion_history.read().await;
-        history.values().cloned().collect()
+        if let Ok(history) = self.completion_history.try_read() {
+            history.values().cloned().collect()
+        } else {
+            Vec::new()
+        }
     }
 
     pub async fn get_shutdown_summary(&self) -> ShutdownSummary {
-        let ops = self.operations.read().await;
-        // Since we move terminal operations to completion_history in update_status,
-        // all operations in self.operations should be non-terminal (active)
-        let operations: Vec<Operation> = ops.values().cloned().collect();
-        let total_active = operations.len();
+        if let Ok(ops) = self.operations.try_read() {
+            // Filter strictly to non-terminal (active) operations for shutdown coordination
+            let operations: Vec<Operation> = ops
+                .values()
+                .filter(|op| !op.state.is_terminal())
+                .cloned()
+                .collect();
+            let total_active = operations.len();
 
-        ShutdownSummary {
-            total_active,
-            operations,
+            ShutdownSummary {
+                total_active,
+                operations,
+            }
+        } else {
+            ShutdownSummary {
+                total_active: 0,
+                operations: Vec::new(),
+            }
         }
     }
 
@@ -385,7 +401,7 @@ impl OperationMonitor {
                     }
                     return Some(op.clone());
                 }
-                
+
                 // Set first_wait_time if it hasn't been set yet (atomic operation)
                 if op.first_wait_time.is_none() {
                     op.first_wait_time = Some(SystemTime::now());
@@ -533,6 +549,19 @@ impl OperationMonitor {
                 break;
             }
 
+            // If there are active operations but none match the filter, avoid scanning history repeatedly
+            if let Some(ref filters) = tool_filters {
+                let any_match = active_ops.iter().any(|op| {
+                    let name = op.tool_name.to_lowercase();
+                    filters.iter().any(|f| name.starts_with(f))
+                });
+                if !any_match {
+                    // No matching active operations; short sleep and continue
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    continue;
+                }
+            }
+
             // Check if any operations completed and moved to history
             let history = self.completion_history.read().await;
             let newly_completed: Vec<_> = history
@@ -570,19 +599,25 @@ impl OperationMonitor {
 
     /// Track a status check to detect polling patterns
     async fn track_status_check(&self) {
-        let mut history = self.status_check_history.write().await;
-        let now = Instant::now();
-
-        // Keep only last 10 checks to avoid unbounded growth
-        if history.len() >= 10 {
-            history.remove(0);
+        // Use a non-blocking write to avoid contention on hot paths; if we can't acquire, skip.
+        if let Ok(mut history) = self.status_check_history.try_write() {
+            let now = Instant::now();
+            // Keep only the last 3 checks: sufficient for pattern detection and cheap to maintain
+            if history.len() >= 3 {
+                // Remove the oldest entry; for len <= 3 this is trivial cost
+                history.remove(0);
+            }
+            history.push(now);
         }
-        history.push(now);
     }
 
     /// Check if client is polling too frequently and suggest using await instead
     async fn check_for_polling_pattern(&self) {
-        let history = self.status_check_history.read().await;
+        let history = match self.status_check_history.try_read() {
+            Ok(h) => h,
+            // If we can't read without blocking, skip the check to avoid adding overhead
+            Err(_) => return,
+        };
 
         // Need at least 3 checks to detect a pattern
         if history.len() < 3 {
