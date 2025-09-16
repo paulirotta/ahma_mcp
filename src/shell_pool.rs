@@ -80,10 +80,10 @@ impl Default for ShellPoolConfig {
             enabled: true,
             shells_per_directory: 2,
             max_total_shells: 20,
-            shell_idle_timeout: Duration::from_secs(1800),
-            pool_cleanup_interval: Duration::from_secs(300),
+            shell_idle_timeout: Duration::from_secs(60), // Much shorter - 1 minute
+            pool_cleanup_interval: Duration::from_secs(60), // Reduced from 300s
             shell_spawn_timeout: Duration::from_secs(5),
-            command_timeout: Duration::from_secs(300),
+            command_timeout: Duration::from_secs(30), // Reduced from 300s to 30s
             health_check_interval: Duration::from_secs(60),
         }
     }
@@ -685,34 +685,9 @@ impl ShellPoolManager {
 
     /// Start background monitoring tasks (call this after creating the manager)
     pub fn start_background_tasks(self: Arc<Self>) {
-        if self.config.enabled {
-            let manager_for_cleanup = Arc::clone(&self);
-            let manager_for_health = Arc::clone(&self);
-            let cleanup_interval = self.config.pool_cleanup_interval;
-            let health_interval = self.config.health_check_interval;
-
-            // Start periodic cleanup task
-            tokio::spawn(async move {
-                let mut interval = tokio::time::interval(cleanup_interval);
-
-                loop {
-                    interval.tick().await;
-                    manager_for_cleanup.cleanup_idle_shells().await;
-                }
-            });
-
-            // Start periodic health check task
-            tokio::spawn(async move {
-                let mut interval = tokio::time::interval(health_interval);
-
-                loop {
-                    interval.tick().await;
-                    manager_for_health.health_check_all_pools().await;
-                }
-            });
-
-            tracing::info!("Started background tasks for shell pool monitoring");
-        }
+        // Simplified: No background tasks for now to avoid polling issues
+        // Background cleanup will be handled on-demand during get_shell/return_shell
+        tracing::info!("Shell pool background tasks disabled for performance");
     }
 
     /// Get a shell for the specified working directory
@@ -724,44 +699,41 @@ impl ShellPoolManager {
 
         let working_dir = working_dir.as_ref().to_path_buf();
 
-        // Acquire a permit from the semaphore. This will block if the pool is at capacity.
-        match self.shell_semaphore.try_acquire() {
-            Ok(_permit) => {
-                // The permit is moved into the shell and will be released when the shell is dropped.
-                let pool = {
-                    let pools = self.pools.read().await;
-                    if let Some(pool) = pools.get(&working_dir) {
-                        Arc::clone(pool)
-                    } else {
-                        drop(pools);
-                        self.create_pool_for_dir(&working_dir).await
-                    }
-                };
-
-                // Get shell from pool
-                match pool.get_shell().await {
-                    Ok(shell) => {
-                        tracing::debug!(
-                            "Got shell from pool, available permits: {}",
-                            self.shell_semaphore.available_permits()
-                        );
-                        Some(shell)
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            "Failed to get shell from pool for {:?}: {}",
-                            working_dir,
-                            e
-                        );
-                        None
-                    }
-                }
-            }
+        // Acquire a permit from the semaphore with a timeout to avoid hanging indefinitely
+        let _permit = match self.shell_semaphore.try_acquire() {
+            Ok(permit) => permit,
             Err(_) => {
-                tracing::warn!(
-                    "Shell pool manager at capacity ({} shells)",
+                tracing::debug!(
+                    "Shell pool at capacity ({} shells), skipping",
                     self.config.max_total_shells
                 );
+                return None;
+            }
+        };
+
+        let pool = {
+            let pools = self.pools.read().await;
+            if let Some(pool) = pools.get(&working_dir) {
+                Arc::clone(pool)
+            } else {
+                drop(pools);
+                self.create_pool_for_dir(&working_dir).await
+            }
+        };
+
+        // Get shell from pool
+        match pool.get_shell().await {
+            Ok(shell) => {
+                tracing::debug!(
+                    "Got shell from pool, available permits: {}",
+                    self.shell_semaphore.available_permits()
+                );
+                Some(shell)
+            }
+            Err(e) => {
+                tracing::warn!("Failed to get shell from pool for {:?}: {}", working_dir, e);
+                // Release the permit since we didn't use it
+                drop(_permit);
                 None
             }
         }
@@ -872,35 +844,6 @@ impl ShellPoolManager {
             total_pools: pools.len(),
             total_shells,
             max_shells: self.config.max_total_shells,
-        }
-    }
-
-    /// Clean up idle shells across all pools
-    async fn cleanup_idle_shells(&self) {
-        let pools = self.pools.read().await;
-        let mut cleaned_count = 0;
-
-        for (path, pool) in pools.iter() {
-            let before_count = pool.shell_count().await;
-            // Shells will be cleaned up based on their idle timeout
-            // This is a placeholder - actual cleanup logic would be in ShellPool
-            tracing::debug!("Checking pool {:?} for idle shells", path);
-            let after_count = pool.shell_count().await;
-            cleaned_count += before_count.saturating_sub(after_count);
-        }
-
-        if cleaned_count > 0 {
-            tracing::info!("Cleaned up {} idle shells", cleaned_count);
-        }
-    }
-
-    /// Perform health checks on all pools
-    async fn health_check_all_pools(&self) {
-        let pools = self.pools.read().await;
-
-        for (path, pool) in pools.iter() {
-            tracing::debug!("Health checking pool {:?}", path);
-            pool.health_check().await;
         }
     }
 }

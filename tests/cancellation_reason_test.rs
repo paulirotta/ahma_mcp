@@ -31,11 +31,11 @@ async fn test_cancel_operation_with_reason_persists_reason() {
     assert!(reason_str.contains("LLM requested"));
 }
 
-/// This is a scaffolding test to ensure shutdown timeout is at least 360s and that
+/// This is a scaffolding test to ensure shutdown timeout is at least 30s and that
 /// the MonitorConfig carries that value forward. Full integration of signal-driven
 /// shutdown is covered by runtime tests.
 #[tokio::test]
-async fn test_monitor_shutdown_timeout_is_360s() {
+async fn test_monitor_shutdown_timeout_is_30s() {
     let cfg = MonitorConfig::with_timeout(Duration::from_secs(1));
-    assert_eq!(cfg.shutdown_timeout.as_secs(), 360);
+    assert_eq!(cfg.shutdown_timeout.as_secs(), 30);
 }

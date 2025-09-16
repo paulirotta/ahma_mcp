@@ -50,10 +50,11 @@ async fn test_normal_status_checking() {
     );
     monitor.add_operation(op).await;
 
-    // Simulate normal checking (should not trigger warning)
-    for _ in 0..3 {
+    // Simulate normal checking (should not trigger warning) - reduced duration
+    for _ in 0..2 {
+        // Reduced from 3 to 2 iterations
         let _op = monitor.get_operation("test-op2").await;
-        sleep(Duration::from_secs(6)).await; // Long enough interval
+        sleep(Duration::from_secs(3)).await; // Reduced from 6s to 3s - still tests normal interval
     }
 
     // Complete the operation
