@@ -724,44 +724,47 @@ impl ShellPoolManager {
 
         let working_dir = working_dir.as_ref().to_path_buf();
 
-        // Acquire a permit from the semaphore. This will block if the pool is at capacity.
-        match self.shell_semaphore.try_acquire() {
-            Ok(_permit) => {
-                // The permit is moved into the shell and will be released when the shell is dropped.
-                let pool = {
-                    let pools = self.pools.read().await;
-                    if let Some(pool) = pools.get(&working_dir) {
-                        Arc::clone(pool)
-                    } else {
-                        drop(pools);
-                        self.create_pool_for_dir(&working_dir).await
-                    }
-                };
+        // Acquire a permit from the semaphore with a timeout to avoid hanging indefinitely
+        let permit_future = async { self.shell_semaphore.acquire().await };
 
-                // Get shell from pool
-                match pool.get_shell().await {
-                    Ok(shell) => {
-                        tracing::debug!(
-                            "Got shell from pool, available permits: {}",
-                            self.shell_semaphore.available_permits()
-                        );
-                        Some(shell)
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            "Failed to get shell from pool for {:?}: {}",
-                            working_dir,
-                            e
-                        );
-                        None
-                    }
-                }
+        let _permit = match timeout(Duration::from_secs(5), permit_future).await {
+            Ok(Ok(permit)) => permit,
+            Ok(Err(_)) => {
+                tracing::warn!("Failed to acquire shell semaphore permit");
+                return None;
             }
             Err(_) => {
                 tracing::warn!(
-                    "Shell pool manager at capacity ({} shells)",
+                    "Timeout waiting for shell semaphore permit (pool capacity: {})",
                     self.config.max_total_shells
                 );
+                return None;
+            }
+        };
+
+        let pool = {
+            let pools = self.pools.read().await;
+            if let Some(pool) = pools.get(&working_dir) {
+                Arc::clone(pool)
+            } else {
+                drop(pools);
+                self.create_pool_for_dir(&working_dir).await
+            }
+        };
+
+        // Get shell from pool
+        match pool.get_shell().await {
+            Ok(shell) => {
+                tracing::debug!(
+                    "Got shell from pool, available permits: {}",
+                    self.shell_semaphore.available_permits()
+                );
+                Some(shell)
+            }
+            Err(e) => {
+                tracing::warn!("Failed to get shell from pool for {:?}: {}", working_dir, e);
+                // Release the permit since we didn't use it
+                drop(_permit);
                 None
             }
         }

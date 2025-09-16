@@ -238,8 +238,8 @@ async fn test_multiline_git_commit_with_real_tool() {
         result
     );
 
-    // Wait a moment for the operation to complete
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Wait a moment for the operation to complete - reduced waiting time
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     // Verify the commit was actually created
     let log_result = std::process::Command::new("git")
@@ -388,11 +388,11 @@ async fn test_multiline_git_commit_message() {
         result
     );
 
-    // Wait for the operation to complete
+    // Wait for the operation to complete - optimized waiting strategy
     let mut wait_time = 0;
     let mut completed = false;
-    while wait_time < 50 && !completed {
-        tokio::time::sleep(Duration::from_millis(100)).await;
+    while wait_time < 20 && !completed { // Reduced from 50 to 20 iterations
+        tokio::time::sleep(Duration::from_millis(50)).await; // Reduced from 100ms to 50ms
         if let Some(operation) = monitor.get_operation("test_multiline_commit").await {
             println!("Operation status: {:?}", operation.state);
             if matches!(
