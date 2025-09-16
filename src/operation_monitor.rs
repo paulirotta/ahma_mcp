@@ -112,7 +112,7 @@ impl Operation {
 /// Configuration for operation monitoring
 #[derive(Debug, Clone)]
 pub struct MonitorConfig {
-    /// Default timeout for operations
+    /// Default timeout for operations (reduced from 5 minutes to 30 seconds)
     pub default_timeout: Duration,
     /// Maximum time to await for graceful shutdown
     pub shutdown_timeout: Duration,
@@ -130,7 +130,7 @@ impl MonitorConfig {
     pub fn with_timeout(timeout: Duration) -> Self {
         Self {
             default_timeout: timeout,
-            shutdown_timeout: Duration::from_secs(360), // Default 360 second shutdown timeout
+            shutdown_timeout: Duration::from_secs(30), // Reduced from 360s to 30s
         }
     }
 
@@ -148,8 +148,6 @@ impl MonitorConfig {
 pub struct OperationMonitor {
     operations: Arc<RwLock<HashMap<String, Operation>>>,
     completion_history: Arc<RwLock<HashMap<String, Operation>>>,
-    /// Track status check times to detect polling patterns
-    status_check_history: Arc<RwLock<Vec<Instant>>>,
     #[allow(dead_code)]
     config: MonitorConfig,
 }
@@ -160,7 +158,6 @@ impl OperationMonitor {
         Self {
             operations: Arc::new(RwLock::new(HashMap::new())),
             completion_history: Arc::new(RwLock::new(HashMap::new())),
-            status_check_history: Arc::new(RwLock::new(Vec::new())),
             config,
         }
     }
@@ -177,18 +174,9 @@ impl OperationMonitor {
     }
 
     pub async fn get_operation(&self, operation_id: &str) -> Option<Operation> {
-        // Track status check time to detect polling patterns
-        self.track_status_check().await;
-
+        // Simplified: No polling detection - just return the operation
         let ops = self.operations.read().await;
-        let result = ops.get(operation_id).cloned();
-
-        // Check for polling pattern and provide guidance
-        if result.is_some() {
-            self.check_for_polling_pattern().await;
-        }
-
-        result
+        ops.get(operation_id).cloned()
     }
 
     /// Returns all currently active (non-terminal) operations.
@@ -364,7 +352,7 @@ impl OperationMonitor {
     }
 
     pub async fn wait_for_operation(&self, operation_id: &str) -> Option<Operation> {
-        let timeout = Duration::from_secs(300); // 5 minute timeout to prevent indefinite waiting
+        let timeout = Duration::from_secs(30); // Reduced from 300s to 30s
 
         // First, check if the operation has already completed.
         {
@@ -595,57 +583,6 @@ impl OperationMonitor {
         }
 
         completed_operations
-    }
-
-    /// Track a status check to detect polling patterns
-    async fn track_status_check(&self) {
-        // Use a non-blocking write to avoid contention on hot paths; if we can't acquire, skip.
-        if let Ok(mut history) = self.status_check_history.try_write() {
-            let now = Instant::now();
-            // Keep only the last 3 checks: sufficient for pattern detection and cheap to maintain
-            if history.len() >= 3 {
-                // Remove the oldest entry; for len <= 3 this is trivial cost
-                history.remove(0);
-            }
-            history.push(now);
-        }
-    }
-
-    /// Check if client is polling too frequently and suggest using await instead
-    async fn check_for_polling_pattern(&self) {
-        let history = match self.status_check_history.try_read() {
-            Ok(h) => h,
-            // If we can't read without blocking, skip the check to avoid adding overhead
-            Err(_) => return,
-        };
-
-        // Need at least 3 checks to detect a pattern
-        if history.len() < 3 {
-            return;
-        }
-
-        // Check if all recent checks were within a short time window (< 5 seconds apart)
-        let recent_checks = &history[history.len().saturating_sub(3)..];
-        let mut is_rapid_polling = true;
-
-        for window in recent_checks.windows(2) {
-            if let [prev, current] = window {
-                let interval = current.duration_since(*prev);
-                if interval > Duration::from_secs(5) {
-                    is_rapid_polling = false;
-                    break;
-                }
-            }
-        }
-
-        if is_rapid_polling {
-            tracing::warn!(
-                "🔄 Detected rapid status polling pattern. Consider using the 'await' tool instead of repeated status checks for better efficiency."
-            );
-            tracing::info!(
-                "💡 The 'await' tool will automatically notify you when operations complete, eliminating the need for status polling."
-            );
-        }
     }
 }
 

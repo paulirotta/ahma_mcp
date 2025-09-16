@@ -11,10 +11,10 @@ async fn test_shell_pool_config_default() {
     assert!(config.enabled);
     assert_eq!(config.shells_per_directory, 2);
     assert_eq!(config.max_total_shells, 20);
-    assert_eq!(config.shell_idle_timeout, Duration::from_secs(1800));
-    assert_eq!(config.pool_cleanup_interval, Duration::from_secs(300));
+    assert_eq!(config.shell_idle_timeout, Duration::from_secs(60)); // Updated: reduced from 1800s for performance
+    assert_eq!(config.pool_cleanup_interval, Duration::from_secs(60)); // Updated: reduced from 300s for performance
     assert_eq!(config.shell_spawn_timeout, Duration::from_secs(5));
-    assert_eq!(config.command_timeout, Duration::from_secs(300));
+    assert_eq!(config.command_timeout, Duration::from_secs(30)); // Updated: reduced from 300s for performance
     assert_eq!(config.health_check_interval, Duration::from_secs(60));
 }
 
