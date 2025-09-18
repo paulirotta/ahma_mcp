@@ -18,13 +18,13 @@ futures = "0.3"
 regex = "1.11.2"
 rmcp = { version = "0.6.4", features = ["server", "client", "macros", "transport-io", "transport-child-process", "elicitation", "schemars"] }
 schemars = "1.0.4"
-serde = "1.0.221"
-serde_json = "1.0.144"
+serde = "1.0.225"
+serde_json = "1.0.145"
 tempfile = "3.22.0"
 thiserror = "2.0.16"
 tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread", "process", "fs", "signal"] }
 tokio-util = "0.7.16"
-toml = "0.9.5"
+toml = "0.9.6"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }

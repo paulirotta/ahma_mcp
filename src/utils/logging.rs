@@ -60,19 +60,27 @@ pub fn init_logging(log_level: &str, log_to_file: bool) -> Result<()> {
             .unwrap_or_else(|_| EnvFilter::new(format!("{log_level},ahma_mcp=debug")));
 
         // Attempt to log to a file, fall back to stderr.
-        if log_to_file && let Some(proj_dirs) = ProjectDirs::from("com", "AhmaMcp", "ahma_mcp") {
-            let log_dir = proj_dirs.cache_dir();
-            let file_appender = tracing_appender::rolling::daily(log_dir, "ahma_mcp.log");
-            let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+        if log_to_file {
+            if let Some(proj_dirs) = ProjectDirs::from("com", "AhmaMcp", "ahma_mcp") {
+                let log_dir = proj_dirs.cache_dir();
+                let file_appender = tracing_appender::rolling::daily(log_dir, "ahma_mcp.log");
+                let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
-            tracing_subscriber::registry()
-                .with(env_filter)
-                .with(layer().with_writer(non_blocking).with_ansi(false))
-                .init();
-            // The guard is intentionally leaked to ensure logs are flushed on exit.
-            Box::leak(Box::new(_guard));
+                tracing_subscriber::registry()
+                    .with(env_filter)
+                    .with(layer().with_writer(non_blocking).with_ansi(false))
+                    .init();
+                // The guard is intentionally leaked to ensure logs are flushed on exit.
+                Box::leak(Box::new(_guard));
+            } else {
+                // Fallback to stderr if project directory is not available.
+                tracing_subscriber::registry()
+                    .with(env_filter)
+                    .with(layer().with_writer(stderr))
+                    .init();
+            }
         } else {
-            // Fallback to stderr if project directory is not available.
+            // Fallback to stderr if file logging not requested.
             tracing_subscriber::registry()
                 .with(env_filter)
                 .with(layer().with_writer(stderr))

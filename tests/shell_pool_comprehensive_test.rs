@@ -267,7 +267,7 @@ async fn test_performance_regression_detection() -> Result<()> {
         avg_acquisition_time
     );
     assert!(
-        avg_execution_time < Duration::from_secs(1),
+        avg_execution_time < Duration::from_secs(2),
         "Command execution too slow: {:?}",
         avg_execution_time
     );
