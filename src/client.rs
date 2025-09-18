@@ -66,10 +66,12 @@ impl Client {
         };
 
         let result = service.call_tool(params).await?;
-        if let Some(content) = result.content.first()
-            && let Some(text_content) = content.as_text()
-        {
-            serde_json::from_str(&text_content.text).map_err(|e| anyhow::anyhow!(e))
+        if let Some(content) = result.content.first() {
+            if let Some(text_content) = content.as_text() {
+                serde_json::from_str(&text_content.text).map_err(|e| anyhow::anyhow!(e))
+            } else {
+                Err(anyhow::anyhow!("No text content in response"))
+            }
         } else {
             Err(anyhow::anyhow!("No text content in response"))
         }
@@ -91,10 +93,12 @@ impl Client {
         };
 
         let result = service.call_tool(params).await?;
-        if let Some(content) = result.content.first()
-            && let Some(text_content) = content.as_text()
-        {
-            Ok(text_content.text.clone())
+        if let Some(content) = result.content.first() {
+            if let Some(text_content) = content.as_text() {
+                Ok(text_content.text.clone())
+            } else {
+                Err(anyhow::anyhow!("No text content in response"))
+            }
         } else {
             Err(anyhow::anyhow!("No text content in response"))
         }
@@ -116,10 +120,12 @@ impl Client {
         };
 
         let result = service.call_tool(params).await?;
-        if let Some(content) = result.content.first()
-            && let Some(text_content) = content.as_text()
-        {
-            Ok(text_content.text.clone())
+        if let Some(content) = result.content.first() {
+            if let Some(text_content) = content.as_text() {
+                Ok(text_content.text.clone())
+            } else {
+                Err(anyhow::anyhow!("No text content in response"))
+            }
         } else {
             Err(anyhow::anyhow!("No text content in response"))
         }

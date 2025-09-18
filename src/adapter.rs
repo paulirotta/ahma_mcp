@@ -39,7 +39,7 @@
 
 use crate::{
     operation_monitor::{Operation, OperationMonitor, OperationStatus},
-    shell_pool::{ShellCommand, ShellPoolManager},
+    shell_pool::ShellPoolManager,
 };
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -190,71 +190,48 @@ impl Adapter {
         timeout_seconds: Option<u64>,
         subcommand_config: Option<&crate::config::SubcommandConfig>,
     ) -> Result<String, anyhow::Error> {
-        let mut shell = self
-            .shell_pool
-            .get_shell(working_dir)
-            .await
-            .ok_or_else(|| anyhow::anyhow!("Failed to get shell from pool"))?;
-
-        let (command_with_subcommand, args_vec) = self
+        let (program, args_vec) = self
             .prepare_command_and_args(command, args.as_ref(), subcommand_config)
             .await?;
 
-        let shell_cmd = ShellCommand {
-            id: generate_operation_id(),
-            command: [command_with_subcommand]
-                .iter()
-                .map(ToString::to_string)
-                .chain(args_vec.into_iter())
-                .collect(),
-            working_dir: working_dir.to_string(),
-            timeout_ms: timeout_seconds
-                .unwrap_or_else(|| self.shell_pool.config().command_timeout.as_millis() as u64)
-                * 1000,
-        };
+        let timeout = timeout_seconds
+            .map(Duration::from_secs)
+            .unwrap_or_else(|| self.shell_pool.config().command_timeout);
 
-        let result = shell.execute_command(shell_cmd).await;
-        self.shell_pool.return_shell(shell).await;
+        let mut cmd = tokio::process::Command::new(&program);
+        cmd.args(&args_vec)
+            .current_dir(working_dir)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
 
-        match result {
-            Ok(output) => {
-                if output.exit_code == 0 {
-                    // For synchronous tools, return both stdout and stderr for completeness
-                    // Many tools (like cargo) write informational output to stderr
-                    let result_content = if output.stdout.is_empty() && !output.stderr.is_empty() {
-                        // If stdout is empty but stderr has content, return stderr (e.g., cargo check)
-                        output.stderr
-                    } else if !output.stdout.is_empty() && !output.stderr.is_empty() {
-                        // If both have content, combine them
-                        format!("{}\n{}", output.stdout, output.stderr)
+        let output_res = tokio::time::timeout(timeout, cmd.output()).await;
+
+        match output_res {
+            Err(_) => Err(anyhow::anyhow!(
+                "Operation timed out (exceeded timeout limit): {} seconds",
+                timeout.as_secs()
+            )),
+            Ok(Err(e)) => Err(anyhow::anyhow!("Command execution failed: {}", e)),
+            Ok(Ok(output)) => {
+                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                if output.status.success() {
+                    let result_content = if stdout.is_empty() && !stderr.is_empty() {
+                        stderr
+                    } else if !stdout.is_empty() && !stderr.is_empty() {
+                        format!("{}\n{}", stdout, stderr)
                     } else {
-                        // Otherwise, return stdout (which could be empty)
-                        output.stdout
+                        stdout
                     };
                     Ok(result_content)
                 } else {
                     Err(anyhow::anyhow!(
                         "Command failed with exit code {}: stderr: {}, stdout: {}",
-                        output.exit_code,
-                        output.stderr,
-                        output.stdout
+                        output.status.code().unwrap_or(-1),
+                        stderr,
+                        stdout
                     ))
-                }
-            }
-            Err(e) => {
-                let error_message = e.to_string();
-
-                // TIMEOUT FIX: Detect shell timeout errors and provide descriptive message
-                if error_message.contains("Shell communication timeout")
-                    || error_message.contains("timeout")
-                    || error_message.contains("Timeout")
-                {
-                    Err(anyhow::anyhow!(
-                        "Operation timed out (exceeded timeout limit): {}",
-                        error_message
-                    ))
-                } else {
-                    Err(anyhow::anyhow!("Command execution failed: {}", e))
                 }
             }
         }
@@ -310,12 +287,12 @@ impl Adapter {
     }
 
     /// Asynchronously starts a command using structured options to avoid long arg lists
-    pub async fn execute_async_in_dir_with_options<'a>(
+    pub async fn execute_async_in_dir_with_options(
         &self,
         tool_name: &str,
         command: &str,
         working_dir: &str,
-        options: AsyncExecOptions<'a>,
+        options: AsyncExecOptions<'_>,
     ) -> Result<String> {
         let AsyncExecOptions {
             operation_id,
@@ -345,15 +322,9 @@ impl Adapter {
         let command = command.to_string();
         let wd_clone = wd.clone();
 
-        let (command_with_subcommand, args_vec) = self
+        let (program_with_subcommand, args_vec) = self
             .prepare_command_and_args(&command, args.as_ref(), subcommand_config)
             .await?;
-
-        let full_command = [command_with_subcommand]
-            .iter()
-            .map(ToString::to_string)
-            .chain(args_vec.into_iter())
-            .collect();
 
         let task_handles = self.task_handles.clone();
 
@@ -371,6 +342,20 @@ impl Adapter {
             monitor
                 .update_status(&op_id, OperationStatus::InProgress, None)
                 .await;
+
+            // Send an immediate 'Started' notification if a callback is provided
+            if let Some(callback) = &callback {
+                let _ = callback
+                    .send_progress(crate::callback_system::ProgressUpdate::Started {
+                        operation_id: op_id.clone(),
+                        command: command.clone(),
+                        description: format!(
+                            "Execute {} in {}",
+                            command, wd_clone
+                        ),
+                    })
+                    .await;
+            }
 
             // Check for cancellation before starting
             if cancellation_token.is_cancelled() {
@@ -405,108 +390,26 @@ impl Adapter {
                 return;
             }
 
-            let mut shell = match shell_pool.get_shell(&wd_clone).await {
-                Some(s) => s,
-                None => {
-                    let error_message = "Failed to get shell from pool".to_string();
-                    monitor
-                        .update_status(
-                            &op_id,
-                            OperationStatus::Failed,
-                            Some(Value::String(error_message.clone())),
-                        )
-                        .await;
-
-                    // Send failure notification if callback is provided
-                    if let Some(callback) = &callback {
-                        let failure_update = crate::callback_system::ProgressUpdate::FinalResult {
-                            operation_id: op_id.clone(),
-                            command: command.clone(),
-                            description: format!("Execute {} in {}", command, wd_clone),
-                            working_directory: wd_clone.clone(),
-                            success: false,
-                            duration_ms: 0,
-                            full_output: error_message,
-                        };
-                        if let Err(e) = callback.send_progress(failure_update).await {
-                            tracing::error!("Failed to send failure notification: {:?}", e);
-                        }
-                    }
-                    return;
-                }
-            };
-
-            let shell_cmd = ShellCommand {
-                id: op_id.clone(),
-                command: full_command,
-                working_dir: wd_clone.clone(),
-                timeout_ms: timeout.map_or(
-                    shell_pool.config().command_timeout.as_millis() as u64,
-                    |t| t * 1000,
-                ),
-            };
-
             let start_time = Instant::now();
 
-            // Check for cancellation before executing the command
-            if cancellation_token.is_cancelled() {
-                tracing::info!("Operation {} was cancelled before shell execution", op_id);
-                monitor
-                    .update_status(
-                        &op_id,
-                        OperationStatus::Cancelled,
-                        Some(Value::String("Operation was cancelled".to_string())),
-                    )
-                    .await;
-                if let Some(callback) = &callback {
-                    let elapsed = start_time.elapsed().as_millis() as u64;
-                    let reason_owned = match monitor.get_operation(&op_id).await {
-                        Some(op) => {
-                            let val = op.result.clone();
-                            val.and_then(|v| v.get("reason").cloned())
-                                .and_then(|v| v.as_str().map(|s| s.to_string()))
-                                .unwrap_or_else(|| "Operation was cancelled".to_string())
-                        }
-                        None => "Operation was cancelled".to_string(),
-                    };
-                    let _ = callback
-                        .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
-                            operation_id: op_id.clone(),
-                            message: reason_owned,
-                            duration_ms: elapsed,
-                        })
-                        .await;
-                }
-                shell_pool.return_shell(shell).await;
-                return;
-            }
+            // Build process command to execute directly without shell pool dependency
+            let mut proc_cmd = tokio::process::Command::new(&program_with_subcommand);
+            proc_cmd
+                .args(&args_vec)
+                .current_dir(&wd_clone)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped());
 
-            // DEBUGGING: Log shell command execution start
-            tracing::debug!(
-                "Starting shell execution for operation {} with command: {:?}",
-                op_id,
-                shell_cmd
-            );
+            // Resolve timeout in milliseconds
+            let timeout_ms: u64 = timeout
+                .map(|t| t * 1000)
+                .unwrap_or_else(|| shell_pool.config().command_timeout.as_millis() as u64);
 
-            let result = shell.execute_command(shell_cmd).await;
-
-            // DEBUGGING: Log shell command execution completion
-            tracing::debug!(
-                "Shell execution completed for operation {} with result: {:?}",
-                op_id,
-                match &result {
-                    Ok(output) => format!(
-                        "Success(exit_code={}, stdout_len={}, stderr_len={})",
-                        output.exit_code,
-                        output.stdout.len(),
-                        output.stderr.len()
-                    ),
-                    Err(e) => format!("Error: {}", e),
-                }
-            );
+            // Execute with timeout
+            let proc_result = tokio::time::timeout(Duration::from_millis(timeout_ms), proc_cmd.output()).await;
 
             let duration_ms = start_time.elapsed().as_millis() as u64;
-            shell_pool.return_shell(shell).await;
 
             // Check for cancellation after command execution
             if cancellation_token.is_cancelled() {
@@ -539,108 +442,16 @@ impl Adapter {
                 return;
             }
 
-            match result {
-                Ok(output) => {
-                    // DEBUGGING: Log all process output to trace cancellation source
-                    tracing::debug!(
-                        "Process output for operation {}: stdout='{}', stderr='{}', exit_code={}",
-                        op_id,
-                        output.stdout,
-                        output.stderr,
-                        output.exit_code
-                    );
-
-                    // Check if the output indicates cancellation - enhanced detection for rmcp library errors
-                    let stdout_trimmed = output.stdout.trim();
-                    let stderr_trimmed = output.stderr.trim();
-
-                    let is_cancelled_output = stdout_trimmed == "Canceled"
-                        || stderr_trimmed == "Canceled"
-                        || output.stdout.contains("Canceled: Canceled")
-                        || output.stderr.contains("Canceled: Canceled")
-                        || output.stdout.contains("task cancelled for reason")
-                        || output.stderr.contains("task cancelled for reason");
-
-                    if is_cancelled_output {
-                        // DEBUGGING: Log exactly what cancellation output was detected
-                        tracing::debug!(
-                            "CANCELLATION DETECTED for operation {}: stdout_contains_canceled_canceled={}, stderr_contains_canceled_canceled={}, stdout_contains_task_cancelled={}, stderr_contains_task_cancelled={}, stdout_exact_canceled={}, stderr_exact_canceled={}",
-                            op_id,
-                            output.stdout.contains("Canceled: Canceled"),
-                            output.stderr.contains("Canceled: Canceled"),
-                            output.stdout.contains("task cancelled for reason"),
-                            output.stderr.contains("task cancelled for reason"),
-                            stdout_trimmed == "Canceled",
-                            stderr_trimmed == "Canceled"
-                        );
-
-                        // Enhanced cancellation handling: detect and transform rmcp library cancellation messages
-                        tracing::info!("Detected cancelled process output for operation {}", op_id);
-
-                        // First check if the operation already has a cancellation reason
-                        let enhanced_reason = match monitor.get_operation(&op_id).await {
-                            Some(op) if op.result.is_some() => {
-                                // Operation already has a structured cancellation reason
-                                if let Some(result) = &op.result {
-                                    if let Some(reason) =
-                                        result.get("reason").and_then(|v| v.as_str())
-                                    {
-                                        format!("Process cancelled: {}", reason)
-                                    } else {
-                                        "Process cancelled by external signal or user request"
-                                            .to_string()
-                                    }
-                                } else {
-                                    "Process cancelled by external signal or user request"
-                                        .to_string()
-                                }
-                            }
-                            _ => {
-                                // No structured reason available, enhance based on output patterns
-                                if output.stdout.contains("Canceled: Canceled")
-                                    || output.stderr.contains("Canceled: Canceled")
-                                {
-                                    // This is the classic rmcp library "Canceled: Canceled" message
-                                    "Operation cancelled by user request or system signal (was: Canceled: Canceled from rmcp library)".to_string()
-                                } else if output.stdout.contains("task cancelled for reason")
-                                    || output.stderr.contains("task cancelled for reason")
-                                {
-                                    // This is another rmcp library cancellation format
-                                    "Operation cancelled by user request or system signal (detected rmcp library cancellation)".to_string()
-                                } else {
-                                    // Simple "Canceled" output from external process
-                                    "Process cancelled by external signal or user request"
-                                        .to_string()
-                                }
-                            }
-                        };
-
-                        monitor
-                            .update_status(
-                                &op_id,
-                                OperationStatus::Cancelled,
-                                Some(Value::String(enhanced_reason.clone())),
-                            )
-                            .await;
-
-                        if let Some(callback) = &callback {
-                            let _ = callback
-                                .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
-                                    operation_id: op_id.clone(),
-                                    message: enhanced_reason,
-                                    duration_ms,
-                                })
-                                .await;
-                        }
-                        return;
-                    }
-
+            match proc_result {
+                Ok(Ok(output)) => {
+                    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
                     let final_output = json!({
-                        "stdout": output.stdout,
-                        "stderr": output.stderr,
-                        "exit_code": output.exit_code,
+                        "stdout": stdout,
+                        "stderr": stderr,
+                        "exit_code": output.status.code().unwrap_or(-1),
                     });
-                    let success = output.exit_code == 0;
+                    let success = output.status.success();
                     let status = if success {
                         OperationStatus::Completed
                     } else {
@@ -655,14 +466,17 @@ impl Adapter {
                         let completion_update =
                             crate::callback_system::ProgressUpdate::FinalResult {
                                 operation_id: op_id.clone(),
-                                command: command.clone(),
-                                description: format!("Execute {} in {}", command, wd_clone),
+                                command: program_with_subcommand.clone(),
+                                description: format!(
+                                    "Execute {} in {}",
+                                    program_with_subcommand, wd_clone
+                                ),
                                 working_directory: wd_clone.clone(),
                                 success,
                                 duration_ms,
                                 full_output: format!(
                                     "Exit code: {}\nStdout:\n{}\nStderr:\n{}",
-                                    output.exit_code, output.stdout, output.stderr
+                                    final_output["exit_code"], final_output["stdout"], final_output["stderr"]
                                 ),
                             };
                         if let Err(e) = callback.send_progress(completion_update).await {
@@ -672,76 +486,54 @@ impl Adapter {
                         }
                     }
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     let error_message = e.to_string();
+                    monitor
+                        .update_status(
+                            &op_id,
+                            OperationStatus::Failed,
+                            Some(Value::String(error_message.clone())),
+                        )
+                        .await;
 
-                    // TIMEOUT FIX: Detect shell timeout errors and handle them as cancellations
-                    let is_timeout_error = error_message.contains("Shell communication timeout")
-                        || error_message.contains("timeout")
-                        || error_message.contains("Timeout");
+                    if let Some(callback) = &callback {
+                        let failure_update = crate::callback_system::ProgressUpdate::FinalResult {
+                            operation_id: op_id.clone(),
+                            command: program_with_subcommand.clone(),
+                            description: format!(
+                                "Execute {} in {}",
+                                program_with_subcommand, wd_clone
+                            ),
+                            working_directory: wd_clone.clone(),
+                            success: false,
+                            duration_ms,
+                            full_output: format!("Error: {}", error_message),
+                        };
+                        let _ = callback.send_progress(failure_update).await;
+                    }
+                }
+                Err(_) => {
+                    // Timeout
+                    let timeout_reason = format!(
+                        "Operation timed out after {}ms (exceeded timeout limit)",
+                        duration_ms
+                    );
+                    monitor
+                        .update_status(
+                            &op_id,
+                            OperationStatus::Cancelled,
+                            Some(Value::String(timeout_reason.clone())),
+                        )
+                        .await;
 
-                    if is_timeout_error {
-                        // Handle timeout as a cancellation with descriptive reason
-                        let timeout_reason = format!(
-                            "Operation timed out after {}ms (exceeded shell timeout limit)",
-                            duration_ms
-                        );
-
-                        tracing::info!(
-                            "Detected timeout for operation {}: {}",
-                            op_id,
-                            timeout_reason
-                        );
-
-                        monitor
-                            .update_status(
-                                &op_id,
-                                OperationStatus::Cancelled,
-                                Some(Value::String(timeout_reason.clone())),
-                            )
+                    if let Some(callback) = &callback {
+                        let _ = callback
+                            .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
+                                operation_id: op_id.clone(),
+                                message: timeout_reason,
+                                duration_ms,
+                            })
                             .await;
-
-                        // Send cancellation notification if callback is provided
-                        if let Some(callback) = &callback {
-                            let _ = callback
-                                .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
-                                    operation_id: op_id.clone(),
-                                    message: timeout_reason,
-                                    duration_ms,
-                                })
-                                .await;
-                        }
-                    } else {
-                        // Handle other errors as failures
-                        monitor
-                            .update_status(
-                                &op_id,
-                                OperationStatus::Failed,
-                                Some(Value::String(error_message.clone())),
-                            )
-                            .await;
-
-                        // Send failure notification if callback is provided
-                        if let Some(callback) = &callback {
-                            let failure_update =
-                                crate::callback_system::ProgressUpdate::FinalResult {
-                                    operation_id: op_id.clone(),
-                                    command: command.clone(),
-                                    description: format!("Execute {} in {}", command, wd_clone),
-                                    working_directory: wd_clone.clone(),
-                                    success: false,
-                                    duration_ms,
-                                    full_output: format!("Error: {}", error_message),
-                                };
-                            if let Err(e) = callback.send_progress(failure_update).await {
-                                tracing::error!("Failed to send failure notification: {:?}", e);
-                            } else {
-                                tracing::info!(
-                                    "Sent failure notification for operation: {}",
-                                    op_id
-                                );
-                            }
-                        }
                     }
                 }
             }
