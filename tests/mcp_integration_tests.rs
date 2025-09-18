@@ -99,8 +99,7 @@ async fn test_async_notification_delivery() -> Result<()> {
         if let Some(text_content) = content.as_text() {
             // Should contain operation ID and status info
             assert!(
-                text_content.text.contains("operation_id")
-                    || text_content.text.contains("started")
+                text_content.text.contains("operation_id") || text_content.text.contains("started")
             );
         }
     }

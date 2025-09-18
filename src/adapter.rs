@@ -349,10 +349,7 @@ impl Adapter {
                     .send_progress(crate::callback_system::ProgressUpdate::Started {
                         operation_id: op_id.clone(),
                         command: command.clone(),
-                        description: format!(
-                            "Execute {} in {}",
-                            command, wd_clone
-                        ),
+                        description: format!("Execute {} in {}", command, wd_clone),
                     })
                     .await;
             }
@@ -407,7 +404,8 @@ impl Adapter {
                 .unwrap_or_else(|| shell_pool.config().command_timeout.as_millis() as u64);
 
             // Execute with timeout
-            let proc_result = tokio::time::timeout(Duration::from_millis(timeout_ms), proc_cmd.output()).await;
+            let proc_result =
+                tokio::time::timeout(Duration::from_millis(timeout_ms), proc_cmd.output()).await;
 
             let duration_ms = start_time.elapsed().as_millis() as u64;
 
@@ -476,7 +474,9 @@ impl Adapter {
                                 duration_ms,
                                 full_output: format!(
                                     "Exit code: {}\nStdout:\n{}\nStderr:\n{}",
-                                    final_output["exit_code"], final_output["stdout"], final_output["stderr"]
+                                    final_output["exit_code"],
+                                    final_output["stdout"],
+                                    final_output["stderr"]
                                 ),
                             };
                         if let Err(e) = callback.send_progress(completion_update).await {
