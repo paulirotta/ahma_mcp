@@ -735,7 +735,16 @@ impl ShellPoolManager {
 
         let working_dir = working_dir.as_ref().to_path_buf();
 
-        // Acquire a permit from the semaphore with a timeout to avoid hanging indefinitely
+        // Check if we're at capacity first
+        if self.shell_semaphore.available_permits() == 0 {
+            tracing::debug!(
+                "Shell pool at capacity ({} shells), skipping",
+                self.config.max_total_shells
+            );
+            return None;
+        }
+
+        // Acquire a permit from the semaphore
         let _permit = match self.shell_semaphore.try_acquire() {
             Ok(permit) => permit,
             Err(_) => {
@@ -764,6 +773,8 @@ impl ShellPoolManager {
                     "Got shell from pool, available permits: {}",
                     self.shell_semaphore.available_permits()
                 );
+                // Keep the permit active until the shell is returned
+                std::mem::forget(_permit);
                 Some(shell)
             }
             Err(e) => {
@@ -787,6 +798,7 @@ impl ShellPoolManager {
 
             pool.return_shell(shell).await;
 
+            // Release one permit back to the semaphore
             self.shell_semaphore.add_permits(1);
             tracing::debug!(
                 "Returned shell to pool, available permits: {}",
@@ -794,7 +806,8 @@ impl ShellPoolManager {
             );
         } else {
             tracing::warn!("No pool found for working directory: {:?}", working_dir);
-            // Shell will be dropped
+            // Shell will be dropped, also release permit
+            self.shell_semaphore.add_permits(1);
         }
     }
 
