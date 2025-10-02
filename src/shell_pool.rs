@@ -292,29 +292,64 @@ impl PrewarmedShell {
 # Portable minimal shell setup for async_cargo_mcp (macOS bash 3.2 compatible)
 set +e
 
-command -v jq >/dev/null 2>&1 || {
+if ! command -v jq >/dev/null 2>&1; then
     echo 'MCP_DIAG: jq not found in PATH' >&2
+fi
+
+# JSON string encoder: reads from stdin, outputs a JSON string value
+json_escape_stream() {
+    if command -v jq >/dev/null 2>&1; then
+        jq -Rs . 2>/dev/null
+        return
+    fi
+    # Fallback: emit empty JSON string if no input
+    if [ -t 0 ]; then
+        printf '""'
+        return
+    fi
+    tmp_in=$(mktemp)
+    cat >"$tmp_in"
+    if [ ! -s "$tmp_in" ]; then
+        printf '""'
+    else
+        # Basic escaping: backslash and quote, join lines with \n
+        sed 's/\\/\\\\/g; s/"/\"/g; s/$/\\n/' "${tmp_in}" | tr -d '\n' | sed 's/\\n$//' | sed 's/^/"/;s/$/"/'
+    fi
+    rm -f "$tmp_in"
 }
 
-json_escape_file() {
-    # Use jq -Rs . to JSON-encode entire file contents
-    jq -Rs . 2>/dev/null || {
-        # Fallback: basic escaping (quotes and newlines)
-        sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/' | tr -d '\n' | sed 's/\\n$//' | sed 's/^/"/;s/$/"/'
-    }
+# Extract simple fields from JSON when jq is unavailable
+json_get_string() {
+    key="$1"
+    input="$2"
+    if command -v jq >/dev/null 2>&1; then
+        echo "$input" | jq -r ".${key}"
+    else
+        echo "$input" | sed -n 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1
+    fi
+}
+
+json_get_command_array() {
+    input="$1"
+    if command -v jq >/dev/null 2>&1; then
+        echo "$input" | jq -r '.command[]'
+    else
+        # Extract content inside command array and split by ","
+        echo "$input" | sed -n 's/.*"command"[[:space:]]*:[[:space:]]*\[\(.*\)\].*/\1/p' | head -n1 | awk -v RS=',' '{gsub(/^\"|\"$/,"",$0); print}'
+    fi
 }
 
 execute_command() {
     cmd_json="$1"
-    id=$(echo "$cmd_json" | jq -r '.id')
-    working_dir=$(echo "$cmd_json" | jq -r '.working_dir')
-    
-    # Safely read command and arguments into a bash array (bash 3.2+ compatible)
-    # This is the critical security change to prevent command injection
+    id=$(json_get_string id "$cmd_json")
+    working_dir=$(json_get_string working_dir "$cmd_json")
+
+    # Safely read command and arguments into a bash array
     temp_cmd_file=$(mktemp)
-    echo "$cmd_json" | jq -r '.command[]' > "$temp_cmd_file"
+    json_get_command_array "$cmd_json" > "$temp_cmd_file"
     cmd_array=()
     while IFS= read -r cmd_part; do
+        [ -z "$cmd_part" ] && continue
         cmd_array[${#cmd_array[@]}]="$cmd_part"
     done < "$temp_cmd_file"
     rm -f "$temp_cmd_file"
@@ -334,8 +369,8 @@ execute_command() {
     end_time=$(date +%s)
     duration=$(((end_time - start_time)*1000))
 
-    stdout_json=$(cat "$temp_stdout" | json_escape_file)
-    stderr_json=$(cat "$temp_stderr" | json_escape_file)
+    stdout_json=$(json_escape_stream < "$temp_stdout")
+    stderr_json=$(json_escape_stream < "$temp_stderr")
     rm -f "$temp_stdout" "$temp_stderr"
     echo '{"id":"'"$id"'","exit_code":'"$exit_code"',"stdout":'"$stdout_json"',"stderr":'"$stderr_json"',"duration_ms":'"$duration"'}'
 }
@@ -351,6 +386,7 @@ while IFS= read -r line; do
     else
         execute_command "$line"
     fi
+
 done
 "#;
 
@@ -699,7 +735,16 @@ impl ShellPoolManager {
 
         let working_dir = working_dir.as_ref().to_path_buf();
 
-        // Acquire a permit from the semaphore with a timeout to avoid hanging indefinitely
+        // Check if we're at capacity first
+        if self.shell_semaphore.available_permits() == 0 {
+            tracing::debug!(
+                "Shell pool at capacity ({} shells), skipping",
+                self.config.max_total_shells
+            );
+            return None;
+        }
+
+        // Acquire a permit from the semaphore
         let _permit = match self.shell_semaphore.try_acquire() {
             Ok(permit) => permit,
             Err(_) => {
@@ -728,6 +773,8 @@ impl ShellPoolManager {
                     "Got shell from pool, available permits: {}",
                     self.shell_semaphore.available_permits()
                 );
+                // Keep the permit active until the shell is returned
+                std::mem::forget(_permit);
                 Some(shell)
             }
             Err(e) => {
@@ -751,6 +798,7 @@ impl ShellPoolManager {
 
             pool.return_shell(shell).await;
 
+            // Release one permit back to the semaphore
             self.shell_semaphore.add_permits(1);
             tracing::debug!(
                 "Returned shell to pool, available permits: {}",
@@ -758,7 +806,8 @@ impl ShellPoolManager {
             );
         } else {
             tracing::warn!("No pool found for working directory: {:?}", working_dir);
-            // Shell will be dropped
+            // Shell will be dropped, also release permit
+            self.shell_semaphore.add_permits(1);
         }
     }
 

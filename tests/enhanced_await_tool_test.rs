@@ -34,10 +34,10 @@ async fn test_await_tool_timeout_functionality() -> Result<()> {
     assert!(result.is_error != Some(true));
     if !result.content.is_empty() {
         // Should contain message about no pending operations
-        if let Some(content) = result.content.first()
-            && let Some(text_content) = content.as_text()
-        {
-            assert!(text_content.text.contains("No pending operations"));
+        if let Some(content) = result.content.first() {
+            if let Some(text_content) = content.as_text() {
+                assert!(text_content.text.contains("No pending operations"));
+            }
         }
     }
 
@@ -98,15 +98,16 @@ async fn test_status_tool_functionality() -> Result<()> {
     let result = client.call_tool(call_param).await?;
     assert!(result.is_error != Some(true));
 
-    if !result.content.is_empty()
-        && let Some(content) = result.content.first()
-        && let Some(text_content) = content.as_text()
-    {
-        // Should contain operation status information
-        assert!(
-            text_content.text.contains("Operations status")
-                || text_content.text.contains("operations")
-        );
+    if !result.content.is_empty() {
+        if let Some(content) = result.content.first() {
+            if let Some(text_content) = content.as_text() {
+                // Should contain operation status information
+                assert!(
+                    text_content.text.contains("Operations status")
+                        || text_content.text.contains("operations")
+                );
+            }
+        }
     }
 
     client.cancel().await?;

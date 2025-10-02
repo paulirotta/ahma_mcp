@@ -58,15 +58,15 @@ async fn test_call_tool_basic() -> Result<()> {
 
     // The result should contain operation status information
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first()
-        && let Some(text_content) = content.as_text()
-    {
-        // Should contain information about operations or status
-        assert!(
-            text_content.text.contains("operation")
-                || text_content.text.contains("status")
-                || text_content.text.contains("completed")
-        );
+    if let Some(content) = result.content.first() {
+        if let Some(text_content) = content.as_text() {
+            // Should contain information about operations or status
+            assert!(
+                text_content.text.contains("operation")
+                    || text_content.text.contains("status")
+                    || text_content.text.contains("completed")
+            );
+        }
     }
 
     client.cancel().await?;
@@ -95,13 +95,13 @@ async fn test_async_notification_delivery() -> Result<()> {
 
     // The async tool should return immediately with operation info
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first()
-        && let Some(text_content) = content.as_text()
-    {
-        // Should contain operation ID and status info
-        assert!(
-            text_content.text.contains("operation_id") || text_content.text.contains("started")
-        );
+    if let Some(content) = result.content.first() {
+        if let Some(text_content) = content.as_text() {
+            // Should contain operation ID and status info
+            assert!(
+                text_content.text.contains("operation_id") || text_content.text.contains("started")
+            );
+        }
     }
 
     // 2. Use the await tool to check that async operations can be tracked - no timeout parameter needed
