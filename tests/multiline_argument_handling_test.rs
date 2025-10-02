@@ -238,8 +238,17 @@ async fn test_multiline_git_commit_with_real_tool() {
         result
     );
 
-    // Wait a moment for the operation to complete - reduced waiting time
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    // Wait for the async operation to complete
+    let operation = monitor
+        .wait_for_operation("test_multiline_commit_real")
+        .await
+        .expect("Operation not found");
+
+    assert!(
+        operation.state.is_terminal(),
+        "Operation should be in terminal state: {:?}",
+        operation.state
+    );
 
     // Verify the commit was actually created
     let log_result = std::process::Command::new("git")
