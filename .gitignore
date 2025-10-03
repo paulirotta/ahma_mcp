@@ -20,3 +20,6 @@ target
 
 # Apple
 *.DS_Store
+
+# Kotlin build artifacts created by tests
+**/.kotlin/
