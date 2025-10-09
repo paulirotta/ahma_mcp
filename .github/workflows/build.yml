@@ -146,6 +146,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true
+      matrix:
+        language: ["rust"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -231,6 +233,8 @@ jobs:
     runs-on: macos-latest
     strategy:
       fail-fast: true
+      matrix:
+        language: ["rust"]
     env:
       TERM: xterm-256color
     steps:
