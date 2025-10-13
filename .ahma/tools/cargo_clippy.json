@@ -27,6 +27,36 @@
                     "name": "tests",
                     "type": "boolean",
                     "description": "Run clippy on tests as well"
+                },
+                {
+                    "name": "workspace",
+                    "type": "boolean",
+                    "description": "Run on all packages in the workspace"
+                },
+                {
+                    "name": "package",
+                    "type": "string",
+                    "description": "Package to run clippy for"
+                },
+                {
+                    "name": "all-targets",
+                    "type": "boolean",
+                    "description": "Check all targets"
+                },
+                {
+                    "name": "fix-allow-dirty",
+                    "type": "boolean",
+                    "description": "Allow dirty when applying fixes"
+                },
+                {
+                    "name": "verbose",
+                    "type": "integer",
+                    "description": "Use verbose output (-vv for very verbose)"
+                },
+                {
+                    "name": "color",
+                    "type": "string",
+                    "description": "Coloring [possible values: auto, always, never]"
                 }
             ]
         }
