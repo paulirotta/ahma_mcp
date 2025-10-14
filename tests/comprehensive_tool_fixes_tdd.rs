@@ -36,15 +36,15 @@ mod comprehensive_tool_fixes_tdd {
             "Should have at least one subcommand"
         );
 
-        // Find the default subcommand and check its options
-        let default_cmd = subcommands
+        // Find the clippy subcommand and check its options
+        let clippy_cmd = subcommands
             .iter()
-            .find(|cmd| cmd["name"] == "default")
-            .expect("Should have default subcommand");
+            .find(|cmd| cmd["name"] == "clippy")
+            .expect("Should have clippy subcommand");
 
-        let options = default_cmd["options"]
+        let options = clippy_cmd["options"]
             .as_array()
-            .expect("Default subcommand should have options");
+            .expect("Clippy subcommand should have options");
 
         // Check for required options
         let has_fix = options.iter().any(|opt| opt["name"] == "fix");

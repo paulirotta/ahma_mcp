@@ -5,6 +5,107 @@
     "synchronous": true,
     "subcommand": [
         {
+            "name": "pr_create",
+            "description": "Create a pull request.",
+            "options": [
+                {
+                    "name": "repo",
+                    "alias": "R",
+                    "type": "string",
+                    "description": "The repository to create the pull request in.",
+                    "required": true
+                },
+                {
+                    "name": "title",
+                    "alias": "t",
+                    "type": "string",
+                    "description": "The title of the pull request."
+                },
+                {
+                    "name": "body",
+                    "alias": "b",
+                    "type": "string",
+                    "description": "The body of the pull request."
+                },
+                {
+                    "name": "base",
+                    "alias": "B",
+                    "type": "string",
+                    "description": "The branch to merge into."
+                },
+                {
+                    "name": "head",
+                    "alias": "H",
+                    "type": "string",
+                    "description": "The branch to merge from."
+                },
+                {
+                    "name": "web",
+                    "alias": "w",
+                    "type": "boolean",
+                    "description": "Open the pull request in a web browser."
+                }
+            ]
+        },
+        {
+            "name": "pr_list",
+            "description": "List pull requests in a repository.",
+            "options": [
+                {
+                    "name": "repo",
+                    "alias": "R",
+                    "type": "string",
+                    "description": "The repository to list pull requests from.",
+                    "required": true
+                },
+                {
+                    "name": "limit",
+                    "alias": "L",
+                    "type": "integer",
+                    "description": "Maximum number of items to return."
+                },
+                {
+                    "name": "state",
+                    "alias": "s",
+                    "type": "string",
+                    "description": "Filter by state: {open|closed|merged|all}."
+                },
+                {
+                    "name": "web",
+                    "alias": "w",
+                    "type": "boolean",
+                    "description": "Open the list of pull requests in a web browser."
+                }
+            ]
+        },
+        {
+            "name": "pr_view",
+            "description": "View a pull request.",
+            "options": [
+                {
+                    "name": "repo",
+                    "alias": "R",
+                    "type": "string",
+                    "description": "The repository to view the pull request in.",
+                    "required": true
+                },
+                {
+                    "name": "web",
+                    "alias": "w",
+                    "type": "boolean",
+                    "description": "Open the pull request in a web browser."
+                }
+            ],
+            "positional_args": [
+                {
+                    "name": "pr_number",
+                    "type": "string",
+                    "description": "The number of the pull request to view.",
+                    "required": true
+                }
+            ]
+        },
+        {
             "name": "pr_close",
             "description": "Close a pull request.",
             "options": [

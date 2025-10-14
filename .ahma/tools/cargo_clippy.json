@@ -9,7 +9,7 @@
     },
     "subcommand": [
         {
-            "name": "default",
+            "name": "clippy",
             "synchronous": true,
             "description": "Enhanced linting and code quality checks - returns immediately for incremental checks.",
             "options": [

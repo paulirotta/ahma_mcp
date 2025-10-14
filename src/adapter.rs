@@ -198,9 +198,18 @@ impl Adapter {
             .map(Duration::from_secs)
             .unwrap_or_else(|| self.shell_pool.config().command_timeout);
 
-        let mut cmd = tokio::process::Command::new(&program);
-        cmd.args(&args_vec)
-            .current_dir(working_dir)
+        let mut cmd = if program == "/bin/sh" {
+            let mut shell_cmd = tokio::process::Command::new(&program);
+            let full_command = args_vec.join(" ");
+            shell_cmd.arg("-c").arg(full_command);
+            shell_cmd
+        } else {
+            let mut direct_cmd = tokio::process::Command::new(&program);
+            direct_cmd.args(&args_vec);
+            direct_cmd
+        };
+
+        cmd.current_dir(working_dir)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
