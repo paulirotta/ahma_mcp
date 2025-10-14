@@ -573,6 +573,11 @@
             "description": "Display dependency tree - returns immediately."
         },
         {
+            "name": "clippy",
+            "synchronous": true,
+            "description": "Enhanced linting and code quality checks - returns immediately for incremental checks."
+        },
+        {
             "name": "version",
             "synchronous": true,
             "description": "Show cargo version information - returns immediately."

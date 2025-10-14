@@ -2,7 +2,7 @@ mod common;
 
 use ahma_mcp::client::Client;
 use anyhow::Result;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
 async fn setup_mcp_service_with_long_running_tool() -> Result<(TempDir, Client)> {
@@ -62,6 +62,7 @@ async fn test_await_blocks_correctly() -> Result<()> {
     println!("Started operation: {}", long_running_task.job_id);
 
     // A single call to await should now block until the operation is complete.
+    tokio::time::sleep(Duration::from_millis(50)).await;
     let await_start = Instant::now();
     let await_result = client.await_op(&long_running_task.job_id).await?;
     let await_duration = await_start.elapsed();

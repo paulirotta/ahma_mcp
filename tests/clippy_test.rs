@@ -2,6 +2,7 @@
 mod common;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParam;
+use serde_json::json;
 use std::borrow::Cow;
 
 use ahma_mcp::utils::logging::init_test_logging;
@@ -13,8 +14,8 @@ async fn test_run_clippy() -> Result<()> {
     let client = new_client(Some(".ahma/tools")).await?;
 
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("cargo_clippy"),
-        arguments: None,
+        name: Cow::Borrowed("cargo"),
+        arguments: Some(serde_json::from_value(json!({ "subcommand": "clippy" })).unwrap()),
     };
 
     let result = client.call_tool(call_param).await?;

@@ -13,6 +13,9 @@ async fn test_gh_tool_expansion_all_synchronous() {
 
     // Verify all expected subcommands are present and synchronous
     let expected_subcommands = vec![
+        "pr_create",
+        "pr_list",
+        "pr_view",
         "pr_close",
         "cache_list",
         "cache_delete",
@@ -31,9 +34,8 @@ async fn test_gh_tool_expansion_all_synchronous() {
         .expect("Should have subcommands");
     assert_eq!(
         subcommands.len(),
-        expected_subcommands.len(),
-        "Should have exactly {} subcommands",
-        expected_subcommands.len()
+        13,
+        "Should have exactly 13 subcommands"
     );
 
     // Check that tool has synchronous = true at tool level for inheritance
