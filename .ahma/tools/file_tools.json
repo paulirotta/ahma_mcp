@@ -11,19 +11,21 @@
             "name": "ls",
             "description": "List directory contents with various formatting options",
             "synchronous": true,
-            "options": [
-                {
-                    "name": "working_directory",
-                    "type": "string",
-                    "description": "Working directory for command execution",
-                    "format": "path"
-                },
+            "positional_args": [
                 {
                     "name": "path",
                     "type": "string",
                     "description": "Directory or file path to list",
                     "format": "path",
                     "required": false
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "long",
@@ -73,13 +75,7 @@
             "name": "mv",
             "description": "Move (rename) files and directories",
             "synchronous": true,
-            "options": [
-                {
-                    "name": "working_directory",
-                    "type": "string",
-                    "description": "Working directory for command execution",
-                    "format": "path"
-                },
+            "positional_args": [
                 {
                     "name": "source",
                     "type": "string",
@@ -93,6 +89,14 @@
                     "description": "Destination file or directory path",
                     "format": "path",
                     "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "force",
@@ -118,13 +122,7 @@
             "name": "cp",
             "description": "Copy files and directories",
             "synchronous": true,
-            "options": [
-                {
-                    "name": "working_directory",
-                    "type": "string",
-                    "description": "Working directory for command execution",
-                    "format": "path"
-                },
+            "positional_args": [
                 {
                     "name": "source",
                     "type": "string",
@@ -138,6 +136,14 @@
                     "description": "Destination file or directory path",
                     "format": "path",
                     "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "recursive",
@@ -181,19 +187,21 @@
             "name": "rm",
             "description": "Remove files and directories",
             "synchronous": true,
-            "options": [
-                {
-                    "name": "working_directory",
-                    "type": "string",
-                    "description": "Working directory for command execution",
-                    "format": "path"
-                },
+            "positional_args": [
                 {
                     "name": "paths",
                     "type": "array",
                     "description": "File or directory paths to remove",
                     "format": "path",
                     "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "recursive",
@@ -219,13 +227,7 @@
             "name": "grep",
             "description": "Search text patterns in files",
             "synchronous": true,
-            "options": [
-                {
-                    "name": "working_directory",
-                    "type": "string",
-                    "description": "Working directory for command execution",
-                    "format": "path"
-                },
+            "positional_args": [
                 {
                     "name": "pattern",
                     "type": "string",
@@ -238,6 +240,14 @@
                     "description": "Files to search in",
                     "format": "path",
                     "required": false
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "recursive",
@@ -293,13 +303,7 @@
             "name": "sed",
             "description": "Stream editor for filtering and transforming text",
             "synchronous": true,
-            "options": [
-                {
-                    "name": "working_directory",
-                    "type": "string",
-                    "description": "Working directory for command execution",
-                    "format": "path"
-                },
+            "positional_args": [
                 {
                     "name": "expression",
                     "type": "string",
@@ -312,6 +316,14 @@
                     "description": "Input files to process",
                     "format": "path",
                     "required": false
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "in-place",
@@ -334,47 +346,24 @@
             ]
         },
         {
-            "name": "git",
-            "description": "Git version control operations (subset of most common commands)",
-            "synchronous": true,
-            "options": [
-                {
-                    "name": "working_directory",
-                    "type": "string",
-                    "description": "Working directory for command execution",
-                    "format": "path"
-                },
-                {
-                    "name": "git_command",
-                    "type": "string",
-                    "description": "Git subcommand (status, add, commit, log, diff, branch)",
-                    "required": true
-                },
-                {
-                    "name": "args",
-                    "type": "array",
-                    "description": "Additional arguments for the git command",
-                    "required": false
-                }
-            ]
-        },
-        {
             "name": "touch",
             "description": "Create empty files or update timestamps",
             "synchronous": true,
-            "options": [
-                {
-                    "name": "working_directory",
-                    "type": "string",
-                    "description": "Working directory for command execution",
-                    "format": "path"
-                },
+            "positional_args": [
                 {
                     "name": "files",
                     "type": "array",
                     "description": "File paths to create or update",
                     "format": "path",
                     "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "no-create",
@@ -407,19 +396,21 @@
             "name": "cd",
             "description": "Change working directory and list contents",
             "synchronous": true,
-            "options": [
-                {
-                    "name": "working_directory",
-                    "type": "string",
-                    "description": "Working directory for command execution",
-                    "format": "path"
-                },
+            "positional_args": [
                 {
                     "name": "path",
                     "type": "string",
                     "description": "Directory path to change to",
                     "format": "path",
                     "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "list",
@@ -432,19 +423,21 @@
             "name": "cat",
             "description": "Display file contents",
             "synchronous": true,
-            "options": [
-                {
-                    "name": "working_directory",
-                    "type": "string",
-                    "description": "Working directory for command execution",
-                    "format": "path"
-                },
+            "positional_args": [
                 {
                     "name": "files",
                     "type": "array",
                     "description": "File paths to display",
                     "format": "path",
                     "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "number",
@@ -470,6 +463,15 @@
             "name": "find",
             "description": "Search for files and directories",
             "synchronous": true,
+            "positional_args": [
+                {
+                    "name": "path",
+                    "type": "string",
+                    "description": "Starting directory for search",
+                    "format": "path",
+                    "required": false
+                }
+            ],
             "options": [
                 {
                     "name": "working_directory",
@@ -478,14 +480,7 @@
                     "format": "path"
                 },
                 {
-                    "name": "path",
-                    "type": "string",
-                    "description": "Starting directory for search",
-                    "format": "path",
-                    "required": false
-                },
-                {
-                    "name": "name",
+                    "name": "-name",
                     "type": "string",
                     "description": "Search for files with this name pattern"
                 },
@@ -520,19 +515,21 @@
             "name": "head",
             "description": "Display first lines of files",
             "synchronous": true,
-            "options": [
-                {
-                    "name": "working_directory",
-                    "type": "string",
-                    "description": "Working directory for command execution",
-                    "format": "path"
-                },
+            "positional_args": [
                 {
                     "name": "files",
                     "type": "array",
                     "description": "File paths to display",
                     "format": "path",
                     "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "lines",
@@ -558,19 +555,21 @@
             "name": "tail",
             "description": "Display last lines of files",
             "synchronous": true,
-            "options": [
-                {
-                    "name": "working_directory",
-                    "type": "string",
-                    "description": "Working directory for command execution",
-                    "format": "path"
-                },
+            "positional_args": [
                 {
                     "name": "files",
                     "type": "array",
                     "description": "File paths to display",
                     "format": "path",
                     "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "lines",
@@ -602,13 +601,7 @@
             "name": "diff",
             "description": "Compare files line by line",
             "synchronous": true,
-            "options": [
-                {
-                    "name": "working_directory",
-                    "type": "string",
-                    "description": "Working directory for command execution",
-                    "format": "path"
-                },
+            "positional_args": [
                 {
                     "name": "file1",
                     "type": "string",
@@ -622,6 +615,14 @@
                     "description": "Second file to compare",
                     "format": "path",
                     "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
                 },
                 {
                     "name": "unified",
