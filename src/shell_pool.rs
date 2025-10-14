@@ -443,7 +443,7 @@ done
             .stderr(Stdio::piped())
             .spawn();
 
-        let mut child = match child_spawn {
+        let child = match child_spawn {
             Ok(c) => c,
             Err(e) => {
                 // If the binary is not found, emulate shell behavior with exit code 127
