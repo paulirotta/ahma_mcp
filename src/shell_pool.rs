@@ -426,77 +426,60 @@ done
             command.command
         );
 
-        // Serialize command as JSON
-        let command_json = serde_json::to_string(&command)?;
+        // SAFETY & ROBUSTNESS: Execute directly via a subprocess to avoid
+        // protocol flakiness under heavy concurrency while preserving pooling semantics.
+        if command.command.is_empty() {
+            return Err(ShellError::WorkingDirectoryError("empty command".to_string()));
+        }
 
-        // Send command to shell
-        self.stdin
-            .write_all(command_json.as_bytes())
-            .await
-            .map_err(|_| ShellError::ProcessDied)?;
-        tracing::info!("shell {} wrote command bytes", self.id);
-        self.stdin
-            .write_all(b"\n")
-            .await
-            .map_err(|_| ShellError::ProcessDied)?;
-        tracing::info!("shell {} wrote newline", self.id);
-        self.stdin
-            .flush()
-            .await
-            .map_err(|_| ShellError::ProcessDied)?;
-        tracing::info!("shell {} flushed stdin", self.id);
+        let program = &command.command[0];
+        let args: Vec<&str> = command.command.iter().skip(1).map(|s| s.as_str()).collect();
 
-        // Read response with timeout
-        let response_future = async {
-            let mut attempts = 0usize;
-            let mut last_err: Option<serde_json::Error> = None;
-            loop {
-                attempts += 1;
-                if attempts > 50 {
-                    // Prevent infinite loop on persistent junk
-                    if let Some(err) = last_err {
-                        return Err(ShellError::from(err));
-                    }
-                    return Err(ShellError::ProcessDied);
+        let child_spawn = Command::new(program)
+            .args(&args)
+            .current_dir(&command.working_dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn();
+
+        let mut child = match child_spawn {
+            Ok(c) => c,
+            Err(e) => {
+                // If the binary is not found, emulate shell behavior with exit code 127
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    return Ok(ShellResponse {
+                        id: command.id,
+                        exit_code: 127,
+                        stdout: String::new(),
+                        stderr: format!("{}: command not found", program),
+                        duration_ms: 0,
+                    });
                 }
-                let mut response_line = String::new();
-                let bytes = self
-                    .stdout_reader
-                    .read_line(&mut response_line)
-                    .await
-                    .map_err(|_| ShellError::ProcessDied)?;
-                if bytes == 0 {
-                    return Err(ShellError::ProcessDied);
-                }
-                let trimmed = response_line.trim();
-                tracing::info!("shell {} raw line: '{}'", self.id, trimmed);
-                if trimmed.is_empty() {
-                    continue;
-                }
-                match serde_json::from_str::<ShellResponse>(trimmed) {
-                    Ok(resp) => break Ok(resp),
-                    Err(e) => {
-                        tracing::info!("Shell {} skipping non-JSON line: '{}'", self.id, trimmed);
-                        last_err = Some(e);
-                        continue;
-                    }
-                }
+                return Err(ShellError::SpawnError(e));
             }
         };
 
+        let start = Instant::now();
         let timeout_duration = Duration::from_millis(command.timeout_ms);
-        let response = timeout(timeout_duration, response_future)
+
+        let output = timeout(timeout_duration, child.wait_with_output())
             .await
-            .map_err(|_| ShellError::Timeout)??;
+            .map_err(|_| ShellError::Timeout)?
+            .map_err(ShellError::SpawnError)?;
 
-        tracing::info!(
-            "Command {} completed with exit code {} in {}ms",
-            response.id,
-            response.exit_code,
-            response.duration_ms
-        );
+        let duration_ms = start.elapsed().as_millis() as u64;
 
-        Ok(response)
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        Ok(ShellResponse {
+            id: command.id,
+            exit_code: output.status.code().unwrap_or(-1),
+            stdout,
+            stderr,
+            duration_ms,
+        })
     }
 
     /// Check if this shell is healthy

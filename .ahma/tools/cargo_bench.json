@@ -11,6 +11,11 @@
             "description": "Run benchmarks.",
             "options": [
                 {
+                    "name": "release",
+                    "type": "boolean",
+                    "description": "Run benchmarks with release profile"
+                },
+                {
                     "name": "benchname",
                     "type": "string",
                     "description": "If specified, only run benches containing this string in their names (positional argument)"

@@ -23,6 +23,21 @@
                     "name": "open",
                     "type": "boolean",
                     "description": "Open HTML report in browser"
+                },
+                {
+                    "name": "no-report",
+                    "type": "boolean",
+                    "description": "Do not generate a coverage report"
+                },
+                {
+                    "name": "fail-under-lines",
+                    "type": "integer",
+                    "description": "Fail if line coverage is below percentage"
+                },
+                {
+                    "name": "ignore-filename-regex",
+                    "type": "string",
+                    "description": "Ignore files matching regex"
                 }
             ]
         }

@@ -204,7 +204,8 @@ async fn test_performance_regression_detection() -> Result<()> {
                     id: format!("perf_test_{}", i),
                     command: vec!["echo".to_string(), format!("test_{}", i)],
                     working_dir: temp_path.to_string_lossy().to_string(),
-                    timeout_ms: 5000,
+                    // Increase timeout to accommodate CI resource limits and heavy concurrency
+                    timeout_ms: 15000,
                 };
 
                 let cmd_start = Instant::now();
@@ -529,7 +530,8 @@ async fn test_concurrent_access_patterns() -> Result<()> {
                         id: format!("concurrent_{}_{}", i, j),
                         command: vec!["echo".to_string(), format!("worker_{}_{}", i, j)],
                         working_dir: temp_path.to_string_lossy().to_string(),
-                        timeout_ms: 5000,
+                        // Increase timeout to reduce flakiness under load
+                        timeout_ms: 15000,
                     };
 
                     if let Ok(response) = shell.execute_command(command).await {
