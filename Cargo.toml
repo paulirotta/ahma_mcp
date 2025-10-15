@@ -12,19 +12,19 @@ rust-version = "1.85.0"
 anyhow = "1.0.100"
 async-trait = "0.1.89"
 chrono = { version = "0.4.42", features = ["serde"] }
-clap = { version = "4.5.48", features = ["derive"] }
+clap = { version = "4.5.49", features = ["derive"] }
 directories = "6.0.0"
 futures = "0.3"
-regex = "1.11.3"
+regex = "1.12.2"
 rmcp = { version = "0.7.0", features = ["server", "client", "macros", "transport-io", "transport-child-process", "elicitation", "schemars"] }
 schemars = "1.0.4"
 serde = "1.0.228"
 serde_json = "1.0.145"
 tempfile = "3.23.0"
 thiserror = "2.0.17"
-tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread", "process", "fs", "signal"] }
+tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread", "process", "fs", "signal"] }
 tokio-util = "0.7.16"
-toml = "0.9.7"
+toml = "0.9.8"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
