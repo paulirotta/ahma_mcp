@@ -46,6 +46,7 @@ use ahma_mcp::{
     mcp_service::{AhmaMcpService, GuidanceConfig},
     operation_monitor::{MonitorConfig, OperationMonitor},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
+    tool_availability::evaluate_tool_availability,
     utils::logging::init_logging,
 };
 use anyhow::Result;
@@ -173,15 +174,68 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     shell_pool_manager.clone().start_background_tasks();
 
     // Initialize the adapter
-    let adapter = Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager)?);
+    let adapter = Arc::new(Adapter::new(
+        operation_monitor.clone(),
+        shell_pool_manager.clone(),
+    )?);
 
     // Load tool configurations
-    let configs = Arc::new(load_tool_configs(&cli.tools_dir)?);
+    let raw_configs = load_tool_configs(&cli.tools_dir)?;
+    let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let availability_summary = evaluate_tool_availability(
+        shell_pool_manager.clone(),
+        raw_configs,
+        working_dir.as_path(),
+    )
+    .await?;
+
+    if !availability_summary.disabled_tools.is_empty() {
+        for disabled in &availability_summary.disabled_tools {
+            tracing::warn!(
+                "Tool '{}' disabled at startup. {}",
+                disabled.name,
+                disabled.message
+            );
+            if let Some(instructions) = &disabled.install_instructions {
+                tracing::info!(
+                    "Install instructions for '{}': {}",
+                    disabled.name,
+                    instructions
+                );
+            }
+        }
+    }
+
+    if !availability_summary.disabled_subcommands.is_empty() {
+        for disabled in &availability_summary.disabled_subcommands {
+            tracing::warn!(
+                "Tool subcommand '{}::{}' disabled at startup. {}",
+                disabled.tool,
+                disabled.subcommand_path,
+                disabled.message
+            );
+            if let Some(instructions) = &disabled.install_instructions {
+                tracing::info!(
+                    "Install instructions for '{}::{}': {}",
+                    disabled.tool,
+                    disabled.subcommand_path,
+                    instructions
+                );
+            }
+        }
+    }
+
+    let configs = Arc::new(availability_summary.filtered_configs);
     if configs.is_empty() {
-        tracing::error!("No valid tool configurations found in {:?}", cli.tools_dir);
+        tracing::error!("No valid tool configurations available after availability checks");
+        tracing::error!("Tools directory: {:?}", cli.tools_dir);
         // It's not a fatal error to have no tools, just log it.
     } else {
-        tracing::info!("Loaded {} tool configurations", configs.len());
+        tracing::info!(
+            "Loaded {} tool configurations ({} disabled)",
+            configs.len(),
+            availability_summary.disabled_tools.len()
+        );
     }
 
     // Create and start the MCP service
@@ -339,12 +393,31 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         ..Default::default()
     };
     let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
-    let adapter = Adapter::new(operation_monitor, shell_pool_manager)?;
+    let adapter = Adapter::new(operation_monitor, shell_pool_manager.clone())?;
 
     // Load tool configurations
-    let configs = Arc::new(load_tool_configs(&std::path::PathBuf::from(".ahma/tools"))?);
+    let raw_configs = load_tool_configs(&PathBuf::from(".ahma/tools"))?;
+    let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let availability_summary = evaluate_tool_availability(
+        shell_pool_manager.clone(),
+        raw_configs,
+        working_dir.as_path(),
+    )
+    .await?;
+
+    if !availability_summary.disabled_tools.is_empty() {
+        for disabled in &availability_summary.disabled_tools {
+            tracing::warn!(
+                "Tool '{}' disabled at CLI startup. {}",
+                disabled.name,
+                disabled.message
+            );
+        }
+    }
+
+    let configs = Arc::new(availability_summary.filtered_configs);
     if configs.is_empty() {
-        tracing::error!("No valid tool configurations found");
+        tracing::error!("No valid tool configurations available after availability checks");
         anyhow::bail!("No tool configurations found");
     }
 

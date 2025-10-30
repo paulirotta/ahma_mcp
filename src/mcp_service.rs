@@ -296,6 +296,14 @@ impl AhmaMcpService {
         tool_config: &'a ToolConfig,
         subcommand_name: Option<String>,
     ) -> Option<(&'a SubcommandConfig, Vec<String>)> {
+        if !tool_config.enabled {
+            tracing::warn!(
+                "Attempted to resolve subcommand on disabled tool '{}'",
+                tool_config.name
+            );
+            return None;
+        }
+
         let subcommand_path = subcommand_name.unwrap_or_else(|| "default".to_string());
         let subcommand_parts: Vec<&str> = subcommand_path.split('_').collect();
 
@@ -304,7 +312,10 @@ impl AhmaMcpService {
         let mut command_parts = vec![tool_config.command.clone()];
 
         for (i, part) in subcommand_parts.iter().enumerate() {
-            if let Some(sub) = current_subcommands.iter().find(|s| s.name == *part) {
+            if let Some(sub) = current_subcommands
+                .iter()
+                .find(|s| s.name == *part && s.enabled)
+            {
                 if sub.name != "default" {
                     command_parts.push(sub.name.clone());
                 } else {
@@ -494,7 +505,7 @@ impl ServerHandler for AhmaMcpService {
                 name: "await".into(),
                 title: Some("await".to_string()),
                 icons: None,
-                description: Some("Wait for previously started asynchronous operations to complete. **WARNING:** This is a blocking tool and makes you inefficient. **ONLY** use this if you have NO other tasks and cannot proceed until completion. It is **ALWAYS** better to perform other work and let results be pushed to you.".into()),
+                description: Some("Wait for previously started asynchronous operations to complete. **WARNING:** This is a blocking tool and makes you inefficient. **ONLY** use this if you have NO other tasks and cannot proceed until completion. It is **ALWAYS** better to perform other work and let results be pushed to you. **IMPORTANT:** Operations automatically notify you when complete - you do NOT need to check status repeatedly. Use this tool only when you genuinely cannot make progress without the results.".into()),
                 input_schema: self.generate_input_schema_for_wait(),
                 output_schema: None,
                 annotations: None,
@@ -505,13 +516,18 @@ impl ServerHandler for AhmaMcpService {
                 name: "status".into(),
                 title: Some("status".to_string()),
                 icons: None,
-                description: Some("Query the status of operations without blocking. Shows active and completed operations.".into()),
+                description: Some("Query the status of operations without blocking. Shows active and completed operations. **IMPORTANT:** Results are automatically pushed to you when operations complete - you do NOT need to poll this tool repeatedly! If you find yourself calling 'status' multiple times for the same operation, you should use 'await' instead. Repeated status checks are an anti-pattern that wastes resources.".into()),
                 input_schema: self.generate_input_schema_for_status(),
                 output_schema: None,
                 annotations: None,
             });
 
             for config in self.configs.values() {
+                if !config.enabled {
+                    tracing::debug!("Skipping disabled tool '{}' during list_tools", config.name);
+                    continue;
+                }
+
                 let tool = self.create_tool_from_config(config);
                 tools.push(tool);
             }
@@ -808,6 +824,15 @@ impl ServerHandler for AhmaMcpService {
                     ));
                 }
             };
+
+            if !config.enabled {
+                let error_message = format!(
+                    "Tool '{}' is unavailable because its runtime availability probe failed",
+                    tool_name
+                );
+                tracing::error!("{}", error_message);
+                return Err(McpError::invalid_request(error_message, None));
+            }
 
             // Check if this is a sequence tool
             if config.sequence.is_some() {
@@ -1183,6 +1208,21 @@ impl AhmaMcpService {
                     )]));
                 }
             };
+
+            if !step_config.enabled {
+                let error_msg = format!(
+                    "Sequence step {}/{} failed: Tool '{}' is disabled (availability probe failed)",
+                    step_num,
+                    sequence.len(),
+                    step.tool
+                );
+                tracing::error!("{}", error_msg);
+                results.push(format!("❌ {}", error_msg));
+                all_outputs.push(error_msg.clone());
+                return Ok(CallToolResult::success(vec![Content::text(
+                    all_outputs.join("\n\n"),
+                )]));
+            }
 
             // Find the subcommand config
             let (subcommand_config, command_parts) = match self

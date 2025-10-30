@@ -175,6 +175,16 @@ impl MtdfValidator {
                 "number",
                 "Delay in milliseconds between sequence steps (default: SEQUENCE_STEP_DELAY_MS)",
             ),
+            (
+                "availability_check",
+                "object",
+                "Runtime availability probe executed at server startup",
+            ),
+            (
+                "install_instructions",
+                "string",
+                "Installation guidance displayed when the tool is unavailable",
+            ),
         ];
 
         // Check required fields
@@ -201,6 +211,26 @@ impl MtdfValidator {
         for (field, expected_type, _description) in &optional_fields {
             if let Some(value) = obj.get(*field) {
                 self.validate_field_type(field, value, expected_type, errors);
+            }
+        }
+
+        if let Some(check) = obj.get("availability_check") {
+            self.validate_availability_check_object(check, "availability_check", errors);
+
+            match obj
+                .get("install_instructions")
+                .and_then(|v| v.as_str())
+                .filter(|value| !value.trim().is_empty())
+            {
+                Some(_) => {}
+                None => errors.push(SchemaValidationError {
+                    field_path: "install_instructions".to_string(),
+                    error_type: ValidationErrorType::MissingRequired,
+                    message: "Tools using availability_check must provide non-empty install_instructions".to_string(),
+                    suggestion: Some(
+                        "Add an install command string, e.g. \"install_instructions\": \"brew install <tool>\"".to_string(),
+                    ),
+                }),
             }
         }
 
@@ -314,6 +344,16 @@ impl MtdfValidator {
                 "array",
                 "Array of nested subcommand definitions",
             ),
+            (
+                "availability_check",
+                "object",
+                "Runtime availability probe executed at server startup",
+            ),
+            (
+                "install_instructions",
+                "string",
+                "Installation guidance displayed when the subcommand is unavailable",
+            ),
         ];
 
         // Check required fields
@@ -361,6 +401,32 @@ impl MtdfValidator {
         // Validate options array if present
         if let Some(options) = obj.get("options") {
             self.validate_options_array(options, &format!("{}.options", path), errors);
+        }
+
+        if let Some(check) = obj.get("availability_check") {
+            self.validate_availability_check_object(
+                check,
+                &format!("{}.availability_check", path),
+                errors,
+            );
+
+            match obj
+                .get("install_instructions")
+                .and_then(|v| v.as_str())
+                .filter(|value| !value.trim().is_empty())
+            {
+                Some(_) => {}
+                None => errors.push(SchemaValidationError {
+                    field_path: format!("{}.install_instructions", path),
+                    error_type: ValidationErrorType::MissingRequired,
+                    message:
+                        "Subcommands using availability_check must provide non-empty install_instructions"
+                            .to_string(),
+                    suggestion: Some(
+                        "Add an install command string, e.g. \"install_instructions\": \"rustup component add <name>\"".to_string(),
+                    ),
+                }),
+            }
         }
 
         // Validate async behavior guidelines
@@ -514,6 +580,132 @@ impl MtdfValidator {
                     errors,
                 );
             }
+        }
+    }
+
+    fn validate_availability_check_object(
+        &self,
+        value: &Value,
+        path: &str,
+        errors: &mut Vec<SchemaValidationError>,
+    ) {
+        if !value.is_object() {
+            errors.push(SchemaValidationError {
+                field_path: path.to_string(),
+                error_type: ValidationErrorType::InvalidType,
+                message: "availability_check must be an object".to_string(),
+                suggestion: Some(
+                    "Use object syntax: \"availability_check\": { \"command\": \"...\", \"args\": [\"--version\"] }".to_string(),
+                ),
+            });
+            return;
+        }
+
+        let obj = value.as_object().unwrap();
+        let known_fields = [
+            "command",
+            "args",
+            "working_directory",
+            "success_exit_codes",
+            "skip_subcommand_args",
+        ];
+
+        if self.strict_mode && !self.allow_unknown_fields {
+            for key in obj.keys() {
+                if !known_fields.contains(&key.as_str()) {
+                    errors.push(SchemaValidationError {
+                        field_path: format!("{}.{}", path, key),
+                        error_type: ValidationErrorType::UnknownField,
+                        message: format!("Unknown field '{}' in availability_check", key),
+                        suggestion: Some(format!("Allowed fields: {}", known_fields.join(", "))),
+                    });
+                }
+            }
+        }
+
+        if let Some(command) = obj.get("command") {
+            self.validate_field_type(&format!("{}.command", path), command, "string", errors);
+            if let Some(cmd) = command.as_str() {
+                if cmd.trim().is_empty() {
+                    errors.push(SchemaValidationError {
+                        field_path: format!("{}.command", path),
+                        error_type: ValidationErrorType::ConstraintViolation,
+                        message: "availability_check.command cannot be empty".to_string(),
+                        suggestion: Some(
+                            "Remove the field to inherit the tool command or provide a non-empty command string.".to_string(),
+                        ),
+                    });
+                }
+            }
+        }
+
+        if let Some(args) = obj.get("args") {
+            self.validate_field_type(&format!("{}.args", path), args, "array", errors);
+            if let Some(arr) = args.as_array() {
+                for (index, item) in arr.iter().enumerate() {
+                    if !item.is_string() {
+                        errors.push(SchemaValidationError {
+                            field_path: format!("{}.args[{}]", path, index),
+                            error_type: ValidationErrorType::InvalidType,
+                            message: "availability_check.args entries must be strings".to_string(),
+                            suggestion: Some(
+                                "Provide each argument as a string, e.g. [\"--version\"]"
+                                    .to_string(),
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+
+        if let Some(working_dir) = obj.get("working_directory") {
+            self.validate_field_type(
+                &format!("{}.working_directory", path),
+                working_dir,
+                "string",
+                errors,
+            );
+        }
+
+        if let Some(exit_codes) = obj.get("success_exit_codes") {
+            self.validate_field_type(
+                &format!("{}.success_exit_codes", path),
+                exit_codes,
+                "array",
+                errors,
+            );
+            if let Some(arr) = exit_codes.as_array() {
+                for (index, item) in arr.iter().enumerate() {
+                    match item.as_i64() {
+                        Some(value) if value >= i32::MIN as i64 && value <= i32::MAX as i64 => {}
+                        Some(_) => errors.push(SchemaValidationError {
+                            field_path: format!("{}.success_exit_codes[{}]", path, index),
+                            error_type: ValidationErrorType::InvalidValue,
+                            message: "availability_check.success_exit_codes entries must fit within 32-bit integer range".to_string(),
+                            suggestion: Some(
+                                "Use standard process exit codes between -2147483648 and 2147483647.".to_string(),
+                            ),
+                        }),
+                        None => errors.push(SchemaValidationError {
+                            field_path: format!("{}.success_exit_codes[{}]", path, index),
+                            error_type: ValidationErrorType::InvalidType,
+                            message: "availability_check.success_exit_codes entries must be integers".to_string(),
+                            suggestion: Some(
+                                "Provide each exit code as an integer, e.g. [0, 2].".to_string(),
+                            ),
+                        }),
+                    }
+                }
+            }
+        }
+
+        if let Some(skip_args) = obj.get("skip_subcommand_args") {
+            self.validate_field_type(
+                &format!("{}.skip_subcommand_args", path),
+                skip_args,
+                "boolean",
+                errors,
+            );
         }
     }
 

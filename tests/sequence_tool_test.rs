@@ -147,13 +147,13 @@ async fn test_rust_quality_check_structure() -> Result<()> {
     );
 
     // Verify each step
-    assert_eq!(sequence[0]["tool"].as_str(), Some("cargo_fmt"));
-    assert_eq!(sequence[0]["subcommand"].as_str(), Some("default"));
+    assert_eq!(sequence[0]["tool"].as_str(), Some("cargo"));
+    assert_eq!(sequence[0]["subcommand"].as_str(), Some("fmt"));
 
-    assert_eq!(sequence[1]["tool"].as_str(), Some("cargo_clippy"));
+    assert_eq!(sequence[1]["tool"].as_str(), Some("cargo"));
     assert_eq!(sequence[1]["subcommand"].as_str(), Some("clippy"));
 
-    assert_eq!(sequence[2]["tool"].as_str(), Some("cargo_nextest"));
+    assert_eq!(sequence[2]["tool"].as_str(), Some("cargo"));
     assert_eq!(sequence[2]["subcommand"].as_str(), Some("nextest_run"));
 
     assert_eq!(sequence[3]["tool"].as_str(), Some("cargo"));

@@ -62,21 +62,21 @@ async fn test_dump_actual_schemas_for_debugging() -> anyhow::Result<()> {
         }
     }
 
-    // Focus specifically on cargo_audit which is causing the issue
-    let cargo_audit_tool = tools
+    // Focus specifically on consolidated cargo tool which now includes cargo-audit options
+    let cargo_tool = tools
         .iter()
-        .find(|tool| tool.name == "cargo_audit")
-        .expect("Should have cargo_audit tool");
+        .find(|tool| tool.name == "cargo")
+        .expect("cargo tool should exist after consolidation");
 
-    println!("\n🔍 DETAILED ANALYSIS OF cargo_audit TOOL:");
-    println!("Tool name: {}", cargo_audit_tool.name);
-    println!("Tool description: {:?}", cargo_audit_tool.description);
+    println!("\n🔍 DETAILED ANALYSIS OF cargo TOOL:");
+    println!("Tool name: {}", cargo_tool.name);
+    println!("Tool description: {:?}", cargo_tool.description);
 
-    let schema_json = serde_json::to_string_pretty(cargo_audit_tool.input_schema.as_ref())?;
+    let schema_json = serde_json::to_string_pretty(cargo_tool.input_schema.as_ref())?;
     println!("Complete schema:\n{}", schema_json);
 
     // Write the specific problematic schema to temporary directory
-    let problematic_file = debug_dir.join("PROBLEMATIC_cargo_audit_schema.json");
+    let problematic_file = debug_dir.join("PROBLEMATIC_cargo_schema.json");
     fs::write(&problematic_file, &schema_json)?;
 
     client.cancel().await?;
@@ -93,13 +93,13 @@ async fn test_release_build_schema_generation() -> anyhow::Result<()> {
     let client = new_client(Some(".ahma/tools")).await?;
     let tools = client.list_all_tools().await?;
 
-    let cargo_audit_tool = tools
+    let cargo_tool = tools
         .iter()
-        .find(|tool| tool.name == "cargo_audit")
-        .expect("Should have cargo_audit tool");
+        .find(|tool| tool.name == "cargo")
+        .expect("cargo tool should exist");
 
-    println!("Release build cargo_audit schema:");
-    let schema = cargo_audit_tool.input_schema.as_ref();
+    println!("Release build cargo schema:");
+    let schema = cargo_tool.input_schema.as_ref();
 
     if let Some(properties) = schema.get("properties") {
         if let Some(props_obj) = properties.as_object() {

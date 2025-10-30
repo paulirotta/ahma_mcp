@@ -44,6 +44,27 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::{collections::HashMap, fs, path::Path};
 
+/// Defines how to probe for tool or subcommand availability at runtime.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AvailabilityCheck {
+    /// Optional override for the executable to invoke during the check. Defaults to the tool command.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// Arguments passed to the availability probe.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+    /// Working directory used for the probe (defaults to project root).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub working_directory: Option<String>,
+    /// Exit codes considered successful (defaults to `[0]`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub success_exit_codes: Option<Vec<i32>>,
+    /// If true, do not append derived subcommand arguments when constructing the probe command.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub skip_subcommand_args: bool,
+}
+
 /// Represents a single step in a tool sequence
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -89,6 +110,12 @@ pub struct ToolConfig {
     /// Delay in milliseconds between sequence steps (default: SEQUENCE_STEP_DELAY_MS)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub step_delay_ms: Option<u64>,
+    /// Runtime availability probe executed at server startup.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub availability_check: Option<AvailabilityCheck>,
+    /// Human-friendly instructions describing how to install this tool when missing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub install_instructions: Option<String>,
 }
 
 /// Configuration for a subcommand within a tool
@@ -114,6 +141,12 @@ pub struct SubcommandConfig {
     /// Nested subcommands for recursive command structures
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subcommand: Option<Vec<SubcommandConfig>>,
+    /// Optional availability probe executed at server startup.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub availability_check: Option<AvailabilityCheck>,
+    /// Install instructions displayed when this subcommand is unavailable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub install_instructions: Option<String>,
 }
 
 /// Configuration for an option within a subcommand
@@ -144,6 +177,10 @@ pub struct OptionConfig {
 
 fn default_enabled() -> bool {
     true
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// A collection of hints for AI clients using this tool.

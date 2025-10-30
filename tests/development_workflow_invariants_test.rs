@@ -118,8 +118,7 @@ fn test_json_tool_configuration_count_invariant() {
     // CRITICAL: These are CLI tool adapters only. MCP tools (status, await) are hardwired.
     // Expected core tools (minimal set): cargo*.json, python3.json, git.json, gh.json
     // NOTE: ls.json was formerly required but is now OPTIONAL. Tests must not assume its presence.
-    // Complete tool set includes modular cargo tools: cargo_audit, cargo_bench, cargo_clippy,
-    // cargo_edit, cargo_fmt, cargo_llvm_cov, cargo_nextest + Unix utils: echo, cat, grep, sed
+    // Complete tool set now consolidates cargo tooling into cargo.json; legacy cargo_*.json files must be removed
     assert!(
         json_files.len() >= 3,
         "Should have core CLI tool configurations (got {})",
@@ -132,7 +131,17 @@ fn test_json_tool_configuration_count_invariant() {
     );
 
     // Verify core tools exist
-    let has_cargo = json_files.iter().any(|f| f.contains("cargo"));
+    let has_cargo = json_files.iter().any(|f| f == "cargo.json");
+    let legacy_cargo_files: Vec<_> = json_files
+        .iter()
+        .filter(|f| f.starts_with("cargo_") && f.ends_with(".json"))
+        .cloned()
+        .collect();
+    assert!(
+        legacy_cargo_files.is_empty(),
+        "Legacy cargo_*.json files should be merged into cargo.json: {:?}",
+        legacy_cargo_files
+    );
     // ls tool is optional; do not assert its presence (legacy requirement removed)
     let _has_ls = json_files.iter().any(|f| f.contains("ls"));
     let has_python = json_files.iter().any(|f| f.contains("python"));

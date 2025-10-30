@@ -55,6 +55,7 @@ pub mod operation_monitor;
 pub mod schema_validation;
 pub mod shell_pool;
 pub mod terminal_output;
+pub mod tool_availability;
 pub mod tool_hints;
 pub mod utils;
 

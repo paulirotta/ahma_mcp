@@ -393,6 +393,8 @@ async fn test_subcommand_configuration_handling() -> Result<()> {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        availability_check: None,
+        install_instructions: None,
         positional_args: Some(vec![ahma_mcp::config::OptionConfig {
             name: "message".to_string(),
             alias: None,
@@ -486,6 +488,8 @@ async fn test_file_based_argument_handling() -> Result<()> {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        availability_check: None,
+        install_instructions: None,
         positional_args: None,
         options: Some(vec![ahma_mcp::config::OptionConfig {
             name: "script".to_string(),

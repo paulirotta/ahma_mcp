@@ -104,6 +104,8 @@ async fn test_multiline_argument_with_echo() {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        availability_check: None,
+        install_instructions: None,
     };
 
     // Test with a multi-line string that should trigger escaping
@@ -355,6 +357,8 @@ async fn test_multiline_git_commit_message() {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        availability_check: None,
+        install_instructions: None,
     };
 
     // Test with a multi-line commit message that should trigger file-based handling
@@ -492,6 +496,8 @@ async fn test_special_characters_in_arguments() {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        availability_check: None,
+        install_instructions: None,
     };
 
     // Test with text containing special characters

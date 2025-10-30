@@ -111,3 +111,31 @@ async fn test_await_blocks_correctly() -> Result<()> {
     println!("✅ Await tool correctly blocked until operation completed");
     Ok(())
 }
+
+#[tokio::test]
+async fn test_await_detects_pending_operation_without_delay() -> Result<()> {
+    let (_temp_dir, mut client) = setup_mcp_service_with_long_running_tool().await?;
+
+    // Launch an async operation and immediately await it.
+    let long_running_task = client.long_running_async("1").await?;
+    assert_eq!(long_running_task.status, "started");
+
+    let await_start = Instant::now();
+    let await_result = client.await_op(&long_running_task.job_id).await?;
+    let await_duration = await_start.elapsed();
+
+    assert!(
+        await_duration.as_secs_f64() >= 0.8,
+        "Await returned too quickly ({}s) indicating the operation was not detected as pending. Result: {}",
+        await_duration.as_secs_f64(),
+        await_result
+    );
+
+    assert!(
+        await_result.contains("operation") || await_result.contains("completed"),
+        "Await result should reference the operation completion. Got: {}",
+        await_result
+    );
+
+    Ok(())
+}

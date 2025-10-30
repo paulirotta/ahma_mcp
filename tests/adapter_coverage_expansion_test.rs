@@ -50,6 +50,8 @@ async fn test_prepare_command_and_args_edge_cases() {
         subcommand: None,
         positional_args: None,
         options: None,
+        availability_check: None,
+        install_instructions: None,
     };
 
     let mut args = Map::new();
@@ -109,6 +111,8 @@ async fn test_prepare_command_and_args_with_aliases() {
                 file_flag: None,
             },
         ]),
+        availability_check: None,
+        install_instructions: None,
     };
 
     let mut args = Map::new();
@@ -192,6 +196,8 @@ async fn test_prepare_command_and_args_mixed_types() {
                 file_flag: None,
             },
         ]),
+        availability_check: None,
+        install_instructions: None,
     };
 
     let mut args = Map::new();
@@ -548,6 +554,8 @@ async fn test_prepare_command_and_args_with_null_values() {
             file_arg: Some(false),
             file_flag: None,
         }]),
+        availability_check: None,
+        install_instructions: None,
     };
 
     let mut args = Map::new();

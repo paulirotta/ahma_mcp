@@ -141,6 +141,8 @@ async fn test_execute_sync_with_subcommand_config() {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        availability_check: None,
+        install_instructions: None,
     };
 
     let mut args = Map::new();

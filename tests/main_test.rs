@@ -303,6 +303,8 @@ mod main_tests {
                 enabled: true,
                 sequence: None,
                 step_delay_ms: None,
+                availability_check: None,
+                install_instructions: None,
             },
         );
 
@@ -333,6 +335,8 @@ mod main_tests {
                 positional_args: None,
                 synchronous: Some(false),
                 enabled: true,
+                availability_check: None,
+                install_instructions: None,
             },
             SubcommandConfig {
                 name: "check".to_string(),
@@ -344,6 +348,8 @@ mod main_tests {
                 positional_args: None,
                 synchronous: Some(false),
                 enabled: true,
+                availability_check: None,
+                install_instructions: None,
             },
         ];
 

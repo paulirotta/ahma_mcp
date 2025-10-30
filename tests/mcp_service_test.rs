@@ -118,6 +118,8 @@ mod mcp_service_tests {
             guidance_key: None,
             hints: Default::default(),
             input_schema: None,
+            availability_check: None,
+            install_instructions: None,
             subcommand: Some(vec![SubcommandConfig {
                 name: "build".to_string(),
                 description: "Build the project".to_string(),
@@ -137,6 +139,8 @@ mod mcp_service_tests {
                 }]),
                 positional_args: None,
                 subcommand: None,
+                availability_check: None,
+                install_instructions: None,
             }]),
             sequence: None,
             step_delay_ms: None,

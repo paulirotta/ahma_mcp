@@ -13,7 +13,6 @@
             "name": "default",
             "guidance_key": "async_behavior",
             "description": "Execute a shell command asynchronously using bash",
-            "enabled": true,
             "positional_args": [
                 {
                     "name": "command",

@@ -183,14 +183,11 @@ impl OperationMonitor {
     ///
     /// Note: Completed operations are accessible via `get_completed_operations`.
     pub async fn get_all_active_operations(&self) -> Vec<Operation> {
-        if let Ok(ops) = self.operations.try_read() {
-            ops.values()
-                .filter(|op| !op.state.is_terminal())
-                .cloned()
-                .collect()
-        } else {
-            Vec::new()
-        }
+        let ops = self.operations.read().await;
+        ops.values()
+            .filter(|op| !op.state.is_terminal())
+            .cloned()
+            .collect()
     }
 
     pub async fn update_status(
@@ -310,44 +307,30 @@ impl OperationMonitor {
     }
 
     pub async fn get_active_operations(&self) -> Vec<Operation> {
-        // Filter out terminal operations to only return truly active operations
-        if let Ok(ops) = self.operations.try_read() {
-            ops.values()
-                .filter(|op| !op.state.is_terminal())
-                .cloned()
-                .collect()
-        } else {
-            Vec::new()
-        }
+        let ops = self.operations.read().await;
+        ops.values()
+            .filter(|op| !op.state.is_terminal())
+            .cloned()
+            .collect()
     }
 
     pub async fn get_completed_operations(&self) -> Vec<Operation> {
-        if let Ok(history) = self.completion_history.try_read() {
-            history.values().cloned().collect()
-        } else {
-            Vec::new()
-        }
+        let history = self.completion_history.read().await;
+        history.values().cloned().collect()
     }
 
     pub async fn get_shutdown_summary(&self) -> ShutdownSummary {
-        if let Ok(ops) = self.operations.try_read() {
-            // Filter strictly to non-terminal (active) operations for shutdown coordination
-            let operations: Vec<Operation> = ops
-                .values()
-                .filter(|op| !op.state.is_terminal())
-                .cloned()
-                .collect();
-            let total_active = operations.len();
+        let ops = self.operations.read().await;
+        let operations: Vec<Operation> = ops
+            .values()
+            .filter(|op| !op.state.is_terminal())
+            .cloned()
+            .collect();
+        let total_active = operations.len();
 
-            ShutdownSummary {
-                total_active,
-                operations,
-            }
-        } else {
-            ShutdownSummary {
-                total_active: 0,
-                operations: Vec::new(),
-            }
+        ShutdownSummary {
+            total_active,
+            operations,
         }
     }
 

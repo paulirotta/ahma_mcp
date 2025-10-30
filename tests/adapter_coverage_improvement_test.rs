@@ -101,6 +101,8 @@ async fn test_command_preparation_error_paths() -> Result<()> {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        availability_check: None,
+        install_instructions: None,
         positional_args: Some(vec![
             OptionConfig {
                 name: "pos1".to_string(),
@@ -267,6 +269,8 @@ async fn test_file_handling_error_scenarios() -> Result<()> {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        availability_check: None,
+        install_instructions: None,
         positional_args: None,
         options: Some(vec![OptionConfig {
             name: "content".to_string(),
@@ -699,6 +703,8 @@ async fn test_complex_async_exec_options() -> Result<()> {
         enabled: true,
         guidance_key: Some("test_guidance".to_string()),
         subcommand: None,
+        availability_check: None,
+        install_instructions: None,
         positional_args: Some(vec![OptionConfig {
             name: "target".to_string(),
             alias: None,

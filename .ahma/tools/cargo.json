@@ -575,7 +575,670 @@
         {
             "name": "clippy",
             "synchronous": true,
-            "description": "Enhanced linting and code quality checks - returns immediately for incremental checks."
+            "description": "Enhanced linting and code quality checks - returns immediately for incremental checks.",
+            "options": [
+                {
+                    "name": "fix",
+                    "type": "boolean",
+                    "description": "Automatically fix warnings"
+                },
+                {
+                    "name": "allow-dirty",
+                    "type": "boolean",
+                    "description": "Allow fixing when working directory is dirty"
+                },
+                {
+                    "name": "tests",
+                    "type": "boolean",
+                    "description": "Run clippy on tests as well"
+                },
+                {
+                    "name": "workspace",
+                    "type": "boolean",
+                    "description": "Run on all packages in the workspace"
+                },
+                {
+                    "name": "package",
+                    "type": "string",
+                    "description": "Package to run clippy for"
+                },
+                {
+                    "name": "all-targets",
+                    "type": "boolean",
+                    "description": "Check all targets"
+                },
+                {
+                    "name": "fix-allow-dirty",
+                    "type": "boolean",
+                    "description": "Allow dirty when applying fixes"
+                },
+                {
+                    "name": "verbose",
+                    "type": "integer",
+                    "description": "Use verbose output (-vv for very verbose)"
+                },
+                {
+                    "name": "color",
+                    "type": "string",
+                    "description": "Coloring [possible values: auto, always, never]"
+                }
+            ],
+            "availability_check": {
+                "command": "cargo",
+                "args": [
+                    "clippy",
+                    "--version"
+                ],
+                "skip_subcommand_args": true
+            },
+            "install_instructions": "Install clippy using: rustup component add clippy"
+        },
+        {
+            "name": "fmt",
+            "synchronous": true,
+            "description": "Format code using rustfmt.",
+            "options": [
+                {
+                    "name": "check",
+                    "type": "boolean",
+                    "description": "Check if files are formatted without changing them"
+                },
+                {
+                    "name": "all",
+                    "type": "boolean",
+                    "description": "Format all packages in the workspace"
+                },
+                {
+                    "name": "manifest-path",
+                    "type": "string",
+                    "description": "Path to Cargo.toml",
+                    "format": "path"
+                },
+                {
+                    "name": "verbose",
+                    "type": "boolean",
+                    "description": "Use verbose output (-v)"
+                },
+                {
+                    "name": "quiet",
+                    "type": "boolean",
+                    "description": "Do not print cargo log messages (-q)"
+                },
+                {
+                    "name": "color",
+                    "type": "string",
+                    "description": "Coloring [possible values: auto, always, never]"
+                }
+            ],
+            "availability_check": {
+                "command": "cargo",
+                "args": [
+                    "fmt",
+                    "--version"
+                ],
+                "skip_subcommand_args": true
+            },
+            "install_instructions": "Install rustfmt using: rustup component add rustfmt"
+        },
+        {
+            "name": "nextest",
+            "guidance_key": "async_behavior",
+            "description": "Run tests using cargo nextest.",
+            "install_instructions": "Install cargo-nextest using: cargo install cargo-nextest --locked",
+            "subcommand": [
+                {
+                    "name": "run",
+                    "description": "Run tests using nextest. Operates asynchronously - returns operation_id immediately, results delivered via notification when complete. Continue with other tasks.",
+                    "options": [
+                        {
+                            "name": "verbose",
+                            "type": "boolean",
+                            "description": "Verbose output [env: NEXTEST_VERBOSE=]"
+                        },
+                        {
+                            "name": "color",
+                            "type": "string",
+                            "description": "Produce color output: auto, always, never [env: CARGO_TERM_COLOR=] [default: auto]"
+                        },
+                        {
+                            "name": "manifest-path",
+                            "type": "string",
+                            "description": "Path to Cargo.toml",
+                            "format": "path"
+                        },
+                        {
+                            "name": "config-file",
+                            "type": "string",
+                            "description": "Config file [default: workspace-root/.config/nextest.toml]",
+                            "format": "path"
+                        },
+                        {
+                            "name": "tool-config-file",
+                            "type": "string",
+                            "description": "Tool-specific config files in the format 'tool:abs_path'. May be specified multiple times; later files are lower priority.",
+                            "format": "path"
+                        },
+                        {
+                            "name": "override-version-check",
+                            "type": "boolean",
+                            "description": "Override checks for the minimum version defined in nextest's config"
+                        },
+                        {
+                            "name": "profile",
+                            "type": "string",
+                            "description": "The nextest profile to use [env: NEXTEST_PROFILE=]"
+                        },
+                        {
+                            "name": "workspace",
+                            "type": "boolean",
+                            "description": "Run tests for all packages in workspace"
+                        }
+                    ],
+                    "availability_check": {
+                        "command": "cargo",
+                        "args": [
+                            "nextest",
+                            "run",
+                            "--version"
+                        ],
+                        "skip_subcommand_args": true
+                    },
+                    "install_instructions": "Install cargo-nextest using: cargo install cargo-nextest --locked"
+                },
+                {
+                    "name": "show",
+                    "synchronous": true,
+                    "description": "Show results/logs from a previous nextest run. If no run_id is provided, shows the most recent run.",
+                    "options": [
+                        {
+                            "name": "run_id",
+                            "type": "string",
+                            "description": "ID of the nextest run to show (if omitted, show latest run)"
+                        },
+                        {
+                            "name": "json",
+                            "type": "boolean",
+                            "description": "Output results in JSON format if supported"
+                        },
+                        {
+                            "name": "open",
+                            "type": "boolean",
+                            "description": "Open the HTML report in a browser if available"
+                        },
+                        {
+                            "name": "workspace",
+                            "type": "boolean",
+                            "description": "Scope the operation to the workspace when applicable"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "bench",
+            "guidance_key": "async_behavior",
+            "description": "Run benchmarks.",
+            "options": [
+                {
+                    "name": "release",
+                    "type": "boolean",
+                    "description": "Run benchmarks with release profile"
+                },
+                {
+                    "name": "benchname",
+                    "type": "string",
+                    "description": "If specified, only run benches containing this string in their names (positional argument)"
+                },
+                {
+                    "name": "args",
+                    "type": "array",
+                    "description": "Arguments passed to the bench binary (use after '--')"
+                },
+                {
+                    "name": "no-run",
+                    "type": "boolean",
+                    "description": "Compile, but don't run benchmarks"
+                },
+                {
+                    "name": "no-fail-fast",
+                    "type": "boolean",
+                    "description": "Run all benchmarks regardless of failure"
+                },
+                {
+                    "name": "message-format",
+                    "type": "string",
+                    "description": "Error format [possible values: human, short, json, json-diagnostic-short, json-diagnostic-rendered-ansi, json-render-diagnostics]"
+                },
+                {
+                    "name": "verbose",
+                    "type": "integer",
+                    "description": "Use verbose output (-vv very verbose/build.rs output)"
+                },
+                {
+                    "name": "quiet",
+                    "type": "boolean",
+                    "description": "Do not print cargo log messages"
+                },
+                {
+                    "name": "color",
+                    "type": "string",
+                    "description": "Coloring [possible values: auto, always, never]"
+                },
+                {
+                    "name": "config",
+                    "type": "string",
+                    "description": "Override a configuration value (KEY=VALUE or PATH)",
+                    "format": "path-or-value"
+                },
+                {
+                    "name": "unstable",
+                    "type": "string",
+                    "description": "Unstable (nightly-only) flags to Cargo (use 'cargo -Z help' for details)"
+                },
+                {
+                    "name": "package",
+                    "type": "string",
+                    "description": "Package to run benchmarks for (-p, --package [<SPEC>])"
+                },
+                {
+                    "name": "workspace",
+                    "type": "boolean",
+                    "description": "Benchmark all packages in the workspace"
+                },
+                {
+                    "name": "exclude",
+                    "type": "array",
+                    "description": "Exclude packages from the benchmark (can be specified multiple times)"
+                },
+                {
+                    "name": "all",
+                    "type": "boolean",
+                    "description": "Alias for --workspace (deprecated)"
+                },
+                {
+                    "name": "lib",
+                    "type": "boolean",
+                    "description": "Benchmark only this package's library"
+                },
+                {
+                    "name": "bins",
+                    "type": "boolean",
+                    "description": "Benchmark all binaries"
+                },
+                {
+                    "name": "bin",
+                    "type": "string",
+                    "description": "Benchmark only the specified binary"
+                },
+                {
+                    "name": "examples",
+                    "type": "boolean",
+                    "description": "Benchmark all examples"
+                },
+                {
+                    "name": "example",
+                    "type": "string",
+                    "description": "Benchmark only the specified example"
+                },
+                {
+                    "name": "tests",
+                    "type": "boolean",
+                    "description": "Benchmark all targets that have `test = true` set"
+                },
+                {
+                    "name": "test",
+                    "type": "string",
+                    "description": "Benchmark only the specified test target"
+                },
+                {
+                    "name": "benches",
+                    "type": "boolean",
+                    "description": "Benchmark all targets that have `bench = true` set"
+                },
+                {
+                    "name": "bench-target",
+                    "type": "string",
+                    "description": "Benchmark only the specified bench target (--bench <NAME>)"
+                },
+                {
+                    "name": "all-targets",
+                    "type": "boolean",
+                    "description": "Benchmark all targets"
+                },
+                {
+                    "name": "features",
+                    "type": "string",
+                    "description": "Space or comma separated list of features to activate"
+                },
+                {
+                    "name": "all-features",
+                    "type": "boolean",
+                    "description": "Activate all available features"
+                },
+                {
+                    "name": "no-default-features",
+                    "type": "boolean",
+                    "description": "Do not activate the `default` feature"
+                },
+                {
+                    "name": "jobs",
+                    "type": "integer",
+                    "description": "Number of parallel jobs, defaults to # of CPUs (-j, --jobs <N>)"
+                },
+                {
+                    "name": "profile",
+                    "type": "string",
+                    "description": "Build artifacts with the specified profile"
+                },
+                {
+                    "name": "target",
+                    "type": "string",
+                    "description": "Build for the target triple"
+                },
+                {
+                    "name": "target-dir",
+                    "type": "string",
+                    "description": "Directory for all generated artifacts",
+                    "format": "path"
+                },
+                {
+                    "name": "unit-graph",
+                    "type": "boolean",
+                    "description": "Output build graph in JSON (unstable)"
+                },
+                {
+                    "name": "timings",
+                    "type": "string",
+                    "description": "Timing output formats (unstable) (comma separated): html, json"
+                },
+                {
+                    "name": "manifest-path",
+                    "type": "string",
+                    "description": "Path to Cargo.toml",
+                    "format": "path"
+                },
+                {
+                    "name": "lockfile-path",
+                    "type": "string",
+                    "description": "Path to Cargo.lock (unstable)",
+                    "format": "path"
+                },
+                {
+                    "name": "ignore-rust-version",
+                    "type": "boolean",
+                    "description": "Ignore `rust-version` specification in packages"
+                },
+                {
+                    "name": "locked",
+                    "type": "boolean",
+                    "description": "Assert that `Cargo.lock` will remain unchanged"
+                },
+                {
+                    "name": "offline",
+                    "type": "boolean",
+                    "description": "Run without accessing the network"
+                },
+                {
+                    "name": "frozen",
+                    "type": "boolean",
+                    "description": "Equivalent to specifying both --locked and --offline"
+                }
+            ]
+        },
+        {
+            "name": "add",
+            "synchronous": true,
+            "description": "Add a dependency to Cargo.toml.",
+            "positional_args": [
+                {
+                    "name": "dep",
+                    "type": "string",
+                    "description": "The dependency to add (e.g., `serde` or `serde@1.0`).",
+                    "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "dev",
+                    "type": "boolean",
+                    "description": "Add as a dev-dependency"
+                },
+                {
+                    "name": "build",
+                    "type": "boolean",
+                    "description": "Add as a build-dependency"
+                },
+                {
+                    "name": "git",
+                    "type": "string",
+                    "description": "Specify a git repository to add"
+                },
+                {
+                    "name": "path",
+                    "type": "string",
+                    "description": "Specify a path to a local crate to add",
+                    "format": "path"
+                },
+                {
+                    "name": "features",
+                    "type": "string",
+                    "description": "Specify features to add"
+                },
+                {
+                    "name": "optional",
+                    "type": "boolean",
+                    "description": "Add as an optional dependency"
+                },
+                {
+                    "name": "no-default-features",
+                    "type": "boolean",
+                    "description": "Disable the default features"
+                },
+                {
+                    "name": "rename",
+                    "type": "string",
+                    "description": "Rename the dependency"
+                },
+                {
+                    "name": "exact",
+                    "type": "boolean",
+                    "description": "Use exact version requirement"
+                },
+                {
+                    "name": "registry",
+                    "type": "string",
+                    "description": "Package registry to use"
+                }
+            ],
+            "availability_check": {
+                "command": "cargo",
+                "args": [
+                    "add",
+                    "--version"
+                ],
+                "skip_subcommand_args": true
+            },
+            "install_instructions": "Install cargo-edit using: cargo install cargo-edit"
+        },
+        {
+            "name": "rm",
+            "synchronous": true,
+            "description": "Remove a dependency from Cargo.toml.",
+            "options": [
+                {
+                    "name": "dependency",
+                    "type": "string",
+                    "description": "The dependency to remove"
+                },
+                {
+                    "name": "dev",
+                    "type": "boolean",
+                    "description": "Remove from dev-dependencies"
+                },
+                {
+                    "name": "build",
+                    "type": "boolean",
+                    "description": "Remove from build-dependencies"
+                }
+            ],
+            "availability_check": {
+                "command": "cargo",
+                "args": [
+                    "rm",
+                    "--version"
+                ],
+                "skip_subcommand_args": true
+            },
+            "install_instructions": "Install cargo-edit using: cargo install cargo-edit"
+        },
+        {
+            "name": "upgrade",
+            "synchronous": true,
+            "description": "Upgrade a dependency in Cargo.toml.",
+            "options": [
+                {
+                    "name": "dependency",
+                    "type": "string",
+                    "description": "The dependency to upgrade"
+                },
+                {
+                    "name": "all",
+                    "type": "boolean",
+                    "description": "Upgrade all dependencies"
+                },
+                {
+                    "name": "dry-run",
+                    "type": "boolean",
+                    "description": "Don't actually write to Cargo.toml"
+                },
+                {
+                    "name": "workspace",
+                    "type": "boolean",
+                    "description": "Act on the entire workspace"
+                },
+                {
+                    "name": "to",
+                    "type": "string",
+                    "description": "Target a specific version"
+                }
+            ],
+            "availability_check": {
+                "command": "cargo",
+                "args": [
+                    "upgrade",
+                    "--version"
+                ],
+                "skip_subcommand_args": true
+            },
+            "install_instructions": "Install cargo-edit using: cargo install cargo-edit"
+        },
+        {
+            "name": "set-version",
+            "synchronous": true,
+            "description": "Set the version of a dependency in Cargo.toml.",
+            "options": [
+                {
+                    "name": "version",
+                    "type": "string",
+                    "description": "The version to set"
+                }
+            ],
+            "availability_check": {
+                "command": "cargo",
+                "args": [
+                    "set-version",
+                    "--version"
+                ],
+                "skip_subcommand_args": true
+            },
+            "install_instructions": "Install cargo-edit using: cargo install cargo-edit"
+        },
+        {
+            "name": "llvm-cov",
+            "synchronous": true,
+            "description": "Run tests and collect coverage data via cargo llvm-cov.",
+            "options": [
+                {
+                    "name": "html",
+                    "type": "boolean",
+                    "description": "Generate HTML coverage report"
+                },
+                {
+                    "name": "open",
+                    "type": "boolean",
+                    "description": "Open HTML report in browser"
+                },
+                {
+                    "name": "no-report",
+                    "type": "boolean",
+                    "description": "Do not generate a coverage report"
+                },
+                {
+                    "name": "fail-under-lines",
+                    "type": "integer",
+                    "description": "Fail if line coverage is below percentage"
+                },
+                {
+                    "name": "ignore-filename-regex",
+                    "type": "string",
+                    "description": "Ignore files matching regex"
+                }
+            ],
+            "availability_check": {
+                "command": "cargo",
+                "args": [
+                    "llvm-cov",
+                    "--version"
+                ],
+                "skip_subcommand_args": true
+            },
+            "install_instructions": "Install cargo-llvm-cov using: cargo install cargo-llvm-cov"
+        },
+        {
+            "name": "audit",
+            "guidance_key": "async_behavior",
+            "description": "Audit dependencies for security vulnerabilities.",
+            "options": [
+                {
+                    "name": "json",
+                    "type": "boolean",
+                    "description": "Output report in JSON format"
+                },
+                {
+                    "name": "fix",
+                    "type": "boolean",
+                    "description": "Automatically try to fix vulnerabilities"
+                },
+                {
+                    "name": "stale",
+                    "type": "boolean",
+                    "description": "Check for stale advisory database"
+                },
+                {
+                    "name": "ignore",
+                    "type": "array",
+                    "description": "Advisory id to ignore (can be specified multiple times)"
+                },
+                {
+                    "name": "target-arch",
+                    "type": "array",
+                    "description": "filter vulnerabilities by CPU (default: no filter). Can be specified multiple times"
+                },
+                {
+                    "name": "target-os",
+                    "type": "array",
+                    "description": "filter vulnerabilities by OS (default: no filter). Can be specified multiple times"
+                }
+            ],
+            "availability_check": {
+                "command": "cargo",
+                "args": [
+                    "audit",
+                    "--version"
+                ],
+                "skip_subcommand_args": true
+            },
+            "install_instructions": "Install cargo-audit using: cargo install cargo-audit"
         },
         {
             "name": "version",
