@@ -301,6 +301,8 @@ mod main_tests {
                 synchronous: Some(false),
                 hints: Default::default(),
                 enabled: true,
+                sequence: None,
+                step_delay_ms: None,
             },
         );
 

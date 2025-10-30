@@ -110,6 +110,8 @@ fn test_tool_config_creation() {
         hints: ToolHints::default(),
         enabled: true,
         guidance_key: None,
+        sequence: None,
+        step_delay_ms: None,
     };
 
     assert_eq!(tool_config.name, "cargo");
@@ -249,6 +251,8 @@ async fn test_service_with_configs() {
         hints: ToolHints::default(),
         enabled: true,
         guidance_key: None,
+        sequence: None,
+        step_delay_ms: None,
     };
     configs.insert("test_tool".to_string(), tool_config);
 
@@ -338,6 +342,8 @@ fn test_tool_config_with_nested_subcommands() {
         hints: ToolHints::default(),
         enabled: true,
         guidance_key: None,
+        sequence: None,
+        step_delay_ms: None,
     };
 
     assert_eq!(tool_config.name, "cargo");
@@ -385,6 +391,8 @@ async fn test_service_with_tool_configs() {
         hints: ToolHints::default(),
         enabled: true,
         guidance_key: None,
+        sequence: None,
+        step_delay_ms: None,
     };
     configs.insert("cargo".to_string(), tool_config);
 

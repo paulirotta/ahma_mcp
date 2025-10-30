@@ -429,7 +429,9 @@ done
         // SAFETY & ROBUSTNESS: Execute directly via a subprocess to avoid
         // protocol flakiness under heavy concurrency while preserving pooling semantics.
         if command.command.is_empty() {
-            return Err(ShellError::WorkingDirectoryError("empty command".to_string()));
+            return Err(ShellError::WorkingDirectoryError(
+                "empty command".to_string(),
+            ));
         }
 
         let program = &command.command[0];

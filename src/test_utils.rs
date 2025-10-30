@@ -41,7 +41,10 @@ pub async fn setup_mcp_service_with_client() -> Result<(TempDir, Client)> {
         .await?;
 
     // Give the server a moment to start
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    tokio::time::sleep(Duration::from_millis(
+        crate::constants::SEQUENCE_STEP_DELAY_MS,
+    ))
+    .await;
 
     Ok((temp_dir, client))
 }
