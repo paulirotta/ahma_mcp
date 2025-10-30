@@ -29,6 +29,7 @@ This document outlines the requirements for the project and for the AI assistant
 * When I give you a new request, you must first cross-reference it with this file.
 * If my request implies a **change, addition, or conflict** with these requirements, you must **stop and ask for confirmation** of your solution to update this file *before* writing any code.
 * After generating code, your final step is to automatically run the "Run Quality Check (ahma_mcp)" task.
+* Before starting a new task, search the codebase and existing tools to see if the functionality already exists.
 
 ---
 
