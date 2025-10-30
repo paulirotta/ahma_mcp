@@ -344,17 +344,17 @@ rust_quality_check
 
 **Key Benefits:**
 
-* **Consistent execution**: Same quality checks every time
-* **Automatic delays**: Prevents Cargo.lock file conflicts (100ms between steps)
-* **Error handling**: Stops at first failure, reports all completed steps
-* **Comprehensive output**: Aggregated results from all successful steps
+- **Consistent execution**: Same quality checks every time
+- **Automatic delays**: Prevents Cargo.lock file conflicts (100ms between steps)
+- **Error handling**: Stops at first failure, reports all completed steps
+- **Comprehensive output**: Aggregated results from all successful steps
 
 **When to Use:**
 
-* **Pre-commit validation**: Ensure all quality checks pass before committing
-* **PR preparation**: Verify code meets quality standards
-* **CI simulation**: Run the same checks locally as CI will run
-* **Code review prep**: Ensure consistent formatting and passing tests
+- **Pre-commit validation**: Ensure all quality checks pass before committing
+- **PR preparation**: Verify code meets quality standards
+- **CI simulation**: Run the same checks locally as CI will run
+- **Code review prep**: Ensure consistent formatting and passing tests
 
 **Example Workflow:**
 
@@ -386,11 +386,11 @@ rust_quality_check
 
 **Understanding Sequence Tool Behavior:**
 
-* Each step executes fully before the next begins
-* 100ms delay between steps prevents file lock conflicts
-* Synchronous execution ensures results available before return
-* Failures stop the sequence but preserve output from completed steps
-* Total timeout: 600 seconds (configurable in tool definition)
+- Each step executes fully before the next begins
+- 100ms delay between steps prevents file lock conflicts
+- Synchronous execution ensures results available before return
+- Failures stop the sequence but preserve output from completed steps
+- Total timeout: 600 seconds (configurable in tool definition)
 
 ### Creating Custom Sequences
 
