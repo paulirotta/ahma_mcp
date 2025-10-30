@@ -1,4 +1,6 @@
-use ahma_mcp::config::{OptionConfig, SubcommandConfig, ToolConfig, ToolHints, load_tool_configs};
+use ahma_mcp::config::{
+    OptionConfig, SequenceStep, SubcommandConfig, ToolConfig, ToolHints, load_tool_configs,
+};
 use ahma_mcp::utils::logging::init_test_logging;
 use serde_json::json;
 use std::collections::HashMap;
@@ -19,6 +21,8 @@ fn test_tool_config_defaults() {
         hints: ToolHints::default(),
         enabled: true,
         guidance_key: None,
+        sequence: None,
+        step_delay_ms: None,
     };
 
     assert_eq!(config.name, "test_tool");
@@ -27,6 +31,8 @@ fn test_tool_config_defaults() {
     assert!(config.subcommand.is_none());
     assert!(config.timeout_seconds.is_none());
     assert!(config.synchronous.is_none());
+    assert!(config.sequence.is_none());
+    assert!(config.step_delay_ms.is_none());
 }
 
 #[test]
@@ -148,6 +154,8 @@ fn test_tool_config_serialization() {
         },
         enabled: true,
         guidance_key: Some("cargo_main".to_string()),
+        sequence: None,
+        step_delay_ms: None,
     };
 
     let json = serde_json::to_string_pretty(&config).unwrap();
@@ -494,4 +502,87 @@ fn test_subcommand_config_with_overrides() {
         Some("long_task_guidance".to_string())
     );
     assert!(subcommand.enabled);
+}
+
+#[test]
+fn test_sequence_step_serialization() {
+    init_test_logging();
+    use serde_json::Map;
+
+    let mut args = Map::new();
+    args.insert("fix".to_string(), json!(true));
+    args.insert("allow-dirty".to_string(), json!(true));
+
+    let step = SequenceStep {
+        tool: "cargo_clippy".to_string(),
+        subcommand: "clippy".to_string(),
+        args: args.clone(),
+        description: Some("Run clippy with auto-fix".to_string()),
+    };
+
+    let json = serde_json::to_string_pretty(&step).unwrap();
+    assert!(json.contains("\"tool\": \"cargo_clippy\""));
+    assert!(json.contains("\"subcommand\": \"clippy\""));
+    assert!(json.contains("\"fix\": true"));
+    assert!(json.contains("\"allow-dirty\": true"));
+
+    // Test round-trip
+    let deserialized: SequenceStep = serde_json::from_str(&json).unwrap();
+    assert_eq!(deserialized.tool, step.tool);
+    assert_eq!(deserialized.subcommand, step.subcommand);
+    assert_eq!(deserialized.args.len(), 2);
+}
+
+#[test]
+fn test_sequence_tool_config() {
+    init_test_logging();
+    use serde_json::Map;
+
+    let mut args = Map::new();
+    args.insert("workspace".to_string(), json!(true));
+
+    let config = ToolConfig {
+        name: "rust_quality_check".to_string(),
+        description: "Comprehensive Rust quality check".to_string(),
+        command: "sequence".to_string(),
+        subcommand: None,
+        input_schema: None,
+        timeout_seconds: Some(1200),
+        synchronous: Some(true),
+        hints: ToolHints::default(),
+        enabled: true,
+        guidance_key: None,
+        sequence: Some(vec![
+            SequenceStep {
+                tool: "cargo_fmt".to_string(),
+                subcommand: "fmt".to_string(),
+                args: Map::new(),
+                description: Some("Format code".to_string()),
+            },
+            SequenceStep {
+                tool: "cargo_nextest".to_string(),
+                subcommand: "nextest_run".to_string(),
+                args,
+                description: Some("Run tests".to_string()),
+            },
+        ]),
+        step_delay_ms: Some(100),
+    };
+
+    assert_eq!(config.name, "rust_quality_check");
+    assert_eq!(config.command, "sequence");
+    assert!(config.sequence.is_some());
+    assert_eq!(config.sequence.as_ref().unwrap().len(), 2);
+    assert_eq!(config.step_delay_ms, Some(100));
+
+    // Test serialization
+    let json = serde_json::to_string_pretty(&config).unwrap();
+    assert!(json.contains("\"sequence\""));
+    assert!(json.contains("\"step_delay_ms\""));
+
+    // Test round-trip
+    let deserialized: ToolConfig = serde_json::from_str(&json).unwrap();
+    assert_eq!(deserialized.name, config.name);
+    assert!(deserialized.sequence.is_some());
+    assert_eq!(deserialized.sequence.as_ref().unwrap().len(), 2);
 }

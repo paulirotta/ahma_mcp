@@ -579,7 +579,10 @@ impl OperationMonitor {
             drop(history);
 
             // Sleep before next check
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(
+                crate::constants::SEQUENCE_STEP_DELAY_MS,
+            ))
+            .await;
         }
 
         completed_operations

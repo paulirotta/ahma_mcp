@@ -69,6 +69,14 @@ pub const CONCURRENCY_HINT_TEMPLATE: &str = "CONCURRENCY HINT: You waited for '{
 pub const STATUS_POLLING_HINT_TEMPLATE: &str = "**STATUS POLLING ANTI-PATTERN DETECTED:** You've called status {count} times for operation '{operation_id}'. \
   This is inefficient! Instead of repeatedly polling, use 'await' with the operation ID to get automatic completion notifications.\n";
 
+/// Standard delay between sequential tool invocations to avoid file lock contention.
+/// Particularly important for Cargo operations that may hold Cargo.lock.
+/// This delay is used:
+/// - Between steps in sequence tools (e.g., rust_quality_check)
+/// - When spawning related commands that may conflict on shared resources
+/// - In any scenario where temporal separation prevents race conditions
+pub const SEQUENCE_STEP_DELAY_MS: u64 = 100;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -89,5 +97,26 @@ mod tests {
         assert!(TOOL_HINT_TEMPLATE.contains("{operation_id}"));
         assert!(CONCURRENCY_HINT_TEMPLATE.contains("{operation_id}"));
         assert!(STATUS_POLLING_HINT_TEMPLATE.contains("{operation_id}"));
+    }
+
+    #[test]
+    fn sequence_step_delay_is_reasonable() {
+        init_test_logging();
+        // Compile-time checks for the delay constant
+        // These use const assertions to validate at compile time
+        const _: () = assert!(
+            SEQUENCE_STEP_DELAY_MS >= 50,
+            "Delay too short - may not prevent file lock contention"
+        );
+        const _: () = assert!(
+            SEQUENCE_STEP_DELAY_MS <= 500,
+            "Delay too long - impacts user experience"
+        );
+
+        // Verify it's exactly 100ms as documented
+        assert_eq!(
+            SEQUENCE_STEP_DELAY_MS, 100,
+            "Delay should be 100ms as specified"
+        );
     }
 }

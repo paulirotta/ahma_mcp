@@ -1,0 +1,59 @@
+{
+    "name": "rust_quality_check",
+    "description": "Comprehensive Rust code quality pipeline: format, lint with auto-fix, test, and build. Runs each step sequentially with proper delays to avoid Cargo.lock contention. Always use this for pre-commit validation or CI preparation.",
+    "command": "sequence",
+    "enabled": true,
+    "synchronous": true,
+    "timeout_seconds": 1200,
+    "hints": {
+        "default": "Quality check running - this performs formatting, linting, testing, and building in sequence. Review any warnings or errors in the output to improve code quality."
+    },
+    "sequence": [
+        {
+            "tool": "cargo_fmt",
+            "subcommand": "default",
+            "args": {},
+            "description": "Format code with rustfmt"
+        },
+        {
+            "tool": "cargo_clippy",
+            "subcommand": "clippy",
+            "args": {
+                "fix": true,
+                "allow-dirty": true,
+                "tests": true
+            },
+            "description": "Lint and auto-fix with clippy (including tests)"
+        },
+        {
+            "tool": "cargo_nextest",
+            "subcommand": "nextest_run",
+            "args": {
+                "workspace": true
+            },
+            "description": "Run all tests with nextest"
+        },
+        {
+            "tool": "cargo",
+            "subcommand": "build",
+            "args": {},
+            "description": "Build the project"
+        }
+    ],
+    "step_delay_ms": 100,
+    "subcommand": [
+        {
+            "name": "run",
+            "description": "Execute the complete Rust quality check sequence",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for all operations",
+                    "format": "path",
+                    "required": false
+                }
+            ]
+        }
+    ]
+}

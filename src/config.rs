@@ -41,8 +41,24 @@
 use anyhow::{Context, Result};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::{collections::HashMap, fs, path::Path};
+
+/// Represents a single step in a tool sequence
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SequenceStep {
+    /// Name of the tool to invoke
+    pub tool: String,
+    /// Subcommand within that tool
+    pub subcommand: String,
+    /// Arguments to pass to the tool
+    #[serde(default)]
+    pub args: Map<String, Value>,
+    /// Optional description for logging/display
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
 
 /// Represents the complete configuration for a command-line tool.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -67,6 +83,12 @@ pub struct ToolConfig {
     /// Key to look up guidance in tool_guidance.json
     #[serde(skip_serializing_if = "Option::is_none")]
     pub guidance_key: Option<String>,
+    /// Optional sequence of tools to execute in order (for composite tools)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sequence: Option<Vec<SequenceStep>>,
+    /// Delay in milliseconds between sequence steps (default: SEQUENCE_STEP_DELAY_MS)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_delay_ms: Option<u64>,
 }
 
 /// Configuration for a subcommand within a tool

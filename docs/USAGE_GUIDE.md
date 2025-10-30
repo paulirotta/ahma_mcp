@@ -323,6 +323,79 @@ AHMA MCP provides intelligent timeout remediation:
    - Manual cleanup instead of trusting automatic lifecycle management
    - Manual timeout calculation instead of using progressive warnings
 
+## Sequence Tools: Streamlined Workflows
+
+Sequence tools provide a simplified interface for multi-step workflows. Instead of manually executing and coordinating multiple commands, a single sequence tool handles the entire process with proper timing and error handling.
+
+### Rust Quality Check
+
+The `rust_quality_check` sequence tool executes a comprehensive code quality pipeline:
+
+```bash
+# Single command for complete quality check
+rust_quality_check
+
+# Executes in sequence:
+# 1. cargo fmt        - Format code
+# 2. cargo clippy     - Lint with auto-fixes
+# 3. cargo nextest    - Run all tests
+# 4. cargo build      - Verify compilation
+```
+
+**Key Benefits:**
+
+- **Consistent execution**: Same quality checks every time
+- **Automatic delays**: Prevents Cargo.lock file conflicts (100ms between steps)
+- **Error handling**: Stops at first failure, reports all completed steps
+- **Comprehensive output**: Aggregated results from all successful steps
+
+**When to Use:**
+
+- **Pre-commit validation**: Ensure all quality checks pass before committing
+- **PR preparation**: Verify code meets quality standards
+- **CI simulation**: Run the same checks locally as CI will run
+- **Code review prep**: Ensure consistent formatting and passing tests
+
+**Example Workflow:**
+
+```bash
+# Make code changes
+vim src/main.rs
+
+# Run comprehensive quality check
+rust_quality_check --working_directory .
+
+# Review aggregated output from all steps
+# If any step fails, see exactly which step and why
+# All prior successful steps still show their output
+
+# Once all checks pass, proceed with git commit
+git add .
+git commit -m "feature: implement new functionality"
+```
+
+**Working Directory Support:**
+
+```bash
+# Check different project
+rust_quality_check --working_directory /path/to/project
+
+# Check current directory (default)
+rust_quality_check
+```
+
+**Understanding Sequence Tool Behavior:**
+
+- Each step executes fully before the next begins
+- 100ms delay between steps prevents file lock conflicts
+- Synchronous execution ensures results available before return
+- Failures stop the sequence but preserve output from completed steps
+- Total timeout: 600 seconds (configurable in tool definition)
+
+### Creating Custom Sequences
+
+Sequence tools can be created for any multi-step workflow. See `docs/tool-schema-guide.md` for details on defining custom sequence tools for your specific needs.
+
 ## Integration with Development Tools
 
 ### Git Workflow Integration

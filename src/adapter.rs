@@ -573,45 +573,54 @@ impl Adapter {
         let mut processed_args = HashSet::new();
 
         if let Some(config) = subcommand_config {
-            // Handle positional arguments in the order they are defined
-            if let Some(positional_args) = &config.positional_args {
-                for pos_arg_config in positional_args {
-                    if let Some(value) = args.and_then(|a| a.get(&pos_arg_config.name)) {
-                        if let Some(s) = value.as_str() {
-                            command_args.push(s.to_string());
-                        } else if let Some(arr) = value.as_array() {
-                            for item in arr {
-                                if let Some(s) = item.as_str() {
-                                    command_args.push(s.to_string());
-                                }
-                            }
-                        } else if !value.is_null() {
-                            command_args.push(value.to_string().trim_matches('"').to_string());
-                        }
-                        processed_args.insert(pos_arg_config.name.clone());
-                    }
-                }
-            }
-
-            // Handle named options
+            // Handle named options FIRST (before positional args)
+            // This matches Unix command convention: command [OPTIONS] [ARGS]
+            // For example: ls -l -a /path  (not: ls /path -l -a)
             if let Some(args_map) = args {
                 if let Some(options) = &config.options {
                     for opt_config in options {
-                        // Check for the option by its name or alias
-                        let arg_value = args_map.get(&opt_config.name).or_else(|| {
-                            opt_config
-                                .alias
-                                .as_ref()
-                                .and_then(|alias| args_map.get(alias))
-                        });
+                        // Check which key was provided: main name or alias
+                        let (arg_value, used_alias) =
+                            if let Some(v) = args_map.get(&opt_config.name) {
+                                (Some(v), false)
+                            } else if let Some(alias) = &opt_config.alias {
+                                (args_map.get(alias), true)
+                            } else {
+                                (None, false)
+                            };
 
                         if let Some(value) = arg_value {
+                            // Generate the flag based on which key was used
                             let flag = if opt_config.name.starts_with('-') {
+                                // Already has dashes
                                 opt_config.name.clone()
-                            } else if opt_config.name.len() == 1 {
-                                format!("-{}", opt_config.name)
+                            } else if used_alias {
+                                // User provided the alias key - use the alias
+                                let alias = opt_config.alias.as_ref().unwrap();
+                                if alias.starts_with('-') {
+                                    alias.clone()
+                                } else if alias.len() == 1 {
+                                    format!("-{}", alias)
+                                } else {
+                                    format!("--{}", alias)
+                                }
+                            } else if opt_config.option_type == "boolean"
+                                && opt_config
+                                    .alias
+                                    .as_ref()
+                                    .map(|a| a.len() == 1)
+                                    .unwrap_or(false)
+                            {
+                                // For boolean options with single-char aliases, prefer short form
+                                // (Unix convention for flags like -l, -a, -h)
+                                format!("-{}", opt_config.alias.as_ref().unwrap())
                             } else {
-                                format!("--{}", opt_config.name)
+                                // User provided the main name - use the main name format
+                                if opt_config.name.len() == 1 {
+                                    format!("-{}", opt_config.name)
+                                } else {
+                                    format!("--{}", opt_config.name)
+                                }
                             };
 
                             match opt_config.option_type.as_str() {
@@ -670,6 +679,27 @@ impl Adapter {
                                 processed_args.insert(alias.clone());
                             }
                         }
+                    }
+                }
+            }
+
+            // Handle positional arguments AFTER options (following Unix convention)
+            // This ensures: command [OPTIONS] [POSITIONAL_ARGS]
+            if let Some(positional_args) = &config.positional_args {
+                for pos_arg_config in positional_args {
+                    if let Some(value) = args.and_then(|a| a.get(&pos_arg_config.name)) {
+                        if let Some(s) = value.as_str() {
+                            command_args.push(s.to_string());
+                        } else if let Some(arr) = value.as_array() {
+                            for item in arr {
+                                if let Some(s) = item.as_str() {
+                                    command_args.push(s.to_string());
+                                }
+                            }
+                        } else if !value.is_null() {
+                            command_args.push(value.to_string().trim_matches('"').to_string());
+                        }
+                        processed_args.insert(pos_arg_config.name.clone());
                     }
                 }
             }

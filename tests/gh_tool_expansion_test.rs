@@ -32,11 +32,7 @@ async fn test_gh_tool_expansion_all_synchronous() {
         .subcommand
         .as_ref()
         .expect("Should have subcommands");
-    assert_eq!(
-        subcommands.len(),
-        13,
-        "Should have exactly 13 subcommands"
-    );
+    assert_eq!(subcommands.len(), 13, "Should have exactly 13 subcommands");
 
     // Check that tool has synchronous = true at tool level for inheritance
     assert_eq!(

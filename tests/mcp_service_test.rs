@@ -138,6 +138,8 @@ mod mcp_service_tests {
                 positional_args: None,
                 subcommand: None,
             }]),
+            sequence: None,
+            step_delay_ms: None,
         };
 
         assert_eq!(config.name, "test_tool");

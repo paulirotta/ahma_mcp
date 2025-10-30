@@ -33,6 +33,25 @@
     "name": {
       "type": "string"
     },
+    "sequence": {
+      "description": "Optional sequence of tools to execute in order (for composite tools)",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/SequenceStep"
+      }
+    },
+    "step_delay_ms": {
+      "description": "Delay in milliseconds between sequence steps (default: SEQUENCE_STEP_DELAY_MS)",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
     "subcommand": {
       "type": [
         "array",
@@ -119,6 +138,38 @@
         "name",
         "type",
         "description"
+      ]
+    },
+    "SequenceStep": {
+      "description": "Represents a single step in a tool sequence",
+      "type": "object",
+      "properties": {
+        "args": {
+          "description": "Arguments to pass to the tool",
+          "type": "object",
+          "additionalProperties": true,
+          "default": {}
+        },
+        "description": {
+          "description": "Optional description for logging/display",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subcommand": {
+          "description": "Subcommand within that tool",
+          "type": "string"
+        },
+        "tool": {
+          "description": "Name of the tool to invoke",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "subcommand"
       ]
     },
     "SubcommandConfig": {

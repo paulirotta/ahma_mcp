@@ -72,7 +72,8 @@ Tool-calling AIs work. Note that Grok Code Fast 1 currently appears lazy with to
 Ahma MCP speeds and simplifies AI-driven workflows by letting the AI continue planning while CLI tools run. Key benefits:
 
 - **FAST**: Async-first execution: multiple tool operations **while** AI is also working reduces wall clock time to complete tasks.
-- **EASY TOOL DEFINITION**: add a single JSON to `.ahma/tools/` to make command line tools available to AI. See [MTDF schema guide](./docs/mtdf-schema-guide.md).
+- **EASY TOOL DEFINITION**: add a single JSON to `.ahma/tools/` to make command line tools available to AI. See [MTDF schema guide](./docs/tool-schema-guide.md).
+- **SEQUENCE TOOLS**: Chain multiple tool operations together (e.g., `rust_quality_check` runs format → lint → test → build) with automatic delay handling to prevent file lock conflicts.
 - **SCOPED TOOL USE**: Safely expose tools since file paths can not be outside the working directory.
 - **GUIDE AI TO SUCCESSFUL TOOL USE**: Guidance helps AI understand how to use your tools effectively and concurrently.
 
@@ -80,7 +81,7 @@ Ahma MCP speeds and simplifies AI-driven workflows by letting the AI continue pl
 
 ### Installation
 
-1.  **Clone and build the repository**:
+1. **Clone and build the repository**:
 
     ```bash
     git clone https://github.com/paulirotta/ahma_mcp.git

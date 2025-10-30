@@ -165,6 +165,16 @@ impl MtdfValidator {
                 "Key to reference shared guidance from tool_guidance.json",
             ),
             ("subcommand", "array", "Array of subcommand definitions"),
+            (
+                "sequence",
+                "array",
+                "Optional sequence of tools to execute in order (for composite tools)",
+            ),
+            (
+                "step_delay_ms",
+                "number",
+                "Delay in milliseconds between sequence steps (default: SEQUENCE_STEP_DELAY_MS)",
+            ),
         ];
 
         // Check required fields
