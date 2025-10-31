@@ -5,8 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
-use rayon::prelude::*;
-use tokio::runtime::Handle;
+
 use tokio::time::timeout;
 use tracing::{debug, info, warn};
 
@@ -134,15 +133,19 @@ pub async fn evaluate_tool_availability(
         });
     }
 
-    let handle = Handle::current();
-    let outcomes: Vec<ProbeOutcome> = plans
-        .par_iter()
+    // Run probes concurrently without blocking the current runtime
+    let probe_tasks: Vec<_> = plans
+        .into_iter()
         .map(|plan| {
-            let plan = plan.clone();
             let shell_pool = shell_pool.clone();
-            let handle = handle.clone();
-            handle.block_on(async move { run_probe(shell_pool, plan).await })
+            tokio::spawn(async move { run_probe(shell_pool, plan).await })
         })
+        .collect();
+
+    let outcomes: Vec<ProbeOutcome> = futures::future::join_all(probe_tasks)
+        .await
+        .into_iter()
+        .filter_map(|result| result.ok())
         .collect();
 
     let mut disabled_tools = Vec::new();
@@ -286,13 +289,17 @@ fn collect_subcommand_plans(
                 default_working_dir,
             );
         } else {
-            plans.push(build_subcommand_plan(
-                tool_name,
-                config,
-                sub,
-                path,
-                default_working_dir,
-            ));
+            // Only create probe plans for subcommands with explicit availability checks
+            // (either on the subcommand itself or inherited from the tool)
+            if sub.availability_check.is_some() {
+                plans.push(build_subcommand_plan(
+                    tool_name,
+                    config,
+                    sub,
+                    path,
+                    default_working_dir,
+                ));
+            }
         }
     }
 }

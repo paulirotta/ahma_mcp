@@ -307,43 +307,35 @@ impl AhmaMcpService {
         let subcommand_path = subcommand_name.unwrap_or_else(|| "default".to_string());
         let subcommand_parts: Vec<&str> = subcommand_path.split('_').collect();
 
+        tracing::debug!(
+            "Finding subcommand for tool '{}': path='{}', parts={:?}, has_subcommands={}",
+            tool_config.name,
+            subcommand_path,
+            subcommand_parts,
+            tool_config.subcommand.is_some()
+        );
+
         let mut current_subcommands = tool_config.subcommand.as_ref()?;
         let mut found_subcommand: Option<&SubcommandConfig> = None;
-        let mut command_parts = vec![tool_config.command.clone()];
 
         for (i, part) in subcommand_parts.iter().enumerate() {
+            tracing::debug!(
+                "Searching for subcommand part '{}' (index {}/{}) in {} candidates",
+                part,
+                i,
+                subcommand_parts.len() - 1,
+                current_subcommands.len()
+            );
+
             if let Some(sub) = current_subcommands
                 .iter()
                 .find(|s| s.name == *part && s.enabled)
             {
-                if sub.name != "default" {
-                    command_parts.push(sub.name.clone());
-                } else {
-                    let config_key = &tool_config.name;
-                    let parts: Vec<&str> = config_key.split('_').collect();
-                    let derived_subcommand = if parts.len() > 1 {
-                        parts[1..].join("-")
-                    } else {
-                        parts.last().unwrap_or(&"").to_string()
-                    };
-
-                    let is_script_like = tool_config.command.contains(' ');
-                    let base_command = tool_config
-                        .command
-                        .split_whitespace()
-                        .next()
-                        .unwrap_or(&tool_config.command);
-                    let should_derive = !derived_subcommand.is_empty()
-                        && derived_subcommand != tool_config.command
-                        && derived_subcommand != base_command
-                        && !is_script_like
-                        && config_key.starts_with(base_command)
-                        && config_key != base_command;
-
-                    if should_derive {
-                        command_parts.push(derived_subcommand);
-                    }
-                }
+                tracing::debug!(
+                    "Found matching subcommand: name='{}', enabled={}",
+                    sub.name,
+                    sub.enabled
+                );
 
                 if i == subcommand_parts.len() - 1 {
                     found_subcommand = Some(sub);
@@ -353,14 +345,28 @@ impl AhmaMcpService {
                 if let Some(nested) = &sub.subcommand {
                     current_subcommands = nested;
                 } else {
+                    tracing::debug!(
+                        "Subcommand '{}' has no nested subcommands, but path continues",
+                        sub.name
+                    );
                     return None; // More parts in name, but no more nested subcommands
                 }
             } else {
+                tracing::debug!(
+                    "Subcommand part '{}' not found. Available: {:?}",
+                    part,
+                    current_subcommands
+                        .iter()
+                        .map(|s| &s.name)
+                        .collect::<Vec<_>>()
+                );
                 return None; // Subcommand part not found
             }
         }
 
-        found_subcommand.map(|sc| (sc, command_parts))
+        // The command parts are now just the base command from the tool config.
+        // The adapter will handle argument assembly.
+        found_subcommand.map(|sc| (sc, vec![tool_config.command.clone()]))
     }
 }
 
@@ -845,19 +851,41 @@ impl ServerHandler for AhmaMcpService {
                 .and_then(|v| v.as_str().map(|s| s.to_string()));
 
             // Find the subcommand config and construct the command parts
-            let (subcommand_config, command_parts) =
-                match self.find_subcommand_config_from_args(config, subcommand_name) {
-                    Some(result) => result,
-                    None => {
-                        let error_message =
-                            format!("Subcommand for tool '{}' not found or invalid.", tool_name);
-                        tracing::error!("{}", error_message);
-                        return Err(McpError::invalid_params(
-                            error_message,
-                            Some(serde_json::json!({ "tool_name": tool_name })),
-                        ));
-                    }
-                };
+            let (subcommand_config, command_parts) = match self
+                .find_subcommand_config_from_args(config, subcommand_name.clone())
+            {
+                Some(result) => result,
+                None => {
+                    let has_subcommands = config.subcommand.is_some();
+                    let num_subcommands = config.subcommand.as_ref().map(|s| s.len()).unwrap_or(0);
+                    let subcommand_names: Vec<String> = config
+                        .subcommand
+                        .as_ref()
+                        .map(|subs| {
+                            subs.iter()
+                                .map(|s| format!("{} (enabled={})", s.name, s.enabled))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    let error_message = format!(
+                        "Subcommand '{:?}' for tool '{}' not found or invalid. Tool enabled={}, has_subcommands={}, num_subcommands={}, available_subcommands={:?}",
+                        subcommand_name,
+                        tool_name,
+                        config.enabled,
+                        has_subcommands,
+                        num_subcommands,
+                        subcommand_names
+                    );
+                    tracing::error!("{}", error_message);
+                    return Err(McpError::invalid_params(
+                        error_message,
+                        Some(
+                            serde_json::json!({ "tool_name": tool_name, "subcommand": subcommand_name }),
+                        ),
+                    ));
+                }
+            };
 
             let base_command = command_parts.join(" ");
 
