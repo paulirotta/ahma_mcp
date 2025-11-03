@@ -482,7 +482,7 @@
         },
         {
             "name": "run",
-            "description": "Run a binary or example of the local package. Executes asynchronously by default.",
+            "description": "Run a binary or example of the local package.",
             "options": [
                 {
                     "name": "release",
@@ -860,7 +860,8 @@
                             "--help"
                         ],
                         "skip_subcommand_args": true
-                    }
+                    },
+                    "install_instructions": "Install cargo-nextest using: cargo install cargo-nextest --locked"
                 }
             ]
         },

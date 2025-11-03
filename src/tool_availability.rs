@@ -402,8 +402,14 @@ fn resolve_command(
 
     let skip_sub_args = check.map(|c| c.skip_subcommand_args).unwrap_or(false);
 
-    if let Some((path, _)) = sub_target {
-        if !skip_sub_args {
+    if let Some((path, sub_config)) = sub_target {
+        // Only add subcommand name to the command if:
+        // 1. skip_subcommand_args is false, AND
+        // 2. The subcommand doesn't have its own explicit availability_check
+        //    (if it does, we use that check's command and args directly)
+        let has_own_check = sub_config.availability_check.is_some();
+
+        if !skip_sub_args && !has_own_check {
             for segment in path {
                 if !segment.is_empty() {
                     command.push(segment.clone());
