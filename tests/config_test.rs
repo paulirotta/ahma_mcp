@@ -23,6 +23,8 @@ fn test_tool_config_defaults() {
         guidance_key: None,
         sequence: None,
         step_delay_ms: None,
+        availability_check: None,
+        install_instructions: None,
     };
 
     assert_eq!(config.name, "test_tool");
@@ -48,6 +50,8 @@ fn test_subcommand_config_defaults() {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        availability_check: None,
+        install_instructions: None,
     };
 
     assert_eq!(subcommand.name, "build");
@@ -137,6 +141,8 @@ fn test_tool_config_serialization() {
             enabled: true,
             guidance_key: Some("cargo_build".to_string()),
             subcommand: None,
+            availability_check: None,
+            install_instructions: None,
         }]),
         input_schema: None,
         timeout_seconds: Some(600),
@@ -156,6 +162,8 @@ fn test_tool_config_serialization() {
         guidance_key: Some("cargo_main".to_string()),
         sequence: None,
         step_delay_ms: None,
+        availability_check: None,
+        install_instructions: None,
     };
 
     let json = serde_json::to_string_pretty(&config).unwrap();
@@ -514,14 +522,14 @@ fn test_sequence_step_serialization() {
     args.insert("allow-dirty".to_string(), json!(true));
 
     let step = SequenceStep {
-        tool: "cargo_clippy".to_string(),
+        tool: "cargo".to_string(),
         subcommand: "clippy".to_string(),
         args: args.clone(),
         description: Some("Run clippy with auto-fix".to_string()),
     };
 
     let json = serde_json::to_string_pretty(&step).unwrap();
-    assert!(json.contains("\"tool\": \"cargo_clippy\""));
+    assert!(json.contains("\"tool\": \"cargo\""));
     assert!(json.contains("\"subcommand\": \"clippy\""));
     assert!(json.contains("\"fix\": true"));
     assert!(json.contains("\"allow-dirty\": true"));
@@ -554,19 +562,21 @@ fn test_sequence_tool_config() {
         guidance_key: None,
         sequence: Some(vec![
             SequenceStep {
-                tool: "cargo_fmt".to_string(),
+                tool: "cargo".to_string(),
                 subcommand: "fmt".to_string(),
                 args: Map::new(),
                 description: Some("Format code".to_string()),
             },
             SequenceStep {
-                tool: "cargo_nextest".to_string(),
+                tool: "cargo".to_string(),
                 subcommand: "nextest_run".to_string(),
                 args,
                 description: Some("Run tests".to_string()),
             },
         ]),
         step_delay_ms: Some(100),
+        availability_check: None,
+        install_instructions: None,
     };
 
     assert_eq!(config.name, "rust_quality_check");

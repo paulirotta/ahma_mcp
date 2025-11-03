@@ -561,199 +561,190 @@ impl Adapter {
 
     async fn prepare_command_and_args(
         &self,
-        base_command: &str,
-        args: Option<&Map<String, serde_json::Value>>,
+        command: &str,
+        args: Option<&Map<String, Value>>,
         subcommand_config: Option<&crate::config::SubcommandConfig>,
     ) -> Result<(String, Vec<String>)> {
-        let mut command_parts: Vec<String> = base_command
-            .split_whitespace()
-            .map(|s| s.to_string())
-            .collect();
-        let mut command_args = Vec::new();
-        let mut processed_args = HashSet::new();
+        let mut parts: Vec<&str> = command.split_whitespace().collect();
+        let program = parts.remove(0).to_string();
 
-        if let Some(config) = subcommand_config {
-            // Handle named options FIRST (before positional args)
-            // This matches Unix command convention: command [OPTIONS] [ARGS]
-            // For example: ls -l -a /path  (not: ls /path -l -a)
-            if let Some(args_map) = args {
-                if let Some(options) = &config.options {
-                    for opt_config in options {
-                        // Check which key was provided: main name or alias
-                        let (arg_value, used_alias) =
-                            if let Some(v) = args_map.get(&opt_config.name) {
-                                (Some(v), false)
-                            } else if let Some(alias) = &opt_config.alias {
-                                (args_map.get(alias), true)
-                            } else {
-                                (None, false)
-                            };
+        if program.is_empty() {
+            anyhow::bail!("Command must not be empty");
+        }
 
-                        if let Some(value) = arg_value {
-                            // Generate the flag based on which key was used
-                            let flag = if opt_config.name.starts_with('-') {
-                                // Already has dashes
-                                opt_config.name.clone()
-                            } else if used_alias {
-                                // User provided the alias key - use the alias
-                                let alias = opt_config.alias.as_ref().unwrap();
-                                if alias.starts_with('-') {
-                                    alias.clone()
-                                } else if alias.len() == 1 {
-                                    format!("-{}", alias)
-                                } else {
-                                    format!("--{}", alias)
-                                }
-                            } else if opt_config.option_type == "boolean"
-                                && opt_config
-                                    .alias
-                                    .as_ref()
-                                    .map(|a| a.len() == 1)
-                                    .unwrap_or(false)
-                            {
-                                // For boolean options with single-char aliases, prefer short form
-                                // (Unix convention for flags like -l, -a, -h)
-                                format!("-{}", opt_config.alias.as_ref().unwrap())
-                            } else {
-                                // User provided the main name - use the main name format
-                                if opt_config.name.len() == 1 {
-                                    format!("-{}", opt_config.name)
-                                } else {
-                                    format!("--{}", opt_config.name)
-                                }
-                            };
+        let mut final_args: Vec<String> = parts.into_iter().map(String::from).collect();
 
-                            match opt_config.option_type.as_str() {
-                                "boolean" => {
-                                    let is_true = value.as_bool().unwrap_or_else(|| {
-                                        value
-                                            .as_str()
-                                            .map(|s| s.to_lowercase() == "true")
-                                            .unwrap_or(false)
-                                    });
-                                    if is_true {
-                                        command_args.push(flag);
-                                    }
-                                }
-                                "array" => {
-                                    if let Some(arr) = value.as_array() {
-                                        for item in arr {
-                                            command_args.push(flag.clone());
-                                            if let Some(s) = item.as_str() {
-                                                command_args.push(s.to_string());
-                                            }
-                                        }
-                                    }
-                                }
-                                _ => {
-                                    if let Some(s) = value.as_str() {
-                                        // Check if this option supports file-based arguments and the string needs special handling
-                                        if opt_config.file_arg.unwrap_or(false)
-                                            && Self::needs_file_handling(s)
-                                        {
-                                            // Use file-based argument passing
-                                            let temp_file_path =
-                                                self.create_temp_file_with_content(s).await?;
-                                            let file_flag =
-                                                opt_config.file_flag.as_ref().unwrap_or(&flag);
-                                            command_args.push(file_flag.clone());
-                                            command_args.push(temp_file_path);
-                                        } else if Self::needs_file_handling(s) {
-                                            // Fall back to safe escaping if file handling not supported
-                                            command_args.push(flag);
-                                            command_args.push(Self::escape_shell_argument(s));
-                                        } else {
-                                            // Normal argument handling
-                                            command_args.push(flag);
-                                            command_args.push(s.to_string());
-                                        }
-                                    } else if !value.is_null() {
-                                        command_args.push(flag);
-                                        command_args
-                                            .push(value.to_string().trim_matches('"').to_string());
-                                    }
-                                }
-                            }
-                            processed_args.insert(opt_config.name.clone());
-                            if let Some(alias) = &opt_config.alias {
-                                processed_args.insert(alias.clone());
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Handle positional arguments AFTER options (following Unix convention)
-            // This ensures: command [OPTIONS] [POSITIONAL_ARGS]
-            if let Some(positional_args) = &config.positional_args {
-                for pos_arg_config in positional_args {
-                    if let Some(value) = args.and_then(|a| a.get(&pos_arg_config.name)) {
-                        if let Some(s) = value.as_str() {
-                            command_args.push(s.to_string());
-                        } else if let Some(arr) = value.as_array() {
-                            for item in arr {
-                                if let Some(s) = item.as_str() {
-                                    command_args.push(s.to_string());
-                                }
-                            }
-                        } else if !value.is_null() {
-                            command_args.push(value.to_string().trim_matches('"').to_string());
-                        }
-                        processed_args.insert(pos_arg_config.name.clone());
-                    }
-                }
+        // If a subcommand config is provided, its name should be the first argument
+        if let Some(sc) = subcommand_config {
+            if !sc.name.is_empty() && sc.name != "default" {
+                final_args.push(sc.name.clone());
             }
         }
 
-        // Fallback for arguments not covered by the config or when no config is provided
         if let Some(args_map) = args {
+            let positional_arg_names: HashSet<String> = subcommand_config
+                .and_then(|sc| sc.positional_args.as_ref())
+                .map(|args| args.iter().map(|arg| arg.name.clone()).collect())
+                .unwrap_or_default();
+
+            // Handle positional arguments from `{"args": [...]}`
+            if let Some(inner_args) = args_map.get("args") {
+                if let Some(positional_values) = inner_args.as_array() {
+                    for value in positional_values {
+                        if let Some(s) = Self::value_to_string(value).await? {
+                            final_args.push(s);
+                        }
+                    }
+                }
+            }
+
+            // Process all top-level key-value pairs as named arguments
             for (key, value) in args_map {
-                if processed_args.contains(key) || key == "working_directory" {
+                if key == "args" || key == "subcommand" || key == "_subcommand" {
                     continue;
                 }
+                self.process_named_arg(
+                    key,
+                    value,
+                    &positional_arg_names,
+                    subcommand_config,
+                    &mut final_args,
+                )
+                .await?;
+            }
+        }
 
-                let flag = if key.starts_with('-') {
-                    key.clone()
-                } else if key.len() == 1 {
-                    format!("-{}", key)
+        Ok((program, final_args))
+    }
+
+    /// Helper to process a single named argument.
+    async fn process_named_arg(
+        &self,
+        key: &str,
+        value: &Value,
+        positional_arg_names: &HashSet<String>,
+        subcommand_config: Option<&crate::config::SubcommandConfig>,
+        final_args: &mut Vec<String>,
+    ) -> Result<()> {
+        // Find if there's a specific config for this argument that indicates file handling
+        let file_arg_config = if let Some(sc) = subcommand_config {
+            sc.options.as_ref().and_then(|opts| {
+                opts.iter()
+                    .find(|opt| opt.name == key && opt.file_arg == Some(true))
+            })
+        } else {
+            None
+        };
+
+        // If configured for file-based argument passing
+        if let Some(file_opt) = file_arg_config {
+            // Convert the value to a string; this can be None if the JSON value is `null`.
+            if let Some(value_str) = Self::value_to_string(value).await? {
+                // Only proceed if we have a non-empty string to write.
+                if !value_str.is_empty() {
+                    let temp_file_path = self.create_temp_file_with_content(&value_str).await?;
+                    // Use the configured file_flag (e.g., "-F") or a default.
+                    if let Some(flag) = &file_opt.file_flag {
+                        final_args.push(flag.clone());
+                    } else {
+                        // This case should ideally not be hit if config is valid.
+                        // The presence of `file_arg: true` implies `file_flag` should exist.
+                        final_args.push(format!("--{}", key));
+                    }
+                    final_args.push(temp_file_path);
+                }
+            }
+            // If the value is null or empty, we simply don't add any argument.
+            return Ok(());
+        }
+
+        // Check if this option is defined as boolean type in config
+        let is_boolean_option = if let Some(sc) = subcommand_config {
+            if let Some(options) = &sc.options {
+                options
+                    .iter()
+                    .find(|opt| opt.name == key)
+                    .map(|opt| opt.option_type == "boolean")
+                    .unwrap_or(false)
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        // Handle boolean values
+        if value.as_bool().is_some() || (is_boolean_option && value.as_str().is_some()) {
+            let bool_val = if let Some(b) = value.as_bool() {
+                b
+            } else if let Some(s) = value.as_str() {
+                s.eq_ignore_ascii_case("true")
+            } else {
+                false
+            };
+
+            if bool_val {
+                let flag = if let Some(sc) = subcommand_config {
+                    if let Some(options) = &sc.options {
+                        options
+                            .iter()
+                            .find(|opt| opt.name == key)
+                            .and_then(|opt| opt.alias.as_ref())
+                            .map(|alias| format!("-{}", alias))
+                            .unwrap_or_else(|| format!("--{}", key))
+                    } else {
+                        format!("--{}", key)
+                    }
                 } else {
                     format!("--{}", key)
                 };
+                final_args.push(flag);
+            }
+            return Ok(());
+        }
 
-                if let Some(b) = value.as_bool() {
-                    if b {
-                        command_args.push(flag);
-                    }
-                } else if let Some(s) = value.as_str() {
-                    let lower_s = s.to_lowercase();
-                    if lower_s == "true" {
-                        command_args.push(flag);
-                    } else if lower_s != "false" {
-                        command_args.push(flag);
-                        // For fallback arguments, use safe escaping for problematic strings
-                        if Self::needs_file_handling(s) {
-                            command_args.push(Self::escape_shell_argument(s));
-                        } else {
-                            command_args.push(s.to_string());
-                        }
-                    }
-                } else if let Some(arr) = value.as_array() {
-                    for item in arr {
-                        command_args.push(flag.clone());
-                        if let Some(s) = item.as_str() {
-                            command_args.push(s.to_string());
-                        }
-                    }
-                } else if !value.is_null() {
-                    command_args.push(flag);
-                    command_args.push(value.to_string().trim_matches('"').to_string());
+        // Standard value handling for non-boolean, non-file-arg options.
+        // This can return None for `null` values.
+        if let Some(value_str) = Self::value_to_string(value).await? {
+            if !value_str.is_empty() {
+                if positional_arg_names.contains(key) {
+                    final_args.push(value_str);
+                } else {
+                    final_args.push(format!("--{}", key));
+                    final_args.push(value_str);
                 }
             }
         }
+        Ok(())
+    }
 
-        let final_command = command_parts.remove(0);
-        command_parts.extend(command_args);
-        Ok((final_command, command_parts))
+    /// Converts a serde_json::Value to a string, handling recursion with boxing.
+    fn value_to_string<'a>(
+        value: &'a Value,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<String>>> + Send + 'a>>
+    {
+        Box::pin(async move {
+            match value {
+                Value::Null => Ok(None),
+                Value::String(s) => Ok(Some(s.clone())),
+                Value::Number(n) => Ok(Some(n.to_string())),
+                Value::Bool(b) => Ok(Some(b.to_string())),
+                Value::Array(arr) => {
+                    let mut result = Vec::new();
+                    for item in arr {
+                        if let Some(s) = Self::value_to_string(item).await? {
+                            result.push(s);
+                        }
+                    }
+                    if result.is_empty() {
+                        return Ok(None);
+                    }
+                    Ok(Some(result.join(" ")))
+                }
+                // For other types like Object, we don't want to convert them to a string.
+                _ => Ok(None),
+            }
+        })
     }
 
     /// Checks if a string contains characters that are problematic for shell argument passing

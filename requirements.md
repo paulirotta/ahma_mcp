@@ -1,107 +1,136 @@
-# Project Requirements
+# Ahma MCP Requirements
 
-This document outlines the requirements for the project and for the AI assistant working on it.
+This document is the single source of truth for the `ahma_mcp` project. It outlines the core requirements, architecture, and principles that an AI maintainer must follow. All new development tasks will be reflected as changes in this document.
 
-## Part 1: AI Development Requirements
+## 1. Core Mission
 
-### 1.1. Core Functionality
+`ahma_mcp` is a universal, high-performance Model Context Protocol (MCP) server designed to dynamically adapt any command-line tool for use by AI agents. Its purpose is to provide a consistent, powerful, and non-blocking bridge between AI and the vast ecosystem of command-line utilities.
 
-* The system must run from the command line with command line help and up-to-date version information.
-* Error messages must be clear and informative, checking for common issues and suggesting solutions before beginning work.
+## 2. Core Principles & Requirements
 
-### 1.2. Technical Stack
+These are the non-negotiable principles of the project.
 
-* **Language:** Rust stable
-* **Libraries:** select from the `crates.io` registry, prioritizing well-maintained and widely-used crates.
+### R1: Configuration-Driven Tools
 
-### 1.3. Local Services & QA
+- **R1.1**: The system **must** adapt any command-line tool for use as a set of MCP tools based on declarative JSON configuration files.
+- **R1.2**: All tool definitions **must** be stored in `.json` files within a `tools/` directory. The server discovers and loads these at runtime.
+- **R1.3**: The system **must not** be recompiled to add, remove, or modify a tool. The server's source code must remain generic and tool-agnostic. All tool-specific logic is defined in the JSON configuration.
 
-* **MCP:** Always prefer and use `ahma_mcp` for supported actions including command line requests.
-* All code **must** be validated as defined in `.vscode/tasks.json` under the label "Rust Quality Check".
-* If ahma_mcp is available, you **must** spawn all requests one by one in the sequence specified, ending with the command 'await'.
+### R2: Async-First Architecture
 
-### 1.4. AI Development Rules
+- **R2.1**: Operations **must** execute asynchronously by default. When an AI invokes a tool, the server immediately returns an `operation_id` and a `started` status, then executes the command in the background.
+- **R2.2**: Upon completion of an asynchronous operation, the system **must** automatically push the final result (success or failure) to the AI client via an MCP progress notification.
+- **R2.3**: The AI client **should not** poll for results. The architecture is designed to push results automatically.
+- **R2.4**: Tool descriptions for async operations **must** explicitly guide the AI to continue with other tasks and not to wait, processing the result notification when it arrives.
 
-* You **must** adhere to all requirements in this document.
-* You **must** write tests for all new functionality before implementation (TDD).
-* Test coverage for new code **must** be at least 90%.
-* You **must** not use any deprecated or obsolete libraries or techniques.
-* When I give you a new request, you must first cross-reference it with this file.
-* If my request implies a **change, addition, or conflict** with these requirements, you must **stop and ask for confirmation** of your solution to update this file *before* writing any code.
-* After generating code, your final step is to automatically run the "Run Quality Check (ahma_mcp)" task.
-* Before starting a new task, search the codebase and existing tools to see if the functionality already exists.
+### R3: Selective Synchronous Override
 
----
+- **R3.1**: Fast, non-blocking operations (e.g., `git status`, `cargo version`) **can** be marked as synchronous in their JSON configuration (`"synchronous": true`).
+- **R3.2**: Synchronous operations **must** block, execute, and return their final result directly in a single response. They do not use operation IDs or send completion notifications.
 
-## Part 2: Application Functional Requirements
+### R4: Performance
 
-### 2.1. Project Goal
+- **R4.1**: The system **must** use a pre-warmed shell pool to minimize command startup latency, aiming for startup times of 5-20ms for commands in a known working directory.
 
-The `ahma_mcp` (AI-Human Master Control Program) project is a command-line tool designed to act as a secure and efficient intermediary between a large language model (LLM) AI assistant and a local development environment. Its primary goal is to orchestrate development tasks, manage the project workspace, and enforce quality standards, enabling safe and effective AI-driven software engineering.
+### R5: JSON Schema and Validation
 
-### 2.2. Data Sources
+- **R5.1**: The system **must** implement comprehensive JSON schema validation for all tool configurations against the MCP Tool Definition Format (MTDF).
+- **R5.2**: Validation **must** occur at server startup. Invalid tool configurations must be rejected and not loaded, with clear error messages logged.
+- **R5.3**: The schema must support types (`string`, `boolean`, `integer`, `array`), required fields, and security validation for file paths (`"format": "path"`).
 
-* **Local File System:** The primary data source is the project's directory on the local file system. The tool will read, write, create, and delete files and directories as instructed.
-* **Project Configuration:** Reads project-specific configuration from files like `requirements.md`, `Cargo.toml`, and `.vscode/tasks.json` to maintain context and enforce rules.
-* **Standard I/O:** Receives commands and instructions from the AI assistant via standard input (stdin) and returns results, logs, and errors via standard output (stdout) and standard error (stderr).
+## 3. Tool Definition (MTDF Schema)
 
-### 2.3. Core Functionality
+All tools are defined in `.json` files in the `tools/` directory. This is the MCP Tool Definition Format (MTDF).
 
-* **Task Queue Management:** Maintain a queue of commands received from the AI. Commands are executed sequentially upon receiving an `await` command.
-* **File System Operations:** Provide a safe subset of file system commands (`read`, `write`, `list`, `create`, `delete`) that are restricted to the project's root directory.
-* **Command Execution:** Execute shell commands for tasks like building, testing, and linting. This includes running predefined quality checks.
-* **Contextual Awareness:** Provide the AI with information about the project structure, file contents, and task outcomes.
-* **Self-Update Capability:** The tool must be able to participate in its own update process, guided by the AI, by applying changes to its source code and triggering a rebuild.
+### 3.1. Basic Structure
 
-### 2.4. Command-Line Options
-
-The `ahma_mcp` tool will support the following command-line interface:
-
-```sh
-ahma_mcp [SUBCOMMAND]
-
-SUBCOMMANDS:
-  read <PATH>              # Reads the content of a file and prints it to stdout.
-  write <PATH>             # Writes content from stdin to a file.
-  list [PATH]              # Lists the contents of a directory. Defaults to project root.
-  run <COMMAND> [ARGS...]  # Executes a shell command and its arguments.
-  check                    # Runs the predefined "Rust Quality Check" task.
-  await                    # Executes all queued commands in sequence.
-  help                     # Prints this message or the help of the given subcommand(s).
+```json
+{
+  "command": "base_executable",
+  "enabled": true,
+  "timeout_seconds": 600,
+  "subcommand": [
+    {
+      "name": "subcommand_name",
+      "description": "What this subcommand does. Must include async guidance if not synchronous.",
+      "synchronous": false,
+      "options": [
+        {
+          "name": "option_name",
+          "type": "string",
+          "description": "Description of the option.",
+          "required": true
+        }
+      ],
+      "positional_args": [
+        {
+          "name": "arg_name",
+          "type": "string",
+          "description": "Description of the positional argument.",
+          "required": true
+        }
+      ]
+    }
+  ]
+}
 ```
 
-### 2.5. Command-Line Utilities
+### 3.2. Key Fields
 
-* **Schema Generation:** The tool must support a `generate_schema` command to output JSON schemas for tool configurations.
+- `command`: The base command-line executable (e.g., `git`, `cargo`).
+- `subcommand`: An array of subcommands exposed as individual MCP tools. The final tool name will be `{command}_{name}` (e.g., `git_commit`).
+- `synchronous`: `false` for async (default), `true` for sync.
+- `options`: An array of command-line flags (e.g., `--release`).
+- `positional_args`: An array of positional arguments.
+- `format: "path"`: **CRITICAL**: Any option or argument that accepts a file path **must** include this for security validation.
 
-### 2.6. Quality Assurance Standards
+### 3.3. Sequence Tools
 
-* **Test Coverage:** All new code must maintain at least 90% test coverage.
-* **Code Quality:** All code must pass without warnings:
-  * `cargo fmt` - Code formatting
-  * `cargo clippy` - Linting with auto-fix
-  * `cargo test` (or `cargo nextest run`) - All tests passing
-  * `cargo build` - Clean compilation
+Sequence tools allow for chaining multiple commands into a single, synchronous workflow.
 
-### 2.7. MCP Tool Usage Requirements
+- **Requirement R6.1**: The system **must** support sequence tools to execute a series of predefined steps in order.
+- **Requirement R6.2**: A sequence is defined by setting `"command": "sequence"` and providing a `sequence` array.
+- **Requirement R6.3**: A configurable delay (`step_delay_ms`) **must** be supported between steps to prevent resource conflicts (e.g., `Cargo.lock` contention).
 
-**CRITICAL:** AI assistants working with this project **MUST ALWAYS** use ahma_mcp MCP tools for ALL cargo operations.
+#### Example Sequence Tool
 
-**Prohibited:** NEVER use `run_in_terminal` or direct shell commands for: `cargo build`, `cargo test`, `cargo clippy`, `cargo fmt`, `cargo check`, or any other cargo operations.
+See .ahma/tools/rust_quality_check.json
 
-**Required MCP Tools:**
+## 4. Development & Testing Workflow
 
-* `mcp_ahma_mcp_cargo` - For build, check, and other cargo commands
-* `mcp_ahma_mcp_cargo_clippy` - For linting with clippy
-* `mcp_ahma_mcp_cargo_nextest` - For running tests with nextest
-* `mcp_ahma_mcp_cargo_fmt` - For code formatting
-* `mcp_ahma_mcp_rust_quality_check` - For comprehensive quality checks (format, lint, test, build in sequence)
+### 4.1. Server Restart and Testing
 
-**Rationale:** Using MCP tools ensures:
+**R7.1**: Always use `ahma_mcp` running in VS Code to interactively test the server.
 
-* Consistent command execution across development environments
-* Proper integration with the MCP protocol
-* Self-hosting capability (the tool managing itself)
-* Better error handling and progress reporting
+**R7.2**: To restart the server after code changes:
 
-**Error Handling:** If MCP tools fail, debug the MCP server issue - don't fall back to terminal commands. This maintains consistency and helps identify configuration or connectivity problems.
+- Run `cargo build --release` (either via terminal or `ahma_mcp` MCP tool)
+- Reload the VS Code window (Cmd+Shift+P → "Developer: Reload Window") to restart the MCP server
+- Alternatively, kill the running `ahma_mcp` process and VS Code will restart it automatically
+- The server reads tool configurations from `.ahma/tools/` on each startup
+
+**R7.3**: Interactive Testing Process:
+
+1. Make code or configuration changes
+2. Run `cargo build --release` to trigger server restart
+3. Test the modified tool immediately through the MCP interface
+4. If a tool does not work correctly, fix it immediately and restart
+5. Verify the fix works before proceeding
+
+**R7.4**: Follow strict TDD principles:
+
+- Write unit/integration tests for new functionality
+- Use interactive testing to diagnose and verify fixes
+- Never leave broken tools—fix and test immediately
+
+### 4.2. AI Maintainer Workflow
+
+When a new task is assigned:
+
+1. The changes required will be described in an update to this `requirements.md` file.
+2. Your primary task is to implement the changes described herein.
+3. If the task involves adding or changing tool behavior, you **must** achieve this by editing the JSON files in the `.ahma/tools/` directory.
+4. You **must not** modify the Rust source code to add tool-specific logic.
+5. Follow the existing development principles: write tests for new functionality and ensure all code is formatted (`cargo fmt`) and free of linter warnings (`cargo clippy`).
+6. After any code changes affecting tool execution, restart the server (`cargo build--release`) and test interactively.
+7. **Before stopping work**, you **must** run the `ahma_mcp rust_quality_check` tool and verify that all checks pass (formatting, linting, tests, and build). Do not mark work as complete until the quality check succeeds.

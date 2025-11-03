@@ -103,6 +103,8 @@ fn test_tool_config_creation() {
             timeout_seconds: None,
             guidance_key: None,
             subcommand: None,
+            availability_check: None,
+            install_instructions: None,
         }]),
         input_schema: None,
         timeout_seconds: None,
@@ -112,6 +114,8 @@ fn test_tool_config_creation() {
         guidance_key: None,
         sequence: None,
         step_delay_ms: None,
+        availability_check: None,
+        install_instructions: None,
     };
 
     assert_eq!(tool_config.name, "cargo");
@@ -133,6 +137,8 @@ fn test_subcommand_config_creation() {
         timeout_seconds: Some(300),
         guidance_key: Some("build".to_string()),
         subcommand: None,
+        availability_check: None,
+        install_instructions: None,
     };
 
     assert_eq!(subcommand.name, "build");
@@ -246,6 +252,8 @@ async fn test_service_with_configs() {
             positional_args: None,
             guidance_key: Some("test_guidance".to_string()),
             subcommand: None,
+            availability_check: None,
+            install_instructions: None,
         }]),
         input_schema: None,
         hints: ToolHints::default(),
@@ -253,6 +261,8 @@ async fn test_service_with_configs() {
         guidance_key: None,
         sequence: None,
         step_delay_ms: None,
+        availability_check: None,
+        install_instructions: None,
     };
     configs.insert("test_tool".to_string(), tool_config);
 
@@ -334,7 +344,11 @@ fn test_tool_config_with_nested_subcommands() {
                 timeout_seconds: None,
                 guidance_key: None,
                 subcommand: None,
+                availability_check: None,
+                install_instructions: None,
             }]),
+            availability_check: None,
+            install_instructions: None,
         }]),
         input_schema: None,
         timeout_seconds: None,
@@ -344,6 +358,8 @@ fn test_tool_config_with_nested_subcommands() {
         guidance_key: None,
         sequence: None,
         step_delay_ms: None,
+        availability_check: None,
+        install_instructions: None,
     };
 
     assert_eq!(tool_config.name, "cargo");
@@ -384,6 +400,8 @@ async fn test_service_with_tool_configs() {
             timeout_seconds: None,
             guidance_key: None,
             subcommand: None,
+            availability_check: None,
+            install_instructions: None,
         }]),
         input_schema: None,
         timeout_seconds: None,
@@ -393,6 +411,8 @@ async fn test_service_with_tool_configs() {
         guidance_key: None,
         sequence: None,
         step_delay_ms: None,
+        availability_check: None,
+        install_instructions: None,
     };
     configs.insert("cargo".to_string(), tool_config);
 

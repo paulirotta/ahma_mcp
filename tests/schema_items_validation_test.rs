@@ -21,16 +21,16 @@ async fn test_array_parameters_must_have_items_property() -> anyhow::Result<()> 
         tools.len()
     );
 
-    // Find cargo_audit tool which was causing the catastrophic failure
-    let cargo_audit_tool = tools
+    // Inspect consolidated cargo tool which includes the audit subcommand options
+    let cargo_tool = tools
         .iter()
-        .find(|tool| tool.name == "cargo_audit")
-        .expect("Should have cargo_audit tool - this was the tool causing VSCode GitHub Copilot Chat to fail");
+        .find(|tool| tool.name == "cargo")
+        .expect("cargo tool should exist after consolidation");
 
-    eprintln!("Found cargo_audit tool, checking its array parameters...");
+    eprintln!("Found cargo tool, checking audit-related array parameters...");
 
     // The schema should be valid and not cause VSCode failures
-    let schema = cargo_audit_tool.input_schema.as_ref();
+    let schema = cargo_tool.input_schema.as_ref();
     let properties = schema
         .get("properties")
         .expect("Tool schema must have properties")
@@ -100,7 +100,7 @@ async fn test_array_parameters_must_have_items_property() -> anyhow::Result<()> 
     }
     assert!(
         validated_arrays >= 3,
-        "Should have validated at least 3 array parameters in cargo_audit (ignore, target-arch, target-os)"
+        "Should have validated at least 3 array parameters in cargo audit options (ignore, target-arch, target-os)"
     );
 
     eprintln!(

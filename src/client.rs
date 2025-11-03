@@ -57,7 +57,8 @@ impl Client {
             name: Cow::Borrowed("long_running_async"),
             arguments: Some(
                 json!({
-                    "duration": duration
+                    "subcommand": "default",
+                    "args": [duration]
                 })
                 .as_object()
                 .unwrap()

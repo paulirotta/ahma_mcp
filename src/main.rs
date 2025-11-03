@@ -46,6 +46,7 @@ use ahma_mcp::{
     mcp_service::{AhmaMcpService, GuidanceConfig},
     operation_monitor::{MonitorConfig, OperationMonitor},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
+    tool_availability::evaluate_tool_availability,
     utils::logging::init_logging,
 };
 use anyhow::Result;
@@ -54,6 +55,7 @@ use rmcp::ServiceExt;
 use serde_json::{Value, from_str};
 use std::{
     fs,
+    io::IsTerminal,
     path::PathBuf,
     sync::Arc,
     time::{Duration, Instant},
@@ -134,6 +136,25 @@ async fn main() -> Result<()> {
     */
 
     if cli.server || (cli.tool_name.is_none() && cli.validate.is_none()) {
+        // Check if stdin is a terminal (interactive mode)
+        if std::io::stdin().is_terminal() && !cli.server {
+            eprintln!(
+                "\n❌ Error: ahma_mcp is an MCP server designed for JSON-RPC communication over stdio.\n"
+            );
+            eprintln!("It cannot be run directly from an interactive terminal.\n");
+            eprintln!("Usage options:");
+            eprintln!("  1. Validate configuration:");
+            eprintln!("     ahma_mcp --validate");
+            eprintln!("     ahma_mcp --validate .ahma/tools/");
+            eprintln!("     ahma_mcp --validate .ahma/tools/cargo.json\n");
+            eprintln!("  2. Run as MCP server (requires MCP client with stdio transport):");
+            eprintln!("     Configure in your MCP client's configuration file\n");
+            eprintln!("  3. Execute a single tool command:");
+            eprintln!("     ahma_mcp <tool_name> [tool_arguments...]\n");
+            eprintln!("For more information, run: ahma_mcp --help\n");
+            std::process::exit(1);
+        }
+
         tracing::info!("Running in Server mode");
         run_server_mode(cli).await
     } else if cli.validate.is_some() {
@@ -173,15 +194,70 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     shell_pool_manager.clone().start_background_tasks();
 
     // Initialize the adapter
-    let adapter = Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager)?);
+    let adapter = Arc::new(Adapter::new(
+        operation_monitor.clone(),
+        shell_pool_manager.clone(),
+    )?);
 
     // Load tool configurations
-    let configs = Arc::new(load_tool_configs(&cli.tools_dir)?);
+    let raw_configs = load_tool_configs(&cli.tools_dir)?;
+    let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let availability_summary = evaluate_tool_availability(
+        shell_pool_manager.clone(),
+        raw_configs,
+        working_dir.as_path(),
+    )
+    .await?;
+
+    if !availability_summary.disabled_tools.is_empty() {
+        for disabled in &availability_summary.disabled_tools {
+            tracing::warn!(
+                "Tool '{}' disabled at startup. {}",
+                disabled.name,
+                disabled.message
+            );
+            if let Some(instructions) = &disabled.install_instructions {
+                tracing::info!(
+                    "Install instructions for '{}': {}",
+                    disabled.name,
+                    instructions
+                );
+            }
+        }
+    }
+
+    if !availability_summary.disabled_subcommands.is_empty() {
+        for disabled in &availability_summary.disabled_subcommands {
+            tracing::warn!(
+                "Tool subcommand '{}::{}' disabled at startup. {}",
+                disabled.tool,
+                disabled.subcommand_path,
+                disabled.message
+            );
+            if let Some(instructions) = &disabled.install_instructions {
+                tracing::info!(
+                    "Install instructions for '{}::{}': {}",
+                    disabled.tool,
+                    disabled.subcommand_path,
+                    instructions
+                );
+            }
+        }
+    }
+
+    let configs = Arc::new(availability_summary.filtered_configs);
     if configs.is_empty() {
-        tracing::error!("No valid tool configurations found in {:?}", cli.tools_dir);
+        tracing::error!("No valid tool configurations available after availability checks");
+        tracing::error!("Tools directory: {:?}", cli.tools_dir);
         // It's not a fatal error to have no tools, just log it.
     } else {
-        tracing::info!("Loaded {} tool configurations", configs.len());
+        let tool_names: Vec<String> = configs.keys().cloned().collect();
+        tracing::info!(
+            "Loaded {} tool configurations ({} disabled): {}",
+            configs.len(),
+            availability_summary.disabled_tools.len(),
+            tool_names.join(", ")
+        );
     }
 
     // Create and start the MCP service
@@ -339,12 +415,31 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         ..Default::default()
     };
     let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
-    let adapter = Adapter::new(operation_monitor, shell_pool_manager)?;
+    let adapter = Adapter::new(operation_monitor, shell_pool_manager.clone())?;
 
     // Load tool configurations
-    let configs = Arc::new(load_tool_configs(&std::path::PathBuf::from(".ahma/tools"))?);
+    let raw_configs = load_tool_configs(&PathBuf::from(".ahma/tools"))?;
+    let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let availability_summary = evaluate_tool_availability(
+        shell_pool_manager.clone(),
+        raw_configs,
+        working_dir.as_path(),
+    )
+    .await?;
+
+    if !availability_summary.disabled_tools.is_empty() {
+        for disabled in &availability_summary.disabled_tools {
+            tracing::warn!(
+                "Tool '{}' disabled at CLI startup. {}",
+                disabled.name,
+                disabled.message
+            );
+        }
+    }
+
+    let configs = Arc::new(availability_summary.filtered_configs);
     if configs.is_empty() {
-        tracing::error!("No valid tool configurations found");
+        tracing::error!("No valid tool configurations available after availability checks");
         anyhow::bail!("No tool configurations found");
     }
 

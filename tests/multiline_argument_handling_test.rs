@@ -104,6 +104,8 @@ async fn test_multiline_argument_with_echo() {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        availability_check: None,
+        install_instructions: None,
     };
 
     // Test with a multi-line string that should trigger escaping
@@ -217,7 +219,7 @@ async fn test_multiline_git_commit_with_real_tool() {
     let result = adapter
         .execute_async_in_dir_with_options(
             "git_commit",
-            "git commit",
+            "git",
             repo_path.to_str().unwrap(),
             AsyncExecOptions {
                 operation_id: Some("test_multiline_commit_real".to_string()),
@@ -355,6 +357,8 @@ async fn test_multiline_git_commit_message() {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        availability_check: None,
+        install_instructions: None,
     };
 
     // Test with a multi-line commit message that should trigger file-based handling
@@ -368,7 +372,7 @@ async fn test_multiline_git_commit_message() {
     let result = adapter
         .execute_async_in_dir_with_options(
             "git_commit",
-            "git commit", // Use full command like the working test
+            "git", // Use base command, subcommand is in the config
             repo_path.to_str().unwrap(),
             AsyncExecOptions {
                 operation_id: Some("test_multiline_commit".to_string()),
@@ -492,6 +496,8 @@ async fn test_special_characters_in_arguments() {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        availability_check: None,
+        install_instructions: None,
     };
 
     // Test with text containing special characters

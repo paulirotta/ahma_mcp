@@ -4,6 +4,17 @@
   "description": "Represents the complete configuration for a command-line tool.",
   "type": "object",
   "properties": {
+    "availability_check": {
+      "description": "Runtime availability probe executed at server startup.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AvailabilityCheck"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "command": {
       "type": "string"
     },
@@ -29,6 +40,13 @@
     },
     "input_schema": {
       "description": "Generated input schema (optional - auto-generated from subcommands)"
+    },
+    "install_instructions": {
+      "description": "Human-friendly instructions describing how to install this tool when missing.",
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "name": {
       "type": "string"
@@ -85,6 +103,49 @@
     "command"
   ],
   "$defs": {
+    "AvailabilityCheck": {
+      "description": "Defines how to probe for tool or subcommand availability at runtime.",
+      "type": "object",
+      "properties": {
+        "args": {
+          "description": "Arguments passed to the availability probe.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "command": {
+          "description": "Optional override for the executable to invoke during the check. Defaults to the tool command.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "skip_subcommand_args": {
+          "description": "If true, do not append derived subcommand arguments when constructing the probe command.",
+          "type": "boolean"
+        },
+        "success_exit_codes": {
+          "description": "Exit codes considered successful (defaults to `[0]`).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "working_directory": {
+          "description": "Working directory used for the probe (defaults to project root).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "OptionConfig": {
       "description": "Configuration for an option within a subcommand",
       "type": "object",
@@ -176,6 +237,17 @@
       "description": "Configuration for a subcommand within a tool",
       "type": "object",
       "properties": {
+        "availability_check": {
+          "description": "Optional availability probe executed at server startup.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AvailabilityCheck"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "description": {
           "type": "string"
         },
@@ -186,6 +258,13 @@
         },
         "guidance_key": {
           "description": "Key to look up guidance in tool_guidance.json",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "install_instructions": {
+          "description": "Install instructions displayed when this subcommand is unavailable.",
           "type": [
             "string",
             "null"

@@ -296,43 +296,53 @@ impl AhmaMcpService {
         tool_config: &'a ToolConfig,
         subcommand_name: Option<String>,
     ) -> Option<(&'a SubcommandConfig, Vec<String>)> {
+        if !tool_config.enabled {
+            tracing::warn!(
+                "Attempted to resolve subcommand on disabled tool '{}'",
+                tool_config.name
+            );
+            return None;
+        }
+
         let subcommand_path = subcommand_name.unwrap_or_else(|| "default".to_string());
         let subcommand_parts: Vec<&str> = subcommand_path.split('_').collect();
 
+        tracing::debug!(
+            "Finding subcommand for tool '{}': path='{}', parts={:?}, has_subcommands={}",
+            tool_config.name,
+            subcommand_path,
+            subcommand_parts,
+            tool_config.subcommand.is_some()
+        );
+
         let mut current_subcommands = tool_config.subcommand.as_ref()?;
         let mut found_subcommand: Option<&SubcommandConfig> = None;
-        let mut command_parts = vec![tool_config.command.clone()];
+        let command_parts = vec![tool_config.command.clone()];
 
         for (i, part) in subcommand_parts.iter().enumerate() {
-            if let Some(sub) = current_subcommands.iter().find(|s| s.name == *part) {
-                if sub.name != "default" {
-                    command_parts.push(sub.name.clone());
-                } else {
-                    let config_key = &tool_config.name;
-                    let parts: Vec<&str> = config_key.split('_').collect();
-                    let derived_subcommand = if parts.len() > 1 {
-                        parts[1..].join("-")
-                    } else {
-                        parts.last().unwrap_or(&"").to_string()
-                    };
+            tracing::debug!(
+                "Searching for subcommand part '{}' (index {}/{}) in {} candidates",
+                part,
+                i,
+                subcommand_parts.len() - 1,
+                current_subcommands.len()
+            );
 
-                    let is_script_like = tool_config.command.contains(' ');
-                    let base_command = tool_config
-                        .command
-                        .split_whitespace()
-                        .next()
-                        .unwrap_or(&tool_config.command);
-                    let should_derive = !derived_subcommand.is_empty()
-                        && derived_subcommand != tool_config.command
-                        && derived_subcommand != base_command
-                        && !is_script_like
-                        && config_key.starts_with(base_command)
-                        && config_key != base_command;
+            if let Some(sub) = current_subcommands
+                .iter()
+                .find(|s| s.name == *part && s.enabled)
+            {
+                tracing::debug!(
+                    "Found matching subcommand: name='{}', enabled={}",
+                    sub.name,
+                    sub.enabled
+                );
 
-                    if should_derive {
-                        command_parts.push(derived_subcommand);
-                    }
-                }
+                // Don't add subcommand name to command_parts - the adapter will add it
+                // when preparing the actual command arguments
+                // if sub.name != "default" {
+                //     command_parts.push(sub.name.clone());
+                // }
 
                 if i == subcommand_parts.len() - 1 {
                     found_subcommand = Some(sub);
@@ -342,9 +352,21 @@ impl AhmaMcpService {
                 if let Some(nested) = &sub.subcommand {
                     current_subcommands = nested;
                 } else {
+                    tracing::debug!(
+                        "Subcommand '{}' has no nested subcommands, but path continues",
+                        sub.name
+                    );
                     return None; // More parts in name, but no more nested subcommands
                 }
             } else {
+                tracing::debug!(
+                    "Subcommand part '{}' not found. Available: {:?}",
+                    part,
+                    current_subcommands
+                        .iter()
+                        .map(|s| &s.name)
+                        .collect::<Vec<_>>()
+                );
                 return None; // Subcommand part not found
             }
         }
@@ -494,7 +516,7 @@ impl ServerHandler for AhmaMcpService {
                 name: "await".into(),
                 title: Some("await".to_string()),
                 icons: None,
-                description: Some("Wait for previously started asynchronous operations to complete. **WARNING:** This is a blocking tool and makes you inefficient. **ONLY** use this if you have NO other tasks and cannot proceed until completion. It is **ALWAYS** better to perform other work and let results be pushed to you.".into()),
+                description: Some("Wait for previously started asynchronous operations to complete. **WARNING:** This is a blocking tool and makes you inefficient. **ONLY** use this if you have NO other tasks and cannot proceed until completion. It is **ALWAYS** better to perform other work and let results be pushed to you. **IMPORTANT:** Operations automatically notify you when complete - you do NOT need to check status repeatedly. Use this tool only when you genuinely cannot make progress without the results.".into()),
                 input_schema: self.generate_input_schema_for_wait(),
                 output_schema: None,
                 annotations: None,
@@ -505,13 +527,18 @@ impl ServerHandler for AhmaMcpService {
                 name: "status".into(),
                 title: Some("status".to_string()),
                 icons: None,
-                description: Some("Query the status of operations without blocking. Shows active and completed operations.".into()),
+                description: Some("Query the status of operations without blocking. Shows active and completed operations. **IMPORTANT:** Results are automatically pushed to you when operations complete - you do NOT need to poll this tool repeatedly! If you find yourself calling 'status' multiple times for the same operation, you should use 'await' instead. Repeated status checks are an anti-pattern that wastes resources.".into()),
                 input_schema: self.generate_input_schema_for_status(),
                 output_schema: None,
                 annotations: None,
             });
 
             for config in self.configs.values() {
+                if !config.enabled {
+                    tracing::debug!("Skipping disabled tool '{}' during list_tools", config.name);
+                    continue;
+                }
+
                 let tool = self.create_tool_from_config(config);
                 tools.push(tool);
             }
@@ -809,6 +836,15 @@ impl ServerHandler for AhmaMcpService {
                 }
             };
 
+            if !config.enabled {
+                let error_message = format!(
+                    "Tool '{}' is unavailable because its runtime availability probe failed",
+                    tool_name
+                );
+                tracing::error!("{}", error_message);
+                return Err(McpError::invalid_request(error_message, None));
+            }
+
             // Check if this is a sequence tool
             if config.sequence.is_some() {
                 return self.handle_sequence_tool(config, params).await;
@@ -820,19 +856,41 @@ impl ServerHandler for AhmaMcpService {
                 .and_then(|v| v.as_str().map(|s| s.to_string()));
 
             // Find the subcommand config and construct the command parts
-            let (subcommand_config, command_parts) =
-                match self.find_subcommand_config_from_args(config, subcommand_name) {
-                    Some(result) => result,
-                    None => {
-                        let error_message =
-                            format!("Subcommand for tool '{}' not found or invalid.", tool_name);
-                        tracing::error!("{}", error_message);
-                        return Err(McpError::invalid_params(
-                            error_message,
-                            Some(serde_json::json!({ "tool_name": tool_name })),
-                        ));
-                    }
-                };
+            let (subcommand_config, command_parts) = match self
+                .find_subcommand_config_from_args(config, subcommand_name.clone())
+            {
+                Some(result) => result,
+                None => {
+                    let has_subcommands = config.subcommand.is_some();
+                    let num_subcommands = config.subcommand.as_ref().map(|s| s.len()).unwrap_or(0);
+                    let subcommand_names: Vec<String> = config
+                        .subcommand
+                        .as_ref()
+                        .map(|subs| {
+                            subs.iter()
+                                .map(|s| format!("{} (enabled={})", s.name, s.enabled))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    let error_message = format!(
+                        "Subcommand '{:?}' for tool '{}' not found or invalid. Tool enabled={}, has_subcommands={}, num_subcommands={}, available_subcommands={:?}",
+                        subcommand_name,
+                        tool_name,
+                        config.enabled,
+                        has_subcommands,
+                        num_subcommands,
+                        subcommand_names
+                    );
+                    tracing::error!("{}", error_message);
+                    return Err(McpError::invalid_params(
+                        error_message,
+                        Some(
+                            serde_json::json!({ "tool_name": tool_name, "subcommand": subcommand_name }),
+                        ),
+                    ));
+                }
+            };
 
             let base_command = command_parts.join(" ");
 
@@ -1183,6 +1241,21 @@ impl AhmaMcpService {
                     )]));
                 }
             };
+
+            if !step_config.enabled {
+                let error_msg = format!(
+                    "Sequence step {}/{} failed: Tool '{}' is disabled (availability probe failed)",
+                    step_num,
+                    sequence.len(),
+                    step.tool
+                );
+                tracing::error!("{}", error_msg);
+                results.push(format!("❌ {}", error_msg));
+                all_outputs.push(error_msg.clone());
+                return Ok(CallToolResult::success(vec![Content::text(
+                    all_outputs.join("\n\n"),
+                )]));
+            }
 
             // Find the subcommand config
             let (subcommand_config, command_parts) = match self

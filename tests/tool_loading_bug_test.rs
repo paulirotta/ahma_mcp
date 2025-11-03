@@ -40,10 +40,10 @@ async fn test_tools_are_loaded_after_json_migration() -> Result<()> {
     // Verify specific expected tools are present
     let tool_names: Vec<&str> = tools.tools.iter().map(|t| t.name.as_ref()).collect();
 
-    // Should have cargo subcommand tools
+    // Should have cargo tool (with subcommands)
     assert!(
-        tool_names.iter().any(|name| name.starts_with("cargo_")),
-        "Expected cargo subcommand tools but found: {:?}",
+        tool_names.contains(&"cargo"),
+        "Expected cargo tool but found: {:?}",
         tool_names
     );
 

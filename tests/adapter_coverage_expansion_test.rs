@@ -50,6 +50,8 @@ async fn test_prepare_command_and_args_edge_cases() {
         subcommand: None,
         positional_args: None,
         options: None,
+        availability_check: None,
+        install_instructions: None,
     };
 
     let mut args = Map::new();
@@ -109,6 +111,8 @@ async fn test_prepare_command_and_args_with_aliases() {
                 file_flag: None,
             },
         ]),
+        availability_check: None,
+        install_instructions: None,
     };
 
     let mut args = Map::new();
@@ -192,6 +196,8 @@ async fn test_prepare_command_and_args_mixed_types() {
                 file_flag: None,
             },
         ]),
+        availability_check: None,
+        install_instructions: None,
     };
 
     let mut args = Map::new();
@@ -548,6 +554,8 @@ async fn test_prepare_command_and_args_with_null_values() {
             file_arg: Some(false),
             file_flag: None,
         }]),
+        availability_check: None,
+        install_instructions: None,
     };
 
     let mut args = Map::new();
@@ -568,8 +576,14 @@ async fn test_prepare_command_and_args_with_null_values() {
     assert!(result.is_ok());
     let output = result.unwrap();
     assert!(output.contains("valid_value"));
-    // Null values should be ignored
-    assert!(!output.contains("null"));
+    // Null values should be ignored - check that we don't have --pos_arg or --opt_arg flags
+    // The substring "null" will appear in "null_test" subcommand name, so check more specifically
+    assert!(!output.contains("--pos_arg"));
+    assert!(!output.contains("--opt_arg"));
+    assert!(
+        !output.contains(" null "),
+        "Null should not appear as a standalone argument value"
+    );
 
     adapter.shutdown().await;
 }

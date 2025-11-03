@@ -12,35 +12,22 @@ mod comprehensive_tool_fixes_tdd {
         // - All targets including tests (--tests)
         // - Apply automatic fixes (--fix)
 
-        // Let's verify what ahma_mcp clippy tool supports
-        let cargo_clippy_exists = std::path::Path::new(".ahma/tools/cargo_clippy.json").exists();
-        assert!(
-            cargo_clippy_exists,
-            "cargo_clippy.json should exist for clippy operations"
-        );
+        // Let's verify what ahma_mcp clippy support looks like within cargo.json
+        let cargo_config = std::fs::read_to_string(".ahma/tools/cargo.json")
+            .expect("Failed to read merged cargo.json");
 
-        // Read and parse the clippy tool configuration
-        let clippy_config = std::fs::read_to_string(".ahma/tools/cargo_clippy.json")
-            .expect("Failed to read cargo_clippy.json");
+        let cargo_json: serde_json::Value =
+            serde_json::from_str(&cargo_config).expect("cargo.json should be valid JSON");
 
-        let clippy_json: serde_json::Value =
-            serde_json::from_str(&clippy_config).expect("cargo_clippy.json should be valid JSON");
-
-        // Check if it has the options we need
-        let subcommands = clippy_json["subcommand"]
+        // Find clippy subcommand inside cargo tool
+        let cargo_subcommands = cargo_json["subcommand"]
             .as_array()
-            .expect("Should have subcommand array");
+            .expect("cargo.json should expose subcommands");
 
-        assert!(
-            !subcommands.is_empty(),
-            "Should have at least one subcommand"
-        );
-
-        // Find the clippy subcommand and check its options
-        let clippy_cmd = subcommands
+        let clippy_cmd = cargo_subcommands
             .iter()
-            .find(|cmd| cmd["name"] == "clippy")
-            .expect("Should have clippy subcommand");
+            .find(|cmd| cmd["name"].as_str() == Some("clippy"))
+            .expect("cargo.json must include clippy subcommand");
 
         let options = clippy_cmd["options"]
             .as_array()
@@ -57,35 +44,162 @@ mod comprehensive_tool_fixes_tdd {
             has_allow_dirty,
             "clippy should support --allow-dirty option"
         );
+
+        // Ensure availability metadata is present for proactive startup checks
+        let availability = clippy_cmd["availability_check"]
+            .as_object()
+            .expect("clippy should define availability_check");
+        let command = availability
+            .get("command")
+            .and_then(|value| value.as_str())
+            .expect("availability_check.command should exist");
+        assert_eq!(
+            command, "cargo",
+            "clippy probe should invoke cargo directly"
+        );
+
+        let args = availability
+            .get("args")
+            .and_then(|value| value.as_array())
+            .expect("availability_check.args should exist for clippy");
+        let expected_args = vec!["clippy", "--version"];
+        let actual_args: Vec<_> = args
+            .iter()
+            .map(|value| value.as_str().unwrap_or_default())
+            .collect();
+        assert_eq!(
+            actual_args, expected_args,
+            "clippy probe should use --version"
+        );
+
+        assert!(
+            availability
+                .get("skip_subcommand_args")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false),
+            "clippy availability check should skip derived subcommand args"
+        );
+
+        let install_hint = clippy_cmd["install_instructions"]
+            .as_str()
+            .expect("clippy should include install_instructions");
+        assert!(
+            install_hint.contains("rustup component add clippy"),
+            "clippy install guidance should point to rustup component add clippy"
+        );
     }
 
     #[test]
     fn test_nextest_should_support_run_subcommand() {
         // TDD: nextest needs "run" subcommand to work properly
 
-        let nextest_config = std::fs::read_to_string(".ahma/tools/cargo_nextest.json")
-            .expect("Failed to read cargo_nextest.json");
+        let cargo_config = std::fs::read_to_string(".ahma/tools/cargo.json")
+            .expect("Failed to read merged cargo.json");
 
-        let nextest_json: serde_json::Value =
-            serde_json::from_str(&nextest_config).expect("cargo_nextest.json should be valid JSON");
+        let cargo_json: serde_json::Value =
+            serde_json::from_str(&cargo_config).expect("cargo.json should be valid JSON");
 
-        // The issue is that nextest requires a subcommand like "run"
-        // But our current config only has "default" which doesn't map to nextest's expected subcommands
-
-        // Check current structure
-        let subcommands = nextest_json["subcommand"]
+        let cargo_subcommands = cargo_json["subcommand"]
             .as_array()
-            .expect("Should have subcommand array");
+            .expect("cargo.json should expose subcommands");
 
-        // We need to determine if we should:
-        // 1. Add a "run" subcommand alongside "default"
-        // 2. Change the command structure to properly invoke "cargo nextest run"
+        let nextest_cmd = cargo_subcommands
+            .iter()
+            .find(|cmd| cmd["name"].as_str() == Some("nextest"))
+            .expect("cargo.json must include nextest subcommand");
 
-        assert!(!subcommands.is_empty(), "Should have subcommands defined");
+        let nested_subcommands = nextest_cmd["subcommand"]
+            .as_array()
+            .expect("cargo nextest should expose nested subcommands");
+
+        assert!(
+            nested_subcommands
+                .iter()
+                .any(|cmd| cmd["name"].as_str() == Some("run")),
+            "nextest subcommand must include run"
+        );
 
         println!(
-            "Current nextest subcommands: {}",
-            serde_json::to_string_pretty(subcommands).unwrap()
+            "Current nextest nested subcommands: {}",
+            serde_json::to_string_pretty(nested_subcommands).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_nextest_run_has_availability_and_install_guidance() {
+        let cargo_config = std::fs::read_to_string(".ahma/tools/cargo.json")
+            .expect("Failed to read merged cargo.json");
+
+        let cargo_json: serde_json::Value =
+            serde_json::from_str(&cargo_config).expect("cargo.json should be valid JSON");
+
+        let cargo_subcommands = cargo_json["subcommand"]
+            .as_array()
+            .expect("cargo.json should expose subcommands");
+
+        let nextest_cmd = cargo_subcommands
+            .iter()
+            .find(|cmd| cmd["name"].as_str() == Some("nextest"))
+            .expect("cargo.json must include nextest subcommand");
+
+        let nextest_install_hint = nextest_cmd["install_instructions"]
+            .as_str()
+            .expect("nextest should provide install instructions");
+        assert!(
+            nextest_install_hint.contains("cargo install cargo-nextest"),
+            "nextest install guidance should reference cargo install cargo-nextest"
+        );
+
+        let nested_subcommands = nextest_cmd["subcommand"]
+            .as_array()
+            .expect("cargo nextest should expose nested subcommands");
+
+        let run_cmd = nested_subcommands
+            .iter()
+            .find(|cmd| cmd["name"].as_str() == Some("run"))
+            .expect("nextest run subcommand must exist");
+
+        let run_availability = run_cmd["availability_check"]
+            .as_object()
+            .expect("nextest run should define availability_check");
+
+        let run_command = run_availability
+            .get("command")
+            .and_then(|value| value.as_str())
+            .expect("nextest run availability command should exist");
+        assert_eq!(
+            run_command, "cargo",
+            "nextest run probe should invoke cargo directly"
+        );
+
+        let run_args = run_availability
+            .get("args")
+            .and_then(|value| value.as_array())
+            .expect("nextest run availability args should exist");
+        let expected_args = vec!["nextest", "run", "--version"];
+        let actual_args: Vec<_> = run_args
+            .iter()
+            .map(|value| value.as_str().unwrap_or_default())
+            .collect();
+        assert_eq!(
+            actual_args, expected_args,
+            "nextest run probe should check run --version"
+        );
+
+        assert!(
+            run_availability
+                .get("skip_subcommand_args")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false),
+            "nextest run availability check should skip derived subcommand args"
+        );
+
+        let run_install_hint = run_cmd["install_instructions"]
+            .as_str()
+            .expect("nextest run should include install instructions");
+        assert!(
+            run_install_hint.contains("cargo install cargo-nextest"),
+            "nextest run install guidance should reuse nextest instructions"
         );
     }
 

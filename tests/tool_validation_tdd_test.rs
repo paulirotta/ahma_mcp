@@ -40,18 +40,52 @@ mod tool_validation_tdd_tests {
 
     #[test]
     fn test_mcp_ahma_mcp_tools_should_include_cargo_commands() {
-        // TDD: The MCP ahma_mcp service should provide cargo_test and cargo_nextest tools
-        // This would normally be tested by checking available MCP tools, but for now
-        // we verify the tool files exist
-
+        // TDD: All cargo subcommands must live in cargo.json (no separate cargo-X files)
+        let cargo_path = std::path::Path::new(".ahma/tools/cargo.json");
         assert!(
-            std::path::Path::new(".ahma/tools/cargo.json").exists(),
+            cargo_path.exists(),
             "cargo.json should exist for cargo subcommands"
         );
-        assert!(
-            std::path::Path::new(".ahma/tools/cargo_nextest.json").exists(),
-            "cargo_nextest.json should exist for nextest commands"
-        );
+
+        // Ensure legacy cargo_* JSON files have been merged away
+        let legacy_files = [
+            ".ahma/tools/cargo_nextest.json",
+            ".ahma/tools/cargo_clippy.json",
+            ".ahma/tools/cargo_fmt.json",
+            ".ahma/tools/cargo_bench.json",
+            ".ahma/tools/cargo_audit.json",
+            ".ahma/tools/cargo_edit.json",
+            ".ahma/tools/cargo_llvm_cov.json",
+        ];
+
+        for legacy in legacy_files {
+            assert!(
+                !std::path::Path::new(legacy).exists(),
+                "{} should have been merged into cargo.json",
+                legacy
+            );
+        }
+
+        // Validate that cargo.json actually exposes nextest run subcommand
+        let cargo_config =
+            std::fs::read_to_string(cargo_path).expect("Failed to read cargo.json after merge");
+        let cargo_json: serde_json::Value =
+            serde_json::from_str(&cargo_config).expect("cargo.json should remain valid JSON");
+
+        let subcommands = cargo_json["subcommand"]
+            .as_array()
+            .expect("cargo.json should include subcommand array");
+
+        let has_nextest = subcommands.iter().any(|sub| {
+            sub["name"].as_str() == Some("nextest")
+                && sub["subcommand"].as_array().is_some_and(|nested| {
+                    nested
+                        .iter()
+                        .any(|child| child["name"].as_str() == Some("run"))
+                })
+        });
+
+        assert!(has_nextest, "cargo.json must embed nextest run subcommand");
     }
 
     #[test]

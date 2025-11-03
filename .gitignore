@@ -23,3 +23,5 @@ target
 
 # Kotlin build artifacts created by tests
 **/.kotlin/
+
+agent-plan.md
