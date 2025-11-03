@@ -1291,25 +1291,16 @@
                 {
                     "name": "ignore",
                     "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
                     "description": "Advisory id to ignore (can be specified multiple times)"
                 },
                 {
                     "name": "target-arch",
                     "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
                     "description": "filter vulnerabilities by CPU (default: no filter). Can be specified multiple times"
                 },
                 {
                     "name": "target-os",
                     "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
                     "description": "filter vulnerabilities by OS (default: no filter). Can be specified multiple times"
                 },
                 {
