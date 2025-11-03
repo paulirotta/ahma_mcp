@@ -565,8 +565,14 @@ impl Adapter {
         args: Option<&Map<String, Value>>,
         subcommand_config: Option<&crate::config::SubcommandConfig>,
     ) -> Result<(String, Vec<String>)> {
-        let mut final_args: Vec<String> = Vec::new();
-        let program = command.to_string();
+        let mut parts = command.split_whitespace();
+        let program = parts.next().unwrap_or("").to_string();
+
+        if program.is_empty() {
+            anyhow::bail!("Command must not be empty");
+        }
+
+        let mut final_args: Vec<String> = parts.map(|part| part.to_string()).collect();
 
         if let Some(args_map) = args {
             let positional_arg_names: HashSet<String> = subcommand_config
@@ -585,7 +591,7 @@ impl Adapter {
 
             // Process all top-level key-value pairs as named arguments
             for (key, value) in args_map {
-                if key == "args" || key == "subcommand" {
+                if key == "args" || key == "subcommand" || key == "_subcommand" {
                     continue;
                 }
                 self.process_named_arg(key, value, &positional_arg_names, &mut final_args)

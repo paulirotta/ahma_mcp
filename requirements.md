@@ -92,48 +92,44 @@ Sequence tools allow for chaining multiple commands into a single, synchronous w
 - **Requirement R6.2**: A sequence is defined by setting `"command": "sequence"` and providing a `sequence` array.
 - **Requirement R6.3**: A configurable delay (`step_delay_ms`) **must** be supported between steps to prevent resource conflicts (e.g., `Cargo.lock` contention).
 
-#### Example Sequence Tool (`rust_quality_check.json`)
+#### Example Sequence Tool
 
-```json
-{
-  "name": "rust_quality_check",
-  "description": "Comprehensive Rust code quality check: format, lint, test, build",
-  "command": "sequence",
-  "enabled": true,
-  "synchronous": true,
-  "timeout_seconds": 600,
-  "step_delay_ms": 100,
-  "sequence": [
-    { "tool": "cargo_fmt", "subcommand": "default", "args": {} },
-    { "tool": "cargo_clippy", "subcommand": "clippy", "args": { "fix": "true", "allow-dirty": "true" } },
-    { "tool": "cargo_nextest", "subcommand": "nextest_run", "args": {} },
-    { "tool": "cargo", "subcommand": "build", "args": {} }
-  ],
-  "subcommand": [
-    {
-      "name": "run",
-      "description": "Execute the complete quality check sequence",
-      "synchronous": true,
-      "options": [
-        {
-          "name": "working_directory",
-          "type": "string",
-          "description": "Working directory for all operations",
-          "format": "path",
-          "required": false
-        }
-      ]
-    }
-  ]
-}
-```
+See .ahma/tools/rust_quality_check.json
 
-## 4. AI Maintainer Workflow
+## 4. Development & Testing Workflow
+
+### 4.1. Server Restart and Testing
+
+**R7.1**: Always use `ahma_mcp` running in VS Code to interactively test the server.
+
+**R7.2**: To restart the server after code changes:
+
+- Run `cargo build --release` (either via terminal or `ahma_mcp` MCP tool)
+- Reload the VS Code window (Cmd+Shift+P → "Developer: Reload Window") to restart the MCP server
+- Alternatively, kill the running `ahma_mcp` process and VS Code will restart it automatically
+- The server reads tool configurations from `.ahma/tools/` on each startup
+
+**R7.3**: Interactive Testing Process:
+
+1. Make code or configuration changes
+2. Run `cargo build --release` to trigger server restart
+3. Test the modified tool immediately through the MCP interface
+4. If a tool does not work correctly, fix it immediately and restart
+5. Verify the fix works before proceeding
+
+**R7.4**: Follow strict TDD principles:
+
+- Write unit/integration tests for new functionality
+- Use interactive testing to diagnose and verify fixes
+- Never leave broken tools—fix and test immediately
+
+### 4.2. AI Maintainer Workflow
 
 When a new task is assigned:
 
 1. The changes required will be described in an update to this `requirements.md` file.
 2. Your primary task is to implement the changes described herein.
-3. If the task involves adding or changing tool behavior, you **must** achieve this by editing the JSON files in the `tools/` directory.
+3. If the task involves adding or changing tool behavior, you **must** achieve this by editing the JSON files in the `.ahma/tools/` directory.
 4. You **must not** modify the Rust source code to add tool-specific logic.
 5. Follow the existing development principles: write tests for new functionality and ensure all code is formatted (`cargo fmt`) and free of linter warnings (`cargo clippy`).
+6. After any code changes affecting tool execution, restart the server (`cargo build --release`) and test interactively.

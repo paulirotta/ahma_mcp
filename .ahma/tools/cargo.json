@@ -4,17 +4,17 @@
     "command": "cargo",
     "enabled": true,
     "timeout_seconds": 600,
+    "synchronous": true,
     "hints": {
-        "default": "While cargo operations run, consider reviewing Cargo.toml dependencies, planning tests, or analyzing code structure for optimization opportunities.",
+        "default": "IMPORTANT: For comprehensive code quality checks (formatting, linting, testing, building), use the 'rust_quality_check' tool instead of VS Code tasks or running multiple cargo commands separately. It runs synchronously and provides complete results. For individual cargo operations, this tool now runs synchronously by default to ensure you receive complete results.",
         "build": "Building in progress - review compilation output for warnings, plan deployment steps, or work on documentation.",
-        "test": "Tests running - analyze test patterns, consider additional test cases, or review code coverage strategies.",
+        "test": "Tests running - analyze test patterns, consider additional test cases, or review code coverage strategies. For comprehensive quality checks including fmt, clippy, test, and build, use the 'rust_quality_check' tool instead.",
         "doc": "Documentation building - consider reviewing doc comments, planning API improvements, or working on examples.",
         "check": "Type checking in progress - plan refactoring opportunities or review code patterns while waiting."
     },
     "subcommand": [
         {
             "name": "build",
-            "guidance_key": "async_behavior",
             "description": "Compile the current package.",
             "options": [
                 {
@@ -226,7 +226,6 @@
         },
         {
             "name": "test",
-            "guidance_key": "async_behavior",
             "description": "Run the test suite.",
             "options": [
                 {
@@ -467,7 +466,6 @@
         {
             "name": "check",
             "synchronous": true,
-            "guidance_key": "sync_behavior",
             "description": "Check code without building.",
             "options": [
                 {
@@ -484,7 +482,6 @@
         },
         {
             "name": "run",
-            "guidance_key": "async_behavior",
             "description": "Run the project",
             "options": [
                 {
@@ -506,7 +503,6 @@
         },
         {
             "name": "doc",
-            "guidance_key": "async_behavior",
             "description": "Generate documentation",
             "options": [
                 {
@@ -545,7 +541,6 @@
         },
         {
             "name": "install",
-            "guidance_key": "async_behavior",
             "description": "Install a Rust binary via cargo",
             "options": [
                 {
@@ -682,13 +677,12 @@
         },
         {
             "name": "nextest",
-            "guidance_key": "async_behavior",
             "description": "Run tests using cargo nextest.",
             "install_instructions": "Install cargo-nextest using: cargo install cargo-nextest --locked",
             "subcommand": [
                 {
                     "name": "run",
-                    "description": "Run tests using nextest. Operates asynchronously - returns operation_id immediately, results delivered via notification when complete. Continue with other tasks.",
+                    "description": "Run tests using nextest. Waits for completion and returns full test results.",
                     "options": [
                         {
                             "name": "verbose",
@@ -776,7 +770,6 @@
         },
         {
             "name": "bench",
-            "guidance_key": "async_behavior",
             "description": "Run benchmarks.",
             "options": [
                 {
@@ -1196,7 +1189,6 @@
         },
         {
             "name": "audit",
-            "guidance_key": "async_behavior",
             "description": "Audit dependencies for security vulnerabilities.",
             "options": [
                 {

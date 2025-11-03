@@ -4,8 +4,7 @@ _Create agents from your command line tools with one JSON file, then watch them 
 
 | | |
 | --- | ---: |
-| [![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![Rust](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org/) | ![Ahma MCP Logo](./assets/ahma.png) |
-
+| [![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![Rust](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org/) | ![Ahma MCP Logo](./assets/ahm
 `ahma_mcp` rapidly adapts command-line tools for AI consumption. By default, AI tool calls are asynchronous: the AI receives immediate confirmation that a background process has started and can continue to plan and analyze while receiving results as each operation completes. This enables multiple concurrent tool calls, dramatically speeding up complex tasks.
 
 **Ahma** (Finnish for wolverine) is a tenacious and agile tool, speeding your workflow to rapidly consume complex tasks in less time than common synchronous tools.
