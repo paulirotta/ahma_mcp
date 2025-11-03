@@ -1286,8 +1286,32 @@
         },
         {
             "name": "audit",
-            "description": "Audit dependencies for security vulnerabilities.",
+            "description": "Audit project for security vulnerabilities",
             "options": [
+                {
+                    "name": "ignore",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Advisory id to ignore (can be specified multiple times)"
+                },
+                {
+                    "name": "target-arch",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "filter vulnerabilities by CPU (default: no filter). Can be specified multiple times"
+                },
+                {
+                    "name": "target-os",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "filter vulnerabilities by OS (default: no filter). Can be specified multiple times"
+                },
                 {
                     "name": "json",
                     "type": "boolean",
@@ -1299,24 +1323,19 @@
                     "description": "Automatically try to fix vulnerabilities"
                 },
                 {
+                    "name": "fix-allow-dirty",
+                    "type": "boolean",
+                    "description": "Allow dirty when applying fixes"
+                },
+                {
+                    "name": "dry-run",
+                    "type": "boolean",
+                    "description": "Don't actually write to Cargo.toml"
+                },
+                {
                     "name": "stale",
                     "type": "boolean",
                     "description": "Check for stale advisory database"
-                },
-                {
-                    "name": "ignore",
-                    "type": "array",
-                    "description": "Advisory id to ignore (can be specified multiple times)"
-                },
-                {
-                    "name": "target-arch",
-                    "type": "array",
-                    "description": "filter vulnerabilities by CPU (default: no filter). Can be specified multiple times"
-                },
-                {
-                    "name": "target-os",
-                    "type": "array",
-                    "description": "filter vulnerabilities by OS (default: no filter). Can be specified multiple times"
                 }
             ],
             "availability_check": {
