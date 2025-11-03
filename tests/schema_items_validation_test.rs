@@ -12,6 +12,23 @@ use serde_json::Value;
 #[tokio::test]
 async fn test_array_parameters_must_have_items_property() -> anyhow::Result<()> {
     init_test_logging();
+
+    // Force rebuild to ensure we're testing the latest code in CI
+    eprintln!("Building latest binary to avoid stale cache issues...");
+    let build_output = std::process::Command::new("cargo")
+        .args(&["build", "--bin", "ahma_mcp"])
+        .output()
+        .expect("Failed to build binary");
+
+    if !build_output.status.success() {
+        eprintln!(
+            "Build stderr: {}",
+            String::from_utf8_lossy(&build_output.stderr)
+        );
+        panic!("Failed to build ahma_mcp binary");
+    }
+    eprintln!("Binary built successfully");
+
     // Create a test client with the real tool configurations (assume new_client is now async)
     let client = new_client(Some(".ahma/tools")).await?;
     let tools = client.list_all_tools().await?;
