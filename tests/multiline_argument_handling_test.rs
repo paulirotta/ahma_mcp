@@ -219,7 +219,7 @@ async fn test_multiline_git_commit_with_real_tool() {
     let result = adapter
         .execute_async_in_dir_with_options(
             "git_commit",
-            "git commit",
+            "git",
             repo_path.to_str().unwrap(),
             AsyncExecOptions {
                 operation_id: Some("test_multiline_commit_real".to_string()),
@@ -372,7 +372,7 @@ async fn test_multiline_git_commit_message() {
     let result = adapter
         .execute_async_in_dir_with_options(
             "git_commit",
-            "git commit", // Use full command like the working test
+            "git", // Use base command, subcommand is in the config
             repo_path.to_str().unwrap(),
             AsyncExecOptions {
                 operation_id: Some("test_multiline_commit".to_string()),

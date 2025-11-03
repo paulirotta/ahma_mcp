@@ -142,8 +142,8 @@ async fn test_rust_quality_check_structure() -> Result<()> {
     let sequence = config["sequence"].as_array().unwrap();
     assert_eq!(
         sequence.len(),
-        4,
-        "Should have 4 steps: fmt, clippy, nextest, build"
+        5,
+        "Should have 5 steps: fmt, clippy, clippy (tests), test, build"
     );
 
     // Verify each step
@@ -154,10 +154,13 @@ async fn test_rust_quality_check_structure() -> Result<()> {
     assert_eq!(sequence[1]["subcommand"].as_str(), Some("clippy"));
 
     assert_eq!(sequence[2]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[2]["subcommand"].as_str(), Some("nextest_run"));
+    assert_eq!(sequence[2]["subcommand"].as_str(), Some("clippy"));
 
     assert_eq!(sequence[3]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[3]["subcommand"].as_str(), Some("build"));
+    assert_eq!(sequence[3]["subcommand"].as_str(), Some("test"));
+
+    assert_eq!(sequence[4]["tool"].as_str(), Some("cargo"));
+    assert_eq!(sequence[4]["subcommand"].as_str(), Some("build"));
 
     // Verify delay
     assert_eq!(

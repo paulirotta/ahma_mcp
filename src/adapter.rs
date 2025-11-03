@@ -565,14 +565,21 @@ impl Adapter {
         args: Option<&Map<String, Value>>,
         subcommand_config: Option<&crate::config::SubcommandConfig>,
     ) -> Result<(String, Vec<String>)> {
-        let mut parts = command.split_whitespace();
-        let program = parts.next().unwrap_or("").to_string();
+        let mut parts: Vec<&str> = command.split_whitespace().collect();
+        let program = parts.remove(0).to_string();
 
         if program.is_empty() {
             anyhow::bail!("Command must not be empty");
         }
 
-        let mut final_args: Vec<String> = parts.map(|part| part.to_string()).collect();
+        let mut final_args: Vec<String> = parts.into_iter().map(String::from).collect();
+
+        // If a subcommand config is provided, its name should be the first argument
+        if let Some(sc) = subcommand_config {
+            if !sc.name.is_empty() && sc.name != "default" {
+                final_args.push(sc.name.clone());
+            }
+        }
 
         if let Some(args_map) = args {
             let positional_arg_names: HashSet<String> = subcommand_config
@@ -584,7 +591,9 @@ impl Adapter {
             if let Some(inner_args) = args_map.get("args") {
                 if let Some(positional_values) = inner_args.as_array() {
                     for value in positional_values {
-                        final_args.push(self.value_to_string(value).await?);
+                        if let Some(s) = Self::value_to_string(value).await? {
+                            final_args.push(s);
+                        }
                     }
                 }
             }
@@ -617,6 +626,38 @@ impl Adapter {
         subcommand_config: Option<&crate::config::SubcommandConfig>,
         final_args: &mut Vec<String>,
     ) -> Result<()> {
+        // Find if there's a specific config for this argument that indicates file handling
+        let file_arg_config = if let Some(sc) = subcommand_config {
+            sc.options.as_ref().and_then(|opts| {
+                opts.iter()
+                    .find(|opt| opt.name == key && opt.file_arg == Some(true))
+            })
+        } else {
+            None
+        };
+
+        // If configured for file-based argument passing
+        if let Some(file_opt) = file_arg_config {
+            // Convert the value to a string; this can be None if the JSON value is `null`.
+            if let Some(value_str) = Self::value_to_string(value).await? {
+                // Only proceed if we have a non-empty string to write.
+                if !value_str.is_empty() {
+                    let temp_file_path = self.create_temp_file_with_content(&value_str).await?;
+                    // Use the configured file_flag (e.g., "-F") or a default.
+                    if let Some(flag) = &file_opt.file_flag {
+                        final_args.push(flag.clone());
+                    } else {
+                        // This case should ideally not be hit if config is valid.
+                        // The presence of `file_arg: true` implies `file_flag` should exist.
+                        final_args.push(format!("--{}", key));
+                    }
+                    final_args.push(temp_file_path);
+                }
+            }
+            // If the value is null or empty, we simply don't add any argument.
+            return Ok(());
+        }
+
         // Check if this option is defined as boolean type in config
         let is_boolean_option = if let Some(sc) = subcommand_config {
             if let Some(options) = &sc.options {
@@ -634,17 +675,15 @@ impl Adapter {
 
         // Handle boolean values
         if value.as_bool().is_some() || (is_boolean_option && value.as_str().is_some()) {
-            // For boolean options, treat string "true"/"false" as boolean
             let bool_val = if let Some(b) = value.as_bool() {
                 b
             } else if let Some(s) = value.as_str() {
-                s == "true"
+                s.eq_ignore_ascii_case("true")
             } else {
                 false
             };
 
             if bool_val {
-                // Look up alias from subcommand config
                 let flag = if let Some(sc) = subcommand_config {
                     if let Some(options) = &sc.options {
                         options
@@ -664,13 +703,16 @@ impl Adapter {
             return Ok(());
         }
 
-        let value_str = self.value_to_string(value).await?;
-        if !value_str.is_empty() {
-            if positional_arg_names.contains(key) {
-                final_args.push(value_str);
-            } else {
-                final_args.push(format!("--{}", key));
-                final_args.push(value_str);
+        // Standard value handling for non-boolean, non-file-arg options.
+        // This can return None for `null` values.
+        if let Some(value_str) = Self::value_to_string(value).await? {
+            if !value_str.is_empty() {
+                if positional_arg_names.contains(key) {
+                    final_args.push(value_str);
+                } else {
+                    final_args.push(format!("--{}", key));
+                    final_args.push(value_str);
+                }
             }
         }
         Ok(())
@@ -678,29 +720,29 @@ impl Adapter {
 
     /// Converts a serde_json::Value to a string, handling recursion with boxing.
     fn value_to_string<'a>(
-        &'a self,
         value: &'a Value,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send + 'a>> {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<String>>> + Send + 'a>>
+    {
         Box::pin(async move {
-            let s = match value {
-                Value::Null => return Ok(String::new()), // Return empty string for null values
-                Value::String(s) => s.clone(),
-                Value::Number(n) => n.to_string(),
-                Value::Bool(b) => b.to_string(),
+            match value {
+                Value::Null => Ok(None),
+                Value::String(s) => Ok(Some(s.clone())),
+                Value::Number(n) => Ok(Some(n.to_string())),
+                Value::Bool(b) => Ok(Some(b.to_string())),
                 Value::Array(arr) => {
                     let mut result = Vec::new();
                     for item in arr {
-                        result.push(self.value_to_string(item).await?);
+                        if let Some(s) = Self::value_to_string(item).await? {
+                            result.push(s);
+                        }
                     }
-                    return Ok(result.join(" "));
+                    if result.is_empty() {
+                        return Ok(None);
+                    }
+                    Ok(Some(result.join(" ")))
                 }
-                _ => value.to_string(),
-            };
-
-            if Self::needs_file_handling(&s) {
-                self.create_temp_file_with_content(&s).await
-            } else {
-                Ok(s)
+                // For other types like Object, we don't want to convert them to a string.
+                _ => Ok(None),
             }
         })
     }

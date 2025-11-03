@@ -317,7 +317,7 @@ impl AhmaMcpService {
 
         let mut current_subcommands = tool_config.subcommand.as_ref()?;
         let mut found_subcommand: Option<&SubcommandConfig> = None;
-        let mut command_parts = vec![tool_config.command.clone()];
+        let command_parts = vec![tool_config.command.clone()];
 
         for (i, part) in subcommand_parts.iter().enumerate() {
             tracing::debug!(
@@ -338,9 +338,11 @@ impl AhmaMcpService {
                     sub.enabled
                 );
 
-                if sub.name != "default" {
-                    command_parts.push(sub.name.clone());
-                }
+                // Don't add subcommand name to command_parts - the adapter will add it
+                // when preparing the actual command arguments
+                // if sub.name != "default" {
+                //     command_parts.push(sub.name.clone());
+                // }
 
                 if i == subcommand_parts.len() - 1 {
                     found_subcommand = Some(sub);
