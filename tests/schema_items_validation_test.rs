@@ -12,6 +12,23 @@ use serde_json::Value;
 #[tokio::test]
 async fn test_array_parameters_must_have_items_property() -> anyhow::Result<()> {
     init_test_logging();
+
+    // Force rebuild to ensure we're testing the latest code in CI
+    eprintln!("Building latest binary to avoid stale cache issues...");
+    let build_output = std::process::Command::new("cargo")
+        .args(&["build", "--bin", "ahma_mcp"])
+        .output()
+        .expect("Failed to build binary");
+
+    if !build_output.status.success() {
+        eprintln!(
+            "Build stderr: {}",
+            String::from_utf8_lossy(&build_output.stderr)
+        );
+        panic!("Failed to build ahma_mcp binary");
+    }
+    eprintln!("Binary built successfully");
+
     // Create a test client with the real tool configurations (assume new_client is now async)
     let client = new_client(Some(".ahma/tools")).await?;
     let tools = client.list_all_tools().await?;
@@ -98,15 +115,33 @@ async fn test_array_parameters_must_have_items_property() -> anyhow::Result<()> 
     for result in results {
         result?; // Propagate any errors
     }
-    assert!(
-        validated_arrays >= 3,
-        "Should have validated at least 3 array parameters in cargo audit options (ignore, target-arch, target-os)"
-    );
 
-    eprintln!(
-        "✅ All {} array parameters have proper 'items' properties!",
-        validated_arrays
-    );
+    // Check if cargo-audit is installed
+    let audit_installed = std::process::Command::new("cargo")
+        .args(&["audit", "--version"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    if audit_installed {
+        assert!(
+            validated_arrays >= 5,
+            "Should have validated at least 5 array parameters with cargo audit installed (ignore, target-arch, target-os, args, exclude)"
+        );
+        eprintln!(
+            "cargo-audit is installed, validated {} array parameters.",
+            validated_arrays
+        );
+    } else {
+        assert!(
+            validated_arrays >= 2,
+            "Should have validated at least 2 array parameters without cargo audit installed (args, exclude)"
+        );
+        eprintln!(
+            "cargo-audit not found, skipping audit-related parameter checks. Validated {} array parameters.",
+            validated_arrays
+        );
+    }
 
     client.cancel().await?;
     Ok(())

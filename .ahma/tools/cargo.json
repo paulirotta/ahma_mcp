@@ -1286,23 +1286,8 @@
         },
         {
             "name": "audit",
-            "description": "Audit dependencies for security vulnerabilities.",
+            "description": "Audit project for security vulnerabilities",
             "options": [
-                {
-                    "name": "json",
-                    "type": "boolean",
-                    "description": "Output report in JSON format"
-                },
-                {
-                    "name": "fix",
-                    "type": "boolean",
-                    "description": "Automatically try to fix vulnerabilities"
-                },
-                {
-                    "name": "stale",
-                    "type": "boolean",
-                    "description": "Check for stale advisory database"
-                },
                 {
                     "name": "ignore",
                     "type": "array",
@@ -1317,6 +1302,31 @@
                     "name": "target-os",
                     "type": "array",
                     "description": "filter vulnerabilities by OS (default: no filter). Can be specified multiple times"
+                },
+                {
+                    "name": "json",
+                    "type": "boolean",
+                    "description": "Output report in JSON format"
+                },
+                {
+                    "name": "fix",
+                    "type": "boolean",
+                    "description": "Automatically try to fix vulnerabilities"
+                },
+                {
+                    "name": "fix-allow-dirty",
+                    "type": "boolean",
+                    "description": "Allow dirty when applying fixes"
+                },
+                {
+                    "name": "dry-run",
+                    "type": "boolean",
+                    "description": "Don't actually write to Cargo.toml"
+                },
+                {
+                    "name": "stale",
+                    "type": "boolean",
+                    "description": "Check for stale advisory database"
                 }
             ],
             "availability_check": {
