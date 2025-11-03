@@ -115,15 +115,33 @@ async fn test_array_parameters_must_have_items_property() -> anyhow::Result<()> 
     for result in results {
         result?; // Propagate any errors
     }
-    assert!(
-        validated_arrays >= 5,
-        "Should have validated at least 5 array parameters in cargo audit options (ignore, target-arch, target-os, args, exclude)"
-    );
 
-    eprintln!(
-        "✅ All {} array parameters have proper 'items' properties!",
-        validated_arrays
-    );
+    // Check if cargo-audit is installed
+    let audit_installed = std::process::Command::new("cargo")
+        .args(&["audit", "--version"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    if audit_installed {
+        assert!(
+            validated_arrays >= 5,
+            "Should have validated at least 5 array parameters with cargo audit installed (ignore, target-arch, target-os, args, exclude)"
+        );
+        eprintln!(
+            "cargo-audit is installed, validated {} array parameters.",
+            validated_arrays
+        );
+    } else {
+        assert!(
+            validated_arrays >= 2,
+            "Should have validated at least 2 array parameters without cargo audit installed (args, exclude)"
+        );
+        eprintln!(
+            "cargo-audit not found, skipping audit-related parameter checks. Validated {} array parameters.",
+            validated_arrays
+        );
+    }
 
     client.cancel().await?;
     Ok(())
