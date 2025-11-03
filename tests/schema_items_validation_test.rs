@@ -116,8 +116,8 @@ async fn test_array_parameters_must_have_items_property() -> anyhow::Result<()> 
         result?; // Propagate any errors
     }
     assert!(
-        validated_arrays >= 3,
-        "Should have validated at least 3 array parameters in cargo audit options (ignore, target-arch, target-os)"
+        validated_arrays >= 5,
+        "Should have validated at least 5 array parameters in cargo audit options (ignore, target-arch, target-os, args, exclude)"
     );
 
     eprintln!(
