@@ -132,4 +132,5 @@ When a new task is assigned:
 3. If the task involves adding or changing tool behavior, you **must** achieve this by editing the JSON files in the `.ahma/tools/` directory.
 4. You **must not** modify the Rust source code to add tool-specific logic.
 5. Follow the existing development principles: write tests for new functionality and ensure all code is formatted (`cargo fmt`) and free of linter warnings (`cargo clippy`).
-6. After any code changes affecting tool execution, restart the server (`cargo build --release`) and test interactively.
+6. After any code changes affecting tool execution, restart the server (`cargo build--release`) and test interactively.
+7. **Before stopping work**, you **must** run the `ahma_mcp rust_quality_check` tool and verify that all checks pass (formatting, linting, tests, and build). Do not mark work as complete until the quality check succeeds.

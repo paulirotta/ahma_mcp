@@ -36,9 +36,9 @@
         },
         {
             "tool": "cargo",
-            "subcommand": "nextest",
+            "subcommand": "test",
             "args": {},
-            "description": "Run all tests with nextest"
+            "description": "Run all tests"
         },
         {
             "tool": "cargo",

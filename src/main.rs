@@ -55,6 +55,7 @@ use rmcp::ServiceExt;
 use serde_json::{Value, from_str};
 use std::{
     fs,
+    io::IsTerminal,
     path::PathBuf,
     sync::Arc,
     time::{Duration, Instant},
@@ -135,6 +136,25 @@ async fn main() -> Result<()> {
     */
 
     if cli.server || (cli.tool_name.is_none() && cli.validate.is_none()) {
+        // Check if stdin is a terminal (interactive mode)
+        if std::io::stdin().is_terminal() && !cli.server {
+            eprintln!(
+                "\n❌ Error: ahma_mcp is an MCP server designed for JSON-RPC communication over stdio.\n"
+            );
+            eprintln!("It cannot be run directly from an interactive terminal.\n");
+            eprintln!("Usage options:");
+            eprintln!("  1. Validate configuration:");
+            eprintln!("     ahma_mcp --validate");
+            eprintln!("     ahma_mcp --validate .ahma/tools/");
+            eprintln!("     ahma_mcp --validate .ahma/tools/cargo.json\n");
+            eprintln!("  2. Run as MCP server (requires MCP client with stdio transport):");
+            eprintln!("     Configure in your MCP client's configuration file\n");
+            eprintln!("  3. Execute a single tool command:");
+            eprintln!("     ahma_mcp <tool_name> [tool_arguments...]\n");
+            eprintln!("For more information, run: ahma_mcp --help\n");
+            std::process::exit(1);
+        }
+
         tracing::info!("Running in Server mode");
         run_server_mode(cli).await
     } else if cli.validate.is_some() {
@@ -231,10 +251,12 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
         tracing::error!("Tools directory: {:?}", cli.tools_dir);
         // It's not a fatal error to have no tools, just log it.
     } else {
+        let tool_names: Vec<String> = configs.keys().cloned().collect();
         tracing::info!(
-            "Loaded {} tool configurations ({} disabled)",
+            "Loaded {} tool configurations ({} disabled): {}",
             configs.len(),
-            availability_summary.disabled_tools.len()
+            availability_summary.disabled_tools.len(),
+            tool_names.join(", ")
         );
     }
 

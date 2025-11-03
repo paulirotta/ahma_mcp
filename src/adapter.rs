@@ -594,8 +594,14 @@ impl Adapter {
                 if key == "args" || key == "subcommand" || key == "_subcommand" {
                     continue;
                 }
-                self.process_named_arg(key, value, &positional_arg_names, &mut final_args)
-                    .await?;
+                self.process_named_arg(
+                    key,
+                    value,
+                    &positional_arg_names,
+                    subcommand_config,
+                    &mut final_args,
+                )
+                .await?;
             }
         }
 
@@ -608,11 +614,52 @@ impl Adapter {
         key: &str,
         value: &Value,
         positional_arg_names: &HashSet<String>,
+        subcommand_config: Option<&crate::config::SubcommandConfig>,
         final_args: &mut Vec<String>,
     ) -> Result<()> {
-        if let Some(bool_val) = value.as_bool() {
+        // Check if this option is defined as boolean type in config
+        let is_boolean_option = if let Some(sc) = subcommand_config {
+            if let Some(options) = &sc.options {
+                options
+                    .iter()
+                    .find(|opt| opt.name == key)
+                    .map(|opt| opt.option_type == "boolean")
+                    .unwrap_or(false)
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        // Handle boolean values
+        if value.as_bool().is_some() || (is_boolean_option && value.as_str().is_some()) {
+            // For boolean options, treat string "true"/"false" as boolean
+            let bool_val = if let Some(b) = value.as_bool() {
+                b
+            } else if let Some(s) = value.as_str() {
+                s == "true"
+            } else {
+                false
+            };
+
             if bool_val {
-                final_args.push(format!("--{}", key));
+                // Look up alias from subcommand config
+                let flag = if let Some(sc) = subcommand_config {
+                    if let Some(options) = &sc.options {
+                        options
+                            .iter()
+                            .find(|opt| opt.name == key)
+                            .and_then(|opt| opt.alias.as_ref())
+                            .map(|alias| format!("-{}", alias))
+                            .unwrap_or_else(|| format!("--{}", key))
+                    } else {
+                        format!("--{}", key)
+                    }
+                } else {
+                    format!("--{}", key)
+                };
+                final_args.push(flag);
             }
             return Ok(());
         }
@@ -636,6 +683,7 @@ impl Adapter {
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send + 'a>> {
         Box::pin(async move {
             let s = match value {
+                Value::Null => return Ok(String::new()), // Return empty string for null values
                 Value::String(s) => s.clone(),
                 Value::Number(n) => n.to_string(),
                 Value::Bool(b) => b.to_string(),

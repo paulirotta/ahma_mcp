@@ -482,17 +482,104 @@
         },
         {
             "name": "run",
-            "description": "Run the project",
+            "description": "Run a binary or example of the local package. Executes asynchronously by default.",
             "options": [
                 {
                     "name": "release",
                     "type": "boolean",
-                    "description": "Run with optimizations"
+                    "description": "Run with optimizations (--release)"
                 },
                 {
                     "name": "bin",
                     "type": "string",
                     "description": "Name of the binary to run"
+                },
+                {
+                    "name": "example",
+                    "type": "string",
+                    "description": "Name of the example to run"
+                },
+                {
+                    "name": "package",
+                    "type": "string",
+                    "description": "Package with the target to run"
+                },
+                {
+                    "name": "features",
+                    "type": "string",
+                    "description": "Space or comma separated list of features to activate"
+                },
+                {
+                    "name": "all-features",
+                    "type": "boolean",
+                    "description": "Activate all available features"
+                },
+                {
+                    "name": "no-default-features",
+                    "type": "boolean",
+                    "description": "Do not activate the `default` feature"
+                },
+                {
+                    "name": "profile",
+                    "type": "string",
+                    "description": "Build artifacts with the specified profile"
+                },
+                {
+                    "name": "target",
+                    "type": "string",
+                    "description": "Build for the target triple"
+                },
+                {
+                    "name": "target-dir",
+                    "type": "string",
+                    "description": "Directory for all generated artifacts",
+                    "format": "path"
+                },
+                {
+                    "name": "manifest-path",
+                    "type": "string",
+                    "description": "Path to Cargo.toml",
+                    "format": "path"
+                },
+                {
+                    "name": "jobs",
+                    "type": "integer",
+                    "description": "Number of parallel jobs, defaults to # of CPUs (-j, --jobs <N>)"
+                },
+                {
+                    "name": "quiet",
+                    "type": "boolean",
+                    "description": "Do not print cargo log messages"
+                },
+                {
+                    "name": "verbose",
+                    "type": "integer",
+                    "description": "Use verbose output (-vv very verbose/build.rs output)"
+                },
+                {
+                    "name": "color",
+                    "type": "string",
+                    "description": "Coloring [possible values: auto, always, never]"
+                },
+                {
+                    "name": "message-format",
+                    "type": "string",
+                    "description": "Error format [possible values: human, short, json]"
+                },
+                {
+                    "name": "locked",
+                    "type": "boolean",
+                    "description": "Assert that `Cargo.lock` will remain unchanged"
+                },
+                {
+                    "name": "offline",
+                    "type": "boolean",
+                    "description": "Run without accessing the network"
+                },
+                {
+                    "name": "frozen",
+                    "type": "boolean",
+                    "description": "Equivalent to specifying both --locked and --offline"
                 },
                 {
                     "name": "args",
@@ -764,7 +851,16 @@
                             "type": "boolean",
                             "description": "Scope the operation to the workspace when applicable"
                         }
-                    ]
+                    ],
+                    "availability_check": {
+                        "command": "cargo",
+                        "args": [
+                            "nextest",
+                            "show",
+                            "--help"
+                        ],
+                        "skip_subcommand_args": true
+                    }
                 }
             ]
         },

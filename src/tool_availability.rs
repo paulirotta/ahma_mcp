@@ -247,6 +247,18 @@ fn build_probe_plans(
             continue;
         }
 
+        // Skip probe for project-relative commands without explicit availability_check
+        // Commands like "./gradlew" are project-specific and shouldn't be probed globally
+        if config.availability_check.is_none()
+            && (config.command.starts_with("./") || config.command.starts_with("../"))
+        {
+            debug!(
+                "Skipping availability probe for tool '{}' with project-relative command '{}'",
+                tool_name, config.command
+            );
+            continue;
+        }
+
         plans.push(build_tool_plan(tool_name, config, default_working_dir));
 
         if let Some(subcommands) = &config.subcommand {
