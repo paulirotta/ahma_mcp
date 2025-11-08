@@ -178,7 +178,7 @@ impl MtdfValidator {
 
         if config.command.is_empty() {
             errors.push(SchemaValidationError {
-                error_type: ValidationErrorType::MissingRequiredField,
+                error_type: ValidationErrorType::ConstraintViolation,
                 field_path: "command".to_string(),
                 message: "Command cannot be empty".to_string(),
                 suggestion: None,
@@ -192,6 +192,29 @@ impl MtdfValidator {
                 message: "Description cannot be empty".to_string(),
                 suggestion: None,
             });
+        }
+
+        // Validate timeout constraints
+        if let Some(timeout) = config.timeout_seconds {
+            if timeout > 3600 {
+                errors.push(SchemaValidationError {
+                    error_type: ValidationErrorType::ConstraintViolation,
+                    field_path: "timeout_seconds".to_string(),
+                    message: "Timeout should not exceed 3600 seconds (1 hour)".to_string(),
+                    suggestion: Some("Consider using a shorter timeout or breaking the operation into smaller steps".to_string()),
+                });
+            }
+            if timeout == 0 {
+                errors.push(SchemaValidationError {
+                    error_type: ValidationErrorType::ConstraintViolation,
+                    field_path: "timeout_seconds".to_string(),
+                    message: "Timeout should be at least 1 second".to_string(),
+                    suggestion: Some(
+                        "Set a minimum timeout of 1 second for reliable operation detection"
+                            .to_string(),
+                    ),
+                });
+            }
         }
 
         // Validate subcommands if present
@@ -213,6 +236,9 @@ impl MtdfValidator {
     pub fn format_errors(&self, errors: &[SchemaValidationError], file_path: &Path) -> String {
         let mut report = format!("Validation errors in {}:\n\n", file_path.display());
 
+        let error_count = errors.len();
+        report.push_str(&format!("Found {} error(s):\n\n", error_count));
+
         for (i, error) in errors.iter().enumerate() {
             report.push_str(&format!(
                 "{}. {} at '{}': {}\n",
@@ -227,6 +253,13 @@ impl MtdfValidator {
             }
             report.push('\n');
         }
+
+        // Add general help
+        report.push_str("Common fixes:\n");
+        report.push_str("• Check the tool configuration schema at docs/tool-schema-guide.md\n");
+        report.push_str("• Ensure all required fields are present\n");
+        report.push_str("• Verify data types match the expected schema\n");
+        report.push_str("• Review suggestions above for specific field corrections\n");
 
         report
     }
@@ -254,6 +287,34 @@ impl MtdfValidator {
                 message: "Subcommand description cannot be empty".to_string(),
                 suggestion: None,
             });
+        }
+
+        // Check for logical inconsistency between synchronous flag and description
+        if subcommand.synchronous.unwrap_or(false) {
+            let desc_lower = subcommand.description.to_lowercase();
+            let async_keywords = [
+                "operation_id",
+                "notification",
+                "asynchronously",
+                "async",
+                "background",
+                "returns immediately",
+                "continue with other tasks",
+                "pushed via notification",
+                "results pushed",
+            ];
+
+            for keyword in &async_keywords {
+                if desc_lower.contains(keyword) {
+                    errors.push(SchemaValidationError {
+                        error_type: ValidationErrorType::LogicalInconsistency,
+                        field_path: format!("{}.description", path),
+                        message: "Description mentions async behavior but subcommand is marked as synchronous".to_string(),
+                        suggestion: Some("Either change synchronous to false or update description to reflect synchronous behavior".to_string()),
+                    });
+                    break; // Only report one inconsistency per description
+                }
+            }
         }
 
         // Validate nested subcommands
@@ -294,15 +355,28 @@ impl MtdfValidator {
         // Validate type
         let valid_types = ["string", "boolean", "integer", "array"];
         if !valid_types.contains(&option.option_type.as_str()) {
+            let suggestion = match option.option_type.as_str() {
+                "bool" => Some("Use 'boolean' instead of 'bool'".to_string()),
+                "int" => Some("Use 'integer' instead of 'int'".to_string()),
+                "str" => Some("Use 'string' instead of 'str'".to_string()),
+                _ => None,
+            };
+
+            let error_type = if suggestion.is_some() {
+                ValidationErrorType::InvalidValue
+            } else {
+                ValidationErrorType::InvalidType
+            };
+
             errors.push(SchemaValidationError {
-                error_type: ValidationErrorType::InvalidType,
+                error_type,
                 field_path: format!("{}.type", path),
                 message: format!(
                     "Invalid option type '{}'. Must be one of: {}",
                     option.option_type,
                     valid_types.join(", ")
                 ),
-                suggestion: None,
+                suggestion,
             });
         }
     }
