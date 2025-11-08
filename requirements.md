@@ -134,3 +134,12 @@ When a new task is assigned:
 5. Follow the existing development principles: write tests for new functionality and ensure all code is formatted (`cargo fmt`) and free of linter warnings (`cargo clippy`).
 6. After any code changes affecting tool execution, restart the server (`cargo build--release`) and test interactively.
 7. **Before stopping work**, you **must** run the `ahma_mcp rust_quality_check` tool and verify that all checks pass (formatting, linting, tests, and build). Do not mark work as complete until the quality check succeeds.
+
+### 4.3. Copilot CLI Verification
+
+- **R8.1**: Copilot LLMs **should** validate code and tool changes by invoking `ahma_mcp` directly from the command line using the `--tool_name` and `--tool_args` parameters. This keeps validation steps reproducible and scriptable during autonomous runs.
+- **R8.2**: Always pass the MCP tool identifier to `--tool_name`, and supply the exact arguments that would normally be provided through the MCP interface via `--tool_args`.
+- **R8.3**: Use the double-dash (`--`) separator within `--tool_args` to forward raw positional arguments exactly as the target CLI expects when necessary.
+- **Example – rebuild after code changes**: `ahma_mcp --tool_name cargo_build --tool_args -- --release`
+- **Example – run targeted tests**: `ahma_mcp --tool_name cargo_nextest --tool_args -- --package adapter_comprehensive_test`
+- **Example – inspect repository status**: `ahma_mcp --tool_name git_status --tool_args -- --working-directory .`
