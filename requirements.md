@@ -38,6 +38,14 @@ These are the non-negotiable principles of the project.
 - **R5.2**: Validation **must** occur at server startup. Invalid tool configurations must be rejected and not loaded, with clear error messages logged.
 - **R5.3**: The schema must support types (`string`, `boolean`, `integer`, `array`), required fields, and security validation for file paths (`"format": "path"`).
 
+### R6: Modular Architecture
+
+- **R6.1**: The project **must** be organized as a Cargo workspace with clearly separated concerns to improve maintainability and enable future extensions.
+- **R6.2**: Core library functionality (tool execution, configuration, async orchestration, MCP service) **must** live in the `ahma_core` crate, which is protocol-agnostic and reusable.
+- **R6.3**: The CLI interface and server startup logic **must** live in the `ahma_shell` binary crate, which depends on `ahma_core`.
+- **R6.4**: The core library **must** expose a clean public API that allows other crates (like future `ahma_web` or `ahma_okta` components) to leverage the tool execution engine without tight coupling.
+- **R6.5**: This separation ensures that adding new interfaces (web, authentication) or changing the CLI does not require modifications to core business logic.
+
 ## 3. Tool Definition (MTDF Schema)
 
 All tools are defined in `.json` files in the `tools/` directory. This is the MCP Tool Definition Format (MTDF).
@@ -88,9 +96,9 @@ All tools are defined in `.json` files in the `tools/` directory. This is the MC
 
 Sequence tools allow for chaining multiple commands into a single, synchronous workflow.
 
-- **Requirement R6.1**: The system **must** support sequence tools to execute a series of predefined steps in order.
-- **Requirement R6.2**: A sequence is defined by setting `"command": "sequence"` and providing a `sequence` array.
-- **Requirement R6.3**: A configurable delay (`step_delay_ms`) **must** be supported between steps to prevent resource conflicts (e.g., `Cargo.lock` contention).
+- **Requirement R7.1**: The system **must** support sequence tools to execute a series of predefined steps in order.
+- **Requirement R7.2**: A sequence is defined by setting `"command": "sequence"` and providing a `sequence` array.
+- **Requirement R7.3**: A configurable delay (`step_delay_ms`) **must** be supported between steps to prevent resource conflicts (e.g., `Cargo.lock` contention).
 
 #### Example Sequence Tool
 
@@ -100,16 +108,16 @@ See .ahma/tools/rust_quality_check.json
 
 ### 4.1. Server Restart and Testing
 
-**R7.1**: Always use `ahma_mcp` running in VS Code to interactively test the server.
+**R8.1**: Always use `ahma_mcp` running in VS Code to interactively test the server.
 
-**R7.2**: To restart the server after code changes:
+**R8.2**: To restart the server after code changes:
 
 - Run `cargo build --release` (either via terminal or `ahma_mcp` MCP tool)
 - Reload the VS Code window (Cmd+Shift+P → "Developer: Reload Window") to restart the MCP server
 - Alternatively, kill the running `ahma_mcp` process and VS Code will restart it automatically
 - The server reads tool configurations from `.ahma/tools/` on each startup
 
-**R7.3**: Interactive Testing Process:
+**R8.3**: Interactive Testing Process:
 
 1. Make code or configuration changes
 2. Run `cargo build --release` to trigger server restart
@@ -117,7 +125,7 @@ See .ahma/tools/rust_quality_check.json
 4. If a tool does not work correctly, fix it immediately and restart
 5. Verify the fix works before proceeding
 
-**R7.4**: Follow strict TDD principles:
+**R8.4**: Follow strict TDD principles:
 
 - Write unit/integration tests for new functionality
 - Use interactive testing to diagnose and verify fixes
@@ -137,9 +145,9 @@ When a new task is assigned:
 
 ### 4.3. Copilot CLI Verification
 
-- **R8.1**: Copilot LLMs **should** validate code and tool changes by invoking `ahma_mcp` directly from the command line using the `--tool_name` and `--tool_args` parameters. This keeps validation steps reproducible and scriptable during autonomous runs.
-- **R8.2**: Always pass the MCP tool identifier to `--tool_name`, and supply the exact arguments that would normally be provided through the MCP interface via `--tool_args`.
-- **R8.3**: Use the double-dash (`--`) separator within `--tool_args` to forward raw positional arguments exactly as the target CLI expects when necessary.
+- **R9.1**: Copilot LLMs **should** validate code and tool changes by invoking `ahma_mcp` directly from the command line using the `--tool_name` and `--tool_args` parameters. This keeps validation steps reproducible and scriptable during autonomous runs.
+- **R9.2**: Always pass the MCP tool identifier to `--tool_name`, and supply the exact arguments that would normally be provided through the MCP interface via `--tool_args`.
+- **R9.3**: Use the double-dash (`--`) separator within `--tool_args` to forward raw positional arguments exactly as the target CLI expects when necessary.
 - **Example – rebuild after code changes**: `ahma_mcp --tool_name cargo_build --tool_args -- --release`
 - **Example – run targeted tests**: `ahma_mcp --tool_name cargo_nextest --tool_args -- --package adapter_comprehensive_test`
 - **Example – inspect repository status**: `ahma_mcp --tool_name git_status --tool_args -- --working-directory .`

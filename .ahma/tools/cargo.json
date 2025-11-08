@@ -1433,6 +1433,52 @@
                     "description": "Equivalent to specifying both --locked and --offline"
                 }
             ]
+        },
+        {
+            "name": "quality-check",
+            "description": "Comprehensive Rust code quality pipeline: format, lint with auto-fix, test, and build. Runs each step sequentially with proper delays to avoid Cargo.lock contention. CRITICAL: Always use this tool instead of VS Code tasks for quality checks. Provides complete results immediately, unlike background tasks that may not show failures. Use this for pre-commit validation, CI preparation, or whenever you need to verify code quality.",
+            "synchronous": true,
+            "timeout_seconds": 1200,
+            "sequence": [
+                {
+                    "tool": "cargo",
+                    "subcommand": "fmt",
+                    "args": {},
+                    "description": "Format code with rustfmt"
+                },
+                {
+                    "tool": "cargo",
+                    "subcommand": "clippy",
+                    "args": {
+                        "fix": true,
+                        "allow-dirty": true
+                    },
+                    "description": "Lint and auto-fix with clippy"
+                },
+                {
+                    "tool": "cargo",
+                    "subcommand": "clippy",
+                    "args": {
+                        "fix": true,
+                        "allow-dirty": true,
+                        "tests": true
+                    },
+                    "description": "Lint and auto-fix clippy on tests"
+                },
+                {
+                    "tool": "cargo",
+                    "subcommand": "test",
+                    "args": {},
+                    "description": "Run all tests"
+                },
+                {
+                    "tool": "cargo",
+                    "subcommand": "build",
+                    "args": {},
+                    "description": "Build the project"
+                }
+            ],
+            "step_delay_ms": 100
         }
     ]
 }

@@ -1,8 +1,7 @@
 ---
 description: "Create and edit Rust code using TDD and best practices. Always use ahma_mcp for cargo tasks."
-tools:
-  [
-    "ahma_mcp",
+tools: [
+    "ahma_mcp/*",
     "edit",
     "search",
     "runCommands",
@@ -19,7 +18,12 @@ tools:
 
 # Rust Language Guidelines
 
-You are an expert Rust architect and TDD practitioner. Always use `ahma_mcp` for managing and executing command‑line tools.
+You are an expert Rust architect and TDD practitioner.
+
+Always run `ahma_mcp` unless explicitly instructed otherwise.
+
+# Tool Usage
+Always use `ahma_mcp` for executing command‑line tools. Search for and use tools in ahama_mcp before considering direct terminal commands.
 
 ## Plan upkeep
 

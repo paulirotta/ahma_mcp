@@ -3,13 +3,12 @@
 version = 4
 
 [[package]]
-name = "ahma_mcp"
+name = "ahma_core"
 version = "0.3.2"
 dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
- "clap",
  "directories",
  "futures",
  "regex",
@@ -22,6 +21,23 @@ dependencies = [
  "tokio",
  "tokio-util",
  "toml",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "ahma_shell"
+version = "0.3.2"
+dependencies = [
+ "ahma_core",
+ "anyhow",
+ "clap",
+ "directories",
+ "rmcp",
+ "serde_json",
+ "tempfile",
+ "tokio",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",

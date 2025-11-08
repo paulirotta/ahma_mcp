@@ -41,6 +41,17 @@ Here's an example of Claude Sonnet 3.5's workflow, where it uses tools and think
 
 ## Getting Started
 
+### Project Structure
+
+`ahma_mcp` is organized as a Cargo workspace with two main crates:
+
+- **`ahma_core`**: Library crate containing all core functionality (tool execution, configuration, async orchestration, MCP service)
+- **`ahma_shell`**: Binary crate providing the CLI interface and server startup logic
+
+This modular architecture ensures clean separation of concerns and enables future extensions (e.g., web interface, authentication).
+
+### Installation
+
 1. **Clone and build the repository**:
 
     ```bash
@@ -52,8 +63,10 @@ Here's an example of Claude Sonnet 3.5's workflow, where it uses tools and think
 2. **Run tests to verify installation**:
 
     ```bash
-    cargo nextest run
+    cargo test
     ```
+
+The compiled binary will be at `target/release/ahma_mcp`.
 
 ## VS Code MCP Integration
 
