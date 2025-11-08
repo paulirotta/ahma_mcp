@@ -50,6 +50,10 @@ fn test_subcommand_config_defaults() {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+
+        sequence: None,
+
+        step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
     };
@@ -141,6 +145,10 @@ fn test_tool_config_serialization() {
             enabled: true,
             guidance_key: Some("cargo_build".to_string()),
             subcommand: None,
+
+            sequence: None,
+
+            step_delay_ms: None,
             availability_check: None,
             install_instructions: None,
         }]),

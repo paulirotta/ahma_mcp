@@ -16,10 +16,10 @@ async fn test_sequence_tool_loads() -> Result<()> {
     let tools = client.list_tools(None).await?;
     let tool_names: Vec<_> = tools.tools.iter().map(|t| t.name.as_ref()).collect();
 
-    // Verify rust_quality_check tool is loaded
+    // Verify cargo tool is loaded (it now contains the quality-check subcommand sequence)
     assert!(
-        tool_names.contains(&"rust_quality_check"),
-        "rust_quality_check tool should be loaded. Available tools: {:?}",
+        tool_names.contains(&"cargo"),
+        "cargo tool should be loaded. Available tools: {:?}",
         tool_names
     );
 
@@ -119,9 +119,9 @@ async fn test_simple_sequence_execution() -> Result<()> {
 async fn test_rust_quality_check_structure() -> Result<()> {
     init_test_logging();
 
-    // Test that the rust_quality_check.json file is valid
-    let config_path = std::path::Path::new(".ahma/tools/rust_quality_check.json");
-    assert!(config_path.exists(), "rust_quality_check.json should exist");
+    // Test that the cargo.json file contains quality-check subcommand
+    let config_path = std::path::Path::new(".ahma/tools/cargo.json");
+    assert!(config_path.exists(), "cargo.json should exist");
 
     let config_content = std::fs::read_to_string(config_path)?;
     let config: serde_json::Value = serde_json::from_str(&config_content)?;
@@ -129,17 +129,27 @@ async fn test_rust_quality_check_structure() -> Result<()> {
     // Verify structure
     assert_eq!(
         config["name"].as_str(),
-        Some("rust_quality_check"),
-        "Tool name should be rust_quality_check"
+        Some("cargo"),
+        "Tool name should be cargo"
     );
-    assert_eq!(
-        config["command"].as_str(),
-        Some("sequence"),
-        "Command should be 'sequence'"
-    );
-    assert!(config["sequence"].is_array(), "Should have sequence array");
 
-    let sequence = config["sequence"].as_array().unwrap();
+    // Find the quality-check subcommand
+    let subcommands = config["subcommand"]
+        .as_array()
+        .expect("Should have subcommands array");
+
+    let quality_check = subcommands
+        .iter()
+        .find(|sc| sc["name"].as_str() == Some("quality-check"))
+        .expect("Should have quality-check subcommand");
+
+    // Verify quality-check has a sequence
+    assert!(
+        quality_check["sequence"].is_array(),
+        "quality-check should have sequence array"
+    );
+
+    let sequence = quality_check["sequence"].as_array().unwrap();
     assert_eq!(
         sequence.len(),
         5,
@@ -164,7 +174,7 @@ async fn test_rust_quality_check_structure() -> Result<()> {
 
     // Verify delay
     assert_eq!(
-        config["step_delay_ms"].as_u64(),
+        quality_check["step_delay_ms"].as_u64(),
         Some(100),
         "Step delay should be 100ms"
     );

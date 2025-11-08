@@ -334,6 +334,11 @@ impl MtdfValidator {
                 "Whether this subcommand runs synchronously (default: false)",
             ),
             (
+                "timeout_seconds",
+                "number",
+                "Override timeout for this specific subcommand",
+            ),
+            (
                 "guidance_key",
                 "string",
                 "Key to reference shared guidance from tool_guidance.json",
@@ -343,6 +348,16 @@ impl MtdfValidator {
                 "subcommand",
                 "array",
                 "Array of nested subcommand definitions",
+            ),
+            (
+                "sequence",
+                "array",
+                "Array of sequential steps for multi-command subcommands",
+            ),
+            (
+                "step_delay_ms",
+                "number",
+                "Delay in milliseconds between sequence steps",
             ),
             (
                 "availability_check",

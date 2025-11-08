@@ -139,6 +139,10 @@ mod mcp_service_tests {
                 }]),
                 positional_args: None,
                 subcommand: None,
+
+                sequence: None,
+
+                step_delay_ms: None,
                 availability_check: None,
                 install_instructions: None,
             }]),

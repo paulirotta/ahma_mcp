@@ -104,6 +104,10 @@ async fn test_multiline_argument_with_echo() {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+
+        sequence: None,
+
+        step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
     };
@@ -357,6 +361,10 @@ async fn test_multiline_git_commit_message() {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+
+        sequence: None,
+
+        step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
     };
@@ -496,6 +504,10 @@ async fn test_special_characters_in_arguments() {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+
+        sequence: None,
+
+        step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
     };

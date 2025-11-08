@@ -291,6 +291,25 @@
             "$ref": "#/$defs/OptionConfig"
           }
         },
+        "sequence": {
+          "description": "Optional sequence of steps for subcommands that orchestrate multiple commands",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/SequenceStep"
+          }
+        },
+        "step_delay_ms": {
+          "description": "Delay in milliseconds between sequence steps",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
         "subcommand": {
           "description": "Nested subcommands for recursive command structures",
           "type": [

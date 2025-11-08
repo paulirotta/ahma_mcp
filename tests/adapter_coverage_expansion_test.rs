@@ -48,6 +48,8 @@ async fn test_prepare_command_and_args_edge_cases() {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        sequence: None,
+        step_delay_ms: None,
         positional_args: None,
         options: None,
         availability_check: None,
@@ -88,6 +90,8 @@ async fn test_prepare_command_and_args_with_aliases() {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        sequence: None,
+        step_delay_ms: None,
         positional_args: None,
         options: Some(vec![
             OptionConfig {
@@ -154,6 +158,8 @@ async fn test_prepare_command_and_args_mixed_types() {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        sequence: None,
+        step_delay_ms: None,
         positional_args: Some(vec![OptionConfig {
             name: "pos_str".to_string(),
             alias: None,
@@ -534,6 +540,8 @@ async fn test_prepare_command_and_args_with_null_values() {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        sequence: None,
+        step_delay_ms: None,
         positional_args: Some(vec![OptionConfig {
             name: "pos_arg".to_string(),
             alias: None,

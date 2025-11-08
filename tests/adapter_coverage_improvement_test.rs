@@ -101,6 +101,8 @@ async fn test_command_preparation_error_paths() -> Result<()> {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        sequence: None,
+        step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
         positional_args: Some(vec![
@@ -269,6 +271,8 @@ async fn test_file_handling_error_scenarios() -> Result<()> {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        sequence: None,
+        step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
         positional_args: None,
@@ -703,6 +707,8 @@ async fn test_complex_async_exec_options() -> Result<()> {
         enabled: true,
         guidance_key: Some("test_guidance".to_string()),
         subcommand: None,
+        sequence: None,
+        step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
         positional_args: Some(vec![OptionConfig {

@@ -141,6 +141,12 @@ pub struct SubcommandConfig {
     /// Nested subcommands for recursive command structures
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subcommand: Option<Vec<SubcommandConfig>>,
+    /// Optional sequence of steps for subcommands that orchestrate multiple commands
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sequence: Option<Vec<SequenceStep>>,
+    /// Delay in milliseconds between sequence steps
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_delay_ms: Option<u64>,
     /// Optional availability probe executed at server startup.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub availability_check: Option<AvailabilityCheck>,

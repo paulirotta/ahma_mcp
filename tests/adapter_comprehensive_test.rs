@@ -395,6 +395,8 @@ async fn test_subcommand_configuration_handling() -> Result<()> {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        sequence: None,
+        step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
         positional_args: Some(vec![ahma_mcp::config::OptionConfig {
@@ -490,6 +492,8 @@ async fn test_file_based_argument_handling() -> Result<()> {
         enabled: true,
         guidance_key: None,
         subcommand: None,
+        sequence: None,
+        step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
         positional_args: None,

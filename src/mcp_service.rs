@@ -892,6 +892,13 @@ impl ServerHandler for AhmaMcpService {
                 }
             };
 
+            // Check if the subcommand itself is a sequence
+            if subcommand_config.sequence.is_some() {
+                return self
+                    .handle_subcommand_sequence(config, subcommand_config, params)
+                    .await;
+            }
+
             let base_command = command_parts.join(" ");
 
             // SECURITY: Path validation
@@ -1350,6 +1357,195 @@ impl AhmaMcpService {
         );
 
         tracing::info!("✓ Sequence tool '{}' completed", config.name);
+
+        Ok(CallToolResult::success(vec![Content::text(summary)]))
+    }
+
+    /// Handles execution of subcommand sequences - subcommands that invoke multiple cargo commands in order.
+    async fn handle_subcommand_sequence(
+        &self,
+        config: &crate::config::ToolConfig,
+        subcommand_config: &crate::config::SubcommandConfig,
+        params: CallToolRequestParam,
+    ) -> Result<CallToolResult, McpError> {
+        let sequence = match &subcommand_config.sequence {
+            Some(seq) => seq,
+            None => {
+                return Err(McpError::invalid_params(
+                    "Subcommand is not a sequence".to_string(),
+                    Some(
+                        serde_json::json!({ "tool": config.name, "subcommand": subcommand_config.name }),
+                    ),
+                ));
+            }
+        };
+
+        let step_delay_ms = subcommand_config
+            .step_delay_ms
+            .unwrap_or(crate::constants::SEQUENCE_STEP_DELAY_MS);
+
+        let args = params.arguments.unwrap_or_default();
+        let working_directory = args
+            .get("working_directory")
+            .and_then(|v| v.as_str())
+            .unwrap_or(".");
+
+        tracing::info!(
+            "🔗 Executing subcommand sequence '{} {}' with {} steps (delay: {}ms)",
+            config.name,
+            subcommand_config.name,
+            sequence.len(),
+            step_delay_ms
+        );
+
+        let mut results = Vec::new();
+        let mut all_outputs = Vec::new();
+
+        for (index, step) in sequence.iter().enumerate() {
+            let step_num = index + 1;
+            let default_desc = format!("{} -> {}", step.tool, step.subcommand);
+            let step_desc = step.description.as_deref().unwrap_or(&default_desc);
+
+            tracing::info!(
+                "  Step {}/{}: {} ({})",
+                step_num,
+                sequence.len(),
+                step_desc,
+                step.tool
+            );
+
+            // Execute this step by looking up the tool and calling it
+            let step_config = match self.configs.get(&step.tool) {
+                Some(cfg) => cfg,
+                None => {
+                    let error_msg = format!(
+                        "Sequence step {}/{} failed: Tool '{}' not found",
+                        step_num,
+                        sequence.len(),
+                        step.tool
+                    );
+                    tracing::error!("{}", error_msg);
+                    results.push(format!("❌ {}", error_msg));
+                    all_outputs.push(error_msg.clone());
+                    return Ok(CallToolResult::success(vec![Content::text(
+                        all_outputs.join("\n\n"),
+                    )]));
+                }
+            };
+
+            if !step_config.enabled {
+                let error_msg = format!(
+                    "Sequence step {}/{} failed: Tool '{}' is disabled (availability probe failed)",
+                    step_num,
+                    sequence.len(),
+                    step.tool
+                );
+                tracing::error!("{}", error_msg);
+                results.push(format!("❌ {}", error_msg));
+                all_outputs.push(error_msg.clone());
+                return Ok(CallToolResult::success(vec![Content::text(
+                    all_outputs.join("\n\n"),
+                )]));
+            }
+
+            // Find the subcommand config
+            let (step_subcommand_config, command_parts) = match self
+                .find_subcommand_config_from_args(step_config, Some(step.subcommand.clone()))
+            {
+                Some(result) => result,
+                None => {
+                    let error_msg = format!(
+                        "Sequence step {}/{} failed: Subcommand '{}' not found in tool '{}'",
+                        step_num,
+                        sequence.len(),
+                        step.subcommand,
+                        step.tool
+                    );
+                    tracing::error!("{}", error_msg);
+                    results.push(format!("❌ {}", error_msg));
+                    all_outputs.push(error_msg.clone());
+                    return Ok(CallToolResult::success(vec![Content::text(
+                        all_outputs.join("\n\n"),
+                    )]));
+                }
+            };
+
+            let base_command = command_parts.join(" ");
+            let mut step_arguments = step.args.clone();
+            step_arguments.remove("working_directory");
+            step_arguments.remove("subcommand");
+
+            // Execute synchronously
+            let timeout = step_subcommand_config
+                .timeout_seconds
+                .or(step_config.timeout_seconds);
+
+            match self
+                .adapter
+                .execute_sync_in_dir(
+                    &base_command,
+                    Some(step_arguments),
+                    working_directory,
+                    timeout,
+                    Some(step_subcommand_config),
+                )
+                .await
+            {
+                Ok(output) => {
+                    let success_msg =
+                        format!("✓ Step {}/{}: {}", step_num, sequence.len(), step_desc);
+                    tracing::info!("  {}", success_msg);
+                    results.push(success_msg);
+
+                    // Include the output
+                    let formatted_output = format!(
+                        "--- Step {}/{}: {} ---\n{}\n",
+                        step_num,
+                        sequence.len(),
+                        step_desc,
+                        output
+                    );
+                    all_outputs.push(formatted_output);
+                }
+                Err(e) => {
+                    let error_msg = format!(
+                        "❌ Step {}/{} failed: {}\nError: {}",
+                        step_num,
+                        sequence.len(),
+                        step_desc,
+                        e
+                    );
+                    tracing::error!("  {}", error_msg);
+                    results.push(error_msg.clone());
+                    all_outputs.push(error_msg);
+
+                    // Stop on first error
+                    break;
+                }
+            }
+
+            // Apply delay between steps (but not after the last one)
+            if index < sequence.len() - 1 {
+                tracing::debug!("  Waiting {}ms before next step...", step_delay_ms);
+                tokio::time::sleep(std::time::Duration::from_millis(step_delay_ms)).await;
+            }
+        }
+
+        // Create final summary
+        let summary = format!(
+            "🔗 Subcommand sequence '{} {}' completed: {} steps\n{}\n\n{}",
+            config.name,
+            subcommand_config.name,
+            sequence.len(),
+            results.join("\n"),
+            all_outputs.join("\n")
+        );
+
+        tracing::info!(
+            "✓ Subcommand sequence '{} {}' completed",
+            config.name,
+            subcommand_config.name
+        );
 
         Ok(CallToolResult::success(vec![Content::text(summary)]))
     }
