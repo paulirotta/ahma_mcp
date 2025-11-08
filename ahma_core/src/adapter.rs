@@ -583,9 +583,21 @@ impl Adapter {
 
         if let Some(args_map) = args {
             let positional_arg_names: HashSet<String> = subcommand_config
-                .and_then(|sc| sc.positional_args.as_ref())
+                .and_then(|sc| sc.positional_args.as_deref())
                 .map(|args| args.iter().map(|arg| arg.name.clone()).collect())
                 .unwrap_or_default();
+
+            // Process all top-level key-value pairs as named arguments
+            for (key, value) in args_map {
+                self.process_named_arg(
+                    key,
+                    value,
+                    &positional_arg_names,
+                    subcommand_config,
+                    &mut final_args,
+                )
+                .await?;
+            }
 
             // Handle positional arguments from `{"args": [...]}`
             if let Some(inner_args) = args_map.get("args") {
@@ -596,21 +608,6 @@ impl Adapter {
                         }
                     }
                 }
-            }
-
-            // Process all top-level key-value pairs as named arguments
-            for (key, value) in args_map {
-                if key == "args" || key == "subcommand" || key == "_subcommand" {
-                    continue;
-                }
-                self.process_named_arg(
-                    key,
-                    value,
-                    &positional_arg_names,
-                    subcommand_config,
-                    &mut final_args,
-                )
-                .await?;
             }
         }
 
@@ -627,14 +624,12 @@ impl Adapter {
         final_args: &mut Vec<String>,
     ) -> Result<()> {
         // Find if there's a specific config for this argument that indicates file handling
-        let file_arg_config = if let Some(sc) = subcommand_config {
-            sc.options.as_ref().and_then(|opts| {
+        let file_arg_config = subcommand_config
+            .and_then(|sc| sc.options.as_deref())
+            .and_then(|opts| {
                 opts.iter()
                     .find(|opt| opt.name == key && opt.file_arg == Some(true))
-            })
-        } else {
-            None
-        };
+            });
 
         // If configured for file-based argument passing
         if let Some(file_opt) = file_arg_config {
@@ -659,19 +654,14 @@ impl Adapter {
         }
 
         // Check if this option is defined as boolean type in config
-        let is_boolean_option = if let Some(sc) = subcommand_config {
-            if let Some(options) = &sc.options {
+        let is_boolean_option = subcommand_config
+            .and_then(|sc| sc.options.as_deref())
+            .map(|options| {
                 options
                     .iter()
-                    .find(|opt| opt.name == key)
-                    .map(|opt| opt.option_type == "boolean")
-                    .unwrap_or(false)
-            } else {
-                false
-            }
-        } else {
-            false
-        };
+                    .any(|opt| opt.name == key && opt.option_type == "boolean")
+            })
+            .unwrap_or(false);
 
         // Handle boolean values
         if value.as_bool().is_some() || (is_boolean_option && value.as_str().is_some()) {
@@ -684,20 +674,16 @@ impl Adapter {
             };
 
             if bool_val {
-                let flag = if let Some(sc) = subcommand_config {
-                    if let Some(options) = &sc.options {
+                let flag = subcommand_config
+                    .and_then(|sc| sc.options.as_deref())
+                    .and_then(|options| {
                         options
                             .iter()
                             .find(|opt| opt.name == key)
                             .and_then(|opt| opt.alias.as_ref())
-                            .map(|alias| format!("-{}", alias))
-                            .unwrap_or_else(|| format!("--{}", key))
-                    } else {
-                        format!("--{}", key)
-                    }
-                } else {
-                    format!("--{}", key)
-                };
+                    })
+                    .map(|alias| format!("-{}", alias))
+                    .unwrap_or_else(|| format!("--{}", key));
                 final_args.push(flag);
             }
             return Ok(());

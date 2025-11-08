@@ -60,7 +60,7 @@ fn test_schema_validation_error_display() {
     init_test_logging();
     let error = SchemaValidationError {
         field_path: "test.field".to_string(),
-        error_type: ValidationErrorType::MissingRequired,
+        error_type: ValidationErrorType::MissingRequiredField,
         message: "Field is required".to_string(),
         suggestion: Some("Add the missing field".to_string()),
     };
@@ -91,8 +91,8 @@ fn test_schema_validation_error_display_no_suggestion() {
 fn test_validation_error_type_equality() {
     init_test_logging();
     assert_eq!(
-        ValidationErrorType::MissingRequired,
-        ValidationErrorType::MissingRequired
+        ValidationErrorType::MissingRequiredField,
+        ValidationErrorType::MissingRequiredField
     );
     assert_eq!(
         ValidationErrorType::InvalidType,
@@ -116,7 +116,7 @@ fn test_validation_error_type_equality() {
     );
 
     assert_ne!(
-        ValidationErrorType::MissingRequired,
+        ValidationErrorType::MissingRequiredField,
         ValidationErrorType::InvalidType
     );
 }
@@ -176,7 +176,7 @@ fn test_validate_tool_config_missing_required_fields() {
 
     let missing_fields: Vec<&str> = errors
         .iter()
-        .filter(|e| e.error_type == ValidationErrorType::MissingRequired)
+        .filter(|e| e.error_type == ValidationErrorType::MissingRequiredField)
         .map(|e| e.field_path.as_str())
         .collect();
 
@@ -323,9 +323,11 @@ fn test_validate_tool_config_valid_complete() {
         "timeout_seconds": 300,
         "synchronous": true,
         "hints": {
-            "default": "Building in progress - consider planning next steps",
             "build": "Compiling code - review for optimization opportunities",
-            "test": "Tests running - analyze test patterns for improvements"
+            "test": "Tests running - analyze test patterns for improvements",
+            "custom": {
+                "default": "Building in progress - consider planning next steps"
+            }
         },
         "guidance_key": "cargo_guidance",
         "subcommand": [
@@ -338,6 +340,12 @@ fn test_validate_tool_config_valid_complete() {
     let path = Path::new("cargo.json");
 
     let result = validator.validate_tool_config(path, valid_json);
+    if let Err(errors) = &result {
+        eprintln!(
+            "Validation errors: {}",
+            validator.format_errors(errors, path)
+        );
+    }
     assert!(result.is_ok());
 
     let config = result.unwrap();
@@ -428,7 +436,7 @@ fn test_validate_subcommands_missing_required() {
     let errors = result.unwrap_err();
     let missing_errors: Vec<&SchemaValidationError> = errors
         .iter()
-        .filter(|e| e.error_type == ValidationErrorType::MissingRequired)
+        .filter(|e| e.error_type == ValidationErrorType::MissingRequiredField)
         .collect();
 
     assert!(missing_errors.len() >= 2); // Missing description in first, name in second
@@ -441,7 +449,7 @@ fn test_format_errors() {
     let errors = vec![
         SchemaValidationError {
             field_path: "name".to_string(),
-            error_type: ValidationErrorType::MissingRequired,
+            error_type: ValidationErrorType::MissingRequiredField,
             message: "Missing required field 'name'".to_string(),
             suggestion: Some("Add a name field".to_string()),
         },
@@ -499,7 +507,7 @@ fn test_clone_schema_validation_error() {
     init_test_logging();
     let error = SchemaValidationError {
         field_path: "test".to_string(),
-        error_type: ValidationErrorType::MissingRequired,
+        error_type: ValidationErrorType::MissingRequiredField,
         message: "Test error".to_string(),
         suggestion: Some("Test suggestion".to_string()),
     };

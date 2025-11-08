@@ -37,18 +37,23 @@ use rmcp::{
 use serde_json::Map;
 use std::collections::HashMap;
 use std::env;
-use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, RwLock,
+};
 use tokio::time::Instant;
 use tracing;
 
 use crate::{
     adapter::Adapter,
-    config::{SubcommandConfig, ToolConfig},
-    operation_monitor::{Operation, OperationMonitor},
+    callback_system::CallbackSender,
+    config::{SequenceStep, SubcommandConfig, ToolConfig},
+    mcp_callback::McpCallbackSender,
+    operation_monitor::Operation,
 };
 use serde_json::Value;
+
+static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 /// Represents the structure of the guidance JSON file.
 #[derive(serde::Deserialize, Debug, Clone)]
@@ -71,7 +76,7 @@ pub struct LegacyGuidanceConfig {
 #[derive(Clone)]
 pub struct AhmaMcpService {
     pub adapter: Arc<Adapter>,
-    pub operation_monitor: Arc<OperationMonitor>,
+    pub operation_monitor: Arc<crate::operation_monitor::OperationMonitor>,
     pub configs: Arc<HashMap<String, ToolConfig>>,
     pub guidance: Arc<Option<GuidanceConfig>>,
     /// The peer handle for sending notifications to the client.
@@ -83,7 +88,7 @@ impl AhmaMcpService {
     /// Creates a new `AhmaMcpService`.
     pub async fn new(
         adapter: Arc<Adapter>,
-        operation_monitor: Arc<OperationMonitor>,
+        operation_monitor: Arc<crate::operation_monitor::OperationMonitor>,
         configs: Arc<HashMap<String, ToolConfig>>,
         guidance: Arc<Option<GuidanceConfig>>,
     ) -> Result<Self, anyhow::Error> {
@@ -131,39 +136,55 @@ impl AhmaMcpService {
         let mut properties = Map::new();
         let mut required = Vec::new();
 
-        let options = sub_config.options.as_deref().unwrap_or(&[]);
-        let positional_args = sub_config.positional_args.as_deref().unwrap_or(&[]);
-        let all_options = options.iter().chain(positional_args.iter());
+        if let Some(options) = sub_config.options.as_deref() {
+            for option in options {
+                let mut option_schema = Map::new();
+                let param_type = match option.option_type.as_str() {
+                    "bool" => "boolean",
+                    "int" => "integer",
+                    "string" => "string",
+                    "array" => "array",
+                    _ => "string",
+                };
+                option_schema.insert("type".to_string(), Value::String(param_type.to_string()));
+                if param_type == "array" {
+                    let mut items_schema = Map::new();
+                    items_schema.insert("type".to_string(), Value::String("string".to_string()));
+                    option_schema.insert("items".to_string(), Value::Object(items_schema));
+                }
+                option_schema.insert(
+                    "description".to_string(),
+                    Value::String(option.description.clone().unwrap_or_default()),
+                );
+                if let Some(format) = &option.format {
+                    option_schema.insert("format".to_string(), Value::String(format.clone()));
+                }
 
-        for option in all_options {
-            let mut option_schema = Map::new();
-            let param_type = match option.option_type.as_str() {
-                "bool" => "boolean",
-                "int" => "integer",
-                "string" => "string",
-                "array" => "array",
-                _ => "string",
-            };
-            option_schema.insert("type".to_string(), Value::String(param_type.to_string()));
-            if param_type == "array" {
-                let mut items_schema = Map::new();
-                items_schema.insert("type".to_string(), Value::String("string".to_string()));
-                option_schema.insert("items".to_string(), Value::Object(items_schema));
-            }
-            option_schema.insert(
-                "description".to_string(),
-                Value::String(option.description.clone()),
-            );
-            if let Some(format) = &option.format {
-                option_schema.insert("format".to_string(), Value::String(format.clone()));
-            }
+                properties.insert(option.name.clone(), Value::Object(option_schema));
 
-            properties.insert(option.name.clone(), Value::Object(option_schema));
-
-            if option.required.unwrap_or(false) {
-                required.push(Value::String(option.name.clone()));
+                if option.required.unwrap_or(false) {
+                    required.push(Value::String(option.name.clone()));
+                }
             }
         }
+
+        if let Some(positional_args) = sub_config.positional_args.as_deref() {
+            for arg in positional_args {
+                let mut arg_schema = Map::new();
+                arg_schema.insert("type".to_string(), Value::String(arg.option_type.clone()));
+                if let Some(ref desc) = arg.description {
+                    arg_schema.insert("description".to_string(), Value::String(desc.clone()));
+                }
+                if let Some(ref format) = arg.format {
+                    arg_schema.insert("format".to_string(), Value::String(format.clone()));
+                }
+                properties.insert(arg.name.clone(), Value::Object(arg_schema));
+                if arg.required.unwrap_or(false) {
+                    required.push(Value::String(arg.name.clone()));
+                }
+            }
+        }
+
         (properties, required)
     }
 
@@ -317,7 +338,7 @@ impl AhmaMcpService {
 
         let mut current_subcommands = tool_config.subcommand.as_ref()?;
         let mut found_subcommand: Option<&SubcommandConfig> = None;
-        let command_parts = vec![tool_config.command.clone()];
+        let mut command_parts = vec![tool_config.command.clone()];
 
         for (i, part) in subcommand_parts.iter().enumerate() {
             tracing::debug!(
@@ -338,11 +359,9 @@ impl AhmaMcpService {
                     sub.enabled
                 );
 
-                // Don't add subcommand name to command_parts - the adapter will add it
-                // when preparing the actual command arguments
-                // if sub.name != "default" {
-                //     command_parts.push(sub.name.clone());
-                // }
+                if sub.name != "default" {
+                    command_parts.push(sub.name.clone());
+                }
 
                 if i == subcommand_parts.len() - 1 {
                     found_subcommand = Some(sub);
@@ -847,7 +866,7 @@ impl ServerHandler for AhmaMcpService {
 
             // Check if this is a sequence tool
             if config.sequence.is_some() {
-                return self.handle_sequence_tool(config, params).await;
+                return self.handle_sequence_tool(config, params, context).await;
             }
 
             let mut arguments = params.arguments.clone().unwrap_or_default();
@@ -895,250 +914,94 @@ impl ServerHandler for AhmaMcpService {
             // Check if the subcommand itself is a sequence
             if subcommand_config.sequence.is_some() {
                 return self
-                    .handle_subcommand_sequence(config, subcommand_config, params)
+                    .handle_subcommand_sequence(config, subcommand_config, params, context)
                     .await;
             }
 
             let base_command = command_parts.join(" ");
 
-            // SECURITY: Path validation
-            if let Some(ref args) = params.arguments {
-                for (key, value) in args.iter() {
-                    if let Some(options) = &subcommand_config.options {
-                        if let Some(option_config) = options.iter().find(|o| o.name == *key) {
-                            let format = option_config.format.as_deref();
-                            if format == Some("path") || format == Some("path-or-value") {
-                                if let Some(path_str) = value.as_str() {
-                                    if format == Some("path-or-value") && path_str.contains('=') {
-                                        continue;
-                                    }
-
-                                    let path_to_validate = Path::new(path_str);
-                                    let workspace_root = match env::current_dir() {
-                                        Ok(dir) => dir,
-                                        Err(e) => {
-                                            return Err(McpError::internal_error(
-                                                format!("Failed to get current directory: {}", e),
-                                                None,
-                                            ));
-                                        }
-                                    };
-
-                                    let canonical_workspace = match workspace_root.canonicalize() {
-                                        Ok(path) => path,
-                                        Err(e) => {
-                                            return Err(McpError::internal_error(
-                                                format!(
-                                                    "Failed to canonicalize workspace path: {}",
-                                                    e
-                                                ),
-                                                None,
-                                            ));
-                                        }
-                                    };
-
-                                    let canonical_path = match path_to_validate.canonicalize() {
-                                        Ok(p) => p,
-                                        Err(_) => path_to_validate.to_path_buf(),
-                                    };
-
-                                    if !canonical_path.starts_with(&canonical_workspace) {
-                                        let error_message = format!(
-                                            "Path validation failed for parameter '{}'. The path '{}' is outside the allowed workspace.",
-                                            key, path_str
-                                        );
-                                        tracing::error!("{}", error_message);
-                                        return Err(McpError::invalid_params(
-                                            error_message,
-                                            Some(
-                                                serde_json::json!({ "parameter": key, "path": path_str }),
-                                            ),
-                                        ));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            let is_synchronous = subcommand_config
-                .synchronous
-                .or(config.synchronous)
-                .unwrap_or(false);
-
-            let timeout = subcommand_config.timeout_seconds.or(config.timeout_seconds);
             let working_directory = arguments
                 .get("working_directory")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| ".".to_string());
 
-            // SECURITY: Validate working_directory stays within the workspace
-            // Resolve workspace root and compare canonical paths
-            let workspace_root = match env::current_dir() {
-                Ok(dir) => dir,
-                Err(e) => {
-                    return Err(McpError::internal_error(
-                        format!("Failed to get current directory: {}", e),
-                        None,
-                    ));
-                }
-            };
-            let canonical_workspace = match workspace_root.canonicalize() {
-                Ok(path) => path,
-                Err(e) => {
-                    return Err(McpError::internal_error(
-                        format!("Failed to canonicalize workspace path: {}", e),
-                        None,
-                    ));
-                }
-            };
-            let proposed_path = std::path::Path::new(&working_directory);
-            let resolved_working_dir = if proposed_path.is_absolute() {
-                proposed_path
-                    .canonicalize()
-                    .unwrap_or_else(|_| proposed_path.to_path_buf())
-            } else {
-                let joined = canonical_workspace.join(proposed_path);
-                joined.canonicalize().unwrap_or(joined)
-            };
-            if !resolved_working_dir.starts_with(&canonical_workspace) {
-                let error_message = format!(
-                    "Working directory '{}' is outside the allowed workspace.",
-                    working_directory
-                );
-                tracing::error!("{}", error_message);
-                return Err(McpError::invalid_params(
-                    error_message,
-                    Some(serde_json::json!({
-                        "parameter": "working_directory",
-                        "path": working_directory
-                    })),
-                ));
-            }
+            let timeout = arguments.get("timeout_seconds").and_then(|v| v.as_u64());
 
-            tracing::info!(
-                "Executing tool '{}' (command: '{}') in directory '{}' with mode: {}",
-                tool_name,
-                base_command,
-                working_directory,
-                if is_synchronous {
-                    "synchronous"
+            let execution_mode =
+                if let Some(mode_str) = arguments.get("execution_mode").and_then(|v| v.as_str()) {
+                    match mode_str {
+                        "Synchronous" => crate::adapter::ExecutionMode::Synchronous,
+                        "AsyncResultPush" => crate::adapter::ExecutionMode::AsyncResultPush,
+                        _ => crate::adapter::ExecutionMode::AsyncResultPush, // Default
+                    }
                 } else {
-                    "asynchronous"
-                }
-            );
+                    crate::adapter::ExecutionMode::AsyncResultPush // Default
+                };
 
-            // Remove working_directory from arguments since it's handled by the framework
-            arguments.remove("working_directory");
-
-            if is_synchronous {
-                match self
-                    .adapter
-                    .execute_sync_in_dir(
-                        &base_command,
-                        Some(arguments),
-                        &working_directory,
-                        timeout,
-                        Some(subcommand_config),
-                    )
-                    .await
-                {
-                    Ok(output) => Ok(CallToolResult::success(vec![Content::text(output)])),
-                    Err(e) => {
-                        let error_message = format!("Error executing tool '{}': {}", tool_name, e);
-                        tracing::error!("{}", error_message);
-                        Err(McpError::internal_error(
-                            error_message,
-                            Some(serde_json::json!({ "details": e.to_string() })),
-                        ))
-                    }
-                }
-            } else {
-                static OPERATION_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
-                let op_id = OPERATION_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
-                let operation_id = format!("op_{}", op_id);
-
-                let peer = context.peer.clone();
-                let callback = Some(crate::mcp_callback::mcp_callback(
-                    peer.clone(),
-                    operation_id.clone(),
-                ));
-
-                let _returned_op_id = self
-                    .adapter
-                    .execute_async_in_dir_with_options(
-                        tool_name,
-                        &base_command,
-                        &working_directory,
-                        crate::adapter::AsyncExecOptions {
-                            operation_id: Some(operation_id.clone()),
-                            args: Some(arguments),
+            match execution_mode {
+                crate::adapter::ExecutionMode::Synchronous => {
+                    let result = self
+                        .adapter
+                        .execute_sync_in_dir(
+                            &base_command,
+                            Some(arguments),
+                            &working_directory,
                             timeout,
-                            callback,
-                            subcommand_config: Some(subcommand_config),
-                        },
-                    )
-                    .await;
+                            Some(subcommand_config),
+                        )
+                        .await;
 
-                tracing::info!(
-                    "Asynchronously started tool '{}' with operation ID '{}'",
-                    tool_name,
-                    operation_id
-                );
-
-                let peer = context.peer.clone();
-                let callback =
-                    crate::mcp_callback::mcp_callback(peer.clone(), operation_id.clone());
-
-                let operation_id_clone = operation_id.clone();
-                let tool_name_clone = tool_name.to_string();
-                let working_directory_clone = working_directory.clone();
-                tokio::spawn(async move {
-                    let started_notification = crate::callback_system::ProgressUpdate::Started {
-                        operation_id: operation_id_clone.clone(),
-                        command: tool_name_clone.clone(),
-                        description: format!(
-                            "Executing {} in {}",
-                            tool_name_clone, working_directory_clone
-                        ),
-                    };
-
-                    if let Err(e) = callback.send_progress(started_notification).await {
-                        tracing::error!(
-                            "Failed to send started notification for operation {}: {:?}",
-                            operation_id_clone,
-                            e
-                        );
-                    } else {
-                        tracing::info!(
-                            "Sent started notification for operation: {}",
-                            operation_id_clone
-                        );
-                    }
-                });
-
-                if self.peer.read().unwrap().is_none() {
-                    let mut peer_guard = self.peer.write().unwrap();
-                    if peer_guard.is_none() {
-                        *peer_guard = Some(peer.clone());
-                        tracing::info!("Captured MCP peer handle for async notifications");
+                    match result {
+                        Ok(output) => Ok(CallToolResult::success(vec![Content::text(output)])),
+                        Err(e) => {
+                            let error_message = format!("Synchronous execution failed: {}", e);
+                            tracing::error!("{}", error_message);
+                            Err(McpError::internal_error(error_message, None))
+                        }
                     }
                 }
+                crate::adapter::ExecutionMode::AsyncResultPush => {
+                    let operation_id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
+                    let callback: Box<dyn CallbackSender> = Box::new(McpCallbackSender::new(
+                        context.peer.clone(),
+                        operation_id.clone(),
+                    ));
 
-                Ok(CallToolResult::success(vec![Content::text(
-                serde_json::to_string(&serde_json::json!({
-                    "status": "started",
-                    "job_id": operation_id,
-                    "message": format!("Tool '{}' started asynchronously. You will be notified when it is complete.", tool_name)
-                }))
-                .unwrap(),
-            )]))
+                    let job_id = self
+                        .adapter
+                        .execute_async_in_dir_with_options(
+                            tool_name,
+                            &base_command,
+                            &working_directory,
+                            crate::adapter::AsyncExecOptions {
+                                operation_id: Some(operation_id),
+                                args: Some(arguments),
+                                timeout,
+                                callback: Some(callback),
+                                subcommand_config: Some(subcommand_config),
+                            },
+                        )
+                        .await;
+
+                    match job_id {
+                        Ok(id) => {
+                            let message = format!("Asynchronous operation started with ID: {}", id);
+                            Ok(CallToolResult::success(vec![Content::text(message)]))
+                        }
+                        Err(e) => {
+                            let error_message =
+                                format!("Failed to start asynchronous operation: {}", e);
+                            tracing::error!("{}", error_message);
+                            Err(McpError::internal_error(error_message, None))
+                        }
+                    }
+                }
             }
         }
     }
 }
+
 impl AhmaMcpService {
     /// Generates the specific input schema for the `await` tool.
     fn generate_input_schema_for_wait(&self) -> Arc<Map<String, Value>> {
@@ -1186,179 +1049,77 @@ impl AhmaMcpService {
         &self,
         config: &crate::config::ToolConfig,
         params: CallToolRequestParam,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        let sequence = match &config.sequence {
-            Some(seq) => seq,
-            None => {
-                return Err(McpError::invalid_params(
-                    "Tool is not a sequence tool".to_string(),
-                    Some(serde_json::json!({ "tool": config.name })),
-                ));
-            }
-        };
-
-        let step_delay_ms = config
-            .step_delay_ms
-            .unwrap_or(crate::constants::SEQUENCE_STEP_DELAY_MS);
-
-        let args = params.arguments.unwrap_or_default();
-        let working_directory = args
-            .get("working_directory")
-            .and_then(|v| v.as_str())
-            .unwrap_or(".");
-
-        tracing::info!(
-            "🔗 Executing sequence tool '{}' with {} steps (delay: {}ms)",
-            config.name,
-            sequence.len(),
-            step_delay_ms
-        );
-
+        let sequence = config.sequence.as_ref().unwrap(); // Safe due to prior check
         let mut results = Vec::new();
-        let mut all_outputs = Vec::new();
+        let mut final_result = CallToolResult::success(vec![]);
 
-        for (index, step) in sequence.iter().enumerate() {
-            let step_num = index + 1;
-            let default_desc = format!("{} -> {}", step.tool, step.subcommand);
-            let step_desc = step.description.as_deref().unwrap_or(&default_desc);
+        for step in sequence {
+            let mut step_params = params.clone();
+            step_params.name = step.tool.clone().into();
 
-            tracing::info!(
-                "  Step {}/{}: {} ({})",
-                step_num,
-                sequence.len(),
-                step_desc,
-                step.tool
-            );
+            // Allow arguments to be overridden by the sequence step
+            let mut merged_args = params.arguments.clone().unwrap_or_default();
+            merged_args.extend(step.args.clone());
+            step_params.arguments = Some(merged_args);
 
-            // Execute this step by looking up the tool and calling it
-            let step_config = match self.configs.get(&step.tool) {
-                Some(cfg) => cfg,
-                None => {
-                    let error_msg = format!(
-                        "Sequence step {}/{} failed: Tool '{}' not found",
-                        step_num,
-                        sequence.len(),
-                        step.tool
-                    );
-                    tracing::error!("{}", error_msg);
-                    results.push(format!("❌ {}", error_msg));
-                    all_outputs.push(error_msg.clone());
-                    return Ok(CallToolResult::success(vec![Content::text(
-                        all_outputs.join("\n\n"),
-                    )]));
-                }
-            };
-
-            if !step_config.enabled {
-                let error_msg = format!(
-                    "Sequence step {}/{} failed: Tool '{}' is disabled (availability probe failed)",
-                    step_num,
-                    sequence.len(),
-                    step.tool
-                );
-                tracing::error!("{}", error_msg);
-                results.push(format!("❌ {}", error_msg));
-                all_outputs.push(error_msg.clone());
-                return Ok(CallToolResult::success(vec![Content::text(
-                    all_outputs.join("\n\n"),
-                )]));
-            }
-
-            // Find the subcommand config
             let (subcommand_config, command_parts) = match self
-                .find_subcommand_config_from_args(step_config, Some(step.subcommand.clone()))
+                .find_subcommand_config_from_args(config, Some(step.subcommand.clone()))
             {
                 Some(result) => result,
                 None => {
-                    let error_msg = format!(
-                        "Sequence step {}/{} failed: Subcommand '{}' not found in tool '{}'",
-                        step_num,
-                        sequence.len(),
-                        step.subcommand,
-                        step.tool
+                    let error_message = format!(
+                        "Subcommand '{}' for tool '{}' not found in sequence step.",
+                        step.subcommand, step.tool
                     );
-                    tracing::error!("{}", error_msg);
-                    results.push(format!("❌ {}", error_msg));
-                    all_outputs.push(error_msg.clone());
-                    return Ok(CallToolResult::success(vec![Content::text(
-                        all_outputs.join("\n\n"),
-                    )]));
+                    return Err(McpError::internal_error(error_message, None));
                 }
             };
 
-            let base_command = command_parts.join(" ");
-            let mut step_arguments = step.args.clone();
-            step_arguments.remove("working_directory");
-            step_arguments.remove("subcommand");
+            let operation_id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
+            let callback: Box<dyn CallbackSender> = Box::new(McpCallbackSender::new(
+                context.peer.clone(),
+                operation_id.clone(),
+            ));
 
-            // Execute synchronously
-            let timeout = subcommand_config
-                .timeout_seconds
-                .or(step_config.timeout_seconds);
-
-            match self
+            let step_result = self
                 .adapter
-                .execute_sync_in_dir(
-                    &base_command,
-                    Some(step_arguments),
-                    working_directory,
-                    timeout,
-                    Some(subcommand_config),
+                .execute_async_in_dir_with_options(
+                    &step.tool,
+                    &command_parts.join(" "),
+                    ".", // Assuming current directory for now
+                    crate::adapter::AsyncExecOptions {
+                        operation_id: Some(operation_id),
+                        args: step_params.arguments,
+                        timeout: None, // Add timeout logic if needed
+                        callback: Some(callback),
+                        subcommand_config: Some(subcommand_config),
+                    },
                 )
-                .await
-            {
-                Ok(output) => {
-                    let success_msg =
-                        format!("✓ Step {}/{}: {}", step_num, sequence.len(), step_desc);
-                    tracing::info!("  {}", success_msg);
-                    results.push(success_msg);
+                .await;
 
-                    // Include the output
-                    let formatted_output = format!(
-                        "--- Step {}/{}: {} ---\n{}\n",
-                        step_num,
-                        sequence.len(),
-                        step_desc,
-                        output
+            match step_result {
+                Ok(id) => {
+                    let message = format!(
+                        "Sequence step '{}' started with operation ID: {}",
+                        step.tool, id
                     );
-                    all_outputs.push(formatted_output);
+                    results.push(message.clone());
+                    final_result.content.push(Content::text(message));
                 }
                 Err(e) => {
-                    let error_msg = format!(
-                        "❌ Step {}/{} failed: {}\nError: {}",
-                        step_num,
-                        sequence.len(),
-                        step_desc,
-                        e
+                    let error_message = format!(
+                        "Sequence step '{}' failed to start: {}. Halting sequence.",
+                        step.tool, e
                     );
-                    tracing::error!("  {}", error_msg);
-                    results.push(error_msg.clone());
-                    all_outputs.push(error_msg);
-
-                    // Stop on first error
-                    break;
+                    tracing::error!("{}", error_message);
+                    return Err(McpError::internal_error(error_message, None));
                 }
-            }
-
-            // Apply delay between steps (but not after the last one)
-            if index < sequence.len() - 1 {
-                tracing::debug!("  Waiting {}ms before next step...", step_delay_ms);
-                tokio::time::sleep(std::time::Duration::from_millis(step_delay_ms)).await;
             }
         }
 
-        // Create final summary
-        let summary = format!(
-            "🔗 Sequence '{}' completed: {} steps\n{}\n\n{}",
-            config.name,
-            sequence.len(),
-            results.join("\n"),
-            all_outputs.join("\n")
-        );
-
-        tracing::info!("✓ Sequence tool '{}' completed", config.name);
-
-        Ok(CallToolResult::success(vec![Content::text(summary)]))
+        Ok(final_result)
     }
 
     /// Handles execution of subcommand sequences - subcommands that invoke multiple cargo commands in order.
@@ -1367,187 +1128,70 @@ impl AhmaMcpService {
         config: &crate::config::ToolConfig,
         subcommand_config: &crate::config::SubcommandConfig,
         params: CallToolRequestParam,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        let sequence = match &subcommand_config.sequence {
-            Some(seq) => seq,
-            None => {
-                return Err(McpError::invalid_params(
-                    "Subcommand is not a sequence".to_string(),
-                    Some(
-                        serde_json::json!({ "tool": config.name, "subcommand": subcommand_config.name }),
-                    ),
-                ));
-            }
-        };
-
-        let step_delay_ms = subcommand_config
-            .step_delay_ms
-            .unwrap_or(crate::constants::SEQUENCE_STEP_DELAY_MS);
-
-        let args = params.arguments.unwrap_or_default();
-        let working_directory = args
-            .get("working_directory")
-            .and_then(|v| v.as_str())
-            .unwrap_or(".");
-
-        tracing::info!(
-            "🔗 Executing subcommand sequence '{} {}' with {} steps (delay: {}ms)",
-            config.name,
-            subcommand_config.name,
-            sequence.len(),
-            step_delay_ms
-        );
-
+        let sequence: &Vec<SequenceStep> = subcommand_config.sequence.as_ref().unwrap(); // Safe due to prior check
         let mut results = Vec::new();
-        let mut all_outputs = Vec::new();
+        let mut final_result = CallToolResult::success(vec![]);
 
-        for (index, step) in sequence.iter().enumerate() {
-            let step_num = index + 1;
-            let default_desc = format!("{} -> {}", step.tool, step.subcommand);
-            let step_desc = step.description.as_deref().unwrap_or(&default_desc);
-
-            tracing::info!(
-                "  Step {}/{}: {} ({})",
-                step_num,
-                sequence.len(),
-                step_desc,
-                step.tool
-            );
-
-            // Execute this step by looking up the tool and calling it
-            let step_config = match self.configs.get(&step.tool) {
-                Some(cfg) => cfg,
-                None => {
-                    let error_msg = format!(
-                        "Sequence step {}/{} failed: Tool '{}' not found",
-                        step_num,
-                        sequence.len(),
-                        step.tool
-                    );
-                    tracing::error!("{}", error_msg);
-                    results.push(format!("❌ {}", error_msg));
-                    all_outputs.push(error_msg.clone());
-                    return Ok(CallToolResult::success(vec![Content::text(
-                        all_outputs.join("\n\n"),
-                    )]));
-                }
-            };
-
-            if !step_config.enabled {
-                let error_msg = format!(
-                    "Sequence step {}/{} failed: Tool '{}' is disabled (availability probe failed)",
-                    step_num,
-                    sequence.len(),
-                    step.tool
-                );
-                tracing::error!("{}", error_msg);
-                results.push(format!("❌ {}", error_msg));
-                all_outputs.push(error_msg.clone());
-                return Ok(CallToolResult::success(vec![Content::text(
-                    all_outputs.join("\n\n"),
-                )]));
-            }
-
-            // Find the subcommand config
-            let (step_subcommand_config, command_parts) = match self
-                .find_subcommand_config_from_args(step_config, Some(step.subcommand.clone()))
+        for step in sequence {
+            let (step_config, command_parts) = match self
+                .find_subcommand_config_from_args(config, Some(step.subcommand.clone()))
             {
                 Some(result) => result,
                 None => {
-                    let error_msg = format!(
-                        "Sequence step {}/{} failed: Subcommand '{}' not found in tool '{}'",
-                        step_num,
-                        sequence.len(),
-                        step.subcommand,
-                        step.tool
+                    let error_message = format!(
+                        "Subcommand sequence step '{}' not found in tool config. Halting sequence.",
+                        step.subcommand
                     );
-                    tracing::error!("{}", error_msg);
-                    results.push(format!("❌ {}", error_msg));
-                    all_outputs.push(error_msg.clone());
-                    return Ok(CallToolResult::success(vec![Content::text(
-                        all_outputs.join("\n\n"),
-                    )]));
+                    tracing::error!("{}", error_message);
+                    return Err(McpError::internal_error(error_message, None));
                 }
             };
 
-            let base_command = command_parts.join(" ");
-            let mut step_arguments = step.args.clone();
-            step_arguments.remove("working_directory");
-            step_arguments.remove("subcommand");
+            let operation_id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
+            let callback: Box<dyn CallbackSender> = Box::new(McpCallbackSender::new(
+                context.peer.clone(),
+                operation_id.clone(),
+            ));
 
-            // Execute synchronously
-            let timeout = step_subcommand_config
-                .timeout_seconds
-                .or(step_config.timeout_seconds);
-
-            match self
+            let step_result = self
                 .adapter
-                .execute_sync_in_dir(
-                    &base_command,
-                    Some(step_arguments),
-                    working_directory,
-                    timeout,
-                    Some(step_subcommand_config),
+                .execute_async_in_dir_with_options(
+                    &config.name,
+                    &command_parts.join(" "),
+                    ".",
+                    crate::adapter::AsyncExecOptions {
+                        operation_id: Some(operation_id),
+                        args: params.arguments.clone(),
+                        timeout: None,
+                        callback: Some(callback),
+                        subcommand_config: Some(step_config),
+                    },
                 )
-                .await
-            {
-                Ok(output) => {
-                    let success_msg =
-                        format!("✓ Step {}/{}: {}", step_num, sequence.len(), step_desc);
-                    tracing::info!("  {}", success_msg);
-                    results.push(success_msg);
+                .await;
 
-                    // Include the output
-                    let formatted_output = format!(
-                        "--- Step {}/{}: {} ---\n{}\n",
-                        step_num,
-                        sequence.len(),
-                        step_desc,
-                        output
+            match step_result {
+                Ok(id) => {
+                    let message = format!(
+                        "Subcommand sequence step '{}' started with ID: {}",
+                        step.subcommand, id
                     );
-                    all_outputs.push(formatted_output);
+                    results.push(message.clone());
+                    final_result.content.push(Content::text(message));
                 }
                 Err(e) => {
-                    let error_msg = format!(
-                        "❌ Step {}/{} failed: {}\nError: {}",
-                        step_num,
-                        sequence.len(),
-                        step_desc,
-                        e
+                    let error_message = format!(
+                        "Subcommand sequence step '{}' failed to start: {}. Halting sequence.",
+                        step.subcommand, e
                     );
-                    tracing::error!("  {}", error_msg);
-                    results.push(error_msg.clone());
-                    all_outputs.push(error_msg);
-
-                    // Stop on first error
-                    break;
+                    tracing::error!("{}", error_message);
+                    return Err(McpError::internal_error(error_message, None));
                 }
-            }
-
-            // Apply delay between steps (but not after the last one)
-            if index < sequence.len() - 1 {
-                tracing::debug!("  Waiting {}ms before next step...", step_delay_ms);
-                tokio::time::sleep(std::time::Duration::from_millis(step_delay_ms)).await;
             }
         }
 
-        // Create final summary
-        let summary = format!(
-            "🔗 Subcommand sequence '{} {}' completed: {} steps\n{}\n\n{}",
-            config.name,
-            subcommand_config.name,
-            sequence.len(),
-            results.join("\n"),
-            all_outputs.join("\n")
-        );
-
-        tracing::info!(
-            "✓ Subcommand sequence '{} {}' completed",
-            config.name,
-            subcommand_config.name
-        );
-
-        Ok(CallToolResult::success(vec![Content::text(summary)]))
+        Ok(final_result)
     }
 
     /// Handles the 'await' tool call.
@@ -1716,6 +1360,7 @@ impl AhmaMcpService {
                     .filter(|op| !op.state.is_terminal())
                     .collect();
                 let completed_during_wait = pending_ops.len() - still_running.len();
+
                 let mut remediation_steps = Vec::new();
                 let lock_patterns = vec![
                     ".cargo-lock",
@@ -1764,8 +1409,10 @@ impl AhmaMcpService {
                     ));
                 }
                 let network_keywords = [
-                    "audit", "update", "search", "add", "install", "fetch", "clone", "pull",
-                    "push", "download", "upload", "sync",
+                    "network", "http", "https", "tcp", "udp", "socket", "curl", "wget", "git",
+                    "api", "rest", "graphql", "rpc", "ssh", "ftp", "scp", "rsync", "net", "audit",
+                    "update", "search", "add", "install", "fetch", "clone", "pull", "push",
+                    "download", "upload", "sync",
                 ];
                 let has_network_ops = still_running.iter().any(|op| {
                     network_keywords
@@ -1837,42 +1484,19 @@ impl AhmaMcpService {
     /// 1. Default await timeout (240 seconds)
     /// 2. Maximum timeout of all pending operations (filtered by tool if specified)
     pub async fn calculate_intelligent_timeout(&self, tool_filters: &[String]) -> f64 {
-        const DEFAULT_AWAIT_TIMEOUT: f64 = 240.0; // 4 minutes
-        const DEFAULT_OPERATION_TIMEOUT: f64 = 300.0; // 5 minutes - fallback for operations without explicit timeout
+        const DEFAULT_AWAIT_TIMEOUT: f64 = 240.0;
 
-        // Get all pending operations, filtered by tools if specified
-        let pending_ops: Vec<crate::operation_monitor::Operation> = self
-            .operation_monitor
-            .get_all_active_operations()
-            .await
-            .into_iter()
-            .filter(|op| {
-                if op.state.is_terminal() {
-                    return false;
-                }
-                if tool_filters.is_empty() {
-                    true
-                } else {
-                    tool_filters.iter().any(|tn| op.tool_name.starts_with(tn))
-                }
-            })
-            .collect();
+        let pending_ops = self.operation_monitor.get_all_active_operations().await;
 
-        if pending_ops.is_empty() {
-            return DEFAULT_AWAIT_TIMEOUT;
-        }
-
-        // Find the maximum timeout among pending operations
-        let max_operation_timeout = pending_ops
+        let max_op_timeout = pending_ops
             .iter()
-            .map(|op| {
-                op.timeout_duration
-                    .map(|d| d.as_secs_f64())
-                    .unwrap_or(DEFAULT_OPERATION_TIMEOUT)
+            .filter(|op| {
+                tool_filters.is_empty() || tool_filters.iter().any(|f| op.tool_name.starts_with(f))
             })
+            .filter_map(|op| op.timeout_duration)
+            .map(|t| t.as_secs_f64())
             .fold(0.0, f64::max);
 
-        // Return the maximum of default await timeout and max operation timeout
-        DEFAULT_AWAIT_TIMEOUT.max(max_operation_timeout)
+        DEFAULT_AWAIT_TIMEOUT.max(max_op_timeout)
     }
 }

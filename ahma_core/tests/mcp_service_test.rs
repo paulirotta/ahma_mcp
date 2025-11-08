@@ -130,7 +130,7 @@ mod mcp_service_tests {
                 options: Some(vec![OptionConfig {
                     name: "release".to_string(),
                     option_type: "boolean".to_string(),
-                    description: "Build in release mode".to_string(),
+                    description: Some("Build in release mode".to_string()),
                     required: Some(false),
                     alias: None,
                     format: None,

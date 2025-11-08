@@ -44,9 +44,11 @@ async fn test_mtdf_compliance_edge_cases() -> Result<()> {
         "synchronous": false,
         "guidance_key": "complex_guidance",
         "hints": {
-            "default": "This is a complex tool",
             "build": "Use for building projects",
-            "test": "Use for testing projects"
+            "test": "Use for testing projects",
+            "custom": {
+                "default": "This is a complex tool"
+            }
         },
         "subcommand": [
             {
@@ -215,7 +217,7 @@ async fn test_recursive_subcommand_validation() -> Result<()> {
     // The validator should catch missing required fields in nested subcommands
     // Note: due to implementation details, nested subcommand errors may not have fully qualified paths
     assert!(errors.iter().any(
-        |e| e.error_type == ValidationErrorType::MissingRequired && e.message.contains("name")
+        |e| e.error_type == ValidationErrorType::MissingRequiredField && e.message.contains("name")
     ));
 
     // Test circular or self-referential structure (malformed JSON test)
@@ -608,7 +610,7 @@ async fn test_complex_configuration_validation_scenarios() -> Result<()> {
 
     // Should find errors in the invalid subcommand but not the valid ones
     assert!(errors.iter().any(|e| e.field_path.contains("subcommand[1]")
-        && e.error_type == ValidationErrorType::MissingRequired
+        && e.error_type == ValidationErrorType::MissingRequiredField
         && e.message.contains("description")));
     assert!(errors
         .iter()

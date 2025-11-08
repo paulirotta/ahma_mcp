@@ -6,11 +6,16 @@
     "timeout_seconds": 600,
     "synchronous": true,
     "hints": {
-        "default": "IMPORTANT: For comprehensive code quality checks (formatting, linting, testing, building), use the 'rust_quality_check' tool instead of VS Code tasks or running multiple cargo commands separately. It runs synchronously and provides complete results. For individual cargo operations, this tool now runs synchronously by default to ensure you receive complete results.",
         "build": "Building in progress - review compilation output for warnings, plan deployment steps, or work on documentation.",
         "test": "Tests running - analyze test patterns, consider additional test cases, or review code coverage strategies. For comprehensive quality checks including fmt, clippy, test, and build, use the 'rust_quality_check' tool instead.",
-        "doc": "Documentation building - consider reviewing doc comments, planning API improvements, or working on examples.",
-        "check": "Type checking in progress - plan refactoring opportunities or review code patterns while waiting."
+        "dependencies": null,
+        "clean": null,
+        "run": null,
+        "custom": {
+            "default": "IMPORTANT: For comprehensive code quality checks (formatting, linting, testing, building), use the 'rust_quality_check' tool instead of VS Code tasks or running multiple cargo commands separately. It runs synchronously and provides complete results. For individual cargo operations, this tool now runs synchronously by default to ensure you receive complete results.",
+            "doc": "Documentation building - consider reviewing doc comments, planning API improvements, or working on examples.",
+            "check": "Type checking in progress - plan refactoring opportunities or review code patterns while waiting."
+        }
     },
     "subcommand": [
         {

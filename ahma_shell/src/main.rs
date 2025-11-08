@@ -40,9 +40,11 @@
 //! 7. `service.start_server()` is awaited, running the server indefinitely until it
 //!    is shut down.
 
+use ahma_core::config::load_tool_configs;
+use ahma_core::schema_validation::MtdfValidator;
 use ahma_core::{
     adapter::Adapter,
-    config::{load_tool_configs, ToolConfig},
+    config::ToolConfig,
     mcp_service::{AhmaMcpService, GuidanceConfig},
     operation_monitor::{MonitorConfig, OperationMonitor},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
@@ -667,8 +669,6 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
 }
 
 async fn run_validation_mode(cli: Cli) -> Result<()> {
-    use ahma_core::schema_validation::MtdfValidator;
-
     fn validate_subcommands(
         subcommands: &[ahma_core::config::SubcommandConfig],
         guidance: &Option<GuidanceConfig>,

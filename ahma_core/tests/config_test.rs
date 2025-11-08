@@ -3,7 +3,6 @@ use ahma_core::config::{
 };
 use ahma_core::utils::logging::init_test_logging;
 use serde_json::json;
-use std::collections::HashMap;
 use std::fs;
 use tempfile::tempdir;
 
@@ -71,7 +70,7 @@ fn test_option_config_structure() {
         name: "verbose".to_string(),
         alias: Some("v".to_string()),
         option_type: "boolean".to_string(),
-        description: "Enable verbose output".to_string(),
+        description: Some("Enable verbose output".to_string()),
         format: None,
         required: Some(false),
         file_arg: Some(false),
@@ -89,33 +88,34 @@ fn test_option_config_structure() {
 fn test_tool_hints_default() {
     init_test_logging();
     let hints = ToolHints::default();
-    assert!(hints.default.is_none());
-    assert!(hints.operation_hints.is_empty());
+    assert!(hints.build.is_none());
+    assert!(hints.test.is_none());
+    assert!(hints.dependencies.is_none());
+    assert!(hints.clean.is_none());
+    assert!(hints.run.is_none());
+    assert!(hints.custom.is_none());
 }
 
 #[test]
 fn test_tool_hints_with_operations() {
     init_test_logging();
-    let mut operation_hints = HashMap::new();
-    operation_hints.insert(
-        "build".to_string(),
-        "Use --release for optimized builds".to_string(),
-    );
-    operation_hints.insert(
-        "test".to_string(),
-        "Run tests with --no-capture for debug output".to_string(),
-    );
 
     let hints = ToolHints {
-        default: Some("This is a default hint".to_string()),
-        operation_hints,
+        build: Some("Use --release for optimized builds".to_string()),
+        test: Some("Run tests with --no-capture for debug output".to_string()),
+        dependencies: None,
+        clean: None,
+        run: None,
+        custom: None,
     };
 
-    assert_eq!(hints.default, Some("This is a default hint".to_string()));
-    assert_eq!(hints.operation_hints.len(), 2);
     assert_eq!(
-        hints.operation_hints.get("build"),
-        Some(&"Use --release for optimized builds".to_string())
+        hints.build,
+        Some("Use --release for optimized builds".to_string())
+    );
+    assert_eq!(
+        hints.test,
+        Some("Run tests with --no-capture for debug output".to_string())
     );
 }
 
@@ -133,7 +133,7 @@ fn test_tool_config_serialization() {
                 name: "release".to_string(),
                 alias: None,
                 option_type: "boolean".to_string(),
-                description: "Build artifacts in release mode".to_string(),
+                description: Some("Build artifacts in release mode".to_string()),
                 format: None,
                 required: Some(false),
                 file_arg: Some(false),
@@ -156,15 +156,12 @@ fn test_tool_config_serialization() {
         timeout_seconds: Some(600),
         synchronous: Some(false),
         hints: ToolHints {
-            default: Some("Cargo is the Rust package manager".to_string()),
-            operation_hints: {
-                let mut hints = HashMap::new();
-                hints.insert(
-                    "build".to_string(),
-                    "Use --release for production builds".to_string(),
-                );
-                hints
-            },
+            build: Some("Use --release for production builds".to_string()),
+            test: None,
+            dependencies: None,
+            clean: None,
+            run: None,
+            custom: None,
         },
         enabled: true,
         guidance_key: Some("cargo_main".to_string()),
@@ -217,8 +214,10 @@ fn test_tool_config_deserialization() {
             }
         ],
         "hints": {
-            "default": "Git is a distributed version control system",
-            "commit": "Always write descriptive commit messages"
+            "custom": {
+                "default": "Git is a distributed version control system",
+                "commit": "Always write descriptive commit messages"
+            }
         }
     }
     "#;
@@ -243,11 +242,11 @@ fn test_tool_config_deserialization() {
     assert_eq!(options[0].file_flag, Some("-F".to_string()));
 
     assert_eq!(
-        config.hints.default,
-        Some("Git is a distributed version control system".to_string())
+        config.hints.custom.as_ref().and_then(|c| c.get("default")),
+        Some(&"Git is a distributed version control system".to_string())
     );
     assert_eq!(
-        config.hints.operation_hints.get("commit"),
+        config.hints.custom.as_ref().and_then(|c| c.get("commit")),
         Some(&"Always write descriptive commit messages".to_string())
     );
 }
@@ -428,9 +427,10 @@ fn test_load_tool_configs_invalid_json() {
     // Create an invalid JSON file
     fs::write(tools_dir.join("invalid.json"), "{ invalid json content").unwrap();
 
-    // This should fail to load
+    // Should succeed but skip the invalid file (logged as warning)
     let result = load_tool_configs(tools_dir);
-    assert!(result.is_err());
+    assert!(result.is_ok());
+    assert!(result.unwrap().is_empty()); // No valid configs loaded
 }
 
 #[test]
@@ -488,7 +488,7 @@ fn test_option_config_all_fields() {
     assert_eq!(option.name, "file");
     assert_eq!(option.alias, Some("f".to_string()));
     assert_eq!(option.option_type, "string");
-    assert_eq!(option.description, "Input file path");
+    assert_eq!(option.description, Some("Input file path".to_string()));
     assert_eq!(option.format, Some("path".to_string()));
     assert_eq!(option.required, Some(true));
     assert_eq!(option.file_arg, Some(true));
