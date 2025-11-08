@@ -223,6 +223,9 @@ pub fn load_tool_configs(
 ) -> anyhow::Result<HashMap<String, ToolConfig>> {
     use std::fs;
 
+    // Hardcoded tool names that should not be overridden by user configurations
+    const RESERVED_TOOL_NAMES: &[&str] = &["await", "status"];
+
     // Return empty map if directory doesn't exist
     if !tools_dir.exists() {
         return Ok(HashMap::new());
@@ -240,6 +243,16 @@ pub fn load_tool_configs(
             match fs::read_to_string(&path) {
                 Ok(contents) => match serde_json::from_str::<ToolConfig>(&contents) {
                     Ok(config) => {
+                        // Guard rail: Check for conflicts with hardcoded tool names
+                        if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
+                            anyhow::bail!(
+                                "Tool name '{}' conflicts with a hardcoded system tool. Reserved tool names: {:?}. Please rename your tool in {}",
+                                config.name,
+                                RESERVED_TOOL_NAMES,
+                                path.display()
+                            );
+                        }
+
                         // Only include enabled tools
                         if config.enabled {
                             configs.insert(config.name.clone(), config);
