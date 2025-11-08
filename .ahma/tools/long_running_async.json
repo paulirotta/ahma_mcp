@@ -1,6 +1,6 @@
 {
     "name": "long_running_async",
-    "description": "A tool that runs for a specified duration asynchronously.",
+    "description": "An ahma testing tool that runs for a specified duration asynchronously",
     "command": "sleep",
     "subcommand": [
         {

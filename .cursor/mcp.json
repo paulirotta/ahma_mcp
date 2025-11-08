@@ -5,9 +5,7 @@
             "cwd": "${workspaceFolder}",
             "command": "target/release/ahma_mcp",
             "args": [
-                "--server",
-                "--tools-dir",
-                ".ahma/tools"
+                "--synchronous"
             ],
             "dev": {
                 "watch": [
@@ -18,9 +16,7 @@
                     "run",
                     "--release",
                     "--",
-                    "--server",
-                    "--tools-dir",
-                    ".ahma/tools"
+                    "--synchronous"
                 ]
             }
         }

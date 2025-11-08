@@ -85,7 +85,7 @@ async fn test_array_parameters_have_items_property_fixed() -> anyhow::Result<()>
 
     // Check if cargo-audit is installed
     let audit_installed = std::process::Command::new("cargo")
-        .args(&["audit", "--version"])
+        .args(["audit", "--version"])
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);

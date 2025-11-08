@@ -1,79 +1,77 @@
 {
     "name": "git",
+    "description": "Reliable access to the Git command-line client for repository operations.",
     "command": "git",
-    "description": "Git version control system",
-    "guidance_key": "git_operations",
+    "timeout_seconds": 180,
+    "hints": {
+        "default": "Use --tool_args -- to forward raw git flags exactly as they should appear after the base command."
+    },
     "subcommand": [
         {
             "name": "status",
-            "description": "Show the working tree status",
-            "synchronous": true,
-            "guidance_key": "sync_behavior",
+            "description": "Show the working tree status and staged changes. Automatically runs synchronously when worktree is small.",
             "options": [
                 {
                     "name": "short",
                     "alias": "s",
                     "type": "boolean",
-                    "description": "Give the output in the short-format"
+                    "description": "Use the short-format output."
                 },
                 {
                     "name": "branch",
                     "alias": "b",
                     "type": "boolean",
-                    "description": "Show the branch and tracking info even in short-format"
-                },
-                {
-                    "name": "porcelain",
-                    "type": "string",
-                    "description": "Give the output in an easy-to-parse format for scripts"
-                }
-            ]
-        },
-        {
-            "name": "add",
-            "description": "Add file contents to the index",
-            "synchronous": true,
-            "guidance_key": "sync_behavior",
-            "options": [
-                {
-                    "name": "all",
-                    "alias": "A",
-                    "type": "boolean",
-                    "description": "Add all files in the entire working tree"
-                },
-                {
-                    "name": "update",
-                    "alias": "u",
-                    "type": "boolean",
-                    "description": "Update the index just where it already has an entry matching pathspec"
-                },
-                {
-                    "name": "patch",
-                    "alias": "p",
-                    "type": "boolean",
-                    "description": "Interactively choose hunks of patch between the index and the work tree"
+                    "description": "Show the branch and tracking info even in short format."
                 }
             ],
             "positional_args": [
                 {
                     "name": "pathspec",
-                    "type": "array",
-                    "description": "Files to add to the index",
-                    "required": false
+                    "type": "string",
+                    "description": "Restrict status output to the provided pathspec.",
+                    "required": false,
+                    "format": "path"
                 }
-            ]
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "add",
+            "description": "Add file contents to the index for the next commit. Runs asynchronously, returns an operation_id immediately, and pushes results when complete so you can continue other tasks.",
+            "options": [
+                {
+                    "name": "all",
+                    "alias": "A",
+                    "type": "boolean",
+                    "description": "Stage all tracked and untracked files."
+                },
+                {
+                    "name": "patch",
+                    "alias": "p",
+                    "type": "boolean",
+                    "description": "Interactively choose hunks of patch between the index and the working tree."
+                }
+            ],
+            "positional_args": [
+                {
+                    "name": "pathspec",
+                    "type": "string",
+                    "description": "Files or directories to add to the index.",
+                    "required": false,
+                    "format": "path"
+                }
+            ],
+            "synchronous": false
         },
         {
             "name": "commit",
-            "description": "Record changes to the repository",
-            "synchronous": true,
-            "guidance_key": "sync_behavior",
+            "description": "Record changes to the repository with support for multi-line commit messages via temporary files when required. Runs asynchronously, returns an operation_id immediately, notifies when complete, and you should continue with other work instead of waiting.",
             "options": [
                 {
                     "name": "message",
                     "alias": "m",
                     "type": "string",
-                    "description": "Use the given message as the commit message",
+                    "description": "Commit message content. Multi-line messages are written to a temp file and passed with -F.",
                     "file_arg": true,
                     "file_flag": "-F"
                 },
@@ -81,249 +79,75 @@
                     "name": "all",
                     "alias": "a",
                     "type": "boolean",
-                    "description": "Automatically stage files that have been modified and deleted"
+                    "description": "Automatically stage files that have been modified and deleted."
                 },
                 {
                     "name": "amend",
                     "type": "boolean",
-                    "description": "Replace the tip of the current branch by creating a new commit"
+                    "description": "Amend the tip of the current branch."
                 }
-            ]
+            ],
+            "positional_args": [],
+            "synchronous": false
         },
         {
             "name": "push",
-            "description": "Update remote refs along with associated objects",
-            "guidance_key": "async_behavior",
+            "description": "Update remote refs along with associated objects. Runs asynchronously, returns an operation_id immediately, and completion is pushed via notification so do not wait idly.",
             "options": [
                 {
-                    "name": "timeout_seconds",
-                    "type": "integer",
-                    "description": "Maximum time to await in seconds (default: 240, min: 10, max: 1800)"
+                    "name": "remote",
+                    "type": "string",
+                    "description": "Target remote repository (defaults to origin)."
+                },
+                {
+                    "name": "branch",
+                    "type": "string",
+                    "description": "Remote branch to push to."
                 },
                 {
                     "name": "set-upstream",
                     "alias": "u",
                     "type": "boolean",
-                    "description": "Set up tracking information for the current branch"
+                    "description": "Set upstream for the given branch after push."
                 },
                 {
                     "name": "force",
                     "alias": "f",
                     "type": "boolean",
-                    "description": "Usually, the command refuses to update a remote ref that is not an ancestor"
-                },
-                {
-                    "name": "all",
-                    "type": "boolean",
-                    "description": "Push all branches"
+                    "description": "Force push even if it results in non-fast-forward updates."
                 }
             ],
-            "positional_args": [
-                {
-                    "name": "repository",
-                    "type": "string",
-                    "description": "The repository to push to",
-                    "required": false
-                },
-                {
-                    "name": "refspec",
-                    "type": "string",
-                    "description": "Specify what destination ref to update with what source object",
-                    "required": false
-                }
-            ]
-        },
-        {
-            "name": "pull",
-            "description": "Fetch from and integrate with another repository or a local branch",
-            "guidance_key": "async_behavior",
-            "options": [
-                {
-                    "name": "timeout_seconds",
-                    "type": "integer",
-                    "description": "Maximum time to await in seconds (default: 240, min: 10, max: 1800)"
-                },
-                {
-                    "name": "rebase",
-                    "type": "boolean",
-                    "description": "Rebase the current branch on top of the upstream branch after fetching"
-                },
-                {
-                    "name": "no-rebase",
-                    "type": "boolean",
-                    "description": "Override earlier --rebase"
-                }
-            ],
-            "positional_args": [
-                {
-                    "name": "repository",
-                    "type": "string",
-                    "description": "The repository to pull from",
-                    "required": false
-                },
-                {
-                    "name": "refspec",
-                    "type": "string",
-                    "description": "The refs to fetch and how the local refs are updated",
-                    "required": false
-                }
-            ]
-        },
-        {
-            "name": "fetch",
-            "description": "Download objects and refs from another repository",
-            "guidance_key": "async_behavior",
-            "options": [
-                {
-                    "name": "timeout_seconds",
-                    "type": "integer",
-                    "description": "Maximum time to await in seconds (default: 240, min: 10, max: 1800)"
-                },
-                {
-                    "name": "all",
-                    "type": "boolean",
-                    "description": "Fetch all remotes"
-                },
-                {
-                    "name": "prune",
-                    "alias": "p",
-                    "type": "boolean",
-                    "description": "Remove any remote-tracking references that no longer exist on the remote"
-                }
-            ],
-            "positional_args": [
-                {
-                    "name": "repository",
-                    "type": "string",
-                    "description": "The repository to fetch from",
-                    "required": false
-                }
-            ]
+            "synchronous": false
         },
         {
             "name": "log",
-            "description": "Show commit logs",
-            "synchronous": true,
-            "guidance_key": "sync_behavior",
+            "description": "Show commit logs with common formatting options. Runs asynchronously, returns an operation_id immediately, and will notify you on completion so continue working while it processes.",
             "options": [
                 {
                     "name": "oneline",
                     "type": "boolean",
-                    "description": "Shorthand for '--pretty=oneline --abbrev-commit'"
+                    "description": "Condense each commit to a single line."
+                },
+                {
+                    "name": "decorate",
+                    "type": "boolean",
+                    "description": "Print out ref names of any commits that are shown."
                 },
                 {
                     "name": "graph",
                     "type": "boolean",
-                    "description": "Draw a text-based graphical representation of the commit history"
-                },
-                {
-                    "name": "max-count",
-                    "alias": "n",
-                    "type": "integer",
-                    "description": "Limit the number of commits to output"
+                    "description": "Display branch and merge history graphically alongside the output."
                 }
             ],
             "positional_args": [
                 {
-                    "name": "revision-range",
+                    "name": "rev_range",
                     "type": "string",
-                    "description": "Show only commits in the specified revision range",
+                    "description": "Commit range or revisions to include in the log output.",
                     "required": false
                 }
-            ]
-        },
-        {
-            "name": "diff",
-            "description": "Show changes between commits, commit and working tree, etc",
-            "synchronous": true,
-            "guidance_key": "sync_behavior",
-            "options": [
-                {
-                    "name": "cached",
-                    "type": "boolean",
-                    "description": "Show the changes staged for the next commit relative to the named tree-ish"
-                },
-                {
-                    "name": "name-only",
-                    "type": "boolean",
-                    "description": "Show only names of changed files"
-                },
-                {
-                    "name": "stat",
-                    "type": "boolean",
-                    "description": "Generate a diffstat"
-                }
             ],
-            "positional_args": [
-                {
-                    "name": "paths",
-                    "type": "array",
-                    "description": "Paths to show differences for",
-                    "required": false
-                }
-            ]
-        },
-        {
-            "name": "branch",
-            "description": "List, create, or delete branches",
-            "synchronous": true,
-            "guidance_key": "sync_behavior",
-            "options": [
-                {
-                    "name": "all",
-                    "alias": "a",
-                    "type": "boolean",
-                    "description": "List both remote-tracking branches and local branches"
-                },
-                {
-                    "name": "remote",
-                    "alias": "r",
-                    "type": "boolean",
-                    "description": "List or delete (if used with -d) the remote-tracking branches"
-                },
-                {
-                    "name": "delete",
-                    "alias": "d",
-                    "type": "boolean",
-                    "description": "Delete a branch"
-                }
-            ],
-            "positional_args": [
-                {
-                    "name": "branchname",
-                    "type": "string",
-                    "description": "The name of the branch to create or delete",
-                    "required": false
-                }
-            ]
-        },
-        {
-            "name": "checkout",
-            "description": "Switch branches or restore working tree files",
-            "synchronous": true,
-            "guidance_key": "sync_behavior",
-            "options": [
-                {
-                    "name": "branch",
-                    "alias": "b",
-                    "type": "string",
-                    "description": "Create and checkout a new branch"
-                },
-                {
-                    "name": "track",
-                    "alias": "t",
-                    "type": "boolean",
-                    "description": "Set up tracking information"
-                }
-            ],
-            "positional_args": [
-                {
-                    "name": "branch-or-paths",
-                    "type": "string",
-                    "description": "The branch to check out or paths to checkout from index",
-                    "required": true
-                }
-            ]
+            "synchronous": false
         }
     ]
 }
