@@ -74,7 +74,21 @@ impl Client {
         let result = service.call_tool(params).await?;
         if let Some(content) = result.content.first() {
             if let Some(text_content) = content.as_text() {
-                serde_json::from_str(&text_content.text).map_err(|e| anyhow::anyhow!(e))
+                // Parse the response text which is in format: "Asynchronous operation started with ID: {id}"
+                let text = &text_content.text;
+                if let Some(id_start) = text.find("ID: ") {
+                    let job_id = text[id_start + 4..].trim().to_string();
+                    Ok(ToolCallResult {
+                        status: "started".to_string(),
+                        job_id,
+                        message: text.clone(),
+                    })
+                } else {
+                    Err(anyhow::anyhow!(
+                        "Could not parse operation ID from response: {}",
+                        text
+                    ))
+                }
             } else {
                 Err(anyhow::anyhow!("No text content in response"))
             }
@@ -99,14 +113,25 @@ impl Client {
         };
 
         let result = service.call_tool(params).await?;
-        if let Some(content) = result.content.first() {
+        if result.content.is_empty() {
+            return Err(anyhow::anyhow!("No content in response"));
+        }
+
+        // Concatenate all text content items
+        let mut full_text = String::new();
+        for content in &result.content {
             if let Some(text_content) = content.as_text() {
-                Ok(text_content.text.clone())
-            } else {
-                Err(anyhow::anyhow!("No text content in response"))
+                if !full_text.is_empty() {
+                    full_text.push_str("\n\n");
+                }
+                full_text.push_str(&text_content.text);
             }
-        } else {
+        }
+
+        if full_text.is_empty() {
             Err(anyhow::anyhow!("No text content in response"))
+        } else {
+            Ok(full_text)
         }
     }
 

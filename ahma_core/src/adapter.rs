@@ -572,14 +572,10 @@ impl Adapter {
             anyhow::bail!("Command must not be empty");
         }
 
+        // The remaining parts from the command string become the initial args.
+        // Note: The subcommand name is already included in the command string
+        // (added by mcp_service.rs), so we do NOT add it again here.
         let mut final_args: Vec<String> = parts.into_iter().map(String::from).collect();
-
-        // If a subcommand config is provided, its name should be the first argument
-        if let Some(sc) = subcommand_config {
-            if !sc.name.is_empty() && sc.name != "default" {
-                final_args.push(sc.name.clone());
-            }
-        }
 
         if let Some(args_map) = args {
             let positional_arg_names: HashSet<String> = subcommand_config
@@ -588,7 +584,11 @@ impl Adapter {
                 .unwrap_or_default();
 
             // Process all top-level key-value pairs as named arguments
+            // Skip special keys like "args" which are handled separately
             for (key, value) in args_map {
+                if key == "args" {
+                    continue; // Skip "args" - it will be handled below
+                }
                 self.process_named_arg(
                     key,
                     value,

@@ -928,6 +928,7 @@ impl ServerHandler for AhmaMcpService {
 
             let timeout = arguments.get("timeout_seconds").and_then(|v| v.as_u64());
 
+            // Determine execution mode: first check explicit argument, then config, then default to async
             let execution_mode =
                 if let Some(mode_str) = arguments.get("execution_mode").and_then(|v| v.as_str()) {
                     match mode_str {
@@ -935,8 +936,12 @@ impl ServerHandler for AhmaMcpService {
                         "AsyncResultPush" => crate::adapter::ExecutionMode::AsyncResultPush,
                         _ => crate::adapter::ExecutionMode::AsyncResultPush, // Default
                     }
+                } else if subcommand_config.synchronous == Some(true) {
+                    // Use synchronous mode if subcommand config specifies it
+                    crate::adapter::ExecutionMode::Synchronous
                 } else {
-                    crate::adapter::ExecutionMode::AsyncResultPush // Default
+                    // Default to async
+                    crate::adapter::ExecutionMode::AsyncResultPush
                 };
 
             match execution_mode {
@@ -1011,6 +1016,13 @@ impl AhmaMcpService {
             serde_json::json!({
                 "type": "string",
                 "description": "Comma-separated tool name prefixes to await for (optional; waits for all if omitted)"
+            }),
+        );
+        properties.insert(
+            "operation_id".to_string(),
+            serde_json::json!({
+                "type": "string",
+                "description": "Specific operation ID to await for (optional)"
             }),
         );
 
@@ -1198,6 +1210,12 @@ impl AhmaMcpService {
     async fn handle_await(&self, params: CallToolRequestParam) -> Result<CallToolResult, McpError> {
         let args = params.arguments.unwrap_or_default();
 
+        // Check if a specific operation_id is provided
+        let operation_id_filter: Option<String> = args
+            .get("operation_id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
         // Parse tools parameter as comma-separated string
         let tool_filters: Vec<String> = if let Some(v) = args.get("tools") {
             if let Some(s) = v.as_str() {
@@ -1212,270 +1230,341 @@ impl AhmaMcpService {
             Vec::new()
         };
 
-        // Always use intelligent timeout calculation (no user-provided timeout parameter)
-        let timeout_seconds = self.calculate_intelligent_timeout(&tool_filters).await;
-        let timeout_duration = std::time::Duration::from_secs(timeout_seconds as u64);
+        // If operation_id is specified, wait for that specific operation
+        if let Some(op_id) = operation_id_filter {
+            // Check if operation exists
+            let operation = self.operation_monitor.get_operation(&op_id).await;
 
-        // Build from pending ops, optionally filtered by tools
-        let pending_ops: Vec<Operation> = self
-            .operation_monitor
-            .get_all_active_operations()
-            .await
-            .into_iter()
-            .filter(|op| {
-                if op.state.is_terminal() {
-                    return false;
-                }
-                if tool_filters.is_empty() {
-                    true
+            if operation.is_none() {
+                // Check if it's in completed operations
+                let completed_ops = self.operation_monitor.get_completed_operations().await;
+                if let Some(completed_op) = completed_ops.iter().find(|op| op.id == op_id) {
+                    // Operation already completed
+                    let mut contents = Vec::new();
+                    contents.push(Content::text(format!(
+                        "Operation {} already completed",
+                        op_id
+                    )));
+                    match serde_json::to_string_pretty(completed_op) {
+                        Ok(s) => contents.push(Content::text(s)),
+                        Err(e) => tracing::error!("Serialization error: {}", e),
+                    }
+                    return Ok(CallToolResult::success(contents));
                 } else {
-                    tool_filters.iter().any(|tn| op.tool_name.starts_with(tn))
+                    return Ok(CallToolResult::success(vec![Content::text(format!(
+                        "Operation {} not found",
+                        op_id
+                    ))]));
                 }
-            })
-            .collect();
+            }
 
-        if pending_ops.is_empty() {
-            let completed_ops = self.operation_monitor.get_completed_operations().await;
-            let relevant_completed: Vec<Operation> = completed_ops
+            // Wait for the specific operation
+            tracing::info!("Waiting for operation: {}", op_id);
+
+            // Use a reasonable timeout (e.g., 5 minutes)
+            let timeout_duration = std::time::Duration::from_secs(300);
+            let wait_start = Instant::now();
+
+            let wait_result = tokio::time::timeout(
+                timeout_duration,
+                self.operation_monitor.wait_for_operation(&op_id),
+            )
+            .await;
+
+            match wait_result {
+                Ok(Some(completed_op)) => {
+                    let elapsed = wait_start.elapsed();
+                    let mut contents = vec![Content::text(format!(
+                        "Completed 1 operations in {:.2}s",
+                        elapsed.as_secs_f64()
+                    ))];
+                    match serde_json::to_string_pretty(&completed_op) {
+                        Ok(s) => contents.push(Content::text(s)),
+                        Err(e) => tracing::error!("Serialization error: {}", e),
+                    }
+                    Ok(CallToolResult::success(contents))
+                }
+                Ok(None) => Ok(CallToolResult::success(vec![Content::text(format!(
+                    "Operation {} completed but no result available",
+                    op_id
+                ))])),
+                Err(_) => Ok(CallToolResult::success(vec![Content::text(format!(
+                    "Timeout waiting for operation {}",
+                    op_id
+                ))])),
+            }
+        } else {
+            // Original behavior: wait for operations by tool filter
+            // Always use intelligent timeout calculation (no user-provided timeout parameter)
+            let timeout_seconds = self.calculate_intelligent_timeout(&tool_filters).await;
+            let timeout_duration = std::time::Duration::from_secs(timeout_seconds as u64);
+
+            // Build from pending ops, optionally filtered by tools
+            let pending_ops: Vec<Operation> = self
+                .operation_monitor
+                .get_all_active_operations()
+                .await
                 .into_iter()
                 .filter(|op| {
+                    if op.state.is_terminal() {
+                        return false;
+                    }
                     if tool_filters.is_empty() {
-                        false
+                        true
                     } else {
                         tool_filters.iter().any(|tn| op.tool_name.starts_with(tn))
                     }
                 })
                 .collect();
 
-            if !relevant_completed.is_empty() {
-                let mut contents = Vec::new();
-                contents.push(Content::text(format!(
+            if pending_ops.is_empty() {
+                let completed_ops = self.operation_monitor.get_completed_operations().await;
+                let relevant_completed: Vec<Operation> = completed_ops
+                    .into_iter()
+                    .filter(|op| {
+                        if tool_filters.is_empty() {
+                            false
+                        } else {
+                            tool_filters.iter().any(|tn| op.tool_name.starts_with(tn))
+                        }
+                    })
+                    .collect();
+
+                if !relevant_completed.is_empty() {
+                    let mut contents = Vec::new();
+                    contents.push(Content::text(format!(
                     "No pending operations for tools: {}. However, these operations recently completed:",
                     tool_filters.join(", ")
                 )));
-                for op in relevant_completed {
-                    match serde_json::to_string_pretty(&op) {
+                    for op in relevant_completed {
+                        match serde_json::to_string_pretty(&op) {
+                            Ok(s) => contents.push(Content::text(s)),
+                            Err(e) => tracing::error!("Serialization error: {}", e),
+                        }
+                    }
+                    return Ok(CallToolResult::success(contents));
+                }
+
+                return Ok(CallToolResult::success(vec![Content::text(
+                    if tool_filters.is_empty() {
+                        "No pending operations to await for.".to_string()
+                    } else {
+                        format!(
+                            "No pending operations for tools: {}",
+                            tool_filters.join(", ")
+                        )
+                    },
+                )]));
+            }
+
+            tracing::info!(
+                "Waiting for {} pending operations (timeout: {}s): {:?}",
+                pending_ops.len(),
+                timeout_seconds,
+                pending_ops.iter().map(|op| &op.id).collect::<Vec<_>>()
+            );
+
+            let wait_start = Instant::now();
+            let (warning_tx, mut warning_rx) = tokio::sync::mpsc::unbounded_channel();
+
+            let warning_task = {
+                let warning_tx = warning_tx.clone();
+                let timeout_secs = timeout_seconds;
+                tokio::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs_f64(timeout_secs * 0.5))
+                        .await;
+                    let _ = warning_tx.send(format!(
+                        "Wait operation 50% complete ({:.0}s remaining)",
+                        timeout_secs * 0.5
+                    ));
+                    tokio::time::sleep(std::time::Duration::from_secs_f64(timeout_secs * 0.25))
+                        .await;
+                    let _ = warning_tx.send(format!(
+                        "Wait operation 75% complete ({:.0}s remaining)",
+                        timeout_secs * 0.25
+                    ));
+                    tokio::time::sleep(std::time::Duration::from_secs_f64(timeout_secs * 0.15))
+                        .await;
+                    let _ = warning_tx.send(format!(
+                        "Wait operation 90% complete ({:.0}s remaining)",
+                        timeout_secs * 0.1
+                    ));
+                })
+            };
+
+            let wait_result = tokio::time::timeout(timeout_duration, async {
+                let mut contents = Vec::new();
+                let mut futures = Vec::new();
+                for op in &pending_ops {
+                    futures.push(self.operation_monitor.wait_for_operation(&op.id));
+                }
+
+                let results = futures::future::join_all(futures).await;
+
+                for done in results.into_iter().flatten() {
+                    match serde_json::to_string_pretty(&done) {
                         Ok(s) => contents.push(Content::text(s)),
                         Err(e) => tracing::error!("Serialization error: {}", e),
                     }
                 }
-                return Ok(CallToolResult::success(contents));
-            }
-
-            return Ok(CallToolResult::success(vec![Content::text(
-                if tool_filters.is_empty() {
-                    "No pending operations to await for.".to_string()
-                } else {
-                    format!(
-                        "No pending operations for tools: {}",
-                        tool_filters.join(", ")
-                    )
-                },
-            )]));
-        }
-
-        tracing::info!(
-            "Waiting for {} pending operations (timeout: {}s): {:?}",
-            pending_ops.len(),
-            timeout_seconds,
-            pending_ops.iter().map(|op| &op.id).collect::<Vec<_>>()
-        );
-
-        let wait_start = Instant::now();
-        let (warning_tx, mut warning_rx) = tokio::sync::mpsc::unbounded_channel();
-
-        let warning_task = {
-            let warning_tx = warning_tx.clone();
-            let timeout_secs = timeout_seconds;
-            tokio::spawn(async move {
-                tokio::time::sleep(std::time::Duration::from_secs_f64(timeout_secs * 0.5)).await;
-                let _ = warning_tx.send(format!(
-                    "Wait operation 50% complete ({:.0}s remaining)",
-                    timeout_secs * 0.5
-                ));
-                tokio::time::sleep(std::time::Duration::from_secs_f64(timeout_secs * 0.25)).await;
-                let _ = warning_tx.send(format!(
-                    "Wait operation 75% complete ({:.0}s remaining)",
-                    timeout_secs * 0.25
-                ));
-                tokio::time::sleep(std::time::Duration::from_secs_f64(timeout_secs * 0.15)).await;
-                let _ = warning_tx.send(format!(
-                    "Wait operation 90% complete ({:.0}s remaining)",
-                    timeout_secs * 0.1
-                ));
+                contents
             })
-        };
+            .await;
 
-        let wait_result = tokio::time::timeout(timeout_duration, async {
-            let mut contents = Vec::new();
-            let mut futures = Vec::new();
-            for op in &pending_ops {
-                futures.push(self.operation_monitor.wait_for_operation(&op.id));
+            warning_task.abort();
+            while let Ok(warning) = warning_rx.try_recv() {
+                tracing::info!("Wait progress: {}", warning);
             }
 
-            let results = futures::future::join_all(futures).await;
+            match wait_result {
+                Ok(contents) => {
+                    let elapsed = wait_start.elapsed();
+                    if !contents.is_empty() {
+                        let mut result_contents = vec![Content::text(format!(
+                            "Completed {} operations in {:.2}s",
+                            contents.len(),
+                            elapsed.as_secs_f64()
+                        ))];
 
-            for done in results.into_iter().flatten() {
-                match serde_json::to_string_pretty(&done) {
-                    Ok(s) => contents.push(Content::text(s)),
-                    Err(e) => tracing::error!("Serialization error: {}", e),
+                        result_contents.extend(contents);
+                        Ok(CallToolResult::success(result_contents))
+                    } else {
+                        let result_contents = vec![Content::text(
+                            "No operations completed within timeout period".to_string(),
+                        )];
+
+                        Ok(CallToolResult::success(result_contents))
+                    }
                 }
-            }
-            contents
-        })
-        .await;
+                Err(_) => {
+                    let elapsed = wait_start.elapsed();
+                    let still_running: Vec<Operation> = self
+                        .operation_monitor
+                        .get_all_active_operations()
+                        .await
+                        .into_iter()
+                        .filter(|op| !op.state.is_terminal())
+                        .collect();
+                    let completed_during_wait = pending_ops.len() - still_running.len();
 
-        warning_task.abort();
-        while let Ok(warning) = warning_rx.try_recv() {
-            tracing::info!("Wait progress: {}", warning);
-        }
-
-        match wait_result {
-            Ok(contents) => {
-                let elapsed = wait_start.elapsed();
-                if !contents.is_empty() {
-                    let mut result_contents = vec![Content::text(format!(
-                        "Completed {} operations in {:.2}s",
-                        contents.len(),
-                        elapsed.as_secs_f64()
-                    ))];
-
-                    result_contents.extend(contents);
-                    Ok(CallToolResult::success(result_contents))
-                } else {
-                    let result_contents = vec![Content::text(
-                        "No operations completed within timeout period".to_string(),
-                    )];
-
-                    Ok(CallToolResult::success(result_contents))
-                }
-            }
-            Err(_) => {
-                let elapsed = wait_start.elapsed();
-                let still_running: Vec<Operation> = self
-                    .operation_monitor
-                    .get_all_active_operations()
-                    .await
-                    .into_iter()
-                    .filter(|op| !op.state.is_terminal())
-                    .collect();
-                let completed_during_wait = pending_ops.len() - still_running.len();
-
-                let mut remediation_steps = Vec::new();
-                let lock_patterns = vec![
-                    ".cargo-lock",
-                    ".lock",
-                    "package-lock.json",
-                    "yarn.lock",
-                    ".npm-lock",
-                    "composer.lock",
-                    "Pipfile.lock",
-                    ".bundle-lock",
-                ];
-                for dir in &["target", "node_modules", ".cargo", "tmp", "temp"] {
-                    if let Ok(entries) = std::fs::read_dir(dir) {
-                        for entry in entries.flatten() {
-                            if let Some(name) = entry.file_name().to_str() {
-                                for pattern in &lock_patterns {
-                                    if name.contains(pattern) {
-                                        remediation_steps.push(format!(
-                                            "• Remove potential stale lock file: rm {}/{}",
-                                            dir, name
-                                        ));
-                                        break;
+                    let mut remediation_steps = Vec::new();
+                    let lock_patterns = vec![
+                        ".cargo-lock",
+                        ".lock",
+                        "package-lock.json",
+                        "yarn.lock",
+                        ".npm-lock",
+                        "composer.lock",
+                        "Pipfile.lock",
+                        ".bundle-lock",
+                    ];
+                    for dir in &["target", "node_modules", ".cargo", "tmp", "temp"] {
+                        if let Ok(entries) = std::fs::read_dir(dir) {
+                            for entry in entries.flatten() {
+                                if let Some(name) = entry.file_name().to_str() {
+                                    for pattern in &lock_patterns {
+                                        if name.contains(pattern) {
+                                            remediation_steps.push(format!(
+                                                "• Remove potential stale lock file: rm {}/{}",
+                                                dir, name
+                                            ));
+                                            break;
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
-                if std::fs::metadata(".").is_ok() {
-                    remediation_steps.push("• Check available disk space: df -h .".to_string());
-                }
-                let running_commands: std::collections::HashSet<String> = still_running
-                    .iter()
-                    .map(|op| {
-                        op.tool_name
-                            .split('_')
-                            .next()
-                            .unwrap_or(&op.tool_name)
-                            .to_string()
-                    })
-                    .collect();
-                for cmd in &running_commands {
-                    remediation_steps.push(format!(
-                        "• Check for competing {} processes: ps aux | grep {}",
-                        cmd, cmd
-                    ));
-                }
-                let network_keywords = [
-                    "network", "http", "https", "tcp", "udp", "socket", "curl", "wget", "git",
-                    "api", "rest", "graphql", "rpc", "ssh", "ftp", "scp", "rsync", "net", "audit",
-                    "update", "search", "add", "install", "fetch", "clone", "pull", "push",
-                    "download", "upload", "sync",
-                ];
-                let has_network_ops = still_running.iter().any(|op| {
-                    network_keywords
+                    if std::fs::metadata(".").is_ok() {
+                        remediation_steps.push("• Check available disk space: df -h .".to_string());
+                    }
+                    let running_commands: std::collections::HashSet<String> = still_running
                         .iter()
-                        .any(|keyword| op.tool_name.contains(keyword))
-                });
-                if has_network_ops {
-                    remediation_steps.push(
+                        .map(|op| {
+                            op.tool_name
+                                .split('_')
+                                .next()
+                                .unwrap_or(&op.tool_name)
+                                .to_string()
+                        })
+                        .collect();
+                    for cmd in &running_commands {
+                        remediation_steps.push(format!(
+                            "• Check for competing {} processes: ps aux | grep {}",
+                            cmd, cmd
+                        ));
+                    }
+                    let network_keywords = [
+                        "network", "http", "https", "tcp", "udp", "socket", "curl", "wget", "git",
+                        "api", "rest", "graphql", "rpc", "ssh", "ftp", "scp", "rsync", "net",
+                        "audit", "update", "search", "add", "install", "fetch", "clone", "pull",
+                        "push", "download", "upload", "sync",
+                    ];
+                    let has_network_ops = still_running.iter().any(|op| {
+                        network_keywords
+                            .iter()
+                            .any(|keyword| op.tool_name.contains(keyword))
+                    });
+                    if has_network_ops {
+                        remediation_steps.push(
                         "• Network operations detected - check internet connection: ping 8.8.8.8"
                             .to_string(),
                     );
-                    remediation_steps
-                        .push("• Try running with offline flags if tool supports them".to_string());
-                }
-                let build_keywords = [
-                    "build", "compile", "test", "lint", "clippy", "format", "check", "verify",
-                    "validate", "analyze",
-                ];
-                let has_build_ops = still_running.iter().any(|op| {
-                    build_keywords
-                        .iter()
-                        .any(|keyword| op.tool_name.contains(keyword))
-                });
-                if has_build_ops {
-                    remediation_steps.push("• Build/compile operations can take time - consider increasing timeout_seconds".to_string());
-                    remediation_steps.push("• Check system resources: top or htop".to_string());
-                    remediation_steps.push(
-                        "• Consider running operations with verbose flags to see progress"
-                            .to_string(),
-                    );
-                }
-                if remediation_steps.is_empty() {
-                    remediation_steps
-                        .push("• Use the 'status' tool to check remaining operations".to_string());
-                    remediation_steps.push(
+                        remediation_steps.push(
+                            "• Try running with offline flags if tool supports them".to_string(),
+                        );
+                    }
+                    let build_keywords = [
+                        "build", "compile", "test", "lint", "clippy", "format", "check", "verify",
+                        "validate", "analyze",
+                    ];
+                    let has_build_ops = still_running.iter().any(|op| {
+                        build_keywords
+                            .iter()
+                            .any(|keyword| op.tool_name.contains(keyword))
+                    });
+                    if has_build_ops {
+                        remediation_steps.push("• Build/compile operations can take time - consider increasing timeout_seconds".to_string());
+                        remediation_steps.push("• Check system resources: top or htop".to_string());
+                        remediation_steps.push(
+                            "• Consider running operations with verbose flags to see progress"
+                                .to_string(),
+                        );
+                    }
+                    if remediation_steps.is_empty() {
+                        remediation_steps.push(
+                            "• Use the 'status' tool to check remaining operations".to_string(),
+                        );
+                        remediation_steps.push(
                         "• Operations continue running in background - they may complete shortly"
                             .to_string(),
                     );
-                    remediation_steps.push("• Consider increasing timeout_seconds if operations legitimately need more time".to_string());
-                }
-                let mut error_message = format!(
-                    "Wait operation timed out after {:.2}s (configured timeout: {:.0}s).\n\n\
+                        remediation_steps.push("• Consider increasing timeout_seconds if operations legitimately need more time".to_string());
+                    }
+                    let mut error_message = format!(
+                        "Wait operation timed out after {:.2}s (configured timeout: {:.0}s).\n\n\
                     Progress: {}/{} operations completed during await.\n\
                     Still running: {} operations.\n\n\
                     Suggestions:",
-                    elapsed.as_secs_f64(),
-                    timeout_seconds,
-                    completed_during_wait,
-                    pending_ops.len(),
-                    still_running.len()
-                );
-                for step in &remediation_steps {
-                    error_message.push_str(&format!("\n{}", step));
-                }
-                if !still_running.is_empty() {
-                    error_message.push_str("\n\nStill running operations:");
-                    for op in &still_running {
-                        error_message.push_str(&format!("\n• {} ({})", op.id, op.tool_name));
+                        elapsed.as_secs_f64(),
+                        timeout_seconds,
+                        completed_during_wait,
+                        pending_ops.len(),
+                        still_running.len()
+                    );
+                    for step in &remediation_steps {
+                        error_message.push_str(&format!("\n{}", step));
                     }
+                    if !still_running.is_empty() {
+                        error_message.push_str("\n\nStill running operations:");
+                        for op in &still_running {
+                            error_message.push_str(&format!("\n• {} ({})", op.id, op.tool_name));
+                        }
+                    }
+                    Ok(CallToolResult::success(vec![Content::text(error_message)]))
                 }
-                Ok(CallToolResult::success(vec![Content::text(error_message)]))
             }
-        }
+        } // Close the else block
     }
 
     /// Calculate intelligent timeout based on operation timeouts and default await timeout
