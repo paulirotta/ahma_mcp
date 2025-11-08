@@ -1,18 +1,18 @@
-[package]
-authors = ["Paul Houghton <paulirotta@gmail.com>"] 
-edition = "2024" # AI, do not change
-license = "MIT OR Apache-2.0" 
-name = "ahma_mcp" 
-readme = "README.md" 
-resolver = "3" 
-rust-version = "1.85.0" 
-version = "0.3.2" 
+[workspace]
+members = ["ahma_core", "ahma_shell"]
+resolver = "2"
 
-[dependencies]
+[workspace.package]
+authors = ["Paul Houghton <paulirotta@gmail.com>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+rust-version = "1.85.0"
+version = "0.3.2"
+
+[workspace.dependencies]
 anyhow = "1.0.100"
 async-trait = "0.1.89"
 chrono = {version = "0.4.42", features = ["serde"]}
-clap = {version = "4.5.51", features = ["derive"]}
 directories = "6.0.0"
 futures = "0.3"
 regex = "1.12.2"
@@ -28,15 +28,8 @@ toml = "0.9.8"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = {version = "0.3.20", features = ["env-filter"]}
-
-[dev-dependencies]
-futures = "0.3"
-tempfile = "3.23.0"
-
-# Features allow local development to disable platform-specific tests. The CI will run all tests.
-[features]
-android = []
-default = ["android"]
+# CLI dependencies
+clap = {version = "4.5.51", features = ["derive"]}
 
 [profile.coverage]
 debug = true

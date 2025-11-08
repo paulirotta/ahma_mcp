@@ -1,0 +1,363 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ToolConfig",
+  "description": "Represents the complete configuration for a command-line tool.",
+  "type": "object",
+  "properties": {
+    "availability_check": {
+      "description": "Runtime availability probe executed at server startup.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AvailabilityCheck"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "command": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "guidance_key": {
+      "description": "Key to look up guidance in tool_guidance.json",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "hints": {
+      "$ref": "#/$defs/ToolHints",
+      "default": {
+        "default": null
+      }
+    },
+    "input_schema": {
+      "description": "Generated input schema (optional - auto-generated from subcommands)"
+    },
+    "install_instructions": {
+      "description": "Human-friendly instructions describing how to install this tool when missing.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "name": {
+      "type": "string"
+    },
+    "sequence": {
+      "description": "Optional sequence of tools to execute in order (for composite tools)",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/SequenceStep"
+      }
+    },
+    "step_delay_ms": {
+      "description": "Delay in milliseconds between sequence steps (default: SEQUENCE_STEP_DELAY_MS)",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "subcommand": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/SubcommandConfig"
+      }
+    },
+    "synchronous": {
+      "description": "Default synchronous behavior for all subcommands (can be overridden per subcommand)",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "timeout_seconds": {
+      "description": "Default timeout for operations in seconds",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "description",
+    "command"
+  ],
+  "$defs": {
+    "AvailabilityCheck": {
+      "description": "Defines how to probe for tool or subcommand availability at runtime.",
+      "type": "object",
+      "properties": {
+        "args": {
+          "description": "Arguments passed to the availability probe.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "command": {
+          "description": "Optional override for the executable to invoke during the check. Defaults to the tool command.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "skip_subcommand_args": {
+          "description": "If true, do not append derived subcommand arguments when constructing the probe command.",
+          "type": "boolean"
+        },
+        "success_exit_codes": {
+          "description": "Exit codes considered successful (defaults to `[0]`).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "working_directory": {
+          "description": "Working directory used for the probe (defaults to project root).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "OptionConfig": {
+      "description": "Configuration for an option within a subcommand",
+      "type": "object",
+      "properties": {
+        "alias": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "file_arg": {
+          "description": "If true, multi-line or special character values will be written to a temporary file\nand the file path will be passed as the argument instead of the raw value.\nThe option name will be automatically converted to use the file flag variant\n(e.g., for git commit: \"message\" with file_arg=true becomes \"-F\" instead of \"-m\")",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "file_flag": {
+          "description": "When file_arg is true, this specifies the flag to use for file-based input\n(e.g., \"-F\" for git commit). If not specified, defaults to the normal flag.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "format": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "required": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "description"
+      ]
+    },
+    "SequenceStep": {
+      "description": "Represents a single step in a tool sequence",
+      "type": "object",
+      "properties": {
+        "args": {
+          "description": "Arguments to pass to the tool",
+          "type": "object",
+          "additionalProperties": true,
+          "default": {}
+        },
+        "description": {
+          "description": "Optional description for logging/display",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subcommand": {
+          "description": "Subcommand within that tool",
+          "type": "string"
+        },
+        "tool": {
+          "description": "Name of the tool to invoke",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "subcommand"
+      ]
+    },
+    "SubcommandConfig": {
+      "description": "Configuration for a subcommand within a tool",
+      "type": "object",
+      "properties": {
+        "availability_check": {
+          "description": "Optional availability probe executed at server startup.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AvailabilityCheck"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "enabled": {
+          "description": "Whether this subcommand is enabled (defaults to true)",
+          "type": "boolean",
+          "default": true
+        },
+        "guidance_key": {
+          "description": "Key to look up guidance in tool_guidance.json",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "install_instructions": {
+          "description": "Install instructions displayed when this subcommand is unavailable.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "options": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/OptionConfig"
+          }
+        },
+        "positional_args": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/OptionConfig"
+          }
+        },
+        "sequence": {
+          "description": "Optional sequence of steps for subcommands that orchestrate multiple commands",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/SequenceStep"
+          }
+        },
+        "step_delay_ms": {
+          "description": "Delay in milliseconds between sequence steps",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "subcommand": {
+          "description": "Nested subcommands for recursive command structures",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/SubcommandConfig"
+          }
+        },
+        "synchronous": {
+          "description": "If true, this subcommand runs synchronously instead of async",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "timeout_seconds": {
+          "description": "Override timeout for this specific subcommand",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "description"
+      ]
+    },
+    "ToolHints": {
+      "description": "A collection of hints for AI clients using this tool.",
+      "type": "object",
+      "properties": {
+        "default": {
+          "description": "Default hint for any operation with this tool",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  }
+}
