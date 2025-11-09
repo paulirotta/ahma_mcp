@@ -93,14 +93,68 @@
                 }
             ],
             "availability_check": {
-                "command": "cargo",
+                "command": "clippy-driver",
                 "args": [
-                    "clippy",
                     "--version"
                 ],
                 "skip_subcommand_args": true
             },
             "install_instructions": "Install with `rustup component add clippy`."
+        },
+        {
+            "name": "audit",
+            "description": "Audit dependencies for security vulnerabilities using cargo-audit.",
+            "options": [
+                {
+                    "name": "ignore",
+                    "type": "array",
+                    "description": "Advisory IDs to ignore during the audit run.",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                {
+                    "name": "target-arch",
+                    "type": "array",
+                    "description": "Filter vulnerabilities by CPU architecture.",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                {
+                    "name": "target-os",
+                    "type": "array",
+                    "description": "Filter vulnerabilities by operating system.",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                {
+                    "name": "args",
+                    "type": "array",
+                    "description": "Additional arguments passed after the `--` separator.",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                {
+                    "name": "exclude",
+                    "type": "array",
+                    "description": "Packages to exclude from the audit run.",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            ],
+            "availability_check": {
+                "command": "cargo",
+                "args": [
+                    "audit",
+                    "--version"
+                ],
+                "skip_subcommand_args": true
+            },
+            "install_instructions": "Install with `cargo install cargo-audit`."
         },
         {
             "name": "nextest",
@@ -117,6 +171,7 @@
                             "description": "Run tests for all packages in workspace"
                         }
                     ],
+                    "timeout_seconds": 1800,
                     "availability_check": {
                         "command": "cargo",
                         "args": [

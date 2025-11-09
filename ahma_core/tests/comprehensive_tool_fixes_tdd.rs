@@ -57,15 +57,15 @@ mod comprehensive_tool_fixes_tdd {
             .and_then(|value| value.as_str())
             .expect("availability_check.command should exist");
         assert_eq!(
-            command, "cargo",
-            "clippy probe should invoke cargo directly"
+            command, "clippy-driver",
+            "clippy probe should invoke clippy-driver directly to avoid cargo locking"
         );
 
         let args = availability
             .get("args")
             .and_then(|value| value.as_array())
             .expect("availability_check.args should exist for clippy");
-        let expected_args = vec!["clippy", "--version"];
+        let expected_args = vec!["--version"];
         let actual_args: Vec<_> = args
             .iter()
             .map(|value| value.as_str().unwrap_or_default())

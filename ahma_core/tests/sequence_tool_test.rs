@@ -7,6 +7,7 @@ use anyhow::Result;
 use rmcp::model::CallToolRequestParam;
 use serde_json::json;
 use std::borrow::Cow;
+use std::collections::HashSet;
 
 #[tokio::test]
 async fn test_sequence_tool_loads() -> Result<()> {
@@ -92,23 +93,50 @@ async fn test_simple_sequence_execution() -> Result<()> {
 
     let result = client.call_tool(call_param).await?;
 
-    // Verify the result contains information about both steps
-    let result_text = result
+    // Verify the result contains information about both steps including their descriptions and operation IDs
+    let messages: Vec<String> = result
         .content
         .iter()
-        .filter_map(|c| c.as_text().map(|t| t.text.as_str()))
-        .collect::<Vec<_>>()
-        .join("\n");
+        .filter_map(|c| c.as_text().map(|t| t.text.clone()))
+        .collect();
 
-    assert!(
-        result_text.contains("Step 1") || result_text.contains("First step"),
-        "Result should contain first step: {}",
-        result_text
+    assert_eq!(
+        messages.len(),
+        2,
+        "Sequence should emit exactly two step notifications: {:?}",
+        messages
     );
-    assert!(
-        result_text.contains("Step 2") || result_text.contains("Second step"),
-        "Result should contain second step: {}",
-        result_text
+
+    let expected_descriptions = ["First step", "Second step"];
+    for (message, expected_desc) in messages.iter().zip(expected_descriptions.iter()) {
+        assert!(
+            message.contains("Sequence step 'shell_async'"),
+            "Message should reference shell_async sequence step: {}",
+            message
+        );
+        assert!(
+            message.contains(expected_desc),
+            "Message should include step description '{}': {}",
+            expected_desc,
+            message
+        );
+        assert!(
+            message.contains("operation ID:"),
+            "Message should include operation ID: {}",
+            message
+        );
+    }
+
+    let operation_ids: HashSet<String> = messages
+        .iter()
+        .filter_map(|line| line.split("operation ID:").nth(1))
+        .map(|id| id.trim().to_string())
+        .collect();
+    assert_eq!(
+        operation_ids.len(),
+        messages.len(),
+        "Each sequence step should have a unique operation ID: {:?}",
+        operation_ids
     );
 
     client.cancel().await?;
@@ -119,9 +147,9 @@ async fn test_simple_sequence_execution() -> Result<()> {
 async fn test_rust_quality_check_structure() -> Result<()> {
     init_test_logging();
 
-    // Test that the cargo.json file contains quality-check subcommand
-    let config_path = get_workspace_path(".ahma/tools/cargo.json");
-    assert!(config_path.exists(), "cargo.json should exist");
+    // Test that the rust_quality_check.json file contains the dedicated sequence
+    let config_path = get_workspace_path(".ahma/tools/rust_quality_check.json");
+    assert!(config_path.exists(), "rust_quality_check.json should exist");
 
     let config_content = std::fs::read_to_string(config_path)?;
     let config: serde_json::Value = serde_json::from_str(&config_content)?;
@@ -129,54 +157,85 @@ async fn test_rust_quality_check_structure() -> Result<()> {
     // Verify structure
     assert_eq!(
         config["name"].as_str(),
-        Some("cargo"),
-        "Tool name should be cargo"
+        Some("rust_quality_check"),
+        "Tool name should be rust_quality_check"
+    );
+    assert_eq!(
+        config["command"].as_str(),
+        Some("sequence"),
+        "rust_quality_check should be a sequence tool"
     );
 
-    // Find the quality-check subcommand
+    // Find the default sequence subcommand
     let subcommands = config["subcommand"]
         .as_array()
         .expect("Should have subcommands array");
 
-    let quality_check = subcommands
+    let default_sequence = subcommands
         .iter()
-        .find(|sc| sc["name"].as_str() == Some("quality-check"))
-        .expect("Should have quality-check subcommand");
+        .find(|sc| sc["name"].as_str() == Some("default"))
+        .expect("Should have default subcommand");
 
-    // Verify quality-check has a sequence
+    // Verify default sequence is configured as expected
     assert!(
-        quality_check["sequence"].is_array(),
-        "quality-check should have sequence array"
+        default_sequence["sequence"].is_array(),
+        "default subcommand should have sequence array"
     );
 
-    let sequence = quality_check["sequence"].as_array().unwrap();
+    let sequence = default_sequence["sequence"].as_array().unwrap();
     assert_eq!(
         sequence.len(),
-        5,
-        "Should have 5 steps: fmt, clippy, clippy (tests), test, build"
+        7,
+        "Should have 7 steps: schema generation, validation, fmt, clippy, clippy tests, nextest, build"
     );
 
     // Verify each step
     assert_eq!(sequence[0]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[0]["subcommand"].as_str(), Some("fmt"));
+    assert_eq!(sequence[0]["subcommand"].as_str(), Some("run"));
+    assert_eq!(
+        sequence[0]["args"]["bin"].as_str(),
+        Some("generate_schema"),
+        "First step should regenerate the schema"
+    );
 
     assert_eq!(sequence[1]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[1]["subcommand"].as_str(), Some("clippy"));
+    assert_eq!(sequence[1]["subcommand"].as_str(), Some("run"));
+    assert_eq!(
+        sequence[1]["args"]["bin"].as_str(),
+        Some("ahma_validate"),
+        "Second step should run ahma_validate"
+    );
 
     assert_eq!(sequence[2]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[2]["subcommand"].as_str(), Some("clippy"));
+    assert_eq!(sequence[2]["subcommand"].as_str(), Some("fmt"));
+    assert_eq!(sequence[2]["args"]["all"].as_bool(), Some(true));
 
     assert_eq!(sequence[3]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[3]["subcommand"].as_str(), Some("test"));
+    assert_eq!(sequence[3]["subcommand"].as_str(), Some("clippy"));
+    assert_eq!(sequence[3]["args"]["fix"].as_bool(), Some(true));
+    assert_eq!(sequence[3]["args"]["allow-dirty"].as_bool(), Some(true));
+    assert_eq!(sequence[3]["args"]["workspace"].as_bool(), Some(true));
 
     assert_eq!(sequence[4]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[4]["subcommand"].as_str(), Some("build"));
+    assert_eq!(sequence[4]["subcommand"].as_str(), Some("clippy"));
+    assert_eq!(sequence[4]["args"]["fix"].as_bool(), Some(true));
+    assert_eq!(sequence[4]["args"]["tests"].as_bool(), Some(true));
+    assert_eq!(sequence[4]["args"]["allow-dirty"].as_bool(), Some(true));
+    assert_eq!(sequence[4]["args"]["workspace"].as_bool(), Some(true));
+
+    assert_eq!(sequence[5]["tool"].as_str(), Some("cargo"));
+    assert_eq!(sequence[5]["subcommand"].as_str(), Some("nextest_run"));
+    assert_eq!(sequence[5]["args"]["workspace"].as_bool(), Some(true));
+
+    assert_eq!(sequence[6]["tool"].as_str(), Some("cargo"));
+    assert_eq!(sequence[6]["subcommand"].as_str(), Some("build"));
+    assert_eq!(sequence[6]["args"]["workspace"].as_bool(), Some(true));
 
     // Verify delay
     assert_eq!(
-        quality_check["step_delay_ms"].as_u64(),
-        Some(100),
-        "Step delay should be 100ms"
+        default_sequence["step_delay_ms"].as_u64(),
+        Some(500),
+        "Step delay should be 500ms"
     );
 
     Ok(())
@@ -228,20 +287,21 @@ async fn test_sequence_with_invalid_tool() -> Result<()> {
         ),
     };
 
-    let result = client.call_tool(call_param).await?;
+    let error = client
+        .call_tool(call_param)
+        .await
+        .expect_err("Sequence should fail because the tool is missing");
 
-    // The sequence should handle the error gracefully
-    let result_text = result
-        .content
-        .iter()
-        .filter_map(|c| c.as_text().map(|t| t.text.as_str()))
-        .collect::<Vec<_>>()
-        .join("\n");
-
+    let error_text = format!("{error:?}");
     assert!(
-        result_text.contains("not found") || result_text.contains("failed"),
-        "Result should indicate the tool was not found: {}",
-        result_text
+        error_text.contains("nonexistent_tool"),
+        "Error should reference the missing tool: {}",
+        error_text
+    );
+    assert!(
+        error_text.contains("not configured"),
+        "Error should indicate the tool is not configured: {}",
+        error_text
     );
 
     client.cancel().await?;
@@ -331,17 +391,32 @@ async fn test_sequence_delay_is_applied() -> Result<()> {
         duration.as_millis()
     );
 
-    // Verify all steps executed
+    // Verify all steps emitted notifications with their descriptions and IDs
     let result_text = result
         .content
         .iter()
-        .filter_map(|c| c.as_text().map(|t| t.text.as_str()))
+        .filter_map(|c| c.as_text().map(|t| t.text.clone()))
         .collect::<Vec<_>>()
         .join("\n");
 
-    assert!(result_text.contains("Step A"));
-    assert!(result_text.contains("Step B"));
-    assert!(result_text.contains("Step C"));
+    for expected_desc in ["Step A", "Step B", "Step C"] {
+        assert!(
+            result_text.contains(expected_desc),
+            "Result should include step description '{}': {}",
+            expected_desc,
+            result_text
+        );
+    }
+    assert!(
+        result_text.contains("Sequence step 'shell_async'"),
+        "Result should mention shell_async sequence steps: {}",
+        result_text
+    );
+    assert!(
+        result_text.contains("operation ID:"),
+        "Result should include operation IDs: {}",
+        result_text
+    );
 
     client.cancel().await?;
     Ok(())
