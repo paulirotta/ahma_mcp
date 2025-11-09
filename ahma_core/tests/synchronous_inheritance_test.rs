@@ -12,7 +12,7 @@ fn test_synchronous_inheritance_loading() -> Result<()> {
         "name": "test_tool",
         "description": "Test tool for synchronous inheritance",
         "command": "test",
-        "synchronous": true,
+        "asynchronous": false,
         "subcommand": [
             {
                 "name": "sub1",
@@ -22,7 +22,7 @@ fn test_synchronous_inheritance_loading() -> Result<()> {
             {
                 "name": "sub2", 
                 "description": "Subcommand with explicit synchronous override",
-                "synchronous": false,
+                "asynchronous": true,
                 "options": []
             }
         ]
@@ -31,16 +31,16 @@ fn test_synchronous_inheritance_loading() -> Result<()> {
 
     let config: ToolConfig = serde_json::from_str(json_config)?;
 
-    // Tool-level synchronous should be loaded
-    assert_eq!(config.synchronous, Some(true));
+    // Tool-level asynchronous should be loaded as false (synchronous)
+    assert_eq!(config.asynchronous, Some(false));
 
     let subcommands = config.subcommand.as_ref().expect("Should have subcommands");
 
-    // First subcommand should have None (will inherit tool-level)
-    assert_eq!(subcommands[0].synchronous, None);
+    // First subcommand should have None (will inherit tool-level sync)
+    assert_eq!(subcommands[0].asynchronous, None);
 
-    // Second subcommand should have explicit override
-    assert_eq!(subcommands[1].synchronous, Some(false));
+    // Second subcommand should have explicit override to async
+    assert_eq!(subcommands[1].asynchronous, Some(true));
 
     Ok(())
 }
@@ -75,15 +75,15 @@ fn test_gh_tool_optimized_format() -> Result<()> {
     let gh_json = std::fs::read_to_string(gh_path)?;
     let config: ToolConfig = serde_json::from_str(&gh_json)?;
 
-    // Should have tool-level synchronous=true for inheritance pattern
-    assert_eq!(config.synchronous, Some(true));
+    // Should have tool-level asynchronous=false (synchronous) for inheritance pattern
+    assert_eq!(config.asynchronous, Some(false));
 
-    // Subcommands should NOT have explicit synchronous field and inherit from tool level
+    // Subcommands should NOT have explicit asynchronous field and inherit from tool level
     if let Some(subcommands) = &config.subcommand {
         for subcommand in subcommands {
             assert_eq!(
-                subcommand.synchronous, None,
-                "Subcommand '{}' should inherit synchronous behavior from tool level (should be None)",
+                subcommand.asynchronous, None,
+                "Subcommand '{}' should inherit asynchronous behavior from tool level (should be None)",
                 subcommand.name
             );
         }

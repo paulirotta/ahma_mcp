@@ -36,11 +36,11 @@ async fn test_gh_tool_expansion_all_synchronous() {
         .expect("Should have subcommands");
     assert_eq!(subcommands.len(), 13, "Should have exactly 13 subcommands");
 
-    // Check that tool has synchronous = true at tool level for inheritance
+    // Check that tool has asynchronous = false at tool level (synchronous execution)
     assert_eq!(
-        gh_tool.synchronous,
-        Some(true),
-        "Tool should have synchronous=true for subcommand inheritance"
+        gh_tool.asynchronous,
+        Some(false),
+        "Tool should have asynchronous=false (synchronous execution) for subcommand inheritance"
     );
 
     for expected_name in &expected_subcommands {
@@ -49,13 +49,13 @@ async fn test_gh_tool_expansion_all_synchronous() {
             .find(|sc| sc.name == *expected_name)
             .unwrap_or_else(|| panic!("Should find subcommand {}", expected_name));
 
-        // With inheritance, subcommands should have None and inherit from tool level
+        // With inheritance, subcommands should have None or false and be synchronous
         assert!(
-            subcommand
-                .synchronous
-                .or(gh_tool.synchronous)
+            !subcommand
+                .asynchronous
+                .or(gh_tool.asynchronous)
                 .unwrap_or(false),
-            "Subcommand {} should be synchronous",
+            "Subcommand {} should be synchronous (asynchronous=false or None)",
             expected_name
         );
 

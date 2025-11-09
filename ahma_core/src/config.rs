@@ -57,8 +57,8 @@ pub struct ToolConfig {
     pub input_schema: Option<Value>,
     /// Default timeout for operations in seconds
     pub timeout_seconds: Option<u64>,
-    /// Default synchronous behavior for all subcommands (can be overridden per subcommand)
-    pub synchronous: Option<bool>,
+    /// Default asynchronous behavior for all subcommands (can be overridden per subcommand)
+    pub asynchronous: Option<bool>,
     #[serde(default)]
     pub hints: ToolHints,
     #[serde(default = "default_enabled")]
@@ -95,8 +95,8 @@ pub struct SubcommandConfig {
     pub positional_args: Option<Vec<PositionalArgsConfig>>,
     /// Override timeout for this specific subcommand
     pub timeout_seconds: Option<u64>,
-    /// Override synchronous behavior for this subcommand
-    pub synchronous: Option<bool>,
+    /// Override asynchronous behavior for this subcommand
+    pub asynchronous: Option<bool>,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
     /// Key to look up guidance in tool_guidance.json

@@ -334,7 +334,7 @@ fn test_validate_tool_config_valid_complete() {
         "command": "cargo",
         "enabled": true,
         "timeout_seconds": 300,
-        "synchronous": true,
+        "asynchronous": false,
         "hints": {
             "build": "Compiling code - review for optimization opportunities",
             "test": "Tests running - analyze test patterns for improvements",

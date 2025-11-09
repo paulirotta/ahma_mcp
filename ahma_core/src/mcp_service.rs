@@ -80,7 +80,7 @@ pub struct AhmaMcpService {
     pub operation_monitor: Arc<crate::operation_monitor::OperationMonitor>,
     pub configs: Arc<HashMap<String, ToolConfig>>,
     pub guidance: Arc<Option<GuidanceConfig>>,
-    pub force_synchronous: bool,
+    pub force_asynchronous: bool,
     /// The peer handle for sending notifications to the client.
     /// This is populated by capturing it from the first request context.
     pub peer: Arc<RwLock<Option<Peer<RoleServer>>>>,
@@ -93,14 +93,14 @@ impl AhmaMcpService {
         operation_monitor: Arc<crate::operation_monitor::OperationMonitor>,
         configs: Arc<HashMap<String, ToolConfig>>,
         guidance: Arc<Option<GuidanceConfig>>,
-        force_synchronous: bool,
+        force_asynchronous: bool,
     ) -> Result<Self, anyhow::Error> {
         Ok(Self {
             adapter,
             operation_monitor,
             configs,
             guidance,
-            force_synchronous,
+            force_asynchronous,
             peer: Arc::new(RwLock::new(None)),
         })
     }
@@ -965,22 +965,27 @@ impl ServerHandler for AhmaMcpService {
 
             let timeout = arguments.get("timeout_seconds").and_then(|v| v.as_u64());
 
-            // Determine execution mode: first check explicit argument, then config, then default to async
-            let execution_mode = if self.force_synchronous {
-                crate::adapter::ExecutionMode::Synchronous
+            // Determine execution mode:
+            // 1. If force_asynchronous flag is set (via --asynchronous CLI), force async for all tools
+            // 2. Check explicit execution_mode argument (for advanced use)
+            // 3. Check subcommand config asynchronous setting
+            // 4. Default to synchronous
+            let execution_mode = if self.force_asynchronous {
+                // --asynchronous flag was used: FORCE async mode for all tools, overriding config
+                crate::adapter::ExecutionMode::AsyncResultPush
             } else if let Some(mode_str) = arguments.get("execution_mode").and_then(|v| v.as_str())
             {
                 match mode_str {
                     "Synchronous" => crate::adapter::ExecutionMode::Synchronous,
                     "AsyncResultPush" => crate::adapter::ExecutionMode::AsyncResultPush,
-                    _ => crate::adapter::ExecutionMode::AsyncResultPush, // Default
+                    _ => crate::adapter::ExecutionMode::Synchronous, // Default to sync
                 }
-            } else if subcommand_config.synchronous == Some(true) {
-                // Use synchronous mode if subcommand config specifies it
-                crate::adapter::ExecutionMode::Synchronous
-            } else {
-                // Default to async
+            } else if subcommand_config.asynchronous == Some(true) {
+                // Use async mode if subcommand config explicitly specifies it
                 crate::adapter::ExecutionMode::AsyncResultPush
+            } else {
+                // Default to synchronous mode
+                crate::adapter::ExecutionMode::Synchronous
             };
 
             match execution_mode {

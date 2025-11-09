@@ -269,14 +269,19 @@ mod android_tests {
 
         for subcommand in subcommands {
             let name = subcommand["name"].as_str().unwrap();
-            let is_sync = subcommand
-                .get("synchronous")
+            // asynchronous: true means async, false or missing means sync (new default)
+            let is_async = subcommand
+                .get("asynchronous")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
             let guidance_key = subcommand.get("guidance_key").and_then(|v| v.as_str());
 
             if sync_tasks.contains(&name) {
-                assert!(is_sync, "Task '{}' should be marked as synchronous", name);
+                assert!(
+                    !is_async,
+                    "Task '{}' should NOT be marked as asynchronous (should be sync by default)",
+                    name
+                );
                 assert_eq!(
                     guidance_key,
                     Some("sync_behavior"),
@@ -284,11 +289,7 @@ mod android_tests {
                     name
                 );
             } else if async_tasks.contains(&name) {
-                assert!(
-                    !is_sync,
-                    "Task '{}' should NOT be marked as synchronous",
-                    name
-                );
+                assert!(is_async, "Task '{}' should be marked as asynchronous", name);
                 assert_eq!(
                     guidance_key,
                     Some("async_behavior"),

@@ -4,6 +4,13 @@
   "description": "Represents the complete configuration for a command-line tool.",
   "type": "object",
   "properties": {
+    "asynchronous": {
+      "description": "Default asynchronous behavior for all subcommands (can be overridden per subcommand)",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
     "availability_check": {
       "description": "Runtime availability probe executed at server startup.",
       "anyOf": [
@@ -76,13 +83,6 @@
       "items": {
         "$ref": "#/$defs/SubcommandConfig"
       }
-    },
-    "synchronous": {
-      "description": "Default synchronous behavior for all subcommands (can be overridden per subcommand)",
-      "type": [
-        "boolean",
-        "null"
-      ]
     },
     "timeout_seconds": {
       "description": "Default timeout for operations in seconds",
@@ -268,6 +268,13 @@
       "description": "Configuration for a subcommand, allowing for nested commands.",
       "type": "object",
       "properties": {
+        "asynchronous": {
+          "description": "Override asynchronous behavior for this subcommand",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "availability_check": {
           "description": "Runtime availability probe executed at server startup.",
           "anyOf": [
@@ -349,13 +356,6 @@
           "items": {
             "$ref": "#/$defs/SubcommandConfig"
           }
-        },
-        "synchronous": {
-          "description": "Override synchronous behavior for this subcommand",
-          "type": [
-            "boolean",
-            "null"
-          ]
         },
         "timeout_seconds": {
           "description": "Override timeout for this specific subcommand",

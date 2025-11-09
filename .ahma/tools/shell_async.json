@@ -1,29 +1,30 @@
 {
-    "name": "shell_async",
-    "description": "Execute shell commands asynchronously with full bash capabilities",
-    "command": "bash -c",
-    "enabled": true,
-    "timeout_seconds": 300,
-    "synchronous": false,
-    "hints": {
-        "custom": {
-            "default": "Shell command running asynchronously - consider planning next steps, reviewing output patterns, or working on other tasks while the command executes."
-        }
-    },
-    "subcommand": [
+  "name": "shell_async",
+  "description": "Execute shell commands asynchronously with full bash capabilities",
+  "command": "bash -c",
+  "enabled": true,
+  "timeout_seconds": 300,
+  "asynchronous": true,
+  "hints": {
+    "custom": {
+      "default": "Shell command running asynchronously - consider planning next steps, reviewing output patterns, or working on other tasks while the command executes."
+    }
+  },
+  "subcommand": [
+    {
+      "name": "default",
+      "guidance_key": "async_behavior",
+      "description": "Execute a shell command asynchronously using bash",
+      "positional_args": [
         {
-            "name": "default",
-            "guidance_key": "async_behavior",
-            "description": "Execute a shell command asynchronously using bash",
-            "positional_args": [
-                {
-                    "name": "command",
-                    "type": "string",
-                    "description": "The shell command to execute (supports pipes, redirects, variables, etc.)",
-                    "required": true
-                }
-            ],
-            "options": []
+          "name": "command",
+          "type": "string",
+          "description": "The shell command to execute (supports pipes, redirects, variables, etc.)",
+          "required": true
         }
-    ]
+      ],
+      "options": [],
+      "asynchronous": true
+    }
+  ]
 }

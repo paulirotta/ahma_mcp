@@ -103,7 +103,7 @@ async fn test_multiline_argument_with_echo() {
             file_arg: None, // Echo doesn't support files, should use escaping
             file_flag: None,
         }]),
-        synchronous: Some(true),
+        asynchronous: Some(true),
         timeout_seconds: None,
         enabled: true,
         guidance_key: None,
@@ -370,7 +370,7 @@ async fn test_multiline_git_commit_message() {
             file_flag: Some("-F".to_string()),
         }]),
         positional_args: None,
-        synchronous: Some(false), // Changed to async for proper operation tracking
+        asynchronous: Some(false), // Changed to async for proper operation tracking
         timeout_seconds: None,
         enabled: true,
         guidance_key: None,
@@ -515,7 +515,7 @@ async fn test_special_characters_in_arguments() {
             file_arg: None, // No file support, should use escaping
             file_flag: None,
         }]),
-        synchronous: Some(true),
+        asynchronous: Some(true),
         timeout_seconds: None,
         enabled: true,
         guidance_key: None,

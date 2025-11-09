@@ -17,11 +17,11 @@ async fn setup_mcp_service_with_long_running_tool() -> Result<(TempDir, Client)>
         "description": "A long running async command. Runs in background. Returns operation_id immediately. Results pushed via notification when complete. Continue with other tasks.",
         "command": "sleep",
         "timeout_seconds": 30,
-        "synchronous": false,
         "enabled": true,
         "subcommand": [
             {
                 "name": "default",
+                "asynchronous": true,
                 "description": "Sleeps for a given duration. Runs asynchronously in background. Returns operation_id immediately. Results delivered via notification when complete. Continue with other tasks.",
                 "positional_args": [
                     {

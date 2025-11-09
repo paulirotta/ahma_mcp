@@ -43,7 +43,7 @@ async fn test_prepare_command_and_args_edge_cases() {
     let empty_config = SubcommandConfig {
         name: "empty".to_string(),
         description: "Empty config".to_string(),
-        synchronous: Some(true),
+        asynchronous: Some(true),
         timeout_seconds: None,
         enabled: true,
         guidance_key: None,
@@ -85,7 +85,7 @@ async fn test_prepare_command_and_args_with_aliases() {
     let alias_config = SubcommandConfig {
         name: "alias_test".to_string(),
         description: "Alias test".to_string(),
-        synchronous: Some(true),
+        asynchronous: Some(true),
         timeout_seconds: None,
         enabled: true,
         guidance_key: None,
@@ -157,7 +157,7 @@ async fn test_prepare_command_and_args_mixed_types() {
     let mixed_config = SubcommandConfig {
         name: "mixed".to_string(),
         description: "Mixed types test".to_string(),
-        synchronous: Some(true),
+        asynchronous: Some(true),
         timeout_seconds: None,
         enabled: true,
         guidance_key: None,
@@ -547,7 +547,7 @@ async fn test_prepare_command_and_args_with_null_values() {
     let config_with_nulls = SubcommandConfig {
         name: "null_test".to_string(),
         description: "Null values test".to_string(),
-        synchronous: Some(true),
+        asynchronous: Some(true),
         timeout_seconds: None,
         enabled: true,
         guidance_key: None,
