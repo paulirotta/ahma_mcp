@@ -45,7 +45,7 @@ async fn test_mtdf_compliance_edge_cases() -> Result<()> {
         "command": "complex_tool",
         "enabled": true,
         "timeout_seconds": 600,
-        "synchronous": false,
+        "asynchronous": true,
         "guidance_key": "complex_guidance",
         "hints": {
             "build": "Use for building projects",
@@ -59,7 +59,7 @@ async fn test_mtdf_compliance_edge_cases() -> Result<()> {
                 "name": "build",
                 "description": "Build project - async operation returns operation_id immediately, results pushed via notification when complete, continue with other tasks",
                 "enabled": true,
-                "synchronous": false,
+                "asynchronous": true,
                 "guidance_key": "build_guidance",
                 "options": [
                     {
@@ -161,17 +161,17 @@ async fn test_recursive_subcommand_validation() -> Result<()> {
             {
                 "name": "level1",
                 "description": "First level command - synchronous operation returns results immediately",
-                "synchronous": true,
+                "asynchronous": false,
                 "subcommand": [
                     {
                         "name": "level2",
                         "description": "Second level command - async operation returns operation_id immediately, results pushed via notification when complete, continue with other tasks",
-                        "synchronous": false,
+                        "asynchronous": true,
                         "subcommand": [
                             {
                                 "name": "level3",
                                 "description": "Third level command - quick synchronous operation returns results immediately",
-                                "synchronous": true,
+                                "asynchronous": false,
                                 "options": [
                                     {
                                         "name": "deep_option",
@@ -274,8 +274,8 @@ async fn test_performance_for_large_tool_sets() -> Result<()> {
 
         subcommands.push(json!({
             "name": format!("subcommand_{}", i),
-            "description": format!("Subcommand {} - {} operation", i, if i % 5 == 0 { "synchronous returns results immediately" } else { "async returns operation_id immediately, results pushed via notification when complete, continue with other tasks" }),
-            "synchronous": i % 5 == 0,  // Every 5th subcommand is synchronous
+            "description": format!("Subcommand {} - {} operation", i, if i % 5 == 0 { "async returns operation_id immediately, results pushed via notification when complete, continue with other tasks" } else { "synchronous returns results immediately" }),
+            "asynchronous": i % 5 == 0,  // Every 5th subcommand is asynchronous
             "options": options
         }));
     }
@@ -406,7 +406,7 @@ async fn test_error_message_quality_and_helpfulness() -> Result<()> {
                 "subcommand": [{
                     "name": "build",
                     "description": "Asynchronously builds stuff",  // Contains async keyword but synchronous=true
-                    "synchronous": true
+                    "asynchronous": false
                 }]
             })
             .to_string(),
@@ -480,17 +480,17 @@ async fn test_complex_configuration_validation_scenarios() -> Result<()> {
         "name": "inheritance_test",
         "description": "Test synchronous behavior inheritance",
         "command": "inherit",
-        "synchronous": true,  // Parent is synchronous
+        "asynchronous": true,  // Parent is synchronous (default behavior)
         "subcommand": [
             {
                 "name": "inherit_sync",
                 "description": "Inherits synchronous behavior - returns results immediately",
-                // No synchronous field - should inherit true from parent
+                // No asynchronous field - should inherit false (sync) from parent
             },
             {
                 "name": "override_async", 
                 "description": "Overrides to async. Returns operation_id immediately. Results pushed via notification when complete. Continue with other tasks.",
-                "synchronous": false  // Explicitly override to async
+                "asynchronous": true  // Explicitly override to async
             }
         ]
     }).to_string();
@@ -544,9 +544,9 @@ async fn test_complex_configuration_validation_scenarios() -> Result<()> {
         "subcommand": [
             {
                 "name": "with_guidance_key",
-                "description": "Short description",  // Would normally fail async guidance validation
-                "guidance_key": "shared_guidance",  // But has guidance_key, so should pass
-                "synchronous": false
+                "description": "Asynchronous operation - returns operation_id immediately",  // Mentions async
+                "guidance_key": "shared_guidance",  // Has guidance_key for extended help
+                "asynchronous": true
             }
         ]
     })
@@ -569,7 +569,7 @@ async fn test_complex_configuration_validation_scenarios() -> Result<()> {
             {
                 "name": "sync_with_async_desc",
                 "description": "This command returns an operation_id and sends notifications asynchronously",  // Async language
-                "synchronous": true  // But marked as sync - should trigger warning
+                "asynchronous": false  // But marked as sync - should trigger warning
             }
         ]
     })
@@ -594,7 +594,7 @@ async fn test_complex_configuration_validation_scenarios() -> Result<()> {
             {
                 "name": "valid_async",
                 "description": "Valid async subcommand - returns operation_id immediately, results pushed via notification when complete, continue with other tasks",
-                "synchronous": false,
+                "asynchronous": true,
                 "options": [
                     {
                         "name": "valid_option",
@@ -617,7 +617,7 @@ async fn test_complex_configuration_validation_scenarios() -> Result<()> {
             {
                 "name": "another_valid",
                 "description": "Another valid subcommand - synchronous operation returns results immediately", 
-                "synchronous": true
+                "asynchronous": false
             }
         ]
     }).to_string();
@@ -712,7 +712,7 @@ async fn test_field_validation_edge_cases() -> Result<()> {
             {
                 "name": "type_test",
                 "description": "Tests all types. Synchronous operation returns results immediately.",
-                "synchronous": true,
+                "asynchronous": false,
                 "options": [
                     {
                         "name": "bool_option",
@@ -759,7 +759,7 @@ async fn test_field_validation_edge_cases() -> Result<()> {
                 {
                     "name": "test",
                     "description": "Synchronous test operation",
-                    "synchronous": true,
+                    "asynchronous": false,
                     "options": [
                         {
                             "name": "test_option",
@@ -831,7 +831,7 @@ async fn test_async_guidance_validation_edge_cases() -> Result<()> {
                 {
                     "name": "async_cmd",
                     "description": description,
-                    "synchronous": false
+                    "asynchronous": true
                 }
             ]
         })
@@ -873,7 +873,7 @@ async fn test_async_guidance_validation_edge_cases() -> Result<()> {
             {
                 "name": "sync_cmd",
                 "description": "Simple command", // Minimal description is fine for sync
-                "synchronous": true
+                "asynchronous": false
             }
         ]
     })
@@ -895,7 +895,7 @@ async fn test_async_guidance_validation_edge_cases() -> Result<()> {
             {
                 "name": "bypass_cmd",
                 "description": "Short", // Would normally fail for async
-                "synchronous": false,
+                "asynchronous": true,
                 "guidance_key": "external_guidance" // Should bypass validation
             }
         ]

@@ -23,18 +23,17 @@ async fn test_synchronous_flag_overrides_async_tools() -> Result<()> {
     let tools_dir = temp_dir.path().join("tools");
     fs::create_dir_all(&tools_dir).await?;
 
+    // Create a tool that defaults to synchronous (no asynchronous field)
     let tool_config = r#"{
-    "name": "test_async",
-    "description": "Asynchronous test tool",
+    "name": "test_sync",
+    "description": "Synchronous test tool",
     "command": "bash -c",
     "enabled": true,
     "timeout_seconds": 60,
-    "synchronous": false,
     "subcommand": [
         {
             "name": "default",
-            "description": "Execute provided shell command asynchronously",
-            "synchronous": false,
+            "description": "Execute provided shell command synchronously by default",
             "positional_args": [
                 {
                     "name": "command",
@@ -47,17 +46,17 @@ async fn test_synchronous_flag_overrides_async_tools() -> Result<()> {
     ]
 }"#;
 
-    fs::write(tools_dir.join("test_async.json"), tool_config).await?;
+    fs::write(tools_dir.join("test_sync.json"), tool_config).await?;
 
     let tools_dir_str = tools_dir.to_string_lossy().to_string();
     let working_dir = temp_dir.path().to_string_lossy().to_string();
 
-    // Baseline: without --synchronous, expect async operation start message
+    // Baseline: without --asynchronous flag, expect synchronous (direct output)
     let baseline_client = test_client::new_client_with_args(Some(&tools_dir_str), &[]).await?;
     let baseline_args = build_args("echo WITHOUT_OVERRIDE", &working_dir);
     let baseline_response = baseline_client
         .call_tool(CallToolRequestParam {
-            name: Cow::Borrowed("test_async"),
+            name: Cow::Borrowed("test_sync"),
             arguments: Some(baseline_args),
         })
         .await?;
@@ -70,20 +69,25 @@ async fn test_synchronous_flag_overrides_async_tools() -> Result<()> {
         .unwrap_or_default();
 
     assert!(
-        baseline_text.contains("Asynchronous operation started with ID"),
-        "Expected async start message without override, got '{}'",
+        baseline_text.contains("WITHOUT_OVERRIDE"),
+        "Expected synchronous output without override, got '{}'",
+        baseline_text
+    );
+    assert!(
+        !baseline_text.contains("Asynchronous operation started with ID"),
+        "Should not get async message by default, got '{}'",
         baseline_text
     );
 
     baseline_client.cancel().await?;
 
-    // With --synchronous, expect direct command output instead of async message
+    // With --asynchronous flag, force async mode for all tools
     let override_client =
-        test_client::new_client_with_args(Some(&tools_dir_str), &["--synchronous"]).await?;
+        test_client::new_client_with_args(Some(&tools_dir_str), &["--asynchronous"]).await?;
     let override_args = build_args("echo WITH_OVERRIDE", &working_dir);
     let override_response = override_client
         .call_tool(CallToolRequestParam {
-            name: Cow::Borrowed("test_async"),
+            name: Cow::Borrowed("test_sync"),
             arguments: Some(override_args),
         })
         .await?;
@@ -96,13 +100,13 @@ async fn test_synchronous_flag_overrides_async_tools() -> Result<()> {
         .unwrap_or_default();
 
     assert!(
-        override_text.contains("WITH_OVERRIDE"),
-        "Expected synchronous output to contain 'WITH_OVERRIDE', got '{}'",
+        override_text.contains("Asynchronous operation started with ID"),
+        "Expected async start message with --asynchronous flag, got '{}'",
         override_text
     );
     assert!(
-        !override_text.contains("Asynchronous operation started with ID"),
-        "Synchronous override should not report async start message, got '{}'",
+        !override_text.contains("WITH_OVERRIDE"),
+        "Asynchronous mode should not show direct output, got '{}'",
         override_text
     );
 

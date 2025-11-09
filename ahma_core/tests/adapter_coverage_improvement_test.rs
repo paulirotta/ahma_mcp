@@ -96,7 +96,7 @@ async fn test_command_preparation_error_paths() -> Result<()> {
     let complex_config = SubcommandConfig {
         name: "complex_test".to_string(),
         description: "Complex test command".to_string(),
-        synchronous: Some(true),
+        asynchronous: Some(true),
         timeout_seconds: Some(30),
         enabled: true,
         guidance_key: None,
@@ -272,7 +272,7 @@ async fn test_file_handling_error_scenarios() -> Result<()> {
     let file_config = SubcommandConfig {
         name: "file_test".to_string(),
         description: "File handling test".to_string(),
-        synchronous: Some(true),
+        asynchronous: Some(true),
         timeout_seconds: Some(30),
         enabled: true,
         guidance_key: None,
@@ -709,7 +709,7 @@ async fn test_complex_async_exec_options() -> Result<()> {
     let subcommand_config = SubcommandConfig {
         name: "custom_op_test".to_string(),
         description: "Custom operation test".to_string(),
-        synchronous: Some(false),
+        asynchronous: Some(false),
         timeout_seconds: Some(30),
         enabled: true,
         guidance_key: Some("test_guidance".to_string()),

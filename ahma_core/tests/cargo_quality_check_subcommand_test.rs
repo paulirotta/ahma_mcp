@@ -34,9 +34,9 @@ fn test_rust_quality_check_tool_structure() {
         .expect("default subcommand should be present");
 
     assert_eq!(
-        default.synchronous,
-        Some(true),
-        "Sequence should run synchronously"
+        default.asynchronous,
+        Some(false),
+        "Sequence should run synchronously (asynchronous: false)"
     );
     assert!(
         default.sequence.is_some(),

@@ -6,16 +6,17 @@ _Create agents from your command line tools with one JSON file, then watch them 
 | --- | ---: |
 | [![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![Rust](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org/) | ![Ahma MCP Logo](./assets/ahma.png) |
 
-`ahma_mcp` rapidly adapts command-line tools for AI consumption. By default, AI tool calls are asynchronous: the AI receives immediate confirmation that a background process has started and can continue to plan and analyze while receiving results as each operation completes. This enables multiple concurrent tool calls, dramatically speeding up complex tasks.
+`ahma_mcp` rapidly adapts command-line tools for AI consumption. By default, AI tool calls execute synchronously and return immediate results. For long-running operations, tools can be marked as asynchronous: the AI receives immediate confirmation with an operation ID and can continue working while the command executes in the background, receiving results via automatic notifications when complete.
 
-**Ahma** (Finnish for wolverine) is a tenacious and agile tool, speeding your workflow to rapidly consume complex tasks in less time than common synchronous tools.
+**Ahma** (Finnish for wolverine) is a tenacious and agile tool, enabling efficient workflows that complete complex tasks faster than traditional synchronous-only approaches.
 
 ## Key Features
 
-- **Async-First Execution**: Run multiple tool operations in the background while the AI continues to work. No more waiting for long-running commands.
+- **Sync-First with Async Override**: Most tools return immediate results. Long-running operations (builds, tests) can be marked async for parallel execution.
 - **Easy Tool Definition**: Add any command-line tool to your AI's arsenal by creating a single JSON file. No recompilation needed.
 - **Sequence Tools**: Chain multiple commands into a single, powerful workflow (e.g., `rust_quality_check` runs format → lint → test → build).
 - **Safe & Scoped**: Tools are safely scoped to the project's working directory.
+- **Force Async Mode**: Use `--asynchronous` flag to make all tools execute asynchronously for maximum concurrency.
 
 ### How it Works: AI-driven workflow
 

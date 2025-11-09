@@ -16,7 +16,7 @@ fn test_tool_config_defaults() {
         subcommand: None,
         input_schema: None,
         timeout_seconds: None,
-        synchronous: None,
+        asynchronous: None,
         hints: ToolHints::default(),
         enabled: true,
         guidance_key: None,
@@ -31,7 +31,7 @@ fn test_tool_config_defaults() {
     assert!(config.enabled);
     assert!(config.subcommand.is_none());
     assert!(config.timeout_seconds.is_none());
-    assert!(config.synchronous.is_none());
+    assert!(config.asynchronous.is_none());
     assert!(config.sequence.is_none());
     assert!(config.step_delay_ms.is_none());
 }
@@ -44,7 +44,7 @@ fn test_subcommand_config_defaults() {
         description: "Build the project".to_string(),
         options: None,
         positional_args: None,
-        synchronous: None,
+        asynchronous: None,
         timeout_seconds: None,
         enabled: true,
         guidance_key: None,
@@ -142,7 +142,7 @@ fn test_tool_config_serialization() {
                 file_flag: None,
             }]),
             positional_args: None,
-            synchronous: Some(false),
+            asynchronous: Some(false),
             timeout_seconds: Some(300),
             enabled: true,
             guidance_key: Some("cargo_build".to_string()),
@@ -156,7 +156,7 @@ fn test_tool_config_serialization() {
         }]),
         input_schema: None,
         timeout_seconds: Some(600),
-        synchronous: Some(false),
+        asynchronous: Some(false),
         hints: ToolHints {
             build: Some("Use --release for production builds".to_string()),
             test: None,
@@ -196,7 +196,7 @@ fn test_tool_config_deserialization() {
         "description": "Version control system",
         "command": "git",
         "timeout_seconds": 120,
-        "synchronous": false,
+        "asynchronous": true,
         "enabled": true,
         "subcommand": [
             {
@@ -228,7 +228,7 @@ fn test_tool_config_deserialization() {
     assert_eq!(config.name, "git");
     assert_eq!(config.command, "git");
     assert_eq!(config.timeout_seconds, Some(120));
-    assert_eq!(config.synchronous, Some(false));
+    assert_eq!(config.asynchronous, Some(true));
     assert!(config.enabled);
 
     let subcommands = config.subcommand.unwrap();
@@ -504,7 +504,7 @@ fn test_subcommand_config_with_overrides() {
     {
         "name": "long_task",
         "description": "A task that takes a long time",
-        "synchronous": true,
+        "asynchronous": false,
         "timeout_seconds": 3600,
         "enabled": true,
         "guidance_key": "long_task_guidance"
@@ -513,7 +513,7 @@ fn test_subcommand_config_with_overrides() {
 
     let subcommand: SubcommandConfig = serde_json::from_str(json).unwrap();
     assert_eq!(subcommand.name, "long_task");
-    assert_eq!(subcommand.synchronous, Some(true));
+    assert_eq!(subcommand.asynchronous, Some(false));
     assert_eq!(subcommand.timeout_seconds, Some(3600));
     assert_eq!(
         subcommand.guidance_key,
@@ -566,7 +566,7 @@ fn test_sequence_tool_config() {
         subcommand: None,
         input_schema: None,
         timeout_seconds: Some(1200),
-        synchronous: Some(true),
+        asynchronous: Some(true),
         hints: ToolHints::default(),
         enabled: true,
         guidance_key: None,

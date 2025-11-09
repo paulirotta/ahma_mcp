@@ -1,350 +1,351 @@
 {
-    "name": "gh",
-    "description": "GitHub CLI wrapper exposing curated subcommands for repository management.",
-    "command": "gh",
-    "timeout_seconds": 180,
-    "synchronous": true,
-    "hints": {
-        "custom": {
-            "default": "Use --tool_args -- to pass flags exactly as you would to the gh CLI. Prefer --repo to operate on specific repositories."
+  "name": "gh",
+  "description": "GitHub CLI wrapper exposing curated subcommands for repository management.",
+  "command": "gh",
+  "enabled": true,
+  "timeout_seconds": 180,
+  "asynchronous": false,
+  "hints": {
+    "custom": {
+      "default": "Use --tool_args -- to pass flags exactly as you would to the gh CLI. Prefer --repo to operate on specific repositories."
+    }
+  },
+  "subcommand": [
+    {
+      "name": "pr_create",
+      "description": "Create a pull request with optional draft and metadata flags.",
+      "options": [
+        {
+          "name": "repo",
+          "type": "string",
+          "description": "Target repository in the OWNER/REPO form."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "description": "Title for the pull request."
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "description": "Markdown body content for the pull request.",
+          "file_arg": true,
+          "file_flag": "--body-file"
+        },
+        {
+          "name": "base",
+          "type": "string",
+          "description": "Base branch to merge into."
+        },
+        {
+          "name": "head",
+          "type": "string",
+          "description": "Head branch to merge from."
+        },
+        {
+          "name": "draft",
+          "type": "boolean",
+          "description": "Create the pull request as a draft."
         }
+      ]
     },
-    "subcommand": [
+    {
+      "name": "pr_list",
+      "description": "List pull requests with flexible filtering options.",
+      "options": [
         {
-            "name": "pr_create",
-            "description": "Create a pull request with optional draft and metadata flags.",
-            "options": [
-                {
-                    "name": "repo",
-                    "type": "string",
-                    "description": "Target repository in the OWNER/REPO form."
-                },
-                {
-                    "name": "title",
-                    "type": "string",
-                    "description": "Title for the pull request."
-                },
-                {
-                    "name": "body",
-                    "type": "string",
-                    "description": "Markdown body content for the pull request.",
-                    "file_arg": true,
-                    "file_flag": "--body-file"
-                },
-                {
-                    "name": "base",
-                    "type": "string",
-                    "description": "Base branch to merge into."
-                },
-                {
-                    "name": "head",
-                    "type": "string",
-                    "description": "Head branch to merge from."
-                },
-                {
-                    "name": "draft",
-                    "type": "boolean",
-                    "description": "Create the pull request as a draft."
-                }
-            ]
+          "name": "repo",
+          "type": "string",
+          "description": "Target repository in OWNER/REPO form."
         },
         {
-            "name": "pr_list",
-            "description": "List pull requests with flexible filtering options.",
-            "options": [
-                {
-                    "name": "repo",
-                    "type": "string",
-                    "description": "Target repository in OWNER/REPO form."
-                },
-                {
-                    "name": "state",
-                    "type": "string",
-                    "description": "Filter by state: open, closed, or merged."
-                },
-                {
-                    "name": "author",
-                    "type": "string",
-                    "description": "Filter results to a specific author."
-                },
-                {
-                    "name": "limit",
-                    "type": "integer",
-                    "description": "Maximum number of pull requests to return."
-                }
-            ]
+          "name": "state",
+          "type": "string",
+          "description": "Filter by state: open, closed, or merged."
         },
         {
-            "name": "pr_view",
-            "description": "View detailed information about a pull request.",
-            "positional_args": [
-                {
-                    "name": "pr_selector",
-                    "type": "string",
-                    "description": "Pull request number or URL.",
-                    "required": false
-                }
-            ],
-            "options": [
-                {
-                    "name": "repo",
-                    "type": "string",
-                    "description": "Repository in OWNER/REPO form if not in a local git repo."
-                },
-                {
-                    "name": "comments",
-                    "type": "boolean",
-                    "description": "Include review comments in the output."
-                }
-            ]
+          "name": "author",
+          "type": "string",
+          "description": "Filter results to a specific author."
         },
         {
-            "name": "pr_close",
-            "description": "Close a pull request optionally deleting its branch.",
-            "positional_args": [
-                {
-                    "name": "pr_selector",
-                    "type": "string",
-                    "description": "Pull request number or URL to close.",
-                    "required": true
-                }
-            ],
-            "options": [
-                {
-                    "name": "repo",
-                    "type": "string",
-                    "description": "Repository in OWNER/REPO form."
-                },
-                {
-                    "name": "delete-branch",
-                    "type": "boolean",
-                    "description": "Delete the local and remote branch after closing."
-                },
-                {
-                    "name": "comment",
-                    "type": "string",
-                    "description": "Leave a closing comment for context.",
-                    "file_arg": true,
-                    "file_flag": "--comment-file"
-                }
-            ]
-        },
-        {
-            "name": "cache_list",
-            "description": "List GitHub Actions caches for a repository.",
-            "options": [
-                {
-                    "name": "repo",
-                    "type": "string",
-                    "description": "Repository in OWNER/REPO form."
-                },
-                {
-                    "name": "key",
-                    "type": "string",
-                    "description": "Filter caches matching the provided key prefix."
-                },
-                {
-                    "name": "limit",
-                    "type": "integer",
-                    "description": "Maximum number of caches to return."
-                },
-                {
-                    "name": "order",
-                    "type": "string",
-                    "description": "Sort order for results: asc or desc."
-                },
-                {
-                    "name": "ref",
-                    "type": "string",
-                    "description": "Limit caches to a specific git ref."
-                },
-                {
-                    "name": "sort",
-                    "type": "string",
-                    "description": "Field to sort by such as created or last-accessed."
-                }
-            ]
-        },
-        {
-            "name": "cache_delete",
-            "description": "Delete GitHub Actions caches by key or identifier.",
-            "positional_args": [
-                {
-                    "name": "cache_id_or_key",
-                    "type": "string",
-                    "description": "Cache ID or key to remove.",
-                    "required": false
-                }
-            ],
-            "options": [
-                {
-                    "name": "repo",
-                    "type": "string",
-                    "description": "Repository in OWNER/REPO form."
-                },
-                {
-                    "name": "all",
-                    "type": "boolean",
-                    "description": "Delete all caches that match the current filters."
-                },
-                {
-                    "name": "succeed-on-no-caches",
-                    "type": "boolean",
-                    "description": "Exit successfully even when no caches match."
-                }
-            ]
-        },
-        {
-            "name": "run_cancel",
-            "description": "Cancel a GitHub Actions run by ID.",
-            "positional_args": [
-                {
-                    "name": "run_id",
-                    "type": "string",
-                    "description": "Workflow run identifier to cancel.",
-                    "required": true
-                }
-            ],
-            "options": [
-                {
-                    "name": "repo",
-                    "type": "string",
-                    "description": "Repository in OWNER/REPO form."
-                }
-            ]
-        },
-        {
-            "name": "run_download",
-            "description": "Download artifacts for a workflow run.",
-            "positional_args": [
-                {
-                    "name": "run_id",
-                    "type": "string",
-                    "description": "Workflow run identifier to download.",
-                    "required": true
-                }
-            ],
-            "options": [
-                {
-                    "name": "repo",
-                    "type": "string",
-                    "description": "Repository in OWNER/REPO form."
-                }
-            ]
-        },
-        {
-            "name": "run_list",
-            "description": "List recent workflow runs for a repository.",
-            "options": [
-                {
-                    "name": "repo",
-                    "type": "string",
-                    "description": "Repository in OWNER/REPO form."
-                },
-                {
-                    "name": "workflow",
-                    "type": "string",
-                    "description": "Filter to a specific workflow file name or ID."
-                },
-                {
-                    "name": "branch",
-                    "type": "string",
-                    "description": "Filter runs to a specific branch."
-                },
-                {
-                    "name": "status",
-                    "type": "string",
-                    "description": "Filter by status such as queued, in_progress, or completed."
-                },
-                {
-                    "name": "limit",
-                    "type": "integer",
-                    "description": "Maximum number of runs to return."
-                }
-            ]
-        },
-        {
-            "name": "run_view",
-            "description": "View details for a specific workflow run.",
-            "positional_args": [
-                {
-                    "name": "run_id",
-                    "type": "string",
-                    "description": "Workflow run identifier to inspect.",
-                    "required": false
-                }
-            ],
-            "options": [
-                {
-                    "name": "repo",
-                    "type": "string",
-                    "description": "Repository in OWNER/REPO form."
-                },
-                {
-                    "name": "job",
-                    "type": "string",
-                    "description": "Focus output on a specific job within the run."
-                }
-            ]
-        },
-        {
-            "name": "run_watch",
-            "description": "Stream updates for a workflow run until completion.",
-            "positional_args": [
-                {
-                    "name": "run_id",
-                    "type": "string",
-                    "description": "Workflow run identifier to watch.",
-                    "required": true
-                }
-            ],
-            "options": [
-                {
-                    "name": "repo",
-                    "type": "string",
-                    "description": "Repository in OWNER/REPO form."
-                }
-            ]
-        },
-        {
-            "name": "workflow_view",
-            "description": "View metadata for a workflow definition.",
-            "positional_args": [
-                {
-                    "name": "workflow_selector",
-                    "type": "string",
-                    "description": "Workflow file name or ID to view.",
-                    "required": false
-                }
-            ],
-            "options": [
-                {
-                    "name": "repo",
-                    "type": "string",
-                    "description": "Repository in OWNER/REPO form."
-                },
-                {
-                    "name": "ref",
-                    "type": "string",
-                    "description": "Git ref used to resolve the workflow definition."
-                }
-            ]
-        },
-        {
-            "name": "workflow_list",
-            "description": "List workflows configured for a repository.",
-            "options": [
-                {
-                    "name": "repo",
-                    "type": "string",
-                    "description": "Repository in OWNER/REPO form."
-                },
-                {
-                    "name": "limit",
-                    "type": "integer",
-                    "description": "Maximum number of workflows to list."
-                }
-            ]
+          "name": "limit",
+          "type": "integer",
+          "description": "Maximum number of pull requests to return."
         }
-    ]
+      ]
+    },
+    {
+      "name": "pr_view",
+      "description": "View detailed information about a pull request.",
+      "positional_args": [
+        {
+          "name": "pr_selector",
+          "type": "string",
+          "description": "Pull request number or URL.",
+          "required": false
+        }
+      ],
+      "options": [
+        {
+          "name": "repo",
+          "type": "string",
+          "description": "Repository in OWNER/REPO form if not in a local git repo."
+        },
+        {
+          "name": "comments",
+          "type": "boolean",
+          "description": "Include review comments in the output."
+        }
+      ]
+    },
+    {
+      "name": "pr_close",
+      "description": "Close a pull request optionally deleting its branch.",
+      "positional_args": [
+        {
+          "name": "pr_selector",
+          "type": "string",
+          "description": "Pull request number or URL to close.",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "name": "repo",
+          "type": "string",
+          "description": "Repository in OWNER/REPO form."
+        },
+        {
+          "name": "delete-branch",
+          "type": "boolean",
+          "description": "Delete the local and remote branch after closing."
+        },
+        {
+          "name": "comment",
+          "type": "string",
+          "description": "Leave a closing comment for context.",
+          "file_arg": true,
+          "file_flag": "--comment-file"
+        }
+      ]
+    },
+    {
+      "name": "cache_list",
+      "description": "List GitHub Actions caches for a repository.",
+      "options": [
+        {
+          "name": "repo",
+          "type": "string",
+          "description": "Repository in OWNER/REPO form."
+        },
+        {
+          "name": "key",
+          "type": "string",
+          "description": "Filter caches matching the provided key prefix."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "description": "Maximum number of caches to return."
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "description": "Sort order for results: asc or desc."
+        },
+        {
+          "name": "ref",
+          "type": "string",
+          "description": "Limit caches to a specific git ref."
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "description": "Field to sort by such as created or last-accessed."
+        }
+      ]
+    },
+    {
+      "name": "cache_delete",
+      "description": "Delete GitHub Actions caches by key or identifier.",
+      "positional_args": [
+        {
+          "name": "cache_id_or_key",
+          "type": "string",
+          "description": "Cache ID or key to remove.",
+          "required": false
+        }
+      ],
+      "options": [
+        {
+          "name": "repo",
+          "type": "string",
+          "description": "Repository in OWNER/REPO form."
+        },
+        {
+          "name": "all",
+          "type": "boolean",
+          "description": "Delete all caches that match the current filters."
+        },
+        {
+          "name": "succeed-on-no-caches",
+          "type": "boolean",
+          "description": "Exit successfully even when no caches match."
+        }
+      ]
+    },
+    {
+      "name": "run_cancel",
+      "description": "Cancel a GitHub Actions run by ID.",
+      "positional_args": [
+        {
+          "name": "run_id",
+          "type": "string",
+          "description": "Workflow run identifier to cancel.",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "name": "repo",
+          "type": "string",
+          "description": "Repository in OWNER/REPO form."
+        }
+      ]
+    },
+    {
+      "name": "run_download",
+      "description": "Download artifacts for a workflow run.",
+      "positional_args": [
+        {
+          "name": "run_id",
+          "type": "string",
+          "description": "Workflow run identifier to download.",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "name": "repo",
+          "type": "string",
+          "description": "Repository in OWNER/REPO form."
+        }
+      ]
+    },
+    {
+      "name": "run_list",
+      "description": "List recent workflow runs for a repository.",
+      "options": [
+        {
+          "name": "repo",
+          "type": "string",
+          "description": "Repository in OWNER/REPO form."
+        },
+        {
+          "name": "workflow",
+          "type": "string",
+          "description": "Filter to a specific workflow file name or ID."
+        },
+        {
+          "name": "branch",
+          "type": "string",
+          "description": "Filter runs to a specific branch."
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "description": "Filter by status such as queued, in_progress, or completed."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "description": "Maximum number of runs to return."
+        }
+      ]
+    },
+    {
+      "name": "run_view",
+      "description": "View details for a specific workflow run.",
+      "positional_args": [
+        {
+          "name": "run_id",
+          "type": "string",
+          "description": "Workflow run identifier to inspect.",
+          "required": false
+        }
+      ],
+      "options": [
+        {
+          "name": "repo",
+          "type": "string",
+          "description": "Repository in OWNER/REPO form."
+        },
+        {
+          "name": "job",
+          "type": "string",
+          "description": "Focus output on a specific job within the run."
+        }
+      ]
+    },
+    {
+      "name": "run_watch",
+      "description": "Stream updates for a workflow run until completion.",
+      "positional_args": [
+        {
+          "name": "run_id",
+          "type": "string",
+          "description": "Workflow run identifier to watch.",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "name": "repo",
+          "type": "string",
+          "description": "Repository in OWNER/REPO form."
+        }
+      ]
+    },
+    {
+      "name": "workflow_view",
+      "description": "View metadata for a workflow definition.",
+      "positional_args": [
+        {
+          "name": "workflow_selector",
+          "type": "string",
+          "description": "Workflow file name or ID to view.",
+          "required": false
+        }
+      ],
+      "options": [
+        {
+          "name": "repo",
+          "type": "string",
+          "description": "Repository in OWNER/REPO form."
+        },
+        {
+          "name": "ref",
+          "type": "string",
+          "description": "Git ref used to resolve the workflow definition."
+        }
+      ]
+    },
+    {
+      "name": "workflow_list",
+      "description": "List workflows configured for a repository.",
+      "options": [
+        {
+          "name": "repo",
+          "type": "string",
+          "description": "Repository in OWNER/REPO form."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "description": "Maximum number of workflows to list."
+        }
+      ]
+    }
+  ]
 }

@@ -1,212 +1,212 @@
 {
-    "name": "cargo",
-    "description": "Rust's build tool and package manager",
-    "command": "cargo",
-    "enabled": true,
-    "timeout_seconds": 600,
-    "synchronous": true,
-    "subcommand": [
+  "name": "cargo",
+  "description": "Rust's build tool and package manager",
+  "command": "cargo",
+  "enabled": true,
+  "timeout_seconds": 600,
+  "asynchronous": false,
+  "subcommand": [
+    {
+      "name": "build",
+      "description": "Compile the current package.",
+      "options": [
         {
-            "name": "build",
-            "description": "Compile the current package.",
-            "options": [
-                {
-                    "name": "release",
-                    "type": "boolean",
-                    "description": "Build artifacts in release mode, with optimizations"
-                },
-                {
-                    "name": "workspace",
-                    "type": "boolean",
-                    "description": "Build all packages in the workspace"
-                },
-                {
-                    "name": "bin",
-                    "type": "string",
-                    "description": "Build only the specified binary"
-                }
-            ]
+          "name": "release",
+          "type": "boolean",
+          "description": "Build artifacts in release mode, with optimizations"
         },
         {
-            "name": "run",
-            "description": "Run a binary or example of the local package.",
-            "options": [
-                {
-                    "name": "release",
-                    "type": "boolean",
-                    "description": "Run with optimizations (--release)"
-                },
-                {
-                    "name": "bin",
-                    "type": "string",
-                    "description": "Name of the binary to run"
-                }
-            ]
+          "name": "workspace",
+          "type": "boolean",
+          "description": "Build all packages in the workspace"
         },
         {
-            "name": "check",
-            "description": "Type-check the current package without producing binaries.",
-            "synchronous": true,
-            "options": [
-                {
-                    "name": "workspace",
-                    "type": "boolean",
-                    "description": "Check all packages in the workspace"
-                }
-            ]
-        },
-        {
-            "name": "test",
-            "description": "Run the test suite.",
-            "options": [
-                {
-                    "name": "workspace",
-                    "type": "boolean",
-                    "description": "Test all packages in the workspace"
-                }
-            ]
-        },
-        {
-            "name": "fmt",
-            "synchronous": true,
-            "description": "Format code using rustfmt.",
-            "options": [
-                {
-                    "name": "all",
-                    "type": "boolean",
-                    "description": "Format all packages in the workspace"
-                }
-            ]
-        },
-        {
-            "name": "doc",
-            "synchronous": true,
-            "description": "Build documentation for the current package.",
-            "options": [
-                {
-                    "name": "no-deps",
-                    "type": "boolean",
-                    "description": "Do not build documentation for dependencies"
-                }
-            ]
-        },
-        {
-            "name": "clippy",
-            "synchronous": true,
-            "description": "Enhanced linting and code quality checks.",
-            "options": [
-                {
-                    "name": "fix",
-                    "type": "boolean",
-                    "description": "Automatically fix warnings"
-                },
-                {
-                    "name": "allow-dirty",
-                    "type": "boolean",
-                    "description": "Allow fixing when working directory is dirty"
-                },
-                {
-                    "name": "tests",
-                    "type": "boolean",
-                    "description": "Run clippy on tests as well"
-                },
-                {
-                    "name": "workspace",
-                    "type": "boolean",
-                    "description": "Run on all packages in the workspace"
-                }
-            ],
-            "availability_check": {
-                "command": "clippy-driver",
-                "args": [
-                    "--version"
-                ],
-                "skip_subcommand_args": true
-            },
-            "install_instructions": "Install with `rustup component add clippy`."
-        },
-        {
-            "name": "audit",
-            "description": "Audit dependencies for security vulnerabilities using cargo-audit.",
-            "options": [
-                {
-                    "name": "ignore",
-                    "type": "array",
-                    "description": "Advisory IDs to ignore during the audit run.",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                {
-                    "name": "target-arch",
-                    "type": "array",
-                    "description": "Filter vulnerabilities by CPU architecture.",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                {
-                    "name": "target-os",
-                    "type": "array",
-                    "description": "Filter vulnerabilities by operating system.",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                {
-                    "name": "args",
-                    "type": "array",
-                    "description": "Additional arguments passed after the `--` separator.",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                {
-                    "name": "exclude",
-                    "type": "array",
-                    "description": "Packages to exclude from the audit run.",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            ],
-            "availability_check": {
-                "command": "cargo",
-                "args": [
-                    "audit",
-                    "--version"
-                ],
-                "skip_subcommand_args": true
-            },
-            "install_instructions": "Install with `cargo install cargo-audit`."
-        },
-        {
-            "name": "nextest",
-            "description": "Run tests using cargo nextest.",
-            "install_instructions": "Install with `cargo install cargo-nextest`.",
-            "subcommand": [
-                {
-                    "name": "run",
-                    "description": "Run tests using nextest.",
-                    "options": [
-                        {
-                            "name": "workspace",
-                            "type": "boolean",
-                            "description": "Run tests for all packages in workspace"
-                        }
-                    ],
-                    "timeout_seconds": 1800,
-                    "availability_check": {
-                        "command": "cargo",
-                        "args": [
-                            "nextest",
-                            "--version"
-                        ],
-                        "skip_subcommand_args": true
-                    },
-                    "install_instructions": "Install with `cargo install cargo-nextest` and ensure it is on PATH."
-                }
-            ]
+          "name": "bin",
+          "type": "string",
+          "description": "Build only the specified binary"
         }
-    ]
+      ]
+    },
+    {
+      "name": "run",
+      "description": "Run a binary or example of the local package.",
+      "options": [
+        {
+          "name": "release",
+          "type": "boolean",
+          "description": "Run with optimizations (--release)"
+        },
+        {
+          "name": "bin",
+          "type": "string",
+          "description": "Name of the binary to run"
+        }
+      ]
+    },
+    {
+      "name": "check",
+      "description": "Type-check the current package without producing binaries.",
+      "asynchronous": false,
+      "options": [
+        {
+          "name": "workspace",
+          "type": "boolean",
+          "description": "Check all packages in the workspace"
+        }
+      ]
+    },
+    {
+      "name": "test",
+      "description": "Run the test suite.",
+      "options": [
+        {
+          "name": "workspace",
+          "type": "boolean",
+          "description": "Test all packages in the workspace"
+        }
+      ]
+    },
+    {
+      "name": "fmt",
+      "asynchronous": false,
+      "description": "Format code using rustfmt.",
+      "options": [
+        {
+          "name": "all",
+          "type": "boolean",
+          "description": "Format all packages in the workspace"
+        }
+      ]
+    },
+    {
+      "name": "doc",
+      "asynchronous": false,
+      "description": "Build documentation for the current package.",
+      "options": [
+        {
+          "name": "no-deps",
+          "type": "boolean",
+          "description": "Do not build documentation for dependencies"
+        }
+      ]
+    },
+    {
+      "name": "clippy",
+      "asynchronous": false,
+      "description": "Enhanced linting and code quality checks.",
+      "options": [
+        {
+          "name": "fix",
+          "type": "boolean",
+          "description": "Automatically fix warnings"
+        },
+        {
+          "name": "allow-dirty",
+          "type": "boolean",
+          "description": "Allow fixing when working directory is dirty"
+        },
+        {
+          "name": "tests",
+          "type": "boolean",
+          "description": "Run clippy on tests as well"
+        },
+        {
+          "name": "workspace",
+          "type": "boolean",
+          "description": "Run on all packages in the workspace"
+        }
+      ],
+      "availability_check": {
+        "command": "clippy-driver",
+        "args": [
+          "--version"
+        ],
+        "skip_subcommand_args": true
+      },
+      "install_instructions": "Install with `rustup component add clippy`."
+    },
+    {
+      "name": "audit",
+      "description": "Audit dependencies for security vulnerabilities using cargo-audit.",
+      "options": [
+        {
+          "name": "ignore",
+          "type": "array",
+          "description": "Advisory IDs to ignore during the audit run.",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "target-arch",
+          "type": "array",
+          "description": "Filter vulnerabilities by CPU architecture.",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "target-os",
+          "type": "array",
+          "description": "Filter vulnerabilities by operating system.",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "args",
+          "type": "array",
+          "description": "Additional arguments passed after the `--` separator.",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "exclude",
+          "type": "array",
+          "description": "Packages to exclude from the audit run.",
+          "items": {
+            "type": "string"
+          }
+        }
+      ],
+      "availability_check": {
+        "command": "cargo",
+        "args": [
+          "audit",
+          "--version"
+        ],
+        "skip_subcommand_args": true
+      },
+      "install_instructions": "Install with `cargo install cargo-audit`."
+    },
+    {
+      "name": "nextest",
+      "description": "Run tests using cargo nextest.",
+      "install_instructions": "Install with `cargo install cargo-nextest`.",
+      "subcommand": [
+        {
+          "name": "run",
+          "description": "Run tests using nextest.",
+          "options": [
+            {
+              "name": "workspace",
+              "type": "boolean",
+              "description": "Run tests for all packages in workspace"
+            }
+          ],
+          "timeout_seconds": 1800,
+          "availability_check": {
+            "command": "cargo",
+            "args": [
+              "nextest",
+              "--version"
+            ],
+            "skip_subcommand_args": true
+          },
+          "install_instructions": "Install with `cargo install cargo-nextest` and ensure it is on PATH."
+        }
+      ]
+    }
+  ]
 }
