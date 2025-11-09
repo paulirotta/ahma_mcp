@@ -79,6 +79,18 @@
             ]
         },
         {
+            "name": "doc",
+            "synchronous": true,
+            "description": "Build documentation for the current package.",
+            "options": [
+                {
+                    "name": "no-deps",
+                    "type": "boolean",
+                    "description": "Do not build documentation for dependencies"
+                }
+            ]
+        },
+        {
             "name": "clippy",
             "synchronous": true,
             "description": "Enhanced linting and code quality checks.",

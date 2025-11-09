@@ -11,28 +11,20 @@ mod common;
 
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;
-use common::{get_workspace_path, test_client::new_client};
+use common::test_client::new_client;
 use rmcp::model::CallToolRequestParam;
 use serde_json::{json, Map};
 use std::borrow::Cow;
+use std::path::PathBuf;
+use tempfile::{Builder, TempDir};
 use tokio::fs;
 
-fn unique_suffix() -> String {
-    format!(
-        "{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis()
-    )
-}
-
-async fn make_workdir(prefix: &str) -> Result<String> {
-    let base = get_workspace_path(".ahma/tmp/shell_async");
-    fs::create_dir_all(&base).await?;
-    let dir = base.join(format!("{}_{}", prefix, unique_suffix()));
-    fs::create_dir_all(&dir).await?;
-    Ok(dir.to_string_lossy().to_string())
+fn make_workdir(prefix: &str) -> Result<(TempDir, PathBuf)> {
+    let dir = Builder::new()
+        .prefix(&format!("shell_async_{}_", prefix))
+        .tempdir()?;
+    let path = dir.path().to_path_buf();
+    Ok((dir, path))
 }
 
 /// Test basic shell command execution
@@ -41,7 +33,8 @@ async fn test_basic_shell_command_execution() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    let workdir = make_workdir("basic").await?;
+    let (_temp_dir, workdir_path) = make_workdir("basic")?;
+    let workdir = workdir_path.to_string_lossy().to_string();
 
     let mut args = Map::new();
     args.insert("command".to_string(), json!("echo 'Hello World'"));
@@ -71,15 +64,17 @@ async fn test_working_directory_handling() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    let temp_dir = make_workdir("wd_handling").await?;
+    let (_temp_dir, workdir_path) = make_workdir("wd_handling")?;
 
     // Create a test file in the temp directory
-    let test_file_path = std::path::Path::new(&temp_dir).join("test_file.txt");
+    let test_file_path = workdir_path.join("test_file.txt");
     fs::write(&test_file_path, "test content").await?;
+
+    let workdir = workdir_path.to_string_lossy().to_string();
 
     let mut args = Map::new();
     args.insert("command".to_string(), json!("ls test_file.txt"));
-    args.insert("working_directory".to_string(), json!(temp_dir));
+    args.insert("working_directory".to_string(), json!(workdir));
 
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("shell_async"),
@@ -105,7 +100,8 @@ async fn test_complex_shell_commands() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    let workdir = make_workdir("complex").await?;
+    let (_temp_dir, workdir_path) = make_workdir("complex")?;
+    let workdir = workdir_path.to_string_lossy().to_string();
 
     let mut args = Map::new();
     args.insert("command".to_string(), json!("echo 'test data' | wc -l"));
@@ -135,7 +131,8 @@ async fn test_invalid_command_handling() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    let workdir = make_workdir("invalid_cmd").await?;
+    let (_temp_dir, workdir_path) = make_workdir("invalid_cmd")?;
+    let workdir = workdir_path.to_string_lossy().to_string();
 
     let mut args = Map::new();
     args.insert("command".to_string(), json!("nonexistent_command_xyz"));
@@ -195,9 +192,8 @@ async fn test_invalid_working_directory() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    let base = get_workspace_path(".ahma/tmp/shell_async");
-    fs::create_dir_all(&base).await?;
-    let invalid_dir = base.join(format!("does_not_exist_{}", unique_suffix()));
+    let (_temp_dir, workdir_path) = make_workdir("invalid_dir")?;
+    let invalid_dir = workdir_path.join("does_not_exist");
 
     let mut args = Map::new();
     args.insert("command".to_string(), json!("echo 'test'"));
@@ -231,7 +227,8 @@ async fn test_environment_variables() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    let workdir = make_workdir("env_vars").await?;
+    let (_temp_dir, workdir_path) = make_workdir("env_vars")?;
+    let workdir = workdir_path.to_string_lossy().to_string();
 
     let mut args = Map::new();
     args.insert(
@@ -264,7 +261,8 @@ async fn test_shell_builtins() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    let workdir = make_workdir("builtins").await?;
+    let (_temp_dir, workdir_path) = make_workdir("builtins")?;
+    let workdir = workdir_path.to_string_lossy().to_string();
 
     let mut args = Map::new();
     args.insert("command".to_string(), json!("pwd"));
@@ -291,7 +289,8 @@ async fn test_special_characters() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    let workdir = make_workdir("special_chars").await?;
+    let (_temp_dir, workdir_path) = make_workdir("special_chars")?;
+    let workdir = workdir_path.to_string_lossy().to_string();
 
     let mut args = Map::new();
     args.insert(
@@ -324,7 +323,8 @@ async fn test_multiple_arguments() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    let workdir = make_workdir("multi_args").await?;
+    let (_temp_dir, workdir_path) = make_workdir("multi_args")?;
+    let workdir = workdir_path.to_string_lossy().to_string();
 
     let mut args = Map::new();
     args.insert("command".to_string(), json!("echo arg1 arg2 arg3"));
@@ -354,7 +354,8 @@ async fn test_long_running_command() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    let workdir = make_workdir("long_running").await?;
+    let (_temp_dir, workdir_path) = make_workdir("long_running")?;
+    let workdir = workdir_path.to_string_lossy().to_string();
 
     let mut args = Map::new();
     args.insert("command".to_string(), json!("sleep 1 && echo 'done'"));
@@ -393,7 +394,8 @@ async fn test_working_directory_not_passed_to_command() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    let workdir = make_workdir("wd_exclusion").await?;
+    let (_temp_dir, workdir_path) = make_workdir("wd_exclusion")?;
+    let workdir = workdir_path.to_string_lossy().to_string();
 
     // This test verifies that the working_directory parameter doesn't cause
     // "bash: --working_directory: invalid option" error
@@ -428,16 +430,19 @@ async fn test_different_working_directories() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
-    let temp_dir = make_workdir("wd_variants").await?;
+    let (_temp_dir, workdir_path) = make_workdir("wd_variants")?;
 
     // Create a subdirectory in temp_dir
-    let subdir = std::path::Path::new(&temp_dir).join("subdir");
+    let subdir = workdir_path.join("subdir");
     fs::create_dir(&subdir).await?;
+
+    let workdir = workdir_path.to_string_lossy().to_string();
+    let subdir_str = subdir.to_string_lossy().to_string();
 
     // Test execution in temp directory root
     let mut args1 = Map::new();
     args1.insert("command".to_string(), json!("pwd"));
-    args1.insert("working_directory".to_string(), json!(temp_dir));
+    args1.insert("working_directory".to_string(), json!(workdir));
 
     let call_param1 = CallToolRequestParam {
         name: Cow::Borrowed("shell_async"),
@@ -453,10 +458,7 @@ async fn test_different_working_directories() -> Result<()> {
     // Test execution in subdirectory
     let mut args2 = Map::new();
     args2.insert("command".to_string(), json!("pwd"));
-    args2.insert(
-        "working_directory".to_string(),
-        json!(subdir.to_string_lossy()),
-    );
+    args2.insert("working_directory".to_string(), json!(subdir_str));
 
     let call_param2 = CallToolRequestParam {
         name: Cow::Borrowed("shell_async"),
