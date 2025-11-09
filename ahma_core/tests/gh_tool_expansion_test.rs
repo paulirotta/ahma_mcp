@@ -97,7 +97,9 @@ async fn test_gh_cache_subcommands_schema() {
                 .iter()
                 .find(|opt| opt.name == expected_opt)
                 .unwrap_or_else(|| panic!("Should find option {}", expected_opt));
-            assert!(!option.description.is_empty());
+            assert!(
+                option.description.is_some() && !option.description.as_ref().unwrap().is_empty()
+            );
         }
     }
 

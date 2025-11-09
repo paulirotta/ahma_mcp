@@ -59,6 +59,7 @@ async fn test_mcp_cancellation_does_not_trigger_canceled_canceled_message() {
         operation_monitor.clone(),
         configs,
         guidance,
+        false,
     )
     .await
     .expect("Failed to create MCP service");

@@ -5,12 +5,14 @@
     "enabled": true,
     "timeout_seconds": 600,
     "hints": {
-        "default": "While Android Gradle operations run, consider reviewing build.gradle files, planning test strategies, or analyzing Android app architecture for optimization opportunities.",
+        "custom": {
+            "default": "While Android Gradle operations run, consider reviewing build.gradle files, planning test strategies, or analyzing Android app architecture for optimization opportunities.",
+            "assemble": "Assembling Android APK/AAB - consider code signing, release preparation, or app store optimization.",
+            "install": "Installing app on device - plan testing scenarios, user experience validation, or performance analysis.",
+            "lint": "Running Android lint checks - review code quality suggestions, plan refactoring, or work on accessibility improvements."
+        },
         "build": "Building Android project - review compilation output for warnings, plan deployment steps, or work on app documentation.",
-        "test": "Running Android tests - analyze test patterns, consider additional test cases, or review test coverage strategies.",
-        "assemble": "Assembling Android APK/AAB - consider code signing, release preparation, or app store optimization.",
-        "install": "Installing app on device - plan testing scenarios, user experience validation, or performance analysis.",
-        "lint": "Running Android lint checks - review code quality suggestions, plan refactoring, or work on accessibility improvements."
+        "test": "Running Android tests - analyze test patterns, consider additional test cases, or review test coverage strategies."
     },
     "subcommand": [
         {

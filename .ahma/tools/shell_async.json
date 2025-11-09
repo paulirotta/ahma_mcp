@@ -6,7 +6,9 @@
     "timeout_seconds": 300,
     "synchronous": false,
     "hints": {
-        "default": "Shell command running asynchronously - consider planning next steps, reviewing output patterns, or working on other tasks while the command executes."
+        "custom": {
+            "default": "Shell command running asynchronously - consider planning next steps, reviewing output patterns, or working on other tasks while the command executes."
+        }
     },
     "subcommand": [
         {

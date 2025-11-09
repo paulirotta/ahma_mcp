@@ -4,7 +4,9 @@
     "command": "git",
     "timeout_seconds": 180,
     "hints": {
-        "default": "Use --tool_args -- to forward raw git flags exactly as they should appear after the base command."
+        "custom": {
+            "default": "Use --tool_args -- to forward raw git flags exactly as they should appear after the base command."
+        }
     },
     "subcommand": [
         {

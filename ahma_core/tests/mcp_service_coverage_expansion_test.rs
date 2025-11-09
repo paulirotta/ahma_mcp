@@ -31,7 +31,7 @@ async fn create_test_service() -> (AhmaMcpService, TempDir) {
     let configs = Arc::new(tool_configs);
     let guidance = Arc::new(None::<GuidanceConfig>);
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance)
+    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false)
         .await
         .unwrap();
     (service, temp_dir)
@@ -84,7 +84,7 @@ async fn test_service_creation_with_guidance_config() {
     };
     let guidance = Arc::new(Some(guidance_config));
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance)
+    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false)
         .await
         .unwrap();
 
@@ -113,7 +113,7 @@ async fn test_service_creation_with_existing_tool_configs() {
     let configs = Arc::new(tool_configs);
     let guidance = Arc::new(None::<GuidanceConfig>);
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance)
+    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false)
         .await
         .unwrap();
 
@@ -147,7 +147,7 @@ async fn test_service_creation_with_custom_timeouts() {
     let configs = Arc::new(tool_configs);
     let guidance = Arc::new(None::<GuidanceConfig>);
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance)
+    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false)
         .await
         .unwrap();
 
@@ -205,7 +205,7 @@ async fn test_service_with_empty_configs() {
     let configs = Arc::new(tool_configs);
     let guidance = Arc::new(None::<GuidanceConfig>);
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance)
+    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false)
         .await
         .unwrap();
 
@@ -252,7 +252,7 @@ async fn test_guidance_config_with_tool_specific_guidance() {
     let tool_configs = HashMap::new();
     let configs = Arc::new(tool_configs);
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance)
+    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false)
         .await
         .unwrap();
 
@@ -329,8 +329,14 @@ async fn test_service_creation_error_handling() {
             let configs = Arc::new(tool_configs);
             let guidance = Arc::new(None::<GuidanceConfig>);
 
-            let result =
-                AhmaMcpService::new(Arc::new(adapter), operation_monitor, configs, guidance).await;
+            let result = AhmaMcpService::new(
+                Arc::new(adapter),
+                operation_monitor,
+                configs,
+                guidance,
+                false,
+            )
+            .await;
 
             // If it succeeds, it should be a valid service
             if let Ok(service) = result {

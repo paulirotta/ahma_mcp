@@ -1,0 +1,13 @@
+[package]
+edition = "2021"
+name = "generate_schema"
+version = "0.1.0"
+
+[[bin]]
+name = "generate_schema"
+path = "src/main.rs"
+
+[dependencies]
+ahma_core = {path = "../ahma_core"}
+schemars = "1.1"
+serde_json = "1.0"

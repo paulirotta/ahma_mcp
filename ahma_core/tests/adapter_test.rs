@@ -120,8 +120,10 @@ async fn test_execute_sync_with_subcommand_config() {
             name: "n".to_string(),
             alias: None,
             option_type: "boolean".to_string(),
-            description: "Do not print trailing newline".to_string(),
+            description: Some("Do not print trailing newline".to_string()),
             format: None,
+
+            items: None,
             required: Some(false),
             file_arg: Some(false),
             file_flag: None,
@@ -130,8 +132,10 @@ async fn test_execute_sync_with_subcommand_config() {
             name: "message".to_string(),
             alias: None,
             option_type: "string".to_string(),
-            description: "Message to echo".to_string(),
+            description: Some("Message to echo".to_string()),
             format: None,
+
+            items: None,
             required: Some(true),
             file_arg: Some(false),
             file_flag: None,

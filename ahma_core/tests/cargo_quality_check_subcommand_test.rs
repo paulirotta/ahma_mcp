@@ -1,144 +1,109 @@
-/// TDD test for cargo quality-check subcommand with sequence support
-/// This test validates that cargo subcommands can include a "sequence" field
-/// that executes multiple cargo commands in order.
+/// TDD tests for the dedicated rust_quality_check sequence tool.
 use ahma_core::config::ToolConfig;
+use serde_json::Value;
 use std::path::PathBuf;
 
-#[test]
-fn test_cargo_quality_check_subcommand_loads_successfully() {
-    // Arrange: Load the cargo.json tool configuration
-    // In workspace, CARGO_MANIFEST_DIR is ahma_core, need to go up to workspace root
-    let cargo_json_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+fn load_rust_quality_check_config() -> ToolConfig {
+    let config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("Failed to get workspace root")
-        .join(".ahma/tools/cargo.json");
+        .join(".ahma/tools/rust_quality_check.json");
 
     let json_content =
-        std::fs::read_to_string(&cargo_json_path).expect("Failed to read cargo.json");
+        std::fs::read_to_string(&config_path).expect("Failed to read rust_quality_check.json");
 
-    // Act: Parse the configuration
-    let result: Result<ToolConfig, _> = serde_json::from_str(&json_content);
+    serde_json::from_str(&json_content).expect("Failed to parse rust_quality_check.json")
+}
 
-    // Assert: Should parse without errors
-    assert!(
-        result.is_ok(),
-        "Failed to parse cargo.json: {:?}",
-        result.err()
+#[test]
+fn test_rust_quality_check_tool_structure() {
+    let config = load_rust_quality_check_config();
+
+    assert_eq!(
+        config.command, "sequence",
+        "Tool should be a sequence executor"
     );
+    let subcommands = config
+        .subcommand
+        .as_ref()
+        .expect("rust_quality_check should expose subcommands");
 
-    let config = result.unwrap();
-
-    // Assert: Should have quality-check subcommand
-    assert!(
-        config.subcommand.is_some(),
-        "cargo.json should have subcommands"
-    );
-    let subcommands = config.subcommand.unwrap();
-
-    let quality_check = subcommands
+    let default = subcommands
         .iter()
-        .find(|sc| sc.name == "quality-check")
-        .expect("Should have quality-check subcommand");
+        .find(|sc| sc.name == "default")
+        .expect("default subcommand should be present");
 
-    // Assert: quality-check should have sequence field
-    assert!(
-        quality_check.sequence.is_some(),
-        "quality-check subcommand should have a sequence field"
-    );
-
-    let sequence = quality_check.sequence.as_ref().unwrap();
-
-    // Assert: sequence should have the expected steps
-    assert!(
-        sequence.len() >= 4,
-        "quality-check should have at least 4 steps"
-    );
-
-    // Verify the sequence contains expected cargo commands
-    let step_subcommands: Vec<&str> = sequence
-        .iter()
-        .map(|step| step.subcommand.as_str())
-        .collect();
-
-    assert!(step_subcommands.contains(&"fmt"), "Should include fmt step");
-    assert!(
-        step_subcommands.contains(&"clippy"),
-        "Should include clippy step"
+    assert_eq!(
+        default.synchronous,
+        Some(true),
+        "Sequence should run synchronously"
     );
     assert!(
-        step_subcommands.contains(&"test"),
-        "Should include test step"
+        default.sequence.is_some(),
+        "default subcommand must define a sequence"
     );
-    assert!(
-        step_subcommands.contains(&"build"),
-        "Should include build step"
+    assert_eq!(
+        default.step_delay_ms,
+        Some(500),
+        "Sequence should enforce a delay between steps"
     );
 }
 
 #[test]
-fn test_cargo_quality_check_sequence_execution() {
-    use ahma_core::config::ToolConfig;
-    use std::path::PathBuf;
+fn test_rust_quality_check_sequence_steps() {
+    let config = load_rust_quality_check_config();
+    let default = config
+        .subcommand
+        .as_ref()
+        .and_then(|subs| subs.iter().find(|sc| sc.name == "default"))
+        .expect("default subcommand should be present");
 
-    // Load the cargo.json tool configuration
-    // In workspace, CARGO_MANIFEST_DIR is ahma_core, need to go up to workspace root
-    let cargo_json_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("Failed to get workspace root")
-        .join(".ahma/tools/cargo.json");
-
-    let json_content =
-        std::fs::read_to_string(&cargo_json_path).expect("Failed to read cargo.json");
-
-    let cargo_config: ToolConfig =
-        serde_json::from_str(&json_content).expect("Failed to parse cargo.json");
-
-    // Find the quality-check subcommand
-    let subcommands = cargo_config.subcommand.expect("Should have subcommands");
-    let quality_check = subcommands
-        .iter()
-        .find(|sc| sc.name == "quality-check")
-        .expect("Should have quality-check subcommand");
-
-    // Verify sequence structure
-    let sequence = quality_check
+    let sequence = default
         .sequence
         .as_ref()
-        .expect("quality-check should have a sequence");
+        .expect("default subcommand must contain a sequence");
 
-    // Verify all steps are properly configured
-    for (i, step) in sequence.iter().enumerate() {
-        assert_eq!(step.tool, "cargo", "Step {} should use cargo tool", i);
-        assert!(
-            !step.subcommand.is_empty(),
-            "Step {} should have a subcommand",
-            i
-        );
-        assert!(
-            step.description.is_some(),
-            "Step {} should have a description",
-            i
-        );
-    }
-
-    // Verify we have the expected number of steps
     assert!(
-        sequence.len() >= 4,
-        "Should have at least 4 quality check steps"
+        sequence.len() >= 6,
+        "Sequence should include the full pipeline"
     );
 
-    // Verify synchronous execution
-    assert_eq!(
-        quality_check.synchronous,
-        Some(true),
-        "quality-check should be synchronous"
-    );
+    let has_generate_schema = sequence.iter().any(|step| {
+        step.subcommand == "run"
+            && step
+                .args
+                .get("bin")
+                .is_some_and(|value| value == &Value::String("generate_schema".into()))
+    });
+    assert!(has_generate_schema, "Sequence should regenerate the schema");
 
-    // Verify timeout is set
+    let has_validate = sequence.iter().any(|step| {
+        step.subcommand == "run"
+            && step
+                .args
+                .get("bin")
+                .is_some_and(|value| value == &Value::String("ahma_validate".into()))
+    });
+    assert!(has_validate, "Sequence should validate tool configurations");
+
     assert!(
-        quality_check.timeout_seconds.is_some(),
-        "quality-check should have a timeout"
+        sequence.iter().any(|step| step.subcommand == "fmt"),
+        "Sequence should format the workspace"
     );
-
-    println!("✓ Cargo quality-check subcommand sequence is properly configured");
+    assert!(
+        sequence
+            .iter()
+            .filter(|step| step.subcommand == "clippy")
+            .count()
+            >= 2,
+        "Sequence should lint both code and tests"
+    );
+    assert!(
+        sequence.iter().any(|step| step.subcommand == "nextest_run"),
+        "Sequence should execute the nextest suite"
+    );
+    assert!(
+        sequence.iter().any(|step| step.subcommand == "build"),
+        "Sequence should finish with a build"
+    );
 }

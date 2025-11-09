@@ -34,15 +34,13 @@
     },
     "hints": {
       "$ref": "#/$defs/ToolHints",
-      "default": {
-        "default": null
-      }
+      "default": {}
     },
     "input_schema": {
       "description": "Generated input schema (optional - auto-generated from subcommands)"
     },
     "install_instructions": {
-      "description": "Human-friendly instructions describing how to install this tool when missing.",
+      "description": "Installation guidance displayed when the tool is unavailable.",
       "type": [
         "string",
         "null"
@@ -146,8 +144,8 @@
       },
       "additionalProperties": false
     },
-    "OptionConfig": {
-      "description": "Configuration for an option within a subcommand",
+    "CommandOption": {
+      "description": "Configuration for a single command-line option.",
       "type": "object",
       "properties": {
         "alias": {
@@ -157,18 +155,18 @@
           ]
         },
         "description": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "file_arg": {
-          "description": "If true, multi-line or special character values will be written to a temporary file\nand the file path will be passed as the argument instead of the raw value.\nThe option name will be automatically converted to use the file flag variant\n(e.g., for git commit: \"message\" with file_arg=true becomes \"-F\" instead of \"-m\")",
           "type": [
             "boolean",
             "null"
-          ],
-          "default": null
+          ]
         },
         "file_flag": {
-          "description": "When file_arg is true, this specifies the flag to use for file-based input\n(e.g., \"-F\" for git commit). If not specified, defaults to the normal flag.",
           "type": [
             "string",
             "null"
@@ -180,6 +178,16 @@
             "null"
           ]
         },
+        "items": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemsSpec"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "name": {
           "type": "string"
         },
@@ -187,8 +195,7 @@
           "type": [
             "boolean",
             "null"
-          ],
-          "default": null
+          ]
         },
         "type": {
           "type": "string"
@@ -197,8 +204,32 @@
       "additionalProperties": false,
       "required": [
         "name",
-        "type",
-        "description"
+        "type"
+      ]
+    },
+    "ItemsSpec": {
+      "description": "Schema details for array items.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "format": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
       ]
     },
     "SequenceStep": {
@@ -234,11 +265,11 @@
       ]
     },
     "SubcommandConfig": {
-      "description": "Configuration for a subcommand within a tool",
+      "description": "Configuration for a subcommand, allowing for nested commands.",
       "type": "object",
       "properties": {
         "availability_check": {
-          "description": "Optional availability probe executed at server startup.",
+          "description": "Runtime availability probe executed at server startup.",
           "anyOf": [
             {
               "$ref": "#/$defs/AvailabilityCheck"
@@ -252,7 +283,6 @@
           "type": "string"
         },
         "enabled": {
-          "description": "Whether this subcommand is enabled (defaults to true)",
           "type": "boolean",
           "default": true
         },
@@ -264,7 +294,7 @@
           ]
         },
         "install_instructions": {
-          "description": "Install instructions displayed when this subcommand is unavailable.",
+          "description": "Installation guidance displayed when the subcommand is unavailable.",
           "type": [
             "string",
             "null"
@@ -279,20 +309,21 @@
             "null"
           ],
           "items": {
-            "$ref": "#/$defs/OptionConfig"
+            "$ref": "#/$defs/CommandOption"
           }
         },
         "positional_args": {
+          "description": "Optional arguments that are not flags, but positional values.",
           "type": [
             "array",
             "null"
           ],
           "items": {
-            "$ref": "#/$defs/OptionConfig"
+            "$ref": "#/$defs/CommandOption"
           }
         },
         "sequence": {
-          "description": "Optional sequence of steps for subcommands that orchestrate multiple commands",
+          "description": "Optional sequence of tools to execute in order (for composite tools)",
           "type": [
             "array",
             "null"
@@ -302,7 +333,7 @@
           }
         },
         "step_delay_ms": {
-          "description": "Delay in milliseconds between sequence steps",
+          "description": "Delay in milliseconds between sequence steps (default: SEQUENCE_STEP_DELAY_MS)",
           "type": [
             "integer",
             "null"
@@ -311,7 +342,6 @@
           "minimum": 0
         },
         "subcommand": {
-          "description": "Nested subcommands for recursive command structures",
           "type": [
             "array",
             "null"
@@ -321,7 +351,7 @@
           }
         },
         "synchronous": {
-          "description": "If true, this subcommand runs synchronously instead of async",
+          "description": "Override synchronous behavior for this subcommand",
           "type": [
             "boolean",
             "null"
@@ -344,20 +374,50 @@
       ]
     },
     "ToolHints": {
-      "description": "A collection of hints for AI clients using this tool.",
+      "description": "Provides hints to an AI agent on how to use a tool.",
       "type": "object",
       "properties": {
-        "default": {
-          "description": "Default hint for any operation with this tool",
+        "build": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "clean": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "custom": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "dependencies": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "test": {
           "type": [
             "string",
             "null"
           ]
         }
       },
-      "additionalProperties": {
-        "type": "string"
-      }
+      "additionalProperties": false
     }
   }
 }

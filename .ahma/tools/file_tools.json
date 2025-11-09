@@ -193,6 +193,10 @@
                     "type": "array",
                     "description": "File or directory paths to remove",
                     "format": "path",
+                    "items": {
+                        "type": "string",
+                        "format": "path"
+                    },
                     "required": true
                 }
             ],
@@ -239,6 +243,10 @@
                     "type": "array",
                     "description": "Files to search in",
                     "format": "path",
+                    "items": {
+                        "type": "string",
+                        "format": "path"
+                    },
                     "required": false
                 }
             ],
@@ -315,6 +323,10 @@
                     "type": "array",
                     "description": "Input files to process",
                     "format": "path",
+                    "items": {
+                        "type": "string",
+                        "format": "path"
+                    },
                     "required": false
                 }
             ],
@@ -355,6 +367,10 @@
                     "type": "array",
                     "description": "File paths to create or update",
                     "format": "path",
+                    "items": {
+                        "type": "string",
+                        "format": "path"
+                    },
                     "required": true
                 }
             ],
@@ -429,6 +445,10 @@
                     "type": "array",
                     "description": "File paths to display",
                     "format": "path",
+                    "items": {
+                        "type": "string",
+                        "format": "path"
+                    },
                     "required": true
                 }
             ],
@@ -521,6 +541,10 @@
                     "type": "array",
                     "description": "File paths to display",
                     "format": "path",
+                    "items": {
+                        "type": "string",
+                        "format": "path"
+                    },
                     "required": true
                 }
             ],
@@ -561,6 +585,10 @@
                     "type": "array",
                     "description": "File paths to display",
                     "format": "path",
+                    "items": {
+                        "type": "string",
+                        "format": "path"
+                    },
                     "required": true
                 }
             ],

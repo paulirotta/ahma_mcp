@@ -30,7 +30,7 @@ async fn create_test_service() -> AhmaMcpService {
     let configs = Arc::new(tool_configs);
     let guidance = Arc::new(None::<GuidanceConfig>);
 
-    AhmaMcpService::new(adapter, operation_monitor, configs, guidance)
+    AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false)
         .await
         .unwrap()
 }
@@ -120,7 +120,7 @@ async fn test_mcp_service_with_tool_configs() {
     let configs = Arc::new(HashMap::new());
     let guidance = Arc::new(None::<GuidanceConfig>);
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance)
+    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false)
         .await
         .unwrap();
 

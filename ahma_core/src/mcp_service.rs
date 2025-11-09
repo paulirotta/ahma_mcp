@@ -34,21 +34,27 @@ use rmcp::{
     },
     service::{NotificationContext, Peer, RequestContext, RoleServer},
 };
-use serde_json::Map;
+use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::env;
-use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, RwLock,
+};
+use std::time::Duration;
 use tokio::time::Instant;
 use tracing;
 
 use crate::{
     adapter::Adapter,
-    config::{SubcommandConfig, ToolConfig},
-    operation_monitor::{Operation, OperationMonitor},
+    callback_system::CallbackSender,
+    config::{CommandOption, SequenceStep, SubcommandConfig, ToolConfig},
+    constants::SEQUENCE_STEP_DELAY_MS,
+    mcp_callback::McpCallbackSender,
+    operation_monitor::Operation,
 };
-use serde_json::Value;
+
+static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 /// Represents the structure of the guidance JSON file.
 #[derive(serde::Deserialize, Debug, Clone)]
@@ -71,9 +77,10 @@ pub struct LegacyGuidanceConfig {
 #[derive(Clone)]
 pub struct AhmaMcpService {
     pub adapter: Arc<Adapter>,
-    pub operation_monitor: Arc<OperationMonitor>,
+    pub operation_monitor: Arc<crate::operation_monitor::OperationMonitor>,
     pub configs: Arc<HashMap<String, ToolConfig>>,
     pub guidance: Arc<Option<GuidanceConfig>>,
+    pub force_synchronous: bool,
     /// The peer handle for sending notifications to the client.
     /// This is populated by capturing it from the first request context.
     pub peer: Arc<RwLock<Option<Peer<RoleServer>>>>,
@@ -83,15 +90,17 @@ impl AhmaMcpService {
     /// Creates a new `AhmaMcpService`.
     pub async fn new(
         adapter: Arc<Adapter>,
-        operation_monitor: Arc<OperationMonitor>,
+        operation_monitor: Arc<crate::operation_monitor::OperationMonitor>,
         configs: Arc<HashMap<String, ToolConfig>>,
         guidance: Arc<Option<GuidanceConfig>>,
+        force_synchronous: bool,
     ) -> Result<Self, anyhow::Error> {
         Ok(Self {
             adapter,
             operation_monitor,
             configs,
             guidance,
+            force_synchronous,
             peer: Arc::new(RwLock::new(None)),
         })
     }
@@ -123,6 +132,41 @@ impl AhmaMcpService {
         }
     }
 
+    fn normalize_option_type(option_type: &str) -> &'static str {
+        match option_type {
+            "bool" | "boolean" => "boolean",
+            "int" | "integer" => "integer",
+            "array" => "array",
+            "number" => "number",
+            "string" => "string",
+            _ => "string",
+        }
+    }
+
+    fn build_items_schema(option: &CommandOption) -> Map<String, Value> {
+        let mut items_schema = Map::new();
+
+        if let Some(spec) = option.items.as_ref() {
+            items_schema.insert("type".to_string(), Value::String(spec.item_type.clone()));
+            if let Some(format) = &spec.format {
+                items_schema.insert("format".to_string(), Value::String(format.clone()));
+            }
+            if let Some(description) = &spec.description {
+                items_schema.insert(
+                    "description".to_string(),
+                    Value::String(description.clone()),
+                );
+            }
+        } else {
+            items_schema.insert("type".to_string(), Value::String("string".to_string()));
+            if let Some(format) = &option.format {
+                items_schema.insert("format".to_string(), Value::String(format.clone()));
+            }
+        }
+
+        items_schema
+    }
+
     /// Generates the JSON schema for a subcommand's options.
     fn get_schema_for_options(
         &self,
@@ -131,39 +175,53 @@ impl AhmaMcpService {
         let mut properties = Map::new();
         let mut required = Vec::new();
 
-        let options = sub_config.options.as_deref().unwrap_or(&[]);
-        let positional_args = sub_config.positional_args.as_deref().unwrap_or(&[]);
-        let all_options = options.iter().chain(positional_args.iter());
+        if let Some(options) = sub_config.options.as_deref() {
+            for option in options {
+                let mut option_schema = Map::new();
+                let param_type = Self::normalize_option_type(&option.option_type);
+                option_schema.insert("type".to_string(), Value::String(param_type.to_string()));
+                if param_type == "array" {
+                    let items_schema = Self::build_items_schema(option);
+                    option_schema.insert("items".to_string(), Value::Object(items_schema));
+                }
+                option_schema.insert(
+                    "description".to_string(),
+                    Value::String(option.description.clone().unwrap_or_default()),
+                );
+                if let Some(format) = &option.format {
+                    option_schema.insert("format".to_string(), Value::String(format.clone()));
+                }
 
-        for option in all_options {
-            let mut option_schema = Map::new();
-            let param_type = match option.option_type.as_str() {
-                "bool" => "boolean",
-                "int" => "integer",
-                "string" => "string",
-                "array" => "array",
-                _ => "string",
-            };
-            option_schema.insert("type".to_string(), Value::String(param_type.to_string()));
-            if param_type == "array" {
-                let mut items_schema = Map::new();
-                items_schema.insert("type".to_string(), Value::String("string".to_string()));
-                option_schema.insert("items".to_string(), Value::Object(items_schema));
-            }
-            option_schema.insert(
-                "description".to_string(),
-                Value::String(option.description.clone()),
-            );
-            if let Some(format) = &option.format {
-                option_schema.insert("format".to_string(), Value::String(format.clone()));
-            }
+                properties.insert(option.name.clone(), Value::Object(option_schema));
 
-            properties.insert(option.name.clone(), Value::Object(option_schema));
-
-            if option.required.unwrap_or(false) {
-                required.push(Value::String(option.name.clone()));
+                if option.required.unwrap_or(false) {
+                    required.push(Value::String(option.name.clone()));
+                }
             }
         }
+
+        if let Some(positional_args) = sub_config.positional_args.as_deref() {
+            for arg in positional_args {
+                let mut arg_schema = Map::new();
+                let param_type = Self::normalize_option_type(&arg.option_type);
+                arg_schema.insert("type".to_string(), Value::String(param_type.to_string()));
+                if let Some(ref desc) = arg.description {
+                    arg_schema.insert("description".to_string(), Value::String(desc.clone()));
+                }
+                if let Some(ref format) = arg.format {
+                    arg_schema.insert("format".to_string(), Value::String(format.clone()));
+                }
+                if param_type == "array" {
+                    let items_schema = Self::build_items_schema(arg);
+                    arg_schema.insert("items".to_string(), Value::Object(items_schema));
+                }
+                properties.insert(arg.name.clone(), Value::Object(arg_schema));
+                if arg.required.unwrap_or(false) {
+                    required.push(Value::String(arg.name.clone()));
+                }
+            }
+        }
+
         (properties, required)
     }
 
@@ -317,7 +375,7 @@ impl AhmaMcpService {
 
         let mut current_subcommands = tool_config.subcommand.as_ref()?;
         let mut found_subcommand: Option<&SubcommandConfig> = None;
-        let command_parts = vec![tool_config.command.clone()];
+        let mut command_parts = vec![tool_config.command.clone()];
 
         for (i, part) in subcommand_parts.iter().enumerate() {
             tracing::debug!(
@@ -338,11 +396,9 @@ impl AhmaMcpService {
                     sub.enabled
                 );
 
-                // Don't add subcommand name to command_parts - the adapter will add it
-                // when preparing the actual command arguments
-                // if sub.name != "default" {
-                //     command_parts.push(sub.name.clone());
-                // }
+                if sub.name != "default" {
+                    command_parts.push(sub.name.clone());
+                }
 
                 if i == subcommand_parts.len() - 1 {
                     found_subcommand = Some(sub);
@@ -847,7 +903,7 @@ impl ServerHandler for AhmaMcpService {
 
             // Check if this is a sequence tool
             if config.sequence.is_some() {
-                return self.handle_sequence_tool(config, params).await;
+                return self.handle_sequence_tool(config, params, context).await;
             }
 
             let mut arguments = params.arguments.clone().unwrap_or_default();
@@ -895,250 +951,101 @@ impl ServerHandler for AhmaMcpService {
             // Check if the subcommand itself is a sequence
             if subcommand_config.sequence.is_some() {
                 return self
-                    .handle_subcommand_sequence(config, subcommand_config, params)
+                    .handle_subcommand_sequence(config, subcommand_config, params, context)
                     .await;
             }
 
             let base_command = command_parts.join(" ");
 
-            // SECURITY: Path validation
-            if let Some(ref args) = params.arguments {
-                for (key, value) in args.iter() {
-                    if let Some(options) = &subcommand_config.options {
-                        if let Some(option_config) = options.iter().find(|o| o.name == *key) {
-                            let format = option_config.format.as_deref();
-                            if format == Some("path") || format == Some("path-or-value") {
-                                if let Some(path_str) = value.as_str() {
-                                    if format == Some("path-or-value") && path_str.contains('=') {
-                                        continue;
-                                    }
-
-                                    let path_to_validate = Path::new(path_str);
-                                    let workspace_root = match env::current_dir() {
-                                        Ok(dir) => dir,
-                                        Err(e) => {
-                                            return Err(McpError::internal_error(
-                                                format!("Failed to get current directory: {}", e),
-                                                None,
-                                            ));
-                                        }
-                                    };
-
-                                    let canonical_workspace = match workspace_root.canonicalize() {
-                                        Ok(path) => path,
-                                        Err(e) => {
-                                            return Err(McpError::internal_error(
-                                                format!(
-                                                    "Failed to canonicalize workspace path: {}",
-                                                    e
-                                                ),
-                                                None,
-                                            ));
-                                        }
-                                    };
-
-                                    let canonical_path = match path_to_validate.canonicalize() {
-                                        Ok(p) => p,
-                                        Err(_) => path_to_validate.to_path_buf(),
-                                    };
-
-                                    if !canonical_path.starts_with(&canonical_workspace) {
-                                        let error_message = format!(
-                                            "Path validation failed for parameter '{}'. The path '{}' is outside the allowed workspace.",
-                                            key, path_str
-                                        );
-                                        tracing::error!("{}", error_message);
-                                        return Err(McpError::invalid_params(
-                                            error_message,
-                                            Some(
-                                                serde_json::json!({ "parameter": key, "path": path_str }),
-                                            ),
-                                        ));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            let is_synchronous = subcommand_config
-                .synchronous
-                .or(config.synchronous)
-                .unwrap_or(false);
-
-            let timeout = subcommand_config.timeout_seconds.or(config.timeout_seconds);
             let working_directory = arguments
                 .get("working_directory")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| ".".to_string());
 
-            // SECURITY: Validate working_directory stays within the workspace
-            // Resolve workspace root and compare canonical paths
-            let workspace_root = match env::current_dir() {
-                Ok(dir) => dir,
-                Err(e) => {
-                    return Err(McpError::internal_error(
-                        format!("Failed to get current directory: {}", e),
-                        None,
-                    ));
+            let timeout = arguments.get("timeout_seconds").and_then(|v| v.as_u64());
+
+            // Determine execution mode: first check explicit argument, then config, then default to async
+            let execution_mode = if self.force_synchronous {
+                crate::adapter::ExecutionMode::Synchronous
+            } else if let Some(mode_str) = arguments.get("execution_mode").and_then(|v| v.as_str())
+            {
+                match mode_str {
+                    "Synchronous" => crate::adapter::ExecutionMode::Synchronous,
+                    "AsyncResultPush" => crate::adapter::ExecutionMode::AsyncResultPush,
+                    _ => crate::adapter::ExecutionMode::AsyncResultPush, // Default
                 }
-            };
-            let canonical_workspace = match workspace_root.canonicalize() {
-                Ok(path) => path,
-                Err(e) => {
-                    return Err(McpError::internal_error(
-                        format!("Failed to canonicalize workspace path: {}", e),
-                        None,
-                    ));
-                }
-            };
-            let proposed_path = std::path::Path::new(&working_directory);
-            let resolved_working_dir = if proposed_path.is_absolute() {
-                proposed_path
-                    .canonicalize()
-                    .unwrap_or_else(|_| proposed_path.to_path_buf())
+            } else if subcommand_config.synchronous == Some(true) {
+                // Use synchronous mode if subcommand config specifies it
+                crate::adapter::ExecutionMode::Synchronous
             } else {
-                let joined = canonical_workspace.join(proposed_path);
-                joined.canonicalize().unwrap_or(joined)
+                // Default to async
+                crate::adapter::ExecutionMode::AsyncResultPush
             };
-            if !resolved_working_dir.starts_with(&canonical_workspace) {
-                let error_message = format!(
-                    "Working directory '{}' is outside the allowed workspace.",
-                    working_directory
-                );
-                tracing::error!("{}", error_message);
-                return Err(McpError::invalid_params(
-                    error_message,
-                    Some(serde_json::json!({
-                        "parameter": "working_directory",
-                        "path": working_directory
-                    })),
-                ));
-            }
 
-            tracing::info!(
-                "Executing tool '{}' (command: '{}') in directory '{}' with mode: {}",
-                tool_name,
-                base_command,
-                working_directory,
-                if is_synchronous {
-                    "synchronous"
-                } else {
-                    "asynchronous"
-                }
-            );
-
-            // Remove working_directory from arguments since it's handled by the framework
-            arguments.remove("working_directory");
-
-            if is_synchronous {
-                match self
-                    .adapter
-                    .execute_sync_in_dir(
-                        &base_command,
-                        Some(arguments),
-                        &working_directory,
-                        timeout,
-                        Some(subcommand_config),
-                    )
-                    .await
-                {
-                    Ok(output) => Ok(CallToolResult::success(vec![Content::text(output)])),
-                    Err(e) => {
-                        let error_message = format!("Error executing tool '{}': {}", tool_name, e);
-                        tracing::error!("{}", error_message);
-                        Err(McpError::internal_error(
-                            error_message,
-                            Some(serde_json::json!({ "details": e.to_string() })),
-                        ))
-                    }
-                }
-            } else {
-                static OPERATION_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
-                let op_id = OPERATION_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
-                let operation_id = format!("op_{}", op_id);
-
-                let peer = context.peer.clone();
-                let callback = Some(crate::mcp_callback::mcp_callback(
-                    peer.clone(),
-                    operation_id.clone(),
-                ));
-
-                let _returned_op_id = self
-                    .adapter
-                    .execute_async_in_dir_with_options(
-                        tool_name,
-                        &base_command,
-                        &working_directory,
-                        crate::adapter::AsyncExecOptions {
-                            operation_id: Some(operation_id.clone()),
-                            args: Some(arguments),
+            match execution_mode {
+                crate::adapter::ExecutionMode::Synchronous => {
+                    let result = self
+                        .adapter
+                        .execute_sync_in_dir(
+                            &base_command,
+                            Some(arguments),
+                            &working_directory,
                             timeout,
-                            callback,
-                            subcommand_config: Some(subcommand_config),
-                        },
-                    )
-                    .await;
+                            Some(subcommand_config),
+                        )
+                        .await;
 
-                tracing::info!(
-                    "Asynchronously started tool '{}' with operation ID '{}'",
-                    tool_name,
-                    operation_id
-                );
-
-                let peer = context.peer.clone();
-                let callback =
-                    crate::mcp_callback::mcp_callback(peer.clone(), operation_id.clone());
-
-                let operation_id_clone = operation_id.clone();
-                let tool_name_clone = tool_name.to_string();
-                let working_directory_clone = working_directory.clone();
-                tokio::spawn(async move {
-                    let started_notification = crate::callback_system::ProgressUpdate::Started {
-                        operation_id: operation_id_clone.clone(),
-                        command: tool_name_clone.clone(),
-                        description: format!(
-                            "Executing {} in {}",
-                            tool_name_clone, working_directory_clone
-                        ),
-                    };
-
-                    if let Err(e) = callback.send_progress(started_notification).await {
-                        tracing::error!(
-                            "Failed to send started notification for operation {}: {:?}",
-                            operation_id_clone,
-                            e
-                        );
-                    } else {
-                        tracing::info!(
-                            "Sent started notification for operation: {}",
-                            operation_id_clone
-                        );
-                    }
-                });
-
-                if self.peer.read().unwrap().is_none() {
-                    let mut peer_guard = self.peer.write().unwrap();
-                    if peer_guard.is_none() {
-                        *peer_guard = Some(peer.clone());
-                        tracing::info!("Captured MCP peer handle for async notifications");
+                    match result {
+                        Ok(output) => Ok(CallToolResult::success(vec![Content::text(output)])),
+                        Err(e) => {
+                            let error_message = format!("Synchronous execution failed: {}", e);
+                            tracing::error!("{}", error_message);
+                            Err(McpError::internal_error(error_message, None))
+                        }
                     }
                 }
+                crate::adapter::ExecutionMode::AsyncResultPush => {
+                    let operation_id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
+                    let callback: Box<dyn CallbackSender> = Box::new(McpCallbackSender::new(
+                        context.peer.clone(),
+                        operation_id.clone(),
+                    ));
 
-                Ok(CallToolResult::success(vec![Content::text(
-                serde_json::to_string(&serde_json::json!({
-                    "status": "started",
-                    "job_id": operation_id,
-                    "message": format!("Tool '{}' started asynchronously. You will be notified when it is complete.", tool_name)
-                }))
-                .unwrap(),
-            )]))
+                    let job_id = self
+                        .adapter
+                        .execute_async_in_dir_with_options(
+                            tool_name,
+                            &base_command,
+                            &working_directory,
+                            crate::adapter::AsyncExecOptions {
+                                operation_id: Some(operation_id),
+                                args: Some(arguments),
+                                timeout,
+                                callback: Some(callback),
+                                subcommand_config: Some(subcommand_config),
+                            },
+                        )
+                        .await;
+
+                    match job_id {
+                        Ok(id) => {
+                            let message = format!("Asynchronous operation started with ID: {}", id);
+                            Ok(CallToolResult::success(vec![Content::text(message)]))
+                        }
+                        Err(e) => {
+                            let error_message =
+                                format!("Failed to start asynchronous operation: {}", e);
+                            tracing::error!("{}", error_message);
+                            Err(McpError::internal_error(error_message, None))
+                        }
+                    }
+                }
             }
         }
     }
 }
+
 impl AhmaMcpService {
     /// Generates the specific input schema for the `await` tool.
     fn generate_input_schema_for_wait(&self) -> Arc<Map<String, Value>> {
@@ -1148,6 +1055,13 @@ impl AhmaMcpService {
             serde_json::json!({
                 "type": "string",
                 "description": "Comma-separated tool name prefixes to await for (optional; waits for all if omitted)"
+            }),
+        );
+        properties.insert(
+            "operation_id".to_string(),
+            serde_json::json!({
+                "type": "string",
+                "description": "Specific operation ID to await for (optional)"
             }),
         );
 
@@ -1186,179 +1100,93 @@ impl AhmaMcpService {
         &self,
         config: &crate::config::ToolConfig,
         params: CallToolRequestParam,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        let sequence = match &config.sequence {
-            Some(seq) => seq,
-            None => {
-                return Err(McpError::invalid_params(
-                    "Tool is not a sequence tool".to_string(),
-                    Some(serde_json::json!({ "tool": config.name })),
-                ));
-            }
-        };
-
-        let step_delay_ms = config
-            .step_delay_ms
-            .unwrap_or(crate::constants::SEQUENCE_STEP_DELAY_MS);
-
-        let args = params.arguments.unwrap_or_default();
-        let working_directory = args
-            .get("working_directory")
-            .and_then(|v| v.as_str())
-            .unwrap_or(".");
-
-        tracing::info!(
-            "🔗 Executing sequence tool '{}' with {} steps (delay: {}ms)",
-            config.name,
-            sequence.len(),
-            step_delay_ms
-        );
-
-        let mut results = Vec::new();
-        let mut all_outputs = Vec::new();
+        let sequence = config.sequence.as_ref().unwrap(); // Safe due to prior check
+        let step_delay_ms = config.step_delay_ms.unwrap_or(SEQUENCE_STEP_DELAY_MS);
+        let mut final_result = CallToolResult::success(vec![]);
 
         for (index, step) in sequence.iter().enumerate() {
-            let step_num = index + 1;
-            let default_desc = format!("{} -> {}", step.tool, step.subcommand);
-            let step_desc = step.description.as_deref().unwrap_or(&default_desc);
+            if Self::should_skip_sequence_tool_step(&step.tool) {
+                let message = Self::format_sequence_step_skipped_message(step);
+                final_result.content.push(Content::text(message));
+                continue;
+            }
+            let mut step_params = params.clone();
+            step_params.name = step.tool.clone().into();
 
-            tracing::info!(
-                "  Step {}/{}: {} ({})",
-                step_num,
-                sequence.len(),
-                step_desc,
-                step.tool
-            );
+            // Allow arguments to be overridden by the sequence step
+            let mut merged_args = params.arguments.clone().unwrap_or_default();
+            merged_args.extend(step.args.clone());
+            step_params.arguments = Some(merged_args);
 
-            // Execute this step by looking up the tool and calling it
-            let step_config = match self.configs.get(&step.tool) {
+            let step_tool_config = match self.configs.get(&step.tool) {
                 Some(cfg) => cfg,
                 None => {
-                    let error_msg = format!(
-                        "Sequence step {}/{} failed: Tool '{}' not found",
-                        step_num,
-                        sequence.len(),
+                    let error_message = format!(
+                        "Tool '{}' referenced in sequence step is not configured.",
                         step.tool
                     );
-                    tracing::error!("{}", error_msg);
-                    results.push(format!("❌ {}", error_msg));
-                    all_outputs.push(error_msg.clone());
-                    return Ok(CallToolResult::success(vec![Content::text(
-                        all_outputs.join("\n\n"),
-                    )]));
+                    return Err(McpError::internal_error(error_message, None));
                 }
             };
 
-            if !step_config.enabled {
-                let error_msg = format!(
-                    "Sequence step {}/{} failed: Tool '{}' is disabled (availability probe failed)",
-                    step_num,
-                    sequence.len(),
-                    step.tool
-                );
-                tracing::error!("{}", error_msg);
-                results.push(format!("❌ {}", error_msg));
-                all_outputs.push(error_msg.clone());
-                return Ok(CallToolResult::success(vec![Content::text(
-                    all_outputs.join("\n\n"),
-                )]));
-            }
-
-            // Find the subcommand config
             let (subcommand_config, command_parts) = match self
-                .find_subcommand_config_from_args(step_config, Some(step.subcommand.clone()))
+                .find_subcommand_config_from_args(step_tool_config, Some(step.subcommand.clone()))
             {
                 Some(result) => result,
                 None => {
-                    let error_msg = format!(
-                        "Sequence step {}/{} failed: Subcommand '{}' not found in tool '{}'",
-                        step_num,
-                        sequence.len(),
-                        step.subcommand,
-                        step.tool
+                    let error_message = format!(
+                        "Subcommand '{}' for tool '{}' not found in sequence step.",
+                        step.subcommand, step.tool
                     );
-                    tracing::error!("{}", error_msg);
-                    results.push(format!("❌ {}", error_msg));
-                    all_outputs.push(error_msg.clone());
-                    return Ok(CallToolResult::success(vec![Content::text(
-                        all_outputs.join("\n\n"),
-                    )]));
+                    return Err(McpError::internal_error(error_message, None));
                 }
             };
 
-            let base_command = command_parts.join(" ");
-            let mut step_arguments = step.args.clone();
-            step_arguments.remove("working_directory");
-            step_arguments.remove("subcommand");
+            let operation_id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
+            let callback: Box<dyn CallbackSender> = Box::new(McpCallbackSender::new(
+                context.peer.clone(),
+                operation_id.clone(),
+            ));
 
-            // Execute synchronously
-            let timeout = subcommand_config
-                .timeout_seconds
-                .or(step_config.timeout_seconds);
-
-            match self
+            let step_result = self
                 .adapter
-                .execute_sync_in_dir(
-                    &base_command,
-                    Some(step_arguments),
-                    working_directory,
-                    timeout,
-                    Some(subcommand_config),
+                .execute_async_in_dir_with_options(
+                    &step.tool,
+                    &command_parts.join(" "),
+                    ".", // Assuming current directory for now
+                    crate::adapter::AsyncExecOptions {
+                        operation_id: Some(operation_id),
+                        args: step_params.arguments,
+                        timeout: None, // Add timeout logic if needed
+                        callback: Some(callback),
+                        subcommand_config: Some(subcommand_config),
+                    },
                 )
-                .await
-            {
-                Ok(output) => {
-                    let success_msg =
-                        format!("✓ Step {}/{}: {}", step_num, sequence.len(), step_desc);
-                    tracing::info!("  {}", success_msg);
-                    results.push(success_msg);
+                .await;
 
-                    // Include the output
-                    let formatted_output = format!(
-                        "--- Step {}/{}: {} ---\n{}\n",
-                        step_num,
-                        sequence.len(),
-                        step_desc,
-                        output
-                    );
-                    all_outputs.push(formatted_output);
+            match step_result {
+                Ok(id) => {
+                    let message = Self::format_sequence_step_message(step, &id);
+                    final_result.content.push(Content::text(message));
                 }
                 Err(e) => {
-                    let error_msg = format!(
-                        "❌ Step {}/{} failed: {}\nError: {}",
-                        step_num,
-                        sequence.len(),
-                        step_desc,
-                        e
+                    let error_message = format!(
+                        "Sequence step '{}' failed to start: {}. Halting sequence.",
+                        step.tool, e
                     );
-                    tracing::error!("  {}", error_msg);
-                    results.push(error_msg.clone());
-                    all_outputs.push(error_msg);
-
-                    // Stop on first error
-                    break;
+                    tracing::error!("{}", error_message);
+                    return Err(McpError::internal_error(error_message, None));
                 }
             }
 
-            // Apply delay between steps (but not after the last one)
-            if index < sequence.len() - 1 {
-                tracing::debug!("  Waiting {}ms before next step...", step_delay_ms);
-                tokio::time::sleep(std::time::Duration::from_millis(step_delay_ms)).await;
+            if step_delay_ms > 0 && index + 1 < sequence.len() {
+                tokio::time::sleep(Duration::from_millis(step_delay_ms)).await;
             }
         }
 
-        // Create final summary
-        let summary = format!(
-            "🔗 Sequence '{}' completed: {} steps\n{}\n\n{}",
-            config.name,
-            sequence.len(),
-            results.join("\n"),
-            all_outputs.join("\n")
-        );
-
-        tracing::info!("✓ Sequence tool '{}' completed", config.name);
-
-        Ok(CallToolResult::success(vec![Content::text(summary)]))
+        Ok(final_result)
     }
 
     /// Handles execution of subcommand sequences - subcommands that invoke multiple cargo commands in order.
@@ -1367,192 +1195,160 @@ impl AhmaMcpService {
         config: &crate::config::ToolConfig,
         subcommand_config: &crate::config::SubcommandConfig,
         params: CallToolRequestParam,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        let sequence = match &subcommand_config.sequence {
-            Some(seq) => seq,
-            None => {
-                return Err(McpError::invalid_params(
-                    "Subcommand is not a sequence".to_string(),
-                    Some(
-                        serde_json::json!({ "tool": config.name, "subcommand": subcommand_config.name }),
-                    ),
-                ));
-            }
-        };
-
+        let sequence: &Vec<SequenceStep> = subcommand_config.sequence.as_ref().unwrap(); // Safe due to prior check
         let step_delay_ms = subcommand_config
             .step_delay_ms
-            .unwrap_or(crate::constants::SEQUENCE_STEP_DELAY_MS);
-
-        let args = params.arguments.unwrap_or_default();
-        let working_directory = args
-            .get("working_directory")
-            .and_then(|v| v.as_str())
-            .unwrap_or(".");
-
-        tracing::info!(
-            "🔗 Executing subcommand sequence '{} {}' with {} steps (delay: {}ms)",
-            config.name,
-            subcommand_config.name,
-            sequence.len(),
-            step_delay_ms
-        );
-
-        let mut results = Vec::new();
-        let mut all_outputs = Vec::new();
+            .or(config.step_delay_ms)
+            .unwrap_or(SEQUENCE_STEP_DELAY_MS);
+        let mut final_result = CallToolResult::success(vec![]);
 
         for (index, step) in sequence.iter().enumerate() {
-            let step_num = index + 1;
-            let default_desc = format!("{} -> {}", step.tool, step.subcommand);
-            let step_desc = step.description.as_deref().unwrap_or(&default_desc);
-
-            tracing::info!(
-                "  Step {}/{}: {} ({})",
-                step_num,
-                sequence.len(),
-                step_desc,
-                step.tool
-            );
-
-            // Execute this step by looking up the tool and calling it
-            let step_config = match self.configs.get(&step.tool) {
-                Some(cfg) => cfg,
-                None => {
-                    let error_msg = format!(
-                        "Sequence step {}/{} failed: Tool '{}' not found",
-                        step_num,
-                        sequence.len(),
-                        step.tool
-                    );
-                    tracing::error!("{}", error_msg);
-                    results.push(format!("❌ {}", error_msg));
-                    all_outputs.push(error_msg.clone());
-                    return Ok(CallToolResult::success(vec![Content::text(
-                        all_outputs.join("\n\n"),
-                    )]));
-                }
-            };
-
-            if !step_config.enabled {
-                let error_msg = format!(
-                    "Sequence step {}/{} failed: Tool '{}' is disabled (availability probe failed)",
-                    step_num,
-                    sequence.len(),
-                    step.tool
-                );
-                tracing::error!("{}", error_msg);
-                results.push(format!("❌ {}", error_msg));
-                all_outputs.push(error_msg.clone());
-                return Ok(CallToolResult::success(vec![Content::text(
-                    all_outputs.join("\n\n"),
-                )]));
+            if Self::should_skip_sequence_subcommand_step(&step.subcommand) {
+                let message = Self::format_subcommand_sequence_step_skipped_message(step);
+                final_result.content.push(Content::text(message));
+                continue;
             }
-
-            // Find the subcommand config
-            let (step_subcommand_config, command_parts) = match self
-                .find_subcommand_config_from_args(step_config, Some(step.subcommand.clone()))
+            let (step_config, command_parts) = match self
+                .find_subcommand_config_from_args(config, Some(step.subcommand.clone()))
             {
                 Some(result) => result,
                 None => {
-                    let error_msg = format!(
-                        "Sequence step {}/{} failed: Subcommand '{}' not found in tool '{}'",
-                        step_num,
-                        sequence.len(),
-                        step.subcommand,
-                        step.tool
+                    let error_message = format!(
+                        "Subcommand sequence step '{}' not found in tool config. Halting sequence.",
+                        step.subcommand
                     );
-                    tracing::error!("{}", error_msg);
-                    results.push(format!("❌ {}", error_msg));
-                    all_outputs.push(error_msg.clone());
-                    return Ok(CallToolResult::success(vec![Content::text(
-                        all_outputs.join("\n\n"),
-                    )]));
+                    tracing::error!("{}", error_message);
+                    return Err(McpError::internal_error(error_message, None));
                 }
             };
 
-            let base_command = command_parts.join(" ");
-            let mut step_arguments = step.args.clone();
-            step_arguments.remove("working_directory");
-            step_arguments.remove("subcommand");
+            let operation_id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
+            let callback: Box<dyn CallbackSender> = Box::new(McpCallbackSender::new(
+                context.peer.clone(),
+                operation_id.clone(),
+            ));
 
-            // Execute synchronously
-            let timeout = step_subcommand_config
-                .timeout_seconds
-                .or(step_config.timeout_seconds);
-
-            match self
+            let step_result = self
                 .adapter
-                .execute_sync_in_dir(
-                    &base_command,
-                    Some(step_arguments),
-                    working_directory,
-                    timeout,
-                    Some(step_subcommand_config),
+                .execute_async_in_dir_with_options(
+                    &config.name,
+                    &command_parts.join(" "),
+                    ".",
+                    crate::adapter::AsyncExecOptions {
+                        operation_id: Some(operation_id),
+                        args: params.arguments.clone(),
+                        timeout: None,
+                        callback: Some(callback),
+                        subcommand_config: Some(step_config),
+                    },
                 )
-                .await
-            {
-                Ok(output) => {
-                    let success_msg =
-                        format!("✓ Step {}/{}: {}", step_num, sequence.len(), step_desc);
-                    tracing::info!("  {}", success_msg);
-                    results.push(success_msg);
+                .await;
 
-                    // Include the output
-                    let formatted_output = format!(
-                        "--- Step {}/{}: {} ---\n{}\n",
-                        step_num,
-                        sequence.len(),
-                        step_desc,
-                        output
-                    );
-                    all_outputs.push(formatted_output);
+            match step_result {
+                Ok(id) => {
+                    let message = Self::format_subcommand_sequence_step_message(step, &id);
+                    final_result.content.push(Content::text(message));
                 }
                 Err(e) => {
-                    let error_msg = format!(
-                        "❌ Step {}/{} failed: {}\nError: {}",
-                        step_num,
-                        sequence.len(),
-                        step_desc,
-                        e
+                    let error_message = format!(
+                        "Subcommand sequence step '{}' failed to start: {}. Halting sequence.",
+                        step.subcommand, e
                     );
-                    tracing::error!("  {}", error_msg);
-                    results.push(error_msg.clone());
-                    all_outputs.push(error_msg);
-
-                    // Stop on first error
-                    break;
+                    tracing::error!("{}", error_message);
+                    return Err(McpError::internal_error(error_message, None));
                 }
             }
 
-            // Apply delay between steps (but not after the last one)
-            if index < sequence.len() - 1 {
-                tracing::debug!("  Waiting {}ms before next step...", step_delay_ms);
-                tokio::time::sleep(std::time::Duration::from_millis(step_delay_ms)).await;
+            if step_delay_ms > 0 && index + 1 < sequence.len() {
+                tokio::time::sleep(Duration::from_millis(step_delay_ms)).await;
             }
         }
 
-        // Create final summary
-        let summary = format!(
-            "🔗 Subcommand sequence '{} {}' completed: {} steps\n{}\n\n{}",
-            config.name,
-            subcommand_config.name,
-            sequence.len(),
-            results.join("\n"),
-            all_outputs.join("\n")
-        );
+        Ok(final_result)
+    }
 
-        tracing::info!(
-            "✓ Subcommand sequence '{} {}' completed",
-            config.name,
-            subcommand_config.name
-        );
+    fn format_sequence_step_message(step: &SequenceStep, operation_id: &str) -> String {
+        match step.description.as_deref() {
+            Some(description) if !description.is_empty() => format!(
+                "Sequence step '{}' ({}) started with operation ID: {}",
+                step.tool, description, operation_id
+            ),
+            _ => format!(
+                "Sequence step '{}' started with operation ID: {}",
+                step.tool, operation_id
+            ),
+        }
+    }
 
-        Ok(CallToolResult::success(vec![Content::text(summary)]))
+    fn format_subcommand_sequence_step_message(step: &SequenceStep, operation_id: &str) -> String {
+        match step.description.as_deref() {
+            Some(description) if !description.is_empty() => format!(
+                "Subcommand sequence step '{}' ({}) started with ID: {}",
+                step.subcommand, description, operation_id
+            ),
+            _ => format!(
+                "Subcommand sequence step '{}' started with ID: {}",
+                step.subcommand, operation_id
+            ),
+        }
+    }
+
+    fn format_sequence_step_skipped_message(step: &SequenceStep) -> String {
+        match step.description.as_deref() {
+            Some(description) if !description.is_empty() => format!(
+                "Sequence step '{}' ({}) skipped due to environment override.",
+                step.tool, description
+            ),
+            _ => format!(
+                "Sequence step '{}' skipped due to environment override.",
+                step.tool
+            ),
+        }
+    }
+
+    fn format_subcommand_sequence_step_skipped_message(step: &SequenceStep) -> String {
+        match step.description.as_deref() {
+            Some(description) if !description.is_empty() => format!(
+                "Subcommand sequence step '{}' ({}) skipped due to environment override.",
+                step.subcommand, description
+            ),
+            _ => format!(
+                "Subcommand sequence step '{}' skipped due to environment override.",
+                step.subcommand
+            ),
+        }
+    }
+
+    fn should_skip_sequence_tool_step(tool: &str) -> bool {
+        Self::env_list_contains("AHMA_SKIP_SEQUENCE_TOOLS", tool)
+    }
+
+    fn should_skip_sequence_subcommand_step(subcommand: &str) -> bool {
+        Self::env_list_contains("AHMA_SKIP_SEQUENCE_SUBCOMMANDS", subcommand)
+    }
+
+    fn env_list_contains(env_key: &str, value: &str) -> bool {
+        match env::var(env_key) {
+            Ok(list) => list
+                .split(',')
+                .map(|entry| entry.trim())
+                .filter(|entry| !entry.is_empty())
+                .any(|entry| entry.eq_ignore_ascii_case(value)),
+            Err(_) => false,
+        }
     }
 
     /// Handles the 'await' tool call.
     async fn handle_await(&self, params: CallToolRequestParam) -> Result<CallToolResult, McpError> {
         let args = params.arguments.unwrap_or_default();
+
+        // Check if a specific operation_id is provided
+        let operation_id_filter: Option<String> = args
+            .get("operation_id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
 
         // Parse tools parameter as comma-separated string
         let tool_filters: Vec<String> = if let Some(v) = args.get("tools") {
@@ -1568,267 +1364,341 @@ impl AhmaMcpService {
             Vec::new()
         };
 
-        // Always use intelligent timeout calculation (no user-provided timeout parameter)
-        let timeout_seconds = self.calculate_intelligent_timeout(&tool_filters).await;
-        let timeout_duration = std::time::Duration::from_secs(timeout_seconds as u64);
+        // If operation_id is specified, wait for that specific operation
+        if let Some(op_id) = operation_id_filter {
+            // Check if operation exists
+            let operation = self.operation_monitor.get_operation(&op_id).await;
 
-        // Build from pending ops, optionally filtered by tools
-        let pending_ops: Vec<Operation> = self
-            .operation_monitor
-            .get_all_active_operations()
-            .await
-            .into_iter()
-            .filter(|op| {
-                if op.state.is_terminal() {
-                    return false;
-                }
-                if tool_filters.is_empty() {
-                    true
+            if operation.is_none() {
+                // Check if it's in completed operations
+                let completed_ops = self.operation_monitor.get_completed_operations().await;
+                if let Some(completed_op) = completed_ops.iter().find(|op| op.id == op_id) {
+                    // Operation already completed
+                    let mut contents = Vec::new();
+                    contents.push(Content::text(format!(
+                        "Operation {} already completed",
+                        op_id
+                    )));
+                    match serde_json::to_string_pretty(completed_op) {
+                        Ok(s) => contents.push(Content::text(s)),
+                        Err(e) => tracing::error!("Serialization error: {}", e),
+                    }
+                    return Ok(CallToolResult::success(contents));
                 } else {
-                    tool_filters.iter().any(|tn| op.tool_name.starts_with(tn))
+                    return Ok(CallToolResult::success(vec![Content::text(format!(
+                        "Operation {} not found",
+                        op_id
+                    ))]));
                 }
-            })
-            .collect();
+            }
 
-        if pending_ops.is_empty() {
-            let completed_ops = self.operation_monitor.get_completed_operations().await;
-            let relevant_completed: Vec<Operation> = completed_ops
+            // Wait for the specific operation
+            tracing::info!("Waiting for operation: {}", op_id);
+
+            // Use a reasonable timeout (e.g., 5 minutes)
+            let timeout_duration = std::time::Duration::from_secs(300);
+            let wait_start = Instant::now();
+
+            let wait_result = tokio::time::timeout(
+                timeout_duration,
+                self.operation_monitor.wait_for_operation(&op_id),
+            )
+            .await;
+
+            match wait_result {
+                Ok(Some(completed_op)) => {
+                    let elapsed = wait_start.elapsed();
+                    let mut contents = vec![Content::text(format!(
+                        "Completed 1 operations in {:.2}s",
+                        elapsed.as_secs_f64()
+                    ))];
+                    match serde_json::to_string_pretty(&completed_op) {
+                        Ok(s) => contents.push(Content::text(s)),
+                        Err(e) => tracing::error!("Serialization error: {}", e),
+                    }
+                    Ok(CallToolResult::success(contents))
+                }
+                Ok(None) => Ok(CallToolResult::success(vec![Content::text(format!(
+                    "Operation {} completed but no result available",
+                    op_id
+                ))])),
+                Err(_) => Ok(CallToolResult::success(vec![Content::text(format!(
+                    "Timeout waiting for operation {}",
+                    op_id
+                ))])),
+            }
+        } else {
+            // Original behavior: wait for operations by tool filter
+            // Always use intelligent timeout calculation (no user-provided timeout parameter)
+            let timeout_seconds = self.calculate_intelligent_timeout(&tool_filters).await;
+            let timeout_duration = std::time::Duration::from_secs(timeout_seconds as u64);
+
+            // Build from pending ops, optionally filtered by tools
+            let pending_ops: Vec<Operation> = self
+                .operation_monitor
+                .get_all_active_operations()
+                .await
                 .into_iter()
                 .filter(|op| {
+                    if op.state.is_terminal() {
+                        return false;
+                    }
                     if tool_filters.is_empty() {
-                        false
+                        true
                     } else {
                         tool_filters.iter().any(|tn| op.tool_name.starts_with(tn))
                     }
                 })
                 .collect();
 
-            if !relevant_completed.is_empty() {
-                let mut contents = Vec::new();
-                contents.push(Content::text(format!(
+            if pending_ops.is_empty() {
+                let completed_ops = self.operation_monitor.get_completed_operations().await;
+                let relevant_completed: Vec<Operation> = completed_ops
+                    .into_iter()
+                    .filter(|op| {
+                        if tool_filters.is_empty() {
+                            false
+                        } else {
+                            tool_filters.iter().any(|tn| op.tool_name.starts_with(tn))
+                        }
+                    })
+                    .collect();
+
+                if !relevant_completed.is_empty() {
+                    let mut contents = Vec::new();
+                    contents.push(Content::text(format!(
                     "No pending operations for tools: {}. However, these operations recently completed:",
                     tool_filters.join(", ")
                 )));
-                for op in relevant_completed {
-                    match serde_json::to_string_pretty(&op) {
+                    for op in relevant_completed {
+                        match serde_json::to_string_pretty(&op) {
+                            Ok(s) => contents.push(Content::text(s)),
+                            Err(e) => tracing::error!("Serialization error: {}", e),
+                        }
+                    }
+                    return Ok(CallToolResult::success(contents));
+                }
+
+                return Ok(CallToolResult::success(vec![Content::text(
+                    if tool_filters.is_empty() {
+                        "No pending operations to await for.".to_string()
+                    } else {
+                        format!(
+                            "No pending operations for tools: {}",
+                            tool_filters.join(", ")
+                        )
+                    },
+                )]));
+            }
+
+            tracing::info!(
+                "Waiting for {} pending operations (timeout: {}s): {:?}",
+                pending_ops.len(),
+                timeout_seconds,
+                pending_ops.iter().map(|op| &op.id).collect::<Vec<_>>()
+            );
+
+            let wait_start = Instant::now();
+            let (warning_tx, mut warning_rx) = tokio::sync::mpsc::unbounded_channel();
+
+            let warning_task = {
+                let warning_tx = warning_tx.clone();
+                let timeout_secs = timeout_seconds;
+                tokio::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs_f64(timeout_secs * 0.5))
+                        .await;
+                    let _ = warning_tx.send(format!(
+                        "Wait operation 50% complete ({:.0}s remaining)",
+                        timeout_secs * 0.5
+                    ));
+                    tokio::time::sleep(std::time::Duration::from_secs_f64(timeout_secs * 0.25))
+                        .await;
+                    let _ = warning_tx.send(format!(
+                        "Wait operation 75% complete ({:.0}s remaining)",
+                        timeout_secs * 0.25
+                    ));
+                    tokio::time::sleep(std::time::Duration::from_secs_f64(timeout_secs * 0.15))
+                        .await;
+                    let _ = warning_tx.send(format!(
+                        "Wait operation 90% complete ({:.0}s remaining)",
+                        timeout_secs * 0.1
+                    ));
+                })
+            };
+
+            let wait_result = tokio::time::timeout(timeout_duration, async {
+                let mut contents = Vec::new();
+                let mut futures = Vec::new();
+                for op in &pending_ops {
+                    futures.push(self.operation_monitor.wait_for_operation(&op.id));
+                }
+
+                let results = futures::future::join_all(futures).await;
+
+                for done in results.into_iter().flatten() {
+                    match serde_json::to_string_pretty(&done) {
                         Ok(s) => contents.push(Content::text(s)),
                         Err(e) => tracing::error!("Serialization error: {}", e),
                     }
                 }
-                return Ok(CallToolResult::success(contents));
-            }
-
-            return Ok(CallToolResult::success(vec![Content::text(
-                if tool_filters.is_empty() {
-                    "No pending operations to await for.".to_string()
-                } else {
-                    format!(
-                        "No pending operations for tools: {}",
-                        tool_filters.join(", ")
-                    )
-                },
-            )]));
-        }
-
-        tracing::info!(
-            "Waiting for {} pending operations (timeout: {}s): {:?}",
-            pending_ops.len(),
-            timeout_seconds,
-            pending_ops.iter().map(|op| &op.id).collect::<Vec<_>>()
-        );
-
-        let wait_start = Instant::now();
-        let (warning_tx, mut warning_rx) = tokio::sync::mpsc::unbounded_channel();
-
-        let warning_task = {
-            let warning_tx = warning_tx.clone();
-            let timeout_secs = timeout_seconds;
-            tokio::spawn(async move {
-                tokio::time::sleep(std::time::Duration::from_secs_f64(timeout_secs * 0.5)).await;
-                let _ = warning_tx.send(format!(
-                    "Wait operation 50% complete ({:.0}s remaining)",
-                    timeout_secs * 0.5
-                ));
-                tokio::time::sleep(std::time::Duration::from_secs_f64(timeout_secs * 0.25)).await;
-                let _ = warning_tx.send(format!(
-                    "Wait operation 75% complete ({:.0}s remaining)",
-                    timeout_secs * 0.25
-                ));
-                tokio::time::sleep(std::time::Duration::from_secs_f64(timeout_secs * 0.15)).await;
-                let _ = warning_tx.send(format!(
-                    "Wait operation 90% complete ({:.0}s remaining)",
-                    timeout_secs * 0.1
-                ));
+                contents
             })
-        };
+            .await;
 
-        let wait_result = tokio::time::timeout(timeout_duration, async {
-            let mut contents = Vec::new();
-            let mut futures = Vec::new();
-            for op in &pending_ops {
-                futures.push(self.operation_monitor.wait_for_operation(&op.id));
+            warning_task.abort();
+            while let Ok(warning) = warning_rx.try_recv() {
+                tracing::info!("Wait progress: {}", warning);
             }
 
-            let results = futures::future::join_all(futures).await;
+            match wait_result {
+                Ok(contents) => {
+                    let elapsed = wait_start.elapsed();
+                    if !contents.is_empty() {
+                        let mut result_contents = vec![Content::text(format!(
+                            "Completed {} operations in {:.2}s",
+                            contents.len(),
+                            elapsed.as_secs_f64()
+                        ))];
 
-            for done in results.into_iter().flatten() {
-                match serde_json::to_string_pretty(&done) {
-                    Ok(s) => contents.push(Content::text(s)),
-                    Err(e) => tracing::error!("Serialization error: {}", e),
+                        result_contents.extend(contents);
+                        Ok(CallToolResult::success(result_contents))
+                    } else {
+                        let result_contents = vec![Content::text(
+                            "No operations completed within timeout period".to_string(),
+                        )];
+
+                        Ok(CallToolResult::success(result_contents))
+                    }
                 }
-            }
-            contents
-        })
-        .await;
+                Err(_) => {
+                    let elapsed = wait_start.elapsed();
+                    let still_running: Vec<Operation> = self
+                        .operation_monitor
+                        .get_all_active_operations()
+                        .await
+                        .into_iter()
+                        .filter(|op| !op.state.is_terminal())
+                        .collect();
+                    let completed_during_wait = pending_ops.len() - still_running.len();
 
-        warning_task.abort();
-        while let Ok(warning) = warning_rx.try_recv() {
-            tracing::info!("Wait progress: {}", warning);
-        }
-
-        match wait_result {
-            Ok(contents) => {
-                let elapsed = wait_start.elapsed();
-                if !contents.is_empty() {
-                    let mut result_contents = vec![Content::text(format!(
-                        "Completed {} operations in {:.2}s",
-                        contents.len(),
-                        elapsed.as_secs_f64()
-                    ))];
-
-                    result_contents.extend(contents);
-                    Ok(CallToolResult::success(result_contents))
-                } else {
-                    let result_contents = vec![Content::text(
-                        "No operations completed within timeout period".to_string(),
-                    )];
-
-                    Ok(CallToolResult::success(result_contents))
-                }
-            }
-            Err(_) => {
-                let elapsed = wait_start.elapsed();
-                let still_running: Vec<Operation> = self
-                    .operation_monitor
-                    .get_all_active_operations()
-                    .await
-                    .into_iter()
-                    .filter(|op| !op.state.is_terminal())
-                    .collect();
-                let completed_during_wait = pending_ops.len() - still_running.len();
-                let mut remediation_steps = Vec::new();
-                let lock_patterns = vec![
-                    ".cargo-lock",
-                    ".lock",
-                    "package-lock.json",
-                    "yarn.lock",
-                    ".npm-lock",
-                    "composer.lock",
-                    "Pipfile.lock",
-                    ".bundle-lock",
-                ];
-                for dir in &["target", "node_modules", ".cargo", "tmp", "temp"] {
-                    if let Ok(entries) = std::fs::read_dir(dir) {
-                        for entry in entries.flatten() {
-                            if let Some(name) = entry.file_name().to_str() {
-                                for pattern in &lock_patterns {
-                                    if name.contains(pattern) {
-                                        remediation_steps.push(format!(
-                                            "• Remove potential stale lock file: rm {}/{}",
-                                            dir, name
-                                        ));
-                                        break;
+                    let mut remediation_steps = Vec::new();
+                    let lock_patterns = vec![
+                        ".cargo-lock",
+                        ".lock",
+                        "package-lock.json",
+                        "yarn.lock",
+                        ".npm-lock",
+                        "composer.lock",
+                        "Pipfile.lock",
+                        ".bundle-lock",
+                    ];
+                    for dir in &["target", "node_modules", ".cargo", "tmp", "temp"] {
+                        if let Ok(entries) = std::fs::read_dir(dir) {
+                            for entry in entries.flatten() {
+                                if let Some(name) = entry.file_name().to_str() {
+                                    for pattern in &lock_patterns {
+                                        if name.contains(pattern) {
+                                            remediation_steps.push(format!(
+                                                "• Remove potential stale lock file: rm {}/{}",
+                                                dir, name
+                                            ));
+                                            break;
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
-                if std::fs::metadata(".").is_ok() {
-                    remediation_steps.push("• Check available disk space: df -h .".to_string());
-                }
-                let running_commands: std::collections::HashSet<String> = still_running
-                    .iter()
-                    .map(|op| {
-                        op.tool_name
-                            .split('_')
-                            .next()
-                            .unwrap_or(&op.tool_name)
-                            .to_string()
-                    })
-                    .collect();
-                for cmd in &running_commands {
-                    remediation_steps.push(format!(
-                        "• Check for competing {} processes: ps aux | grep {}",
-                        cmd, cmd
-                    ));
-                }
-                let network_keywords = [
-                    "audit", "update", "search", "add", "install", "fetch", "clone", "pull",
-                    "push", "download", "upload", "sync",
-                ];
-                let has_network_ops = still_running.iter().any(|op| {
-                    network_keywords
+                    if std::fs::metadata(".").is_ok() {
+                        remediation_steps.push("• Check available disk space: df -h .".to_string());
+                    }
+                    let running_commands: std::collections::HashSet<String> = still_running
                         .iter()
-                        .any(|keyword| op.tool_name.contains(keyword))
-                });
-                if has_network_ops {
-                    remediation_steps.push(
+                        .map(|op| {
+                            op.tool_name
+                                .split('_')
+                                .next()
+                                .unwrap_or(&op.tool_name)
+                                .to_string()
+                        })
+                        .collect();
+                    for cmd in &running_commands {
+                        remediation_steps.push(format!(
+                            "• Check for competing {} processes: ps aux | grep {}",
+                            cmd, cmd
+                        ));
+                    }
+                    let network_keywords = [
+                        "network", "http", "https", "tcp", "udp", "socket", "curl", "wget", "git",
+                        "api", "rest", "graphql", "rpc", "ssh", "ftp", "scp", "rsync", "net",
+                        "audit", "update", "search", "add", "install", "fetch", "clone", "pull",
+                        "push", "download", "upload", "sync",
+                    ];
+                    let has_network_ops = still_running.iter().any(|op| {
+                        network_keywords
+                            .iter()
+                            .any(|keyword| op.tool_name.contains(keyword))
+                    });
+                    if has_network_ops {
+                        remediation_steps.push(
                         "• Network operations detected - check internet connection: ping 8.8.8.8"
                             .to_string(),
                     );
-                    remediation_steps
-                        .push("• Try running with offline flags if tool supports them".to_string());
-                }
-                let build_keywords = [
-                    "build", "compile", "test", "lint", "clippy", "format", "check", "verify",
-                    "validate", "analyze",
-                ];
-                let has_build_ops = still_running.iter().any(|op| {
-                    build_keywords
-                        .iter()
-                        .any(|keyword| op.tool_name.contains(keyword))
-                });
-                if has_build_ops {
-                    remediation_steps.push("• Build/compile operations can take time - consider increasing timeout_seconds".to_string());
-                    remediation_steps.push("• Check system resources: top or htop".to_string());
-                    remediation_steps.push(
-                        "• Consider running operations with verbose flags to see progress"
-                            .to_string(),
-                    );
-                }
-                if remediation_steps.is_empty() {
-                    remediation_steps
-                        .push("• Use the 'status' tool to check remaining operations".to_string());
-                    remediation_steps.push(
+                        remediation_steps.push(
+                            "• Try running with offline flags if tool supports them".to_string(),
+                        );
+                    }
+                    let build_keywords = [
+                        "build", "compile", "test", "lint", "clippy", "format", "check", "verify",
+                        "validate", "analyze",
+                    ];
+                    let has_build_ops = still_running.iter().any(|op| {
+                        build_keywords
+                            .iter()
+                            .any(|keyword| op.tool_name.contains(keyword))
+                    });
+                    if has_build_ops {
+                        remediation_steps.push("• Build/compile operations can take time - consider increasing timeout_seconds".to_string());
+                        remediation_steps.push("• Check system resources: top or htop".to_string());
+                        remediation_steps.push(
+                            "• Consider running operations with verbose flags to see progress"
+                                .to_string(),
+                        );
+                    }
+                    if remediation_steps.is_empty() {
+                        remediation_steps.push(
+                            "• Use the 'status' tool to check remaining operations".to_string(),
+                        );
+                        remediation_steps.push(
                         "• Operations continue running in background - they may complete shortly"
                             .to_string(),
                     );
-                    remediation_steps.push("• Consider increasing timeout_seconds if operations legitimately need more time".to_string());
-                }
-                let mut error_message = format!(
-                    "Wait operation timed out after {:.2}s (configured timeout: {:.0}s).\n\n\
+                        remediation_steps.push("• Consider increasing timeout_seconds if operations legitimately need more time".to_string());
+                    }
+                    let mut error_message = format!(
+                        "Wait operation timed out after {:.2}s (configured timeout: {:.0}s).\n\n\
                     Progress: {}/{} operations completed during await.\n\
                     Still running: {} operations.\n\n\
                     Suggestions:",
-                    elapsed.as_secs_f64(),
-                    timeout_seconds,
-                    completed_during_wait,
-                    pending_ops.len(),
-                    still_running.len()
-                );
-                for step in &remediation_steps {
-                    error_message.push_str(&format!("\n{}", step));
-                }
-                if !still_running.is_empty() {
-                    error_message.push_str("\n\nStill running operations:");
-                    for op in &still_running {
-                        error_message.push_str(&format!("\n• {} ({})", op.id, op.tool_name));
+                        elapsed.as_secs_f64(),
+                        timeout_seconds,
+                        completed_during_wait,
+                        pending_ops.len(),
+                        still_running.len()
+                    );
+                    for step in &remediation_steps {
+                        error_message.push_str(&format!("\n{}", step));
                     }
+                    if !still_running.is_empty() {
+                        error_message.push_str("\n\nStill running operations:");
+                        for op in &still_running {
+                            error_message.push_str(&format!("\n• {} ({})", op.id, op.tool_name));
+                        }
+                    }
+                    Ok(CallToolResult::success(vec![Content::text(error_message)]))
                 }
-                Ok(CallToolResult::success(vec![Content::text(error_message)]))
             }
-        }
+        } // Close the else block
     }
 
     /// Calculate intelligent timeout based on operation timeouts and default await timeout
@@ -1837,42 +1707,19 @@ impl AhmaMcpService {
     /// 1. Default await timeout (240 seconds)
     /// 2. Maximum timeout of all pending operations (filtered by tool if specified)
     pub async fn calculate_intelligent_timeout(&self, tool_filters: &[String]) -> f64 {
-        const DEFAULT_AWAIT_TIMEOUT: f64 = 240.0; // 4 minutes
-        const DEFAULT_OPERATION_TIMEOUT: f64 = 300.0; // 5 minutes - fallback for operations without explicit timeout
+        const DEFAULT_AWAIT_TIMEOUT: f64 = 240.0;
 
-        // Get all pending operations, filtered by tools if specified
-        let pending_ops: Vec<crate::operation_monitor::Operation> = self
-            .operation_monitor
-            .get_all_active_operations()
-            .await
-            .into_iter()
-            .filter(|op| {
-                if op.state.is_terminal() {
-                    return false;
-                }
-                if tool_filters.is_empty() {
-                    true
-                } else {
-                    tool_filters.iter().any(|tn| op.tool_name.starts_with(tn))
-                }
-            })
-            .collect();
+        let pending_ops = self.operation_monitor.get_all_active_operations().await;
 
-        if pending_ops.is_empty() {
-            return DEFAULT_AWAIT_TIMEOUT;
-        }
-
-        // Find the maximum timeout among pending operations
-        let max_operation_timeout = pending_ops
+        let max_op_timeout = pending_ops
             .iter()
-            .map(|op| {
-                op.timeout_duration
-                    .map(|d| d.as_secs_f64())
-                    .unwrap_or(DEFAULT_OPERATION_TIMEOUT)
+            .filter(|op| {
+                tool_filters.is_empty() || tool_filters.iter().any(|f| op.tool_name.starts_with(f))
             })
+            .filter_map(|op| op.timeout_duration)
+            .map(|t| t.as_secs_f64())
             .fold(0.0, f64::max);
 
-        // Return the maximum of default await timeout and max operation timeout
-        DEFAULT_AWAIT_TIMEOUT.max(max_operation_timeout)
+        DEFAULT_AWAIT_TIMEOUT.max(max_op_timeout)
     }
 }

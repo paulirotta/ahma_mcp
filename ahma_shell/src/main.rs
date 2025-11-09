@@ -40,21 +40,23 @@
 //! 7. `service.start_server()` is awaited, running the server indefinitely until it
 //!    is shut down.
 
+use ahma_core::config::load_tool_configs;
 use ahma_core::{
     adapter::Adapter,
-    config::{load_tool_configs, ToolConfig},
+    config::{SubcommandConfig, ToolConfig},
     mcp_service::{AhmaMcpService, GuidanceConfig},
     operation_monitor::{MonitorConfig, OperationMonitor},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
     tool_availability::evaluate_tool_availability,
     utils::logging::init_logging,
 };
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
 use clap::Parser;
 use rmcp::ServiceExt;
 use serde_json::{from_str, Value};
 use std::{
-    fs,
+    collections::{HashMap, HashSet},
+    env, fs,
     io::IsTerminal,
     path::PathBuf,
     sync::Arc,
@@ -69,26 +71,17 @@ use tracing::{info, instrument};
     author,
     version,
     about,
-    long_about = "ahma_mcp runs in three modes:
+    long_about = "ahma_mcp runs in two modes:
 1. Server Mode: Runs as a persistent MCP server over stdio.
    Example: ahma_mcp --server
 
 2. CLI Mode: Executes a single command and prints the result to stdout.
-   Example: ahma_mcp cargo_build --working-directory . -- --release
-
-3. Validation Mode: Validates tool configurations without starting the server.
-   Example: ahma_mcp --validate
-   Example: ahma_mcp --validate .ahma/tools/
-   Example: ahma_mcp --validate .ahma/tools/cargo.json,.ahma/tools/git.json"
+   Example: ahma_mcp cargo_build --working-directory . -- --release"
 )]
 struct Cli {
     /// Run in persistent MCP server mode.
     #[arg(long)]
     server: bool,
-
-    /// Validate tool configurations. Can be a directory, a comma-separated list of files, or 'all' to use the --tools-dir.
-    #[arg(long, value_name = "PATH", num_args = 0..=1, default_missing_value = "all")]
-    validate: Option<String>,
 
     /// Path to the directory containing tool JSON configuration files.
     #[arg(long, global = true, default_value = ".ahma/tools")]
@@ -135,7 +128,7 @@ async fn main() -> Result<()> {
             .init();
     */
 
-    if cli.server || (cli.tool_name.is_none() && cli.validate.is_none()) {
+    if cli.server || cli.tool_name.is_none() {
         // Check if stdin is a terminal (interactive mode)
         if std::io::stdin().is_terminal() && !cli.server {
             eprintln!(
@@ -143,13 +136,9 @@ async fn main() -> Result<()> {
             );
             eprintln!("It cannot be run directly from an interactive terminal.\n");
             eprintln!("Usage options:");
-            eprintln!("  1. Validate configuration:");
-            eprintln!("     ahma_mcp --validate");
-            eprintln!("     ahma_mcp --validate .ahma/tools/");
-            eprintln!("     ahma_mcp --validate .ahma/tools/cargo.json\n");
-            eprintln!("  2. Run as MCP server (requires MCP client with stdio transport):");
+            eprintln!("  1. Run as MCP server (requires MCP client with stdio transport):");
             eprintln!("     Configure in your MCP client's configuration file\n");
-            eprintln!("  3. Execute a single tool command:");
+            eprintln!("  2. Execute a single tool command:");
             eprintln!("     ahma_mcp <tool_name> [tool_arguments...]\n");
             eprintln!("For more information, run: ahma_mcp --help\n");
             std::process::exit(1);
@@ -157,13 +146,225 @@ async fn main() -> Result<()> {
 
         tracing::info!("Running in Server mode");
         run_server_mode(cli).await
-    } else if cli.validate.is_some() {
-        tracing::info!("Running in Validation mode");
-        run_validation_mode(cli).await
     } else {
         tracing::info!("Running in CLI mode");
         run_cli_mode(cli).await
     }
+}
+
+fn find_matching_tool<'a>(
+    configs: &'a HashMap<String, ToolConfig>,
+    tool_name: &str,
+) -> Result<(&'a str, &'a ToolConfig)> {
+    configs
+        .iter()
+        .filter(|(_, config)| config.enabled)
+        .filter_map(|(key, config)| {
+            if tool_name.starts_with(key) {
+                Some((key.as_str(), config))
+            } else {
+                None
+            }
+        })
+        .max_by_key(|(key, _)| key.len())
+        .ok_or_else(|| anyhow!("No matching tool configuration found for '{}'", tool_name))
+}
+
+fn find_tool_config<'a>(
+    configs: &'a HashMap<String, ToolConfig>,
+    tool_name: &str,
+) -> Option<(&'a str, &'a ToolConfig)> {
+    if let Some((key, config)) = configs.get_key_value(tool_name) {
+        return Some((key.as_str(), config));
+    }
+
+    configs
+        .iter()
+        .find(|(_, config)| config.name == tool_name)
+        .map(|(key, config)| (key.as_str(), config))
+}
+
+fn resolve_cli_subcommand<'a>(
+    config_key: &str,
+    config: &'a ToolConfig,
+    tool_name: &str,
+    subcommand_override: Option<&str>,
+) -> Result<(&'a SubcommandConfig, Vec<String>)> {
+    let subcommand_source =
+        subcommand_override.unwrap_or_else(|| tool_name.strip_prefix(config_key).unwrap_or(""));
+    let trimmed = subcommand_source.trim();
+    let is_default_call = trimmed.is_empty() || trimmed == "default";
+
+    let subcommand_parts: Vec<&str> = if is_default_call {
+        vec!["default"]
+    } else {
+        trimmed
+            .trim_start_matches('_')
+            .split('_')
+            .filter(|segment| !segment.is_empty())
+            .collect()
+    };
+
+    if subcommand_parts.is_empty() {
+        anyhow::bail!("Invalid tool name format. Expected 'tool_subcommand'.");
+    }
+
+    let mut current_subcommands = config
+        .subcommand
+        .as_ref()
+        .ok_or_else(|| anyhow!("Tool '{}' has no subcommands defined", config_key))?;
+    let mut command_parts = vec![config.command.clone()];
+    let mut found_subcommand = None;
+    let error_path = if is_default_call {
+        "default".to_string()
+    } else {
+        trimmed.trim_start_matches('_').to_string()
+    };
+
+    for (index, part) in subcommand_parts.iter().enumerate() {
+        if let Some(sub) = current_subcommands
+            .iter()
+            .find(|candidate| candidate.name == *part && candidate.enabled)
+        {
+            if sub.name == "default" && is_default_call {
+                if subcommand_override.is_none() || trimmed == "default" {
+                    let segments: Vec<&str> = config_key.split('_').collect();
+                    let derived = if segments.len() > 2 {
+                        segments[1..].join("-")
+                    } else {
+                        segments.last().unwrap_or(&"").to_string()
+                    };
+                    if !derived.is_empty() && derived != config.command {
+                        command_parts.push(derived);
+                    }
+                }
+            } else if sub.name != "default" {
+                command_parts.push(sub.name.clone());
+            }
+
+            if index == subcommand_parts.len() - 1 {
+                found_subcommand = Some(sub);
+            } else if let Some(nested) = &sub.subcommand {
+                current_subcommands = nested;
+            } else {
+                anyhow::bail!(
+                    "Subcommand '{}' has no nested subcommands for remaining path in tool '{}'",
+                    error_path,
+                    config_key
+                );
+            }
+        } else {
+            anyhow::bail!(
+                "Subcommand '{}' not found for tool '{}'",
+                error_path,
+                config_key
+            );
+        }
+    }
+
+    let subcommand_config = found_subcommand.ok_or_else(|| {
+        anyhow!(
+            "Subcommand '{}' not found for tool '{}'",
+            error_path,
+            config_key
+        )
+    })?;
+
+    Ok((subcommand_config, command_parts))
+}
+
+async fn run_cli_sequence(
+    adapter: &Adapter,
+    configs: &HashMap<String, ToolConfig>,
+    parent_config: &ToolConfig,
+    subcommand_config: &SubcommandConfig,
+    working_dir: &str,
+) -> Result<()> {
+    let sequence = subcommand_config
+        .sequence
+        .as_ref()
+        .ok_or_else(|| anyhow!("Sequence not defined for tool '{}'", parent_config.name))?;
+
+    let delay_ms = subcommand_config
+        .step_delay_ms
+        .or(parent_config.step_delay_ms)
+        .unwrap_or(0);
+
+    let skip_tools = parse_env_list("AHMA_SKIP_SEQUENCE_TOOLS");
+    let skip_subcommands = parse_env_list("AHMA_SKIP_SEQUENCE_SUBCOMMANDS");
+
+    for (index, step) in sequence.iter().enumerate() {
+        if should_skip(&skip_tools, &step.tool) {
+            println!(
+                "Skipping sequence step {} ({} {}) due to environment override.",
+                index + 1,
+                step.tool,
+                step.subcommand
+            );
+            continue;
+        }
+
+        if should_skip(&skip_subcommands, &step.subcommand) {
+            println!(
+                "Skipping sequence step {} ({} {}) due to environment override.",
+                index + 1,
+                step.tool,
+                step.subcommand
+            );
+            continue;
+        }
+
+        let (step_key, step_tool_config) = find_tool_config(configs, &step.tool)
+            .ok_or_else(|| anyhow!("Sequence step tool '{}' not found", step.tool))?;
+
+        let (step_subcommand_config, command_parts) =
+            resolve_cli_subcommand(step_key, step_tool_config, step_key, Some(&step.subcommand))?;
+
+        println!(
+            "▶ Running sequence step {} ({} {}):",
+            index + 1,
+            step.tool,
+            step.subcommand
+        );
+
+        let output = adapter
+            .execute_sync_in_dir(
+                &command_parts.join(" "),
+                Some(step.args.clone()),
+                working_dir,
+                step_subcommand_config.timeout_seconds,
+                Some(step_subcommand_config),
+            )
+            .await
+            .with_context(|| format!("Sequence step '{} {}' failed", step.tool, step.subcommand))?;
+
+        if !output.trim().is_empty() {
+            println!("{}", output);
+        } else {
+            println!("✓ Completed without output");
+        }
+
+        if delay_ms > 0 && index + 1 < sequence.len() {
+            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+        }
+    }
+
+    Ok(())
+}
+
+fn parse_env_list(key: &str) -> Option<HashSet<String>> {
+    env::var(key).ok().map(|list| {
+        list.split(',')
+            .map(|entry| entry.trim().to_ascii_lowercase())
+            .filter(|entry| !entry.is_empty())
+            .collect()
+    })
+}
+
+fn should_skip(set: &Option<HashSet<String>>, value: &str) -> bool {
+    set.as_ref()
+        .map(|items| items.contains(&value.to_ascii_lowercase()))
+        .unwrap_or(false)
 }
 
 async fn run_server_mode(cli: Cli) -> Result<()> {
@@ -266,6 +467,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
         operation_monitor.clone(),
         configs,
         Arc::new(guidance_config),
+        cli.synchronous,
     )
     .await?;
     let service = service_handler.serve(rmcp::transport::stdio()).await?;
@@ -405,7 +607,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
 }
 
 async fn run_cli_mode(cli: Cli) -> Result<()> {
-    let tool_name = cli.tool_name.unwrap(); // Safe due to check in main()
+    let tool_name = cli.tool_name.unwrap();
 
     // Initialize adapter and monitor for CLI mode
     let monitor_config = MonitorConfig::with_timeout(std::time::Duration::from_secs(cli.timeout));
@@ -443,96 +645,16 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         anyhow::bail!("No tool configurations found");
     }
 
-    // Use the same longest-matching logic as the MCP service to find the tool config
-    let mut best_match: Option<(&str, &ToolConfig)> = None;
-    for (key, config) in configs.iter() {
-        if tool_name.starts_with(key)
-            && (best_match.is_none() || key.len() > best_match.unwrap().0.len())
-        {
-            best_match = Some((key, config));
-        }
-    }
+    let configs_ref = configs.as_ref();
+    let (config_key, config) = find_matching_tool(configs_ref, &tool_name)?;
+    let (subcommand_config, command_parts) =
+        resolve_cli_subcommand(config_key, config, &tool_name, None)?;
 
-    let (config_key, config) = best_match.ok_or_else(|| {
-        anyhow::anyhow!("No matching tool configuration found for '{}'", tool_name)
-    })?;
-
-    // Parse subcommand parts from the remaining tool name after the config key
-    let subcommand_part_str = tool_name.strip_prefix(config_key).unwrap_or("");
-    let is_default_call = subcommand_part_str.is_empty();
-
-    let subcommand_parts: Vec<&str> = if is_default_call {
-        vec!["default"]
-    } else {
-        subcommand_part_str
-            .strip_prefix('_')
-            .unwrap_or("")
-            .split('_')
-            .filter(|s| !s.is_empty())
-            .collect()
-    };
-
-    if subcommand_parts.is_empty() {
-        anyhow::bail!("Invalid tool name format. Expected 'tool_subcommand'.");
-    }
-
-    // Find the subcommand configuration recursively and build command parts like MCP service
-    let mut current_subcommands = config.subcommand.as_deref();
-    let mut found_subcommand = None;
-    let mut command_parts = vec![config.command.clone()];
-
-    for (i, part) in subcommand_parts.iter().enumerate() {
-        if let Some(subcommands) = current_subcommands {
-            if let Some(sub) = subcommands.iter().find(|s| s.name == *part) {
-                if is_default_call && sub.name == "default" {
-                    // This is a default call, derive subcommand from config_key.
-                    // For keys like `cargo_llvm_cov`, derive `llvm-cov` (join parts after the first underscore with '-')
-                    let parts: Vec<&str> = config_key.split('_').collect();
-                    let derived_subcommand = if parts.len() > 2 {
-                        parts[1..].join("-")
-                    } else {
-                        parts.last().unwrap_or(&"").to_string()
-                    };
-                    if !derived_subcommand.is_empty() && derived_subcommand != config.command {
-                        command_parts.push(derived_subcommand);
-                    }
-                } else if sub.name != "default" {
-                    command_parts.push(sub.name.clone());
-                }
-
-                if i == subcommand_parts.len() - 1 {
-                    found_subcommand = Some(sub);
-                    break;
-                }
-                current_subcommands = sub.subcommand.as_deref();
-            } else {
-                break; // not found
-            }
-        } else {
-            break; // no more subcommands to search
-        }
-    }
-
-    let subcommand_config = found_subcommand.ok_or_else(|| {
-        anyhow::anyhow!(
-            "Subcommand '{}' not found for tool '{}'",
-            subcommand_parts.join("_"),
-            config_key
-        )
-    })?;
-
-    // Construct arguments - start with subcommand name, then add config args, then runtime args
     let mut raw_args = Vec::new();
-
-    // Don't add subcommand name here - it's handled in args_map as "_subcommand"
-
-    // Add predefined args from subcommand config
-    // Note: subcommand_config doesn't have args field, using options instead
-
     let mut working_directory: Option<String> = None;
     let mut tool_args_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
 
-    // Check for environment variable for programmatic execution
+    // Prefer programmatic arguments via environment variable
     if let Ok(env_args) = std::env::var("AHMA_MCP_ARGS") {
         if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(&env_args) {
             if let Some(map) = json_val.as_object() {
@@ -540,34 +662,26 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
             }
         }
     } else {
-        // Manual parsing for CLI invocation
         let mut iter = cli.tool_args.into_iter().peekable();
         while let Some(arg) = iter.next() {
             if arg == "--" {
                 raw_args.extend(iter.map(|s| s.to_string()));
                 break;
             }
+
             if arg.starts_with("--") {
                 let key = arg.trim_start_matches("--").to_string();
-                // Peek to see if next token is another flag
                 if let Some(next) = iter.peek() {
                     if next.starts_with('-') {
-                        // Treat as boolean flag
                         tool_args_map.insert(key, serde_json::Value::Bool(true));
-                    } else {
-                        // Consume the next value as this flag's value
-                        if let Some(val) = iter.next() {
-                            if key == "working-directory" {
-                                working_directory = Some(val);
-                            } else {
-                                tool_args_map.insert(key, serde_json::Value::String(val));
-                            }
+                    } else if let Some(val) = iter.next() {
+                        if key == "working-directory" {
+                            working_directory = Some(val);
                         } else {
-                            tool_args_map.insert(key, serde_json::Value::Bool(true));
+                            tool_args_map.insert(key, serde_json::Value::String(val));
                         }
                     }
                 } else {
-                    // No next token, treat as boolean
                     tool_args_map.insert(key, serde_json::Value::Bool(true));
                 }
             } else {
@@ -598,19 +712,13 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
             .ok()
             .map(|p| p.to_string_lossy().into_owned())
     });
+    let working_dir_str = final_working_dir.unwrap_or_else(|| ".".to_string());
 
-    // Build arguments from subcommand options and user input
     let mut args_map = serde_json::Map::new();
-
-    // Do NOT add _subcommand here - the command_parts already handle the subcommand structure
-
-    // Add any additional arguments from command line
-    // If the user passed 'default' explicitly as a positional arg (e.g., `cargo_llvm_cov default ...`), strip it
     if raw_args.first().map(|s| s.as_str()) == Some("default") {
         raw_args.remove(0);
     }
 
-    // Merge any parsed --key value pairs from tool_args_map into args_map so they are not lost
     for (k, v) in tool_args_map.iter() {
         args_map.insert(k.clone(), v.clone());
     }
@@ -619,20 +727,29 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         if let Some((key, value)) = arg.split_once('=') {
             args_map.insert(key.to_string(), Value::String(value.to_string()));
         } else {
-            // Handle positional arguments or flags
-            args_map.insert(arg.clone(), Value::String("".to_string()));
+            args_map.insert(arg.clone(), Value::String(String::new()));
         }
     }
 
-    // Build the full command like the MCP service does
+    if config.command == "sequence" && subcommand_config.sequence.is_some() {
+        run_cli_sequence(
+            &adapter,
+            configs_ref,
+            config,
+            subcommand_config,
+            &working_dir_str,
+        )
+        .await?;
+        return Ok(());
+    }
+
     let base_command = command_parts.join(" ");
 
-    // Execute the tool
     let result = adapter
         .execute_sync_in_dir(
             &base_command,
             Some(args_map),
-            &final_working_dir.unwrap_or_else(|| ".".to_string()),
+            &working_dir_str,
             subcommand_config.timeout_seconds,
             Some(subcommand_config),
         )
@@ -640,12 +757,10 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
 
     match result {
         Ok(output) => {
-            // Print the output directly since execute_sync_in_dir returns a String
             println!("{}", output);
             Ok(())
         }
         Err(e) => {
-            // Enhanced error handling: detect and transform rmcp cancellation errors
             let error_message = e.to_string();
             if error_message.contains("Canceled: Canceled") {
                 eprintln!(
@@ -664,196 +779,4 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
             Err(anyhow::anyhow!("Tool execution failed"))
         }
     }
-}
-
-async fn run_validation_mode(cli: Cli) -> Result<()> {
-    use ahma_core::schema_validation::MtdfValidator;
-
-    fn validate_subcommands(
-        subcommands: &[ahma_core::config::SubcommandConfig],
-        guidance: &Option<GuidanceConfig>,
-        cli: &Cli,
-        warnings: &mut usize,
-    ) {
-        for subcommand in subcommands {
-            if let Some(guidance_key) = &subcommand.guidance_key {
-                if let Some(g) = guidance {
-                    if !g.guidance_blocks.contains_key(guidance_key) {
-                        println!(
-                            "   ⚠️  Warning: subcommand guidance_key '{}' not found in {}",
-                            guidance_key,
-                            cli.guidance_file.display()
-                        );
-                        *warnings += 1;
-                    }
-                }
-            }
-            if let Some(nested_subcommands) = &subcommand.subcommand {
-                validate_subcommands(nested_subcommands, guidance, cli, warnings);
-            }
-        }
-    }
-
-    let validation_target = cli.validate.clone().unwrap_or_else(|| "all".to_string());
-    let path = PathBuf::from(&validation_target);
-
-    info!("🔍 Validating tool configurations...");
-    info!("Target: {}", validation_target);
-
-    let mut validation_errors = 0;
-    let mut validation_warnings = 0;
-    let mut files_checked = 0;
-
-    // Determine which files to validate
-    let files_to_validate: Vec<PathBuf> = if validation_target == "all" {
-        // Validate all JSON files in tools directory
-        let tools_dir = &cli.tools_dir;
-        if !tools_dir.exists() {
-            anyhow::bail!("Tools directory {:?} does not exist", tools_dir);
-        }
-        get_json_files(tools_dir)?
-    } else if path.is_dir() {
-        get_json_files(&path)?
-    } else {
-        // Validate specific files
-        validation_target
-            .split(',')
-            .map(|s| PathBuf::from(s.trim()))
-            .collect()
-    };
-
-    if files_to_validate.is_empty() {
-        println!(
-            "❌ No tool configuration files found to validate in '{}'",
-            validation_target
-        );
-        return Ok(());
-    }
-
-    // Load guidance configuration for cross-reference validation
-    let guidance_config = if cli.guidance_file.exists() {
-        let guidance_content = fs::read_to_string(&cli.guidance_file)?;
-        from_str::<GuidanceConfig>(&guidance_content).ok()
-    } else {
-        None
-    };
-
-    println!(
-        "📋 Validating {} configuration file(s)...\n",
-        files_to_validate.len()
-    );
-
-    // Validate each file
-    for file_path in &files_to_validate {
-        files_checked += 1;
-
-        if !file_path.exists() {
-            println!("❌ {} - File not found", file_path.display());
-            validation_errors += 1;
-            continue;
-        }
-
-        print!("🔍 {} ... ", file_path.display());
-
-        // Read and parse the file
-        match fs::read_to_string(file_path) {
-            Ok(content) => {
-                // First, try to parse as valid JSON
-                match serde_json::from_str::<Value>(&content) {
-                    Ok(json_value) => {
-                        // Run schema validation
-                        let validator = MtdfValidator::new();
-                        match validator.validate_tool_config(file_path, &content) {
-                            Ok(_) => {
-                                println!("✅ Valid");
-                            }
-                            Err(errors) => {
-                                println!("❌ {} error(s)", errors.len());
-                                validation_errors += errors.len();
-
-                                for (i, error) in errors.iter().enumerate() {
-                                    println!("   {}. {}", i + 1, error);
-                                }
-                            }
-                        }
-
-                        // Additional validation: Check guidance_key references
-                        if let Some(ref guidance) = guidance_config {
-                            if let Ok(tool_config) =
-                                serde_json::from_value::<ahma_core::config::ToolConfig>(json_value)
-                            {
-                                if let Some(guidance_key) = &tool_config.guidance_key {
-                                    if !guidance.guidance_blocks.contains_key(guidance_key) {
-                                        println!(
-                                            "   ⚠️  Warning: guidance_key '{}' not found in {}",
-                                            guidance_key,
-                                            cli.guidance_file.display()
-                                        );
-                                        validation_warnings += 1;
-                                    }
-                                }
-
-                                // Check subcommand guidance keys recursively
-                                if let Some(subcommands) = &tool_config.subcommand {
-                                    validate_subcommands(
-                                        subcommands,
-                                        &guidance_config,
-                                        &cli,
-                                        &mut validation_warnings,
-                                    );
-                                }
-                            }
-                        }
-                    }
-                    Err(json_error) => {
-                        println!("❌ Invalid JSON: {}", json_error);
-                        validation_errors += 1;
-                    }
-                }
-            }
-            Err(io_error) => {
-                println!("❌ Cannot read file: {}", io_error);
-                validation_errors += 1;
-            }
-        }
-    }
-
-    // Print summary
-    println!();
-    println!("📊 Validation Summary:");
-    println!("   Files checked: {}", files_checked);
-    println!("   Errors: {}", validation_errors);
-    println!("   Warnings: {}", validation_warnings);
-
-    if validation_errors > 0 {
-        println!();
-        println!("❌ Validation failed with {} error(s)", validation_errors);
-        println!("💡 Fix these errors before starting the MCP server to prevent crashes");
-        std::process::exit(1);
-    } else if validation_warnings > 0 {
-        println!();
-        println!(
-            "⚠️  Validation passed with {} warning(s)",
-            validation_warnings
-        );
-        println!("💡 Consider addressing warnings for better reliability");
-    } else {
-        println!();
-        println!("✅ All validations passed!");
-        println!("🚀 Tool configurations are ready for use");
-    }
-
-    Ok(())
-}
-
-fn get_json_files(dir: &PathBuf) -> Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
-            files.push(path);
-        }
-    }
-    Ok(files)
 }

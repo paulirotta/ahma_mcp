@@ -5,7 +5,9 @@
     "timeout_seconds": 180,
     "synchronous": true,
     "hints": {
-        "default": "Use --tool_args -- to pass flags exactly as you would to the gh CLI. Prefer --repo to operate on specific repositories."
+        "custom": {
+            "default": "Use --tool_args -- to pass flags exactly as you would to the gh CLI. Prefer --repo to operate on specific repositories."
+        }
     },
     "subcommand": [
         {

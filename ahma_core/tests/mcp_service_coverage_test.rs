@@ -92,9 +92,10 @@ fn test_tool_config_creation() {
                 name: "verbose".to_string(),
                 alias: Some("v".to_string()),
                 option_type: "bool".to_string(),
-                description: "Enable verbose output".to_string(),
+                description: Some("Enable verbose output".to_string()),
                 required: Some(false),
                 format: Some("flag".to_string()),
+                items: None,
                 file_arg: Some(false),
                 file_flag: None,
             }]),
@@ -159,9 +160,10 @@ fn test_option_config_creation() {
         name: "verbose".to_string(),
         alias: Some("v".to_string()),
         option_type: "bool".to_string(),
-        description: "Enable verbose output".to_string(),
+        description: Some("Enable verbose output".to_string()),
         required: Some(false),
         format: Some("flag".to_string()),
+        items: None,
         file_arg: Some(false),
         file_flag: None,
     };
@@ -178,22 +180,16 @@ fn test_option_config_creation() {
 fn test_tool_hints_creation() {
     init_test_logging();
     let hints = ToolHints {
-        default: Some("Default hint".to_string()),
-        operation_hints: std::collections::HashMap::from([
-            ("build".to_string(), "Build hint".to_string()),
-            ("test".to_string(), "Test hint".to_string()),
-        ]),
+        build: Some("Build hint".to_string()),
+        test: Some("Test hint".to_string()),
+        dependencies: None,
+        clean: None,
+        run: None,
+        custom: None,
     };
 
-    assert_eq!(hints.default, Some("Default hint".to_string()));
-    assert_eq!(
-        hints.operation_hints.get("build"),
-        Some(&"Build hint".to_string())
-    );
-    assert_eq!(
-        hints.operation_hints.get("test"),
-        Some(&"Test hint".to_string())
-    );
+    assert_eq!(hints.build, Some("Build hint".to_string()));
+    assert_eq!(hints.test, Some("Test hint".to_string()));
 }
 
 #[tokio::test]
@@ -207,7 +203,7 @@ async fn test_service_creation_and_basic_functionality() {
     let configs = Arc::new(HashMap::new());
     let guidance = Arc::new(None);
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance)
+    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false)
         .await
         .unwrap();
 
@@ -247,9 +243,10 @@ async fn test_service_with_configs() {
                 name: "verbose".to_string(),
                 alias: None,
                 option_type: "bool".to_string(),
-                description: "Enable verbose output".to_string(),
+                description: Some("Enable verbose output".to_string()),
                 required: Some(false),
                 format: None,
+                items: None,
                 file_arg: Some(false),
                 file_flag: Some("--verbose".to_string()),
             }]),
@@ -290,6 +287,7 @@ async fn test_service_with_configs() {
         Arc::clone(&operation_monitor),
         Arc::new(configs),
         guidance,
+        false,
     )
     .await
     .unwrap();
@@ -398,9 +396,10 @@ async fn test_service_with_tool_configs() {
             options: Some(vec![OptionConfig {
                 name: "release".to_string(),
                 option_type: "bool".to_string(),
-                description: "Build in release mode".to_string(),
+                description: Some("Build in release mode".to_string()),
                 required: None,
                 format: None,
+                items: None,
                 file_arg: None,
                 file_flag: None,
                 alias: None,
@@ -436,7 +435,7 @@ async fn test_service_with_tool_configs() {
     let configs = Arc::new(configs);
     let guidance = Arc::new(None);
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance)
+    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false)
         .await
         .unwrap();
 

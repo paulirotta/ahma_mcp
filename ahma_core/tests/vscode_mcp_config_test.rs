@@ -85,9 +85,9 @@ async fn test_vscode_mcp_config_has_valid_command_structure() -> Result<()> {
     let args = server_config["args"]
         .as_array()
         .expect("Args should be an array");
-    assert_eq!(args[0], "--server", "Should run in server mode");
-    assert_eq!(args[1], "--tools-dir", "Should specify tools-dir");
-    assert_eq!(args[2], ".ahma/tools", "Should use tools directory");
+    assert_eq!(args.len(), 2, "Should only include tools-dir arguments");
+    assert_eq!(args[0], "--tools-dir", "Should specify tools-dir");
+    assert_eq!(args[1], ".ahma/tools", "Should use tools directory");
 
     // Verify dev command uses cargo with passthrough args
     let dev = &server_config["dev"];
@@ -99,9 +99,9 @@ async fn test_vscode_mcp_config_has_valid_command_structure() -> Result<()> {
         dev_args[2], "--",
         "Dev should separate cargo args from binary args"
     );
-    assert_eq!(dev_args[3], "--server", "Dev should run in server mode");
-    assert_eq!(dev_args[4], "--tools-dir", "Dev should specify tools-dir");
-    assert_eq!(dev_args[5], ".ahma/tools", "Dev should use tools directory");
+    assert_eq!(dev_args.len(), 5, "Dev args should include tools-dir only");
+    assert_eq!(dev_args[3], "--tools-dir", "Dev should specify tools-dir");
+    assert_eq!(dev_args[4], ".ahma/tools", "Dev should use tools directory");
 
     Ok(())
 }

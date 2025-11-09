@@ -96,8 +96,9 @@ async fn test_multiline_argument_with_echo() {
             name: "text".to_string(),
             alias: None,
             option_type: "string".to_string(),
-            description: "Text to echo".to_string(),
+            description: Some("Text to echo".to_string()),
             format: None,
+            items: None,
             required: Some(true),
             file_arg: None, // Echo doesn't support files, should use escaping
             file_flag: None,
@@ -223,10 +224,11 @@ async fn test_multiline_git_commit_with_real_tool() {
     println!("Testing git commit with multi-line message through real tool config...");
 
     // Execute using the adapter with the real commit subcommand config
+    // Note: The adapter expects the command to include the subcommand (normally added by mcp_service.rs)
     let result = adapter
         .execute_async_in_dir_with_options(
             "git_commit",
-            "git",
+            "git commit", // Must include subcommand name
             repo_path.to_str().unwrap(),
             AsyncExecOptions {
                 operation_id: Some("test_multiline_commit_real".to_string()),
@@ -258,6 +260,14 @@ async fn test_multiline_git_commit_with_real_tool() {
         "Operation should be in terminal state: {:?}",
         operation.state
     );
+
+    // Check if the operation succeeded
+    if let ahma_core::operation_monitor::OperationStatus::Failed = operation.state {
+        if let Some(result) = &operation.result {
+            eprintln!("Operation failed with result: {}", result);
+        }
+        panic!("Git commit operation failed: {:?}", operation);
+    }
 
     // Verify the commit was actually created
     let log_result = std::process::Command::new("git")
@@ -352,8 +362,9 @@ async fn test_multiline_git_commit_message() {
             name: "message".to_string(),
             alias: Some("m".to_string()),
             option_type: "string".to_string(),
-            description: "Use the given message as the commit message".to_string(),
+            description: Some("Use the given message as the commit message".to_string()),
             format: None,
+            items: None,
             required: None,
             file_arg: Some(true),
             file_flag: Some("-F".to_string()),
@@ -380,10 +391,11 @@ async fn test_multiline_git_commit_message() {
     });
 
     // Execute the git commit command
+    // Note: The adapter expects the command to include the subcommand (normally added by mcp_service.rs)
     let result = adapter
         .execute_async_in_dir_with_options(
             "git_commit",
-            "git", // Use base command, subcommand is in the config
+            "git commit", // Must include subcommand name
             repo_path.to_str().unwrap(),
             AsyncExecOptions {
                 operation_id: Some("test_multiline_commit".to_string()),
@@ -496,8 +508,9 @@ async fn test_special_characters_in_arguments() {
             name: "text".to_string(),
             alias: None,
             option_type: "string".to_string(),
-            description: "Text to display".to_string(),
+            description: Some("Text to display".to_string()),
             format: None,
+            items: None,
             required: Some(true),
             file_arg: None, // No file support, should use escaping
             file_flag: None,
