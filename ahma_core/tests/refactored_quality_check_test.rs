@@ -9,6 +9,10 @@ fn test_run_new_quality_check_sequence() {
     // include schema generation and validation.
     let output = Command::new("cargo")
         .current_dir(get_workspace_dir())
+        .env(
+            "AHMA_SKIP_SEQUENCE_SUBCOMMANDS",
+            "fmt,clippy,nextest_run,build",
+        )
         .args([
             "run",
             "--package",

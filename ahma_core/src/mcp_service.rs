@@ -41,6 +41,7 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc, RwLock,
 };
+use std::time::Duration;
 use tokio::time::Instant;
 use tracing;
 
@@ -48,6 +49,7 @@ use crate::{
     adapter::Adapter,
     callback_system::CallbackSender,
     config::{CommandOption, SequenceStep, SubcommandConfig, ToolConfig},
+    constants::SEQUENCE_STEP_DELAY_MS,
     mcp_callback::McpCallbackSender,
     operation_monitor::Operation,
 };
@@ -1101,10 +1103,15 @@ impl AhmaMcpService {
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
         let sequence = config.sequence.as_ref().unwrap(); // Safe due to prior check
-        let mut results = Vec::new();
+        let step_delay_ms = config.step_delay_ms.unwrap_or(SEQUENCE_STEP_DELAY_MS);
         let mut final_result = CallToolResult::success(vec![]);
 
-        for step in sequence {
+        for (index, step) in sequence.iter().enumerate() {
+            if Self::should_skip_sequence_tool_step(&step.tool) {
+                let message = Self::format_sequence_step_skipped_message(step);
+                final_result.content.push(Content::text(message));
+                continue;
+            }
             let mut step_params = params.clone();
             step_params.name = step.tool.clone().into();
 
@@ -1161,11 +1168,7 @@ impl AhmaMcpService {
 
             match step_result {
                 Ok(id) => {
-                    let message = format!(
-                        "Sequence step '{}' started with operation ID: {}",
-                        step.tool, id
-                    );
-                    results.push(message.clone());
+                    let message = Self::format_sequence_step_message(step, &id);
                     final_result.content.push(Content::text(message));
                 }
                 Err(e) => {
@@ -1176,6 +1179,10 @@ impl AhmaMcpService {
                     tracing::error!("{}", error_message);
                     return Err(McpError::internal_error(error_message, None));
                 }
+            }
+
+            if step_delay_ms > 0 && index + 1 < sequence.len() {
+                tokio::time::sleep(Duration::from_millis(step_delay_ms)).await;
             }
         }
 
@@ -1191,10 +1198,18 @@ impl AhmaMcpService {
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
         let sequence: &Vec<SequenceStep> = subcommand_config.sequence.as_ref().unwrap(); // Safe due to prior check
-        let mut results = Vec::new();
+        let step_delay_ms = subcommand_config
+            .step_delay_ms
+            .or(config.step_delay_ms)
+            .unwrap_or(SEQUENCE_STEP_DELAY_MS);
         let mut final_result = CallToolResult::success(vec![]);
 
-        for step in sequence {
+        for (index, step) in sequence.iter().enumerate() {
+            if Self::should_skip_sequence_subcommand_step(&step.subcommand) {
+                let message = Self::format_subcommand_sequence_step_skipped_message(step);
+                final_result.content.push(Content::text(message));
+                continue;
+            }
             let (step_config, command_parts) = match self
                 .find_subcommand_config_from_args(config, Some(step.subcommand.clone()))
             {
@@ -1233,11 +1248,7 @@ impl AhmaMcpService {
 
             match step_result {
                 Ok(id) => {
-                    let message = format!(
-                        "Subcommand sequence step '{}' started with ID: {}",
-                        step.subcommand, id
-                    );
-                    results.push(message.clone());
+                    let message = Self::format_subcommand_sequence_step_message(step, &id);
                     final_result.content.push(Content::text(message));
                 }
                 Err(e) => {
@@ -1249,9 +1260,84 @@ impl AhmaMcpService {
                     return Err(McpError::internal_error(error_message, None));
                 }
             }
+
+            if step_delay_ms > 0 && index + 1 < sequence.len() {
+                tokio::time::sleep(Duration::from_millis(step_delay_ms)).await;
+            }
         }
 
         Ok(final_result)
+    }
+
+    fn format_sequence_step_message(step: &SequenceStep, operation_id: &str) -> String {
+        match step.description.as_deref() {
+            Some(description) if !description.is_empty() => format!(
+                "Sequence step '{}' ({}) started with operation ID: {}",
+                step.tool, description, operation_id
+            ),
+            _ => format!(
+                "Sequence step '{}' started with operation ID: {}",
+                step.tool, operation_id
+            ),
+        }
+    }
+
+    fn format_subcommand_sequence_step_message(step: &SequenceStep, operation_id: &str) -> String {
+        match step.description.as_deref() {
+            Some(description) if !description.is_empty() => format!(
+                "Subcommand sequence step '{}' ({}) started with ID: {}",
+                step.subcommand, description, operation_id
+            ),
+            _ => format!(
+                "Subcommand sequence step '{}' started with ID: {}",
+                step.subcommand, operation_id
+            ),
+        }
+    }
+
+    fn format_sequence_step_skipped_message(step: &SequenceStep) -> String {
+        match step.description.as_deref() {
+            Some(description) if !description.is_empty() => format!(
+                "Sequence step '{}' ({}) skipped due to environment override.",
+                step.tool, description
+            ),
+            _ => format!(
+                "Sequence step '{}' skipped due to environment override.",
+                step.tool
+            ),
+        }
+    }
+
+    fn format_subcommand_sequence_step_skipped_message(step: &SequenceStep) -> String {
+        match step.description.as_deref() {
+            Some(description) if !description.is_empty() => format!(
+                "Subcommand sequence step '{}' ({}) skipped due to environment override.",
+                step.subcommand, description
+            ),
+            _ => format!(
+                "Subcommand sequence step '{}' skipped due to environment override.",
+                step.subcommand
+            ),
+        }
+    }
+
+    fn should_skip_sequence_tool_step(tool: &str) -> bool {
+        Self::env_list_contains("AHMA_SKIP_SEQUENCE_TOOLS", tool)
+    }
+
+    fn should_skip_sequence_subcommand_step(subcommand: &str) -> bool {
+        Self::env_list_contains("AHMA_SKIP_SEQUENCE_SUBCOMMANDS", subcommand)
+    }
+
+    fn env_list_contains(env_key: &str, value: &str) -> bool {
+        match env::var(env_key) {
+            Ok(list) => list
+                .split(',')
+                .map(|entry| entry.trim())
+                .filter(|entry| !entry.is_empty())
+                .any(|entry| entry.eq_ignore_ascii_case(value)),
+            Err(_) => false,
+        }
     }
 
     /// Handles the 'await' tool call.

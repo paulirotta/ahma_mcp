@@ -44,6 +44,18 @@
             ]
         },
         {
+            "name": "check",
+            "description": "Type-check the current package without producing binaries.",
+            "synchronous": true,
+            "options": [
+                {
+                    "name": "workspace",
+                    "type": "boolean",
+                    "description": "Check all packages in the workspace"
+                }
+            ]
+        },
+        {
             "name": "test",
             "description": "Run the test suite.",
             "options": [

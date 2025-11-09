@@ -55,8 +55,8 @@ use clap::Parser;
 use rmcp::ServiceExt;
 use serde_json::{from_str, Value};
 use std::{
-    collections::HashMap,
-    fs,
+    collections::{HashMap, HashSet},
+    env, fs,
     io::IsTerminal,
     path::PathBuf,
     sync::Arc,
@@ -290,7 +290,30 @@ async fn run_cli_sequence(
         .or(parent_config.step_delay_ms)
         .unwrap_or(0);
 
+    let skip_tools = parse_env_list("AHMA_SKIP_SEQUENCE_TOOLS");
+    let skip_subcommands = parse_env_list("AHMA_SKIP_SEQUENCE_SUBCOMMANDS");
+
     for (index, step) in sequence.iter().enumerate() {
+        if should_skip(&skip_tools, &step.tool) {
+            println!(
+                "Skipping sequence step {} ({} {}) due to environment override.",
+                index + 1,
+                step.tool,
+                step.subcommand
+            );
+            continue;
+        }
+
+        if should_skip(&skip_subcommands, &step.subcommand) {
+            println!(
+                "Skipping sequence step {} ({} {}) due to environment override.",
+                index + 1,
+                step.tool,
+                step.subcommand
+            );
+            continue;
+        }
+
         let (step_key, step_tool_config) = find_tool_config(configs, &step.tool)
             .ok_or_else(|| anyhow!("Sequence step tool '{}' not found", step.tool))?;
 
@@ -327,6 +350,21 @@ async fn run_cli_sequence(
     }
 
     Ok(())
+}
+
+fn parse_env_list(key: &str) -> Option<HashSet<String>> {
+    env::var(key).ok().map(|list| {
+        list.split(',')
+            .map(|entry| entry.trim().to_ascii_lowercase())
+            .filter(|entry| !entry.is_empty())
+            .collect()
+    })
+}
+
+fn should_skip(set: &Option<HashSet<String>>, value: &str) -> bool {
+    set.as_ref()
+        .map(|items| items.contains(&value.to_ascii_lowercase()))
+        .unwrap_or(false)
 }
 
 async fn run_server_mode(cli: Cli) -> Result<()> {

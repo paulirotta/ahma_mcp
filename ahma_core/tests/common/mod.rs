@@ -1,4 +1,3 @@
-pub mod templib;
 pub mod test_client;
 pub mod test_project;
 pub mod test_utils;

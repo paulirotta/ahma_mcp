@@ -1,7 +1,7 @@
 mod common;
 
 use anyhow::Result;
-use common::{templib, test_client};
+use common::test_client;
 use rmcp::model::CallToolRequestParam;
 use serde_json::{json, Map};
 use std::borrow::Cow;
@@ -19,7 +19,7 @@ fn build_args(command: &str, working_directory: &str) -> Map<String, serde_json:
 
 #[tokio::test]
 async fn test_synchronous_flag_overrides_async_tools() -> Result<()> {
-    let temp_dir = templib::tempdir()?;
+    let temp_dir = tempfile::tempdir()?;
     let tools_dir = temp_dir.path().join("tools");
     fs::create_dir_all(&tools_dir).await?;
 
