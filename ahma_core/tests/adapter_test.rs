@@ -122,6 +122,8 @@ async fn test_execute_sync_with_subcommand_config() {
             option_type: "boolean".to_string(),
             description: Some("Do not print trailing newline".to_string()),
             format: None,
+
+            items: None,
             required: Some(false),
             file_arg: Some(false),
             file_flag: None,
@@ -132,6 +134,8 @@ async fn test_execute_sync_with_subcommand_config() {
             option_type: "string".to_string(),
             description: Some("Message to echo".to_string()),
             format: None,
+
+            items: None,
             required: Some(true),
             file_arg: Some(false),
             file_flag: None,

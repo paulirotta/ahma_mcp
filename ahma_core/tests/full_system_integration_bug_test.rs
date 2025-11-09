@@ -78,6 +78,7 @@ mod full_system_integration_bug_test {
             operation_monitor.clone(),
             configs,
             Arc::new(None),
+            false,
         )
         .await
         .unwrap();

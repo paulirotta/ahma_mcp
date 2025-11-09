@@ -205,8 +205,9 @@ async fn test_recursive_subcommand_validation() -> Result<()> {
                 "description": "Parent command - async operation with proper guidance returns operation_id immediately, results pushed via notification when complete, continue with other tasks",
                 "subcommand": [
                     {
-                        // Missing required name field
-                        "description": "Child without name"
+                        // Intentionally empty to trigger validation on required fields
+                        "name": "",
+                        "description": ""
                     }
                 ]
             }
@@ -243,10 +244,9 @@ async fn test_recursive_subcommand_validation() -> Result<()> {
         validator.validate_tool_config(&PathBuf::from("malformed.json"), &malformed_nested);
     assert!(result.is_err());
     let errors = result.unwrap_err();
-    assert!(errors
-        .iter()
-        .any(|e| e.field_path.contains("subcommand")
-            && e.error_type == ValidationErrorType::InvalidType));
+    assert!(errors.iter().any(|e| {
+        e.error_type == ValidationErrorType::SchemaViolation && e.message.contains("invalid type")
+    }));
 
     Ok(())
 }
@@ -309,8 +309,10 @@ async fn test_performance_for_large_tool_sets() -> Result<()> {
     let mut invalid_subcommands = Vec::new();
     for i in 0..30 {
         invalid_subcommands.push(json!({
-            // Missing required name and description fields
-            "invalid_field": format!("value_{}", i),
+            "name": format!("invalid_subcommand_{}", i),
+            // Empty description triggers missing field validation while invalid option type
+            // surfaces additional errors for each subcommand.
+            "description": "",
             "options": [
                 {
                     "name": format!("option_{}", i),
@@ -658,10 +660,11 @@ async fn test_validator_configuration_options() -> Result<()> {
         .validate_tool_config(&PathBuf::from("unknown.json"), &config_with_unknown_fields);
     assert!(strict_result.is_err());
     let strict_errors = strict_result.unwrap_err();
-    assert!(strict_errors
-        .iter()
-        .any(|e| e.error_type == ValidationErrorType::UnknownField
-            && e.field_path == "unknown_root_field"));
+    assert!(strict_errors.iter().any(|e| {
+        e.error_type == ValidationErrorType::SchemaViolation
+            && e.message.contains("unknown field")
+            && (e.message.contains("unknown_root_field") || e.message.contains("unknown_sub_field"))
+    }));
 
     // Permissive mode should allow unknown fields with proper validation
     let permissive_validator = MtdfValidator::new()

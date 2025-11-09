@@ -38,6 +38,7 @@ mod async_notification_test {
             operation_monitor.clone(),
             configs,
             Arc::new(None),
+            false,
         )
         .await
         .unwrap();

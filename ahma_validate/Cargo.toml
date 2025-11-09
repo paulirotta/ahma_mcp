@@ -1,0 +1,15 @@
+[package]
+edition = "2021"
+name = "ahma_validate"
+version = "0.1.0"
+
+[[bin]]
+name = "ahma_validate"
+path = "src/main.rs"
+
+[dependencies]
+ahma_core = {path = "../ahma_core"}
+anyhow.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+tracing.workspace = true

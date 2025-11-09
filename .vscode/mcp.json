@@ -5,7 +5,6 @@
             "cwd": "${workspaceFolder}",
             "command": "target/release/ahma_mcp",
             "args": [
-                "--server",
                 "--tools-dir",
                 ".ahma/tools"
             ],
@@ -18,7 +17,6 @@
                     "run",
                     "--release",
                     "--",
-                    "--server",
                     "--tools-dir",
                     ".ahma/tools"
                 ]

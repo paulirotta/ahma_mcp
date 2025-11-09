@@ -179,7 +179,7 @@ mod comprehensive_tool_fixes_tdd {
             .get("args")
             .and_then(|value| value.as_array())
             .expect("nextest run availability args should exist");
-        let expected_args = vec!["nextest", "run", "--version"];
+        let expected_args = vec!["nextest", "--version"];
         let actual_args: Vec<_> = run_args
             .iter()
             .map(|value| value.as_str().unwrap_or_default())

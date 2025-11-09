@@ -100,6 +100,8 @@ async fn test_prepare_command_and_args_with_aliases() {
                 option_type: "boolean".to_string(),
                 description: Some("Verbose flag".to_string()),
                 format: None,
+
+                items: None,
                 required: Some(false),
                 file_arg: Some(false),
                 file_flag: None,
@@ -110,6 +112,8 @@ async fn test_prepare_command_and_args_with_aliases() {
                 option_type: "string".to_string(),
                 description: Some("Output file".to_string()),
                 format: None,
+
+                items: None,
                 required: Some(false),
                 file_arg: Some(false),
                 file_flag: None,
@@ -166,6 +170,8 @@ async fn test_prepare_command_and_args_mixed_types() {
             option_type: "string".to_string(),
             description: Some("String positional".to_string()),
             format: None,
+
+            items: None,
             required: Some(false),
             file_arg: Some(false),
             file_flag: None,
@@ -177,6 +183,8 @@ async fn test_prepare_command_and_args_mixed_types() {
                 option_type: "boolean".to_string(),
                 description: Some("Boolean option".to_string()),
                 format: None,
+
+                items: None,
                 required: Some(false),
                 file_arg: Some(false),
                 file_flag: None,
@@ -187,6 +195,8 @@ async fn test_prepare_command_and_args_mixed_types() {
                 option_type: "array".to_string(),
                 description: Some("Array option".to_string()),
                 format: None,
+
+                items: None,
                 required: Some(false),
                 file_arg: Some(false),
                 file_flag: None,
@@ -197,6 +207,8 @@ async fn test_prepare_command_and_args_mixed_types() {
                 option_type: "number".to_string(),
                 description: Some("Number option".to_string()),
                 format: None,
+
+                items: None,
                 required: Some(false),
                 file_arg: Some(false),
                 file_flag: None,
@@ -548,6 +560,8 @@ async fn test_prepare_command_and_args_with_null_values() {
             option_type: "string".to_string(),
             description: Some("Positional argument".to_string()),
             format: None,
+
+            items: None,
             required: Some(false),
             file_arg: Some(false),
             file_flag: None,
@@ -558,6 +572,8 @@ async fn test_prepare_command_and_args_with_null_values() {
             option_type: "string".to_string(),
             description: Some("Optional argument".to_string()),
             format: None,
+
+            items: None,
             required: Some(false),
             file_arg: Some(false),
             file_flag: None,

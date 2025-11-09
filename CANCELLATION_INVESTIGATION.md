@@ -42,7 +42,7 @@ Despite comprehensive fixes across multiple layers, "Canceled: Canceled" message
 
 - Direct `cargo nextest run --workspace` works fine
 - MCP server execution: `cargo run --bin ahma_mcp -- --tools-dir tools cargo_nextest default --workspace` fails with "Canceled: Canceled"
-- Tool validation via MCP server works: `cargo run --bin ahma_mcp -- --tools-dir tools --validate tools`
+- Tool validation via dedicated validator works: `cargo run --bin ahma_validate -- .ahma/tools`
 
 ### Key Insight
 

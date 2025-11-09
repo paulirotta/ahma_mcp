@@ -18,16 +18,13 @@ mod tool_validation_tdd_tests {
             .current_dir(&workspace_dir)
             .arg("run")
             .arg("--package")
-            .arg("ahma_shell")
+            .arg("ahma_validate")
             .arg("--bin")
-            .arg("ahma_mcp")
+            .arg("ahma_validate")
             .arg("--")
-            .arg("--tools-dir")
-            .arg(&tools_dir_str)
-            .arg("--validate")
             .arg(&tools_dir_str)
             .output()
-            .expect("Failed to run ahma_mcp validation");
+            .expect("Failed to run ahma_validate");
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);

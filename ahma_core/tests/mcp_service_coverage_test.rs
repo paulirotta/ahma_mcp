@@ -95,6 +95,7 @@ fn test_tool_config_creation() {
                 description: Some("Enable verbose output".to_string()),
                 required: Some(false),
                 format: Some("flag".to_string()),
+                items: None,
                 file_arg: Some(false),
                 file_flag: None,
             }]),
@@ -162,6 +163,7 @@ fn test_option_config_creation() {
         description: Some("Enable verbose output".to_string()),
         required: Some(false),
         format: Some("flag".to_string()),
+        items: None,
         file_arg: Some(false),
         file_flag: None,
     };
@@ -201,7 +203,7 @@ async fn test_service_creation_and_basic_functionality() {
     let configs = Arc::new(HashMap::new());
     let guidance = Arc::new(None);
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance)
+    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false)
         .await
         .unwrap();
 
@@ -244,6 +246,7 @@ async fn test_service_with_configs() {
                 description: Some("Enable verbose output".to_string()),
                 required: Some(false),
                 format: None,
+                items: None,
                 file_arg: Some(false),
                 file_flag: Some("--verbose".to_string()),
             }]),
@@ -284,6 +287,7 @@ async fn test_service_with_configs() {
         Arc::clone(&operation_monitor),
         Arc::new(configs),
         guidance,
+        false,
     )
     .await
     .unwrap();
@@ -395,6 +399,7 @@ async fn test_service_with_tool_configs() {
                 description: Some("Build in release mode".to_string()),
                 required: None,
                 format: None,
+                items: None,
                 file_arg: None,
                 file_flag: None,
                 alias: None,
@@ -430,7 +435,7 @@ async fn test_service_with_tool_configs() {
     let configs = Arc::new(configs);
     let guidance = Arc::new(None);
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance)
+    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false)
         .await
         .unwrap();
 

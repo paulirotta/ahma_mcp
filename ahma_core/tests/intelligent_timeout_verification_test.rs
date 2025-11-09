@@ -23,7 +23,7 @@ async fn test_intelligent_timeout_calculation_direct() {
     let configs = Arc::new(HashMap::new());
     let guidance = Arc::new(None);
 
-    let service = AhmaMcpService::new(adapter, operation_monitor.clone(), configs, guidance)
+    let service = AhmaMcpService::new(adapter, operation_monitor.clone(), configs, guidance, false)
         .await
         .unwrap();
 
@@ -81,7 +81,7 @@ async fn test_timeout_warning_logic() {
     let configs = Arc::new(HashMap::new());
     let guidance = Arc::new(None);
 
-    let service = AhmaMcpService::new(adapter, operation_monitor.clone(), configs, guidance)
+    let service = AhmaMcpService::new(adapter, operation_monitor.clone(), configs, guidance, false)
         .await
         .unwrap();
 

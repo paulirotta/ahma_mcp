@@ -178,6 +178,16 @@
             "null"
           ]
         },
+        "items": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemsSpec"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "name": {
           "type": "string"
         },
@@ -194,6 +204,31 @@
       "additionalProperties": false,
       "required": [
         "name",
+        "type"
+      ]
+    },
+    "ItemsSpec": {
+      "description": "Schema details for array items.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "format": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
         "type"
       ]
     },

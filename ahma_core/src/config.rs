@@ -130,6 +130,8 @@ pub struct CommandOption {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub items: Option<ItemsSpec>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub file_arg: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file_flag: Option<String>,
@@ -142,6 +144,18 @@ pub type OptionConfig = CommandOption;
 
 /// Type alias for positional arguments configuration (same as OptionConfig)
 pub type PositionalArgsConfig = CommandOption;
+
+/// Schema details for array items.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ItemsSpec {
+    #[serde(rename = "type")]
+    pub item_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
 
 /// Provides hints to an AI agent on how to use a tool.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]

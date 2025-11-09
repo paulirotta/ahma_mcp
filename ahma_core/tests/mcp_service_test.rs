@@ -134,6 +134,8 @@ mod mcp_service_tests {
                     required: Some(false),
                     alias: None,
                     format: None,
+
+                    items: None,
                     file_arg: None,
                     file_flag: None,
                 }]),
@@ -227,7 +229,8 @@ mod mcp_service_tests {
         let configs = Arc::new(HashMap::new());
         let guidance = Arc::new(None);
 
-        let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance).await;
+        let service =
+            AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false).await;
 
         assert!(service.is_ok());
         let service = service.unwrap();
@@ -256,7 +259,7 @@ mod mcp_service_tests {
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         let service = rt.block_on(async {
-            AhmaMcpService::new(adapter, operation_monitor, configs, guidance)
+            AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false)
                 .await
                 .unwrap()
         });
@@ -287,7 +290,7 @@ mod mcp_service_tests {
         let configs = Arc::new(HashMap::new());
         let guidance = Arc::new(None);
 
-        let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance)
+        let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false)
             .await
             .unwrap();
 

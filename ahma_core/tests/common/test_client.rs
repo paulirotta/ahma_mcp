@@ -10,6 +10,14 @@ use tokio::process::Command;
 
 #[allow(dead_code)]
 pub async fn new_client(tools_dir: Option<&str>) -> Result<RunningService<RoleClient, ()>> {
+    new_client_with_args(tools_dir, &[]).await
+}
+
+#[allow(dead_code)]
+pub async fn new_client_with_args(
+    tools_dir: Option<&str>,
+    extra_args: &[&str],
+) -> Result<RunningService<RoleClient, ()>> {
     let workspace_dir = get_workspace_dir();
     let client = ()
         .serve(TokioChildProcess::new(Command::new("cargo").configure(
@@ -28,6 +36,9 @@ pub async fn new_client(tools_dir: Option<&str>) -> Result<RunningService<RoleCl
                         get_workspace_path(dir)
                     };
                     cmd.arg("--tools-dir").arg(tools_path);
+                }
+                for arg in extra_args {
+                    cmd.arg(arg);
                 }
             },
         ))?)

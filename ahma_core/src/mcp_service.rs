@@ -34,7 +34,7 @@ use rmcp::{
     },
     service::{NotificationContext, Peer, RequestContext, RoleServer},
 };
-use serde_json::Map;
+use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::env;
 use std::sync::{
@@ -47,11 +47,10 @@ use tracing;
 use crate::{
     adapter::Adapter,
     callback_system::CallbackSender,
-    config::{SequenceStep, SubcommandConfig, ToolConfig},
+    config::{CommandOption, SequenceStep, SubcommandConfig, ToolConfig},
     mcp_callback::McpCallbackSender,
     operation_monitor::Operation,
 };
-use serde_json::Value;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -79,6 +78,7 @@ pub struct AhmaMcpService {
     pub operation_monitor: Arc<crate::operation_monitor::OperationMonitor>,
     pub configs: Arc<HashMap<String, ToolConfig>>,
     pub guidance: Arc<Option<GuidanceConfig>>,
+    pub force_synchronous: bool,
     /// The peer handle for sending notifications to the client.
     /// This is populated by capturing it from the first request context.
     pub peer: Arc<RwLock<Option<Peer<RoleServer>>>>,
@@ -91,12 +91,14 @@ impl AhmaMcpService {
         operation_monitor: Arc<crate::operation_monitor::OperationMonitor>,
         configs: Arc<HashMap<String, ToolConfig>>,
         guidance: Arc<Option<GuidanceConfig>>,
+        force_synchronous: bool,
     ) -> Result<Self, anyhow::Error> {
         Ok(Self {
             adapter,
             operation_monitor,
             configs,
             guidance,
+            force_synchronous,
             peer: Arc::new(RwLock::new(None)),
         })
     }
@@ -128,6 +130,41 @@ impl AhmaMcpService {
         }
     }
 
+    fn normalize_option_type(option_type: &str) -> &'static str {
+        match option_type {
+            "bool" | "boolean" => "boolean",
+            "int" | "integer" => "integer",
+            "array" => "array",
+            "number" => "number",
+            "string" => "string",
+            _ => "string",
+        }
+    }
+
+    fn build_items_schema(option: &CommandOption) -> Map<String, Value> {
+        let mut items_schema = Map::new();
+
+        if let Some(spec) = option.items.as_ref() {
+            items_schema.insert("type".to_string(), Value::String(spec.item_type.clone()));
+            if let Some(format) = &spec.format {
+                items_schema.insert("format".to_string(), Value::String(format.clone()));
+            }
+            if let Some(description) = &spec.description {
+                items_schema.insert(
+                    "description".to_string(),
+                    Value::String(description.clone()),
+                );
+            }
+        } else {
+            items_schema.insert("type".to_string(), Value::String("string".to_string()));
+            if let Some(format) = &option.format {
+                items_schema.insert("format".to_string(), Value::String(format.clone()));
+            }
+        }
+
+        items_schema
+    }
+
     /// Generates the JSON schema for a subcommand's options.
     fn get_schema_for_options(
         &self,
@@ -139,17 +176,10 @@ impl AhmaMcpService {
         if let Some(options) = sub_config.options.as_deref() {
             for option in options {
                 let mut option_schema = Map::new();
-                let param_type = match option.option_type.as_str() {
-                    "bool" => "boolean",
-                    "int" => "integer",
-                    "string" => "string",
-                    "array" => "array",
-                    _ => "string",
-                };
+                let param_type = Self::normalize_option_type(&option.option_type);
                 option_schema.insert("type".to_string(), Value::String(param_type.to_string()));
                 if param_type == "array" {
-                    let mut items_schema = Map::new();
-                    items_schema.insert("type".to_string(), Value::String("string".to_string()));
+                    let items_schema = Self::build_items_schema(option);
                     option_schema.insert("items".to_string(), Value::Object(items_schema));
                 }
                 option_schema.insert(
@@ -171,12 +201,17 @@ impl AhmaMcpService {
         if let Some(positional_args) = sub_config.positional_args.as_deref() {
             for arg in positional_args {
                 let mut arg_schema = Map::new();
-                arg_schema.insert("type".to_string(), Value::String(arg.option_type.clone()));
+                let param_type = Self::normalize_option_type(&arg.option_type);
+                arg_schema.insert("type".to_string(), Value::String(param_type.to_string()));
                 if let Some(ref desc) = arg.description {
                     arg_schema.insert("description".to_string(), Value::String(desc.clone()));
                 }
                 if let Some(ref format) = arg.format {
                     arg_schema.insert("format".to_string(), Value::String(format.clone()));
+                }
+                if param_type == "array" {
+                    let items_schema = Self::build_items_schema(arg);
+                    arg_schema.insert("items".to_string(), Value::Object(items_schema));
                 }
                 properties.insert(arg.name.clone(), Value::Object(arg_schema));
                 if arg.required.unwrap_or(false) {
@@ -929,20 +964,22 @@ impl ServerHandler for AhmaMcpService {
             let timeout = arguments.get("timeout_seconds").and_then(|v| v.as_u64());
 
             // Determine execution mode: first check explicit argument, then config, then default to async
-            let execution_mode =
-                if let Some(mode_str) = arguments.get("execution_mode").and_then(|v| v.as_str()) {
-                    match mode_str {
-                        "Synchronous" => crate::adapter::ExecutionMode::Synchronous,
-                        "AsyncResultPush" => crate::adapter::ExecutionMode::AsyncResultPush,
-                        _ => crate::adapter::ExecutionMode::AsyncResultPush, // Default
-                    }
-                } else if subcommand_config.synchronous == Some(true) {
-                    // Use synchronous mode if subcommand config specifies it
-                    crate::adapter::ExecutionMode::Synchronous
-                } else {
-                    // Default to async
-                    crate::adapter::ExecutionMode::AsyncResultPush
-                };
+            let execution_mode = if self.force_synchronous {
+                crate::adapter::ExecutionMode::Synchronous
+            } else if let Some(mode_str) = arguments.get("execution_mode").and_then(|v| v.as_str())
+            {
+                match mode_str {
+                    "Synchronous" => crate::adapter::ExecutionMode::Synchronous,
+                    "AsyncResultPush" => crate::adapter::ExecutionMode::AsyncResultPush,
+                    _ => crate::adapter::ExecutionMode::AsyncResultPush, // Default
+                }
+            } else if subcommand_config.synchronous == Some(true) {
+                // Use synchronous mode if subcommand config specifies it
+                crate::adapter::ExecutionMode::Synchronous
+            } else {
+                // Default to async
+                crate::adapter::ExecutionMode::AsyncResultPush
+            };
 
             match execution_mode {
                 crate::adapter::ExecutionMode::Synchronous => {
@@ -1076,8 +1113,19 @@ impl AhmaMcpService {
             merged_args.extend(step.args.clone());
             step_params.arguments = Some(merged_args);
 
+            let step_tool_config = match self.configs.get(&step.tool) {
+                Some(cfg) => cfg,
+                None => {
+                    let error_message = format!(
+                        "Tool '{}' referenced in sequence step is not configured.",
+                        step.tool
+                    );
+                    return Err(McpError::internal_error(error_message, None));
+                }
+            };
+
             let (subcommand_config, command_parts) = match self
-                .find_subcommand_config_from_args(config, Some(step.subcommand.clone()))
+                .find_subcommand_config_from_args(step_tool_config, Some(step.subcommand.clone()))
             {
                 Some(result) => result,
                 None => {

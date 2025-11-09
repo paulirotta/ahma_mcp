@@ -32,6 +32,7 @@ mod realistic_endless_notification_test {
             operation_monitor.clone(),
             configs,
             Arc::new(None),
+            false,
         )
         .await
         .unwrap();
