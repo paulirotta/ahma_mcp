@@ -12,7 +12,7 @@
 //!   capture.
 //!
 //! - **`config`**: Defines the data structures for tool configuration, primarily the
-//!   `Config`, `Subcommand`, and `CliOption` structs. These are deserialized from TOML
+//!   `Config`, `Subcommand`, and `CliOption` structs. These are deserialized from JSON
 //!   files and provide the blueprint for how `ahma_mcp` understands and interacts with
 //!   a CLI tool.
 //!
