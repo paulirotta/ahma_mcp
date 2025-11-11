@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "ahma_core"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -28,7 +28,7 @@ dependencies = [
 
 [[package]]
 name = "ahma_shell"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "ahma_core",
  "anyhow",
@@ -45,7 +45,7 @@ dependencies = [
 
 [[package]]
 name = "ahma_validate"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "ahma_core",
  "anyhow",
@@ -468,7 +468,7 @@ dependencies = [
 
 [[package]]
 name = "generate_schema"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "ahma_core",
  "schemars",
@@ -1002,9 +1002,9 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "syn"
-version = "2.0.109"
+version = "2.0.110"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f17c7e013e88258aa9543dcbe81aca68a667a9ac37cd69c9fbc07858bfe0e2f"
+checksum = "a99801b5bd34ede4cf3fc688c5919368fea4e4814a4664359503e6015b280aea"
 dependencies = [
  "proc-macro2",
  "quote",

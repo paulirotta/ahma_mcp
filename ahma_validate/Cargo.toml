@@ -1,7 +1,10 @@
 [package]
-edition = "2021"
+edition.workspace = true
+license.workspace = true
 name = "ahma_validate"
-version = "0.1.0"
+readme.workspace = true
+version.workspace = true
+rust-version.workspace = true
 
 [[bin]]
 name = "ahma_validate"
