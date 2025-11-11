@@ -43,13 +43,13 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::{
     collections::{HashMap, HashSet},
     io::Write,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -600,15 +600,14 @@ impl Adapter {
             }
 
             // Handle positional arguments from `{"args": [...]}`
-            if let Some(inner_args) = args_map.get("args") {
-                if let Some(positional_values) = inner_args.as_array() {
+            if let Some(inner_args) = args_map.get("args")
+                && let Some(positional_values) = inner_args.as_array() {
                     for value in positional_values {
                         if let Some(s) = Self::value_to_string(value).await? {
                             final_args.push(s);
                         }
                     }
                 }
-            }
         }
 
         Ok((program, final_args))
@@ -691,8 +690,8 @@ impl Adapter {
 
         // Standard value handling for non-boolean, non-file-arg options.
         // This can return None for `null` values.
-        if let Some(value_str) = Self::value_to_string(value).await? {
-            if !value_str.is_empty() {
+        if let Some(value_str) = Self::value_to_string(value).await?
+            && !value_str.is_empty() {
                 if positional_arg_names.contains(key) {
                     final_args.push(value_str);
                 } else {
@@ -700,7 +699,6 @@ impl Adapter {
                     final_args.push(value_str);
                 }
             }
-        }
         Ok(())
     }
 

@@ -7,7 +7,7 @@ use ahma_core::{
     shell_pool::{ShellPoolConfig, ShellPoolManager},
 };
 use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 
 pub fn init_test_logging() {
     let _ = ahma_core::utils::logging::init_logging("trace", false);
@@ -28,11 +28,10 @@ pub fn contains_all(output: &str, patterns: &[&str]) -> bool {
 pub fn extract_tool_names(debug_output: &str) -> Vec<String> {
     let mut tool_names = Vec::new();
     for line in debug_output.lines() {
-        if line.contains("Loading tool:") || line.contains("Tool loaded:") {
-            if let Some(name) = line.split(':').nth(1) {
+        if (line.contains("Loading tool:") || line.contains("Tool loaded:"))
+            && let Some(name) = line.split(':').nth(1) {
                 tool_names.push(name.trim().to_string());
             }
-        }
     }
     tool_names
 }
@@ -88,8 +87,8 @@ pub async fn setup_test_environment() -> (AhmaMcpService, TempDir) {
 }
 
 #[allow(dead_code)]
-pub async fn setup_test_environment_with_io(
-) -> (AhmaMcpService, Sender<String>, Receiver<String>, TempDir) {
+pub async fn setup_test_environment_with_io()
+-> (AhmaMcpService, Sender<String>, Receiver<String>, TempDir) {
     let temp_dir = tempdir().unwrap();
     let tools_dir = temp_dir.path().join("tools");
     // Use Tokio's async filesystem API so we don't block the runtime

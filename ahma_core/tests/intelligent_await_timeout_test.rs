@@ -13,7 +13,7 @@ use common::test_client::new_client;
 use rmcp::model::CallToolRequestParam;
 use serde_json::json;
 use std::time::Duration;
-use tokio::time::{timeout, Instant};
+use tokio::time::{Instant, timeout};
 
 /// Test: No timeout provided, no operations running
 /// Expected: Use intelligent timeout (240s default) but return immediately

@@ -1,13 +1,13 @@
 [package]
 edition.workspace = true
 license.workspace = true
-name = "generate_schema"
+name = "generate_tool_schema"
 readme.workspace = true
 version.workspace = true
 rust-version.workspace = true
 
 [[bin]]
-name = "generate_schema"
+name = "generate_tool_schema"
 path = "src/main.rs"
 
 [dependencies]

@@ -143,14 +143,13 @@ mod race_condition_bug_test {
         assert_eq!(recheck[0].id, test_op_id);
 
         // The result should remain the original value (late updates don't overwrite completed operations)
-        if let Some(result) = &recheck[0].result {
-            if let Some(result_str) = result.as_str() {
+        if let Some(result) = &recheck[0].result
+            && let Some(result_str) = result.as_str() {
                 assert_eq!(
                     result_str, "completed",
                     "Result should remain as original value - late updates are ignored"
                 );
             }
-        }
 
         println!(
             "✅ Late update_status properly handled - operation remains in history with original result (late updates ignored)"

@@ -73,7 +73,7 @@ fn test_rust_quality_check_sequence_steps() {
             && step
                 .args
                 .get("bin")
-                .is_some_and(|value| value == &Value::String("generate_schema".into()))
+                .is_some_and(|value| value == &Value::String("generate_tool_schema".into()))
     });
     assert!(has_generate_schema, "Sequence should regenerate the schema");
 

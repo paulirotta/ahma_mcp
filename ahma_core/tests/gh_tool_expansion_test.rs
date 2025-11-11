@@ -163,11 +163,10 @@ async fn test_gh_run_subcommands_schema() {
 
         // Should have minimal options (just repo)
         assert!(subcommand.options.as_ref().map_or(0, |opts| opts.len()) <= 1);
-        if let Some(options) = &subcommand.options {
-            if !options.is_empty() {
+        if let Some(options) = &subcommand.options
+            && !options.is_empty() {
                 assert_eq!(options[0].name, "repo");
             }
-        }
     }
 
     // Test run_view has optional run_id

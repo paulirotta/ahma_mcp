@@ -1,5 +1,5 @@
 [workspace]
-members = ["ahma_core", "ahma_shell", "ahma_validate", "generate_schema"]
+members = ["ahma_core", "ahma_shell", "ahma_validate", "generate_tool_schema"]
 resolver = "2"
 
 [workspace.package]

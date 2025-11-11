@@ -194,7 +194,7 @@ async fn test_rust_quality_check_structure() -> Result<()> {
     assert_eq!(sequence[0]["subcommand"].as_str(), Some("run"));
     assert_eq!(
         sequence[0]["args"]["bin"].as_str(),
-        Some("generate_schema"),
+        Some("generate_tool_schema"),
         "First step should regenerate the schema"
     );
 

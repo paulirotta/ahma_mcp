@@ -53,8 +53,8 @@ async fn test_async_notification_delivery() {
         while let Some(msg) = read_output(&mut output_rx).await {
             if let Ok(notification) = serde_json::from_str::<Notification>(&msg) {
                 // params is now JsonObject (Map<String, Value>) not Option<JsonValue>
-                if let Some(content) = notification.params.get("content") {
-                    if content
+                if let Some(content) = notification.params.get("content")
+                    && content
                         .to_string()
                         .contains("Operation long_running_async finished")
                     {
@@ -62,7 +62,6 @@ async fn test_async_notification_delivery() {
                         *received_guard = true;
                         break;
                     }
-                }
             }
         }
     });

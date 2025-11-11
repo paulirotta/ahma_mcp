@@ -38,8 +38,8 @@ use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::env;
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
     Arc, RwLock,
+    atomic::{AtomicU64, Ordering},
 };
 use std::time::Duration;
 use tokio::time::Instant;
@@ -329,11 +329,10 @@ impl AhmaMcpService {
         let tool_name = tool_config.name.clone();
 
         let mut description = tool_config.description.clone();
-        if let Some(guidance_config) = self.guidance.as_ref() {
-            if let Some(guidance_text) = guidance_config.guidance_blocks.get(&tool_name) {
+        if let Some(guidance_config) = self.guidance.as_ref()
+            && let Some(guidance_text) = guidance_config.guidance_blocks.get(&tool_name) {
                 description = format!("{}\n\n{}", guidance_text, description);
             }
-        }
 
         let input_schema = self.generate_schema_for_tool_config(tool_config);
 
@@ -722,20 +721,18 @@ impl ServerHandler for AhmaMcpService {
                     let mut operations_with_waits = 0;
 
                     for op in &completed_ops {
-                        if let Some(end_time) = op.end_time {
-                            if let Ok(execution_duration) = end_time.duration_since(op.start_time) {
+                        if let Some(end_time) = op.end_time
+                            && let Ok(execution_duration) = end_time.duration_since(op.start_time) {
                                 total_execution_time += execution_duration.as_secs_f64();
 
-                                if let Some(first_wait_time) = op.first_wait_time {
-                                    if let Ok(wait_duration) =
+                                if let Some(first_wait_time) = op.first_wait_time
+                                    && let Ok(wait_duration) =
                                         first_wait_time.duration_since(op.start_time)
                                     {
                                         total_wait_time += wait_duration.as_secs_f64();
                                         operations_with_waits += 1;
                                     }
-                                }
                             }
-                        }
                     }
 
                     if total_execution_time > 0.0 {

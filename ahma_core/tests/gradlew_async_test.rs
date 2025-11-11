@@ -57,8 +57,8 @@ async fn test_gradlew_async_build_commands() -> Result<()> {
                     command
                 );
 
-                if let Some(content) = tool_result.content.first() {
-                    if let Some(text_content) = content.as_text() {
+                if let Some(content) = tool_result.content.first()
+                    && let Some(text_content) = content.as_text() {
                         println!(
                             "✓ {} executed (might have failed due to missing Android SDK)",
                             command
@@ -70,7 +70,6 @@ async fn test_gradlew_async_build_commands() -> Result<()> {
                             command
                         );
                     }
-                }
             }
             Err(e) => {
                 // Expected if Android SDK not available - the important thing is the tool handles it gracefully

@@ -18,7 +18,7 @@ mod common;
 use ahma_core::utils::logging::init_test_logging;
 use common::test_client::new_client;
 use rmcp::model::CallToolRequestParam;
-use serde_json::{json, Map};
+use serde_json::{Map, json};
 use std::borrow::Cow;
 
 // Assuming common::test_client::new_client can be optimized for speed,
@@ -58,8 +58,8 @@ async fn test_call_tool_basic() -> Result<()> {
 
     // The result should contain operation status information
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text() {
             // Should contain information about operations or status
             assert!(
                 text_content.text.contains("operation")
@@ -67,7 +67,6 @@ async fn test_call_tool_basic() -> Result<()> {
                     || text_content.text.contains("completed")
             );
         }
-    }
 
     client.cancel().await?;
     Ok(())
@@ -95,14 +94,13 @@ async fn test_async_notification_delivery() -> Result<()> {
 
     // The async tool should return immediately with operation info
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text() {
             // Should contain operation ID and status info
             assert!(
                 text_content.text.contains("operation_id") || text_content.text.contains("started")
             );
         }
-    }
 
     // 2. Use the await tool to check that async operations can be tracked - no timeout parameter needed
     let await_params = json!({});

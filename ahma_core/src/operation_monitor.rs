@@ -349,15 +349,14 @@ impl OperationMonitor {
         // This handles the case where an operation is added in a terminal state
         {
             let mut ops = self.operations.write().await;
-            if let Some(op) = ops.get_mut(operation_id) {
-                if op.state.is_terminal() {
+            if let Some(op) = ops.get_mut(operation_id)
+                && op.state.is_terminal() {
                     // Operation is already terminal, but we still need to set first_wait_time
                     if op.first_wait_time.is_none() {
                         op.first_wait_time = Some(SystemTime::now());
                     }
                     return Some(op.clone());
                 }
-            }
         } // Drop write lock immediately
 
         // Get the notifier and check/set first_wait_time atomically

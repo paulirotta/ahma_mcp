@@ -38,7 +38,7 @@
 use anyhow::Result;
 use directories::ProjectDirs;
 use std::{io::stderr, sync::Once};
-use tracing_subscriber::{fmt::layer, prelude::*, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt::layer, prelude::*};
 
 static INIT: Once = Once::new();
 

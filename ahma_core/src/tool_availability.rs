@@ -190,11 +190,10 @@ pub async fn evaluate_tool_availability(
                 });
             }
             ProbeTarget::Subcommand { ref tool, ref path } => {
-                if let Some(config) = filtered_configs.get_mut(tool) {
-                    if let Some(sub) = find_subcommand_mut(&mut config.subcommand, path) {
+                if let Some(config) = filtered_configs.get_mut(tool)
+                    && let Some(sub) = find_subcommand_mut(&mut config.subcommand, path) {
                         sub.enabled = false;
                     }
-                }
 
                 let joined_path = path.join("_");
                 let message = format!(
@@ -385,11 +384,10 @@ fn resolve_command(
     let mut working_dir = default_working_dir.to_path_buf();
 
     if let Some(check) = check {
-        if let Some(codes) = &check.success_exit_codes {
-            if !codes.is_empty() {
+        if let Some(codes) = &check.success_exit_codes
+            && !codes.is_empty() {
                 success_codes = codes.clone();
             }
-        }
         if let Some(dir) = &check.working_directory {
             working_dir = PathBuf::from(dir);
         }
@@ -544,11 +542,10 @@ fn find_subcommand_mut_in<'a>(
             if rest.is_empty() {
                 return Some(sub);
             }
-            if let Some(children) = sub.subcommand.as_mut() {
-                if let Some(found) = find_subcommand_mut_in(children.as_mut_slice(), rest) {
+            if let Some(children) = sub.subcommand.as_mut()
+                && let Some(found) = find_subcommand_mut_in(children.as_mut_slice(), rest) {
                     return Some(found);
                 }
-            }
         }
     }
     None

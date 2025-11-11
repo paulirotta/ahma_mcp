@@ -4,10 +4,10 @@
 
 use anyhow::Result;
 use rmcp::{
+    ServiceExt,
     model::CallToolRequestParam,
     service::{RoleClient, RunningService},
     transport::{ConfigureCommandExt, TokioChildProcess},
-    ServiceExt,
 };
 use serde_json::json;
 use std::borrow::Cow;

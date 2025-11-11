@@ -35,8 +35,8 @@ async fn test_ls_tool_should_not_add_undefined_path_parameter() -> Result<()> {
     // This test should FAIL initially to demonstrate the bug
     match result {
         Ok(response) => {
-            if let Some(content) = response.content.first() {
-                if let Some(text_content) = content.as_text() {
+            if let Some(content) = response.content.first()
+                && let Some(text_content) = content.as_text() {
                     let output = &text_content.text;
 
                     // Check that we don't see the incorrect --path=. argument
@@ -57,7 +57,6 @@ async fn test_ls_tool_should_not_add_undefined_path_parameter() -> Result<()> {
                         output
                     );
                 }
-            }
         }
         Err(e) => {
             // If the tool call fails, check if it's due to the --path=. bug
@@ -101,8 +100,8 @@ async fn test_ls_tool_executes_plain_ls_command() -> Result<()> {
 
     // ASSERT: Should execute successfully without --path=. error
     // This is testing that the command construction creates valid shell command
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text() {
             let output = &text_content.text;
 
             // Verify command succeeded (no error about unrecognized option)
@@ -120,7 +119,6 @@ async fn test_ls_tool_executes_plain_ls_command() -> Result<()> {
                 "ls command should produce directory listing output"
             );
         }
-    }
 
     client.cancel().await?;
     Ok(())
@@ -150,8 +148,8 @@ async fn test_ls_tool_with_valid_options() -> Result<()> {
     let result = client.call_tool(call_param).await?;
 
     // ASSERT: Should complete successfully
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text() {
             let output = &text_content.text;
 
             // Basic validation that command executed
@@ -161,7 +159,6 @@ async fn test_ls_tool_with_valid_options() -> Result<()> {
                 output
             );
         }
-    }
 
     client.cancel().await?;
     Ok(())

@@ -4,8 +4,8 @@ mod common;
 use ahma_core::utils::logging::init_test_logging;
 use common::test_client::new_client;
 use rmcp::{
-    model::{CallToolRequestParam, ErrorCode},
     ServiceError,
+    model::{CallToolRequestParam, ErrorCode},
 };
 use serde_json::json;
 
@@ -58,9 +58,11 @@ async fn test_path_validation_failure_absolute() {
     match error {
         ServiceError::McpError(mcp_error) => {
             assert_eq!(mcp_error.code, ErrorCode::INVALID_PARAMS);
-            assert!(mcp_error
-                .message
-                .contains("is outside the allowed workspace"));
+            assert!(
+                mcp_error
+                    .message
+                    .contains("is outside the allowed workspace")
+            );
         }
         _ => panic!("Expected McpError, got {:?}", error),
     }
@@ -93,9 +95,11 @@ async fn test_path_validation_failure_relative() {
     match error {
         ServiceError::McpError(mcp_error) => {
             assert_eq!(mcp_error.code, ErrorCode::INVALID_PARAMS);
-            assert!(mcp_error
-                .message
-                .contains("is outside the allowed workspace"));
+            assert!(
+                mcp_error
+                    .message
+                    .contains("is outside the allowed workspace")
+            );
         }
         _ => panic!("Expected McpError, got {:?}", error),
     }

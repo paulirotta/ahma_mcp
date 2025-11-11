@@ -18,12 +18,13 @@ fn test_cancel_tool_message_suggestion_block_shape() {
     let root: Value = suggestion;
     let hint = root.get("tool_hint").expect("tool_hint present");
     assert_eq!(hint.get("suggested_tool").unwrap().as_str(), Some("status"));
-    assert!(hint
-        .get("reason")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .contains("cancelled"));
+    assert!(
+        hint.get("reason")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .contains("cancelled")
+    );
 
     let steps = hint.get("next_steps").unwrap().as_array().unwrap();
     assert_eq!(steps.len(), 2);

@@ -11,7 +11,7 @@ fn workspace_dir() -> PathBuf {
         .to_path_buf()
 }
 
-/// Ensure the generate_schema binary produces an MTDF schema file in the target output directory.
+/// Ensure the generate_tool_schema binary produces an MTDF schema file in the target output directory.
 #[test]
 fn test_generate_schema_binary_outputs_schema() -> Result<()> {
     let workspace_dir = workspace_dir();
@@ -24,16 +24,16 @@ fn test_generate_schema_binary_outputs_schema() -> Result<()> {
         .current_dir(&workspace_dir)
         .arg("run")
         .arg("--package")
-        .arg("generate_schema")
+        .arg("generate_tool_schema")
         .arg("--bin")
-        .arg("generate_schema")
+        .arg("generate_tool_schema")
         .arg("--")
         .arg(&output_dir_arg)
         .output()?;
 
     assert!(
         command_output.status.success(),
-        "generate_schema should exit successfully: stderr={}",
+        "generate_tool_schema should exit successfully: stderr={}",
         String::from_utf8_lossy(&command_output.stderr)
     );
 

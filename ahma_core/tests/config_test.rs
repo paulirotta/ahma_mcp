@@ -1,5 +1,5 @@
 use ahma_core::config::{
-    load_tool_configs, OptionConfig, SequenceStep, SubcommandConfig, ToolConfig, ToolHints,
+    OptionConfig, SequenceStep, SubcommandConfig, ToolConfig, ToolHints, load_tool_configs,
 };
 use ahma_core::utils::logging::init_test_logging;
 use serde_json::json;

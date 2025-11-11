@@ -407,7 +407,7 @@ pub fn channel_callback(
 mod tests {
     use super::*;
     use crate::utils::logging::init_test_logging;
-    use tokio::time::{timeout, Duration};
+    use tokio::time::{Duration, timeout};
 
     #[tokio::test]
     async fn test_no_op_callback() {

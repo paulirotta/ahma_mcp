@@ -534,11 +534,10 @@ async fn test_concurrent_access_patterns() -> Result<()> {
                         timeout_ms: 15000,
                     };
 
-                    if let Ok(response) = shell.execute_command(command).await {
-                        if response.exit_code == 0 {
+                    if let Ok(response) = shell.execute_command(command).await
+                        && response.exit_code == 0 {
                             successful_operations += 1;
                         }
-                    }
 
                     manager_clone.return_shell(shell).await;
                 }

@@ -1,9 +1,9 @@
 use super::{get_workspace_dir, get_workspace_path};
 use anyhow::Result;
 use rmcp::{
+    ServiceExt,
     service::{RoleClient, RunningService},
     transport::{ConfigureCommandExt, TokioChildProcess},
-    ServiceExt,
 };
 use std::path::Path;
 use tokio::process::Command;

@@ -3,7 +3,7 @@ mod common;
 use anyhow::Result;
 use common::test_client;
 use rmcp::model::CallToolRequestParam;
-use serde_json::{json, Map};
+use serde_json::{Map, json};
 use std::borrow::Cow;
 use tokio::fs;
 

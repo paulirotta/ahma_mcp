@@ -16,7 +16,7 @@
           "subcommand": "run",
           "description": "Generate the MTDF schema to ensure it's up-to-date.",
           "args": {
-            "bin": "generate_schema"
+            "bin": "generate_tool_schema"
           }
         },
         {

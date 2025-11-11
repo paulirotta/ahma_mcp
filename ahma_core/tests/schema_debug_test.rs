@@ -35,11 +35,11 @@ async fn test_dump_actual_schemas_for_debugging() -> anyhow::Result<()> {
         println!("Wrote schema for '{}' to {:?}", tool.name, filename);
 
         // Check for array parameters in this tool
-        if let Some(properties) = tool.input_schema.get("properties") {
-            if let Some(props_obj) = properties.as_object() {
+        if let Some(properties) = tool.input_schema.get("properties")
+            && let Some(props_obj) = properties.as_object() {
                 for (param_name, param_schema) in props_obj {
-                    if let Some(param_obj) = param_schema.as_object() {
-                        if param_obj.get("type") == Some(&Value::String("array".to_string())) {
+                    if let Some(param_obj) = param_schema.as_object()
+                        && param_obj.get("type") == Some(&Value::String("array".to_string())) {
                             println!(
                                 "  🔍 Tool '{}' has array parameter '{}': {}",
                                 tool.name,
@@ -56,10 +56,8 @@ async fn test_dump_actual_schemas_for_debugging() -> anyhow::Result<()> {
                                 println!("    ❌ MISSING items property!");
                             }
                         }
-                    }
                 }
             }
-        }
     }
 
     // Focus specifically on consolidated cargo tool which now includes cargo-audit options
@@ -101,11 +99,11 @@ async fn test_release_build_schema_generation() -> anyhow::Result<()> {
     println!("Release build cargo schema:");
     let schema = cargo_tool.input_schema.as_ref();
 
-    if let Some(properties) = schema.get("properties") {
-        if let Some(props_obj) = properties.as_object() {
+    if let Some(properties) = schema.get("properties")
+        && let Some(props_obj) = properties.as_object() {
             for (param_name, param_schema) in props_obj {
-                if let Some(param_obj) = param_schema.as_object() {
-                    if param_obj.get("type") == Some(&Value::String("array".to_string())) {
+                if let Some(param_obj) = param_schema.as_object()
+                    && param_obj.get("type") == Some(&Value::String("array".to_string())) {
                         println!(
                             "Array param '{}': {}",
                             param_name,
@@ -119,10 +117,8 @@ async fn test_release_build_schema_generation() -> anyhow::Result<()> {
                             param_name
                         );
                     }
-                }
             }
         }
-    }
 
     client.cancel().await?;
     Ok(())

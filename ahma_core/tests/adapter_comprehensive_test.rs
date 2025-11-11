@@ -15,7 +15,7 @@ use ahma_core::{
     utils::logging::init_test_logging,
 };
 use anyhow::Result;
-use serde_json::{json, Map};
+use serde_json::{Map, json};
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -621,8 +621,8 @@ async fn test_async_operations_with_callbacks() -> Result<()> {
     let (adapter, temp_dir) = create_test_adapter().await?;
 
     // Mock callback that collects notifications
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct MockCallback {
         notifications: Arc<Mutex<Vec<String>>>,

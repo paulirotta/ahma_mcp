@@ -50,10 +50,10 @@ use ahma_core::{
     tool_availability::evaluate_tool_availability,
     utils::logging::init_logging,
 };
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use rmcp::ServiceExt;
-use serde_json::{from_str, Value};
+use serde_json::{Value, from_str};
 use std::{
     collections::{HashMap, HashSet},
     env, fs,
@@ -657,11 +657,10 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
 
     // Prefer programmatic arguments via environment variable
     if let Ok(env_args) = std::env::var("AHMA_MCP_ARGS") {
-        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(&env_args) {
-            if let Some(map) = json_val.as_object() {
+        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(&env_args)
+            && let Some(map) = json_val.as_object() {
                 tool_args_map = map.clone();
             }
-        }
     } else {
         let mut iter = cli.tool_args.into_iter().peekable();
         while let Some(arg) = iter.next() {
@@ -691,14 +690,13 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         }
     }
 
-    if working_directory.is_none() {
-        if let Some(wd) = tool_args_map
+    if working_directory.is_none()
+        && let Some(wd) = tool_args_map
             .get("working_directory")
             .and_then(|v| v.as_str())
         {
             working_directory = Some(wd.to_string());
         }
-    }
 
     if let Some(args_from_map) = tool_args_map.get("args").and_then(|v| v.as_array()) {
         raw_args.extend(

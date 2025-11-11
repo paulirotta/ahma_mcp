@@ -47,7 +47,7 @@ These are the non-negotiable principles of the project.
 - **R6.2**: Core library functionality (tool execution, configuration, async orchestration, MCP service) **must** live in the `ahma_core` crate, which is protocol-agnostic and reusable.
 - **R6.3**: The main MCP server logic **must** live in the `ahma_shell` binary crate, which depends on `ahma_core`.
 - **R6.4**: Tool configuration validation logic **must** be implemented in the `ahma_validate` binary crate. This provides a fast, focused way to check tool definitions for correctness without starting the full server.
-- **R6.5**: The MTDF JSON Schema generation logic **must** be implemented in the `generate_schema` binary crate.
+- **R6.5**: The MTDF JSON Schema generation logic **must** be implemented in the `generate_tool_schema` binary crate.
 - **R6.6**: The core library **must** expose a clean public API that allows other crates (like future `ahma_web` or `ahma_okta` components) to leverage the tool execution engine without tight coupling.
 - **R6.7**: This separation ensures that adding new interfaces (web, authentication) or changing the CLI does not require modifications to core business logic.
 
@@ -115,7 +115,7 @@ ahma_mcp rust_quality_check
 
 This command is a sequence tool that performs the following essential steps in order:
 
-1. **`generate_schema`**: Regenerates the MTDF JSON schema to ensure it is up-to-date with any changes in the core data structures.
+1. **`generate_tool_schema`**: Regenerates the MTDF JSON schema to ensure it is up-to-date with any changes in the core data structures.
 2. **`ahma_validate`**: Validates all tool configurations against the latest schema.
 3. **`cargo fmt`**: Formats all Rust code.
 4. **`cargo clippy`**: Lints the code and automatically applies fixes.

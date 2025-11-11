@@ -9,9 +9,9 @@
 //! - Callback error handling paths
 
 use anyhow::Result;
-use serde_json::{json, Map};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use serde_json::{Map, json};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use tokio::sync::Mutex;

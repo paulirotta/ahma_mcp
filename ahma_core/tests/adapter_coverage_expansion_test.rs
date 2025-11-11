@@ -13,7 +13,7 @@ use ahma_core::config::{OptionConfig, SubcommandConfig};
 use ahma_core::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_core::shell_pool::{ShellPoolConfig, ShellPoolManager};
 use ahma_core::utils::logging::init_test_logging;
-use serde_json::{json, Map};
+use serde_json::{Map, json};
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;

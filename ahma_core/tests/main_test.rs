@@ -324,8 +324,7 @@ mod main_tests {
         // Test the subcommand configuration lookup logic
         use ahma_core::config::SubcommandConfig;
 
-        let subcommands = vec![
-            SubcommandConfig {
+        let subcommands = [SubcommandConfig {
                 name: "build".to_string(),
                 description: "Build the project".to_string(),
                 guidance_key: None,
@@ -354,8 +353,7 @@ mod main_tests {
                 enabled: true,
                 availability_check: None,
                 install_instructions: None,
-            },
-        ];
+            }];
 
         // Test successful lookup
         let found = subcommands.iter().find(|s| s.name == "build");

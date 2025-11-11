@@ -8,7 +8,7 @@ mod common;
 use anyhow::Result;
 use common::test_client::new_client;
 use rmcp::model::CallToolRequestParam;
-use serde_json::{json, Map};
+use serde_json::{Map, json};
 use std::borrow::Cow;
 
 /// Test that hardcoded tools are properly listed
@@ -57,15 +57,14 @@ async fn test_await_tool_comprehensive() -> Result<()> {
     assert!(!result.content.is_empty());
 
     // Verify response contains operation information
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text() {
             assert!(
                 text_content.text.contains("operation")
                     || text_content.text.contains("await")
                     || text_content.text.contains("complete")
             );
         }
-    }
 
     // Test await with only valid fields (no timeout_seconds)
     let mut valid_params = Map::new();
@@ -100,15 +99,14 @@ async fn test_status_tool_comprehensive() -> Result<()> {
     assert!(!result.content.is_empty());
 
     // Verify status provides operation information
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text() {
             assert!(
                 text_content.text.contains("Operations")
                     || text_content.text.contains("status")
                     || text_content.text.contains("operation")
             );
         }
-    }
 
     // Test status with operation_id parameter
     let mut specific_params = Map::new();
@@ -144,8 +142,8 @@ async fn test_unknown_tool_error_handling() -> Result<()> {
     match result {
         Ok(tool_result) => {
             // Check if error is communicated in response content
-            if let Some(content) = tool_result.content.first() {
-                if let Some(text_content) = content.as_text() {
+            if let Some(content) = tool_result.content.first()
+                && let Some(text_content) = content.as_text() {
                     let text_lower = text_content.text.to_lowercase();
                     assert!(
                         text_lower.contains("error")
@@ -154,7 +152,6 @@ async fn test_unknown_tool_error_handling() -> Result<()> {
                             || text_lower.contains("invalid")
                     );
                 }
-            }
         }
         Err(_) => {
             // Error response is also acceptable for unknown tools

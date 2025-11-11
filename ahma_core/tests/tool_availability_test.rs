@@ -1,8 +1,8 @@
 use ahma_core::config::{AvailabilityCheck, SubcommandConfig, ToolConfig, ToolHints};
 use ahma_core::shell_pool::{ShellPoolConfig, ShellPoolManager};
 use ahma_core::tool_availability::{
-    evaluate_tool_availability, format_install_guidance, AvailabilitySummary, DisabledSubcommand,
-    DisabledTool,
+    AvailabilitySummary, DisabledSubcommand, DisabledTool, evaluate_tool_availability,
+    format_install_guidance,
 };
 use anyhow::Result;
 use std::collections::HashMap;

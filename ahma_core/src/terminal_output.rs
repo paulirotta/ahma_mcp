@@ -40,7 +40,7 @@
 //! can watch the formatted output on `stderr`).
 
 use serde_json::Value;
-use tokio::io::{stderr, AsyncWriteExt};
+use tokio::io::{AsyncWriteExt, stderr};
 
 /// Terminal output utility for formatting and displaying command results
 pub struct TerminalOutput;

@@ -40,8 +40,8 @@ async fn test_array_parameters_have_items_property_fixed() -> anyhow::Result<()>
     let mut validated_arrays = 0;
 
     for (param_name, param_schema) in properties {
-        if let Some(param_obj) = param_schema.as_object() {
-            if param_obj.get("type") == Some(&Value::String("array".to_string())) {
+        if let Some(param_obj) = param_schema.as_object()
+            && param_obj.get("type") == Some(&Value::String("array".to_string())) {
                 validated_arrays += 1;
                 println!("Validating array parameter: {}", param_name);
 
@@ -80,7 +80,6 @@ async fn test_array_parameters_have_items_property_fixed() -> anyhow::Result<()>
                     param_name
                 );
             }
-        }
     }
 
     // Check if cargo-audit is installed
@@ -140,8 +139,8 @@ async fn test_all_tools_array_schemas_are_valid_fixed() -> anyhow::Result<()> {
 
             let mut tool_has_arrays = false;
             for (param_name, param_schema) in props {
-                if let Some(param_obj) = param_schema.as_object() {
-                    if param_obj.get("type") == Some(&Value::String("array".to_string())) {
+                if let Some(param_obj) = param_schema.as_object()
+                    && param_obj.get("type") == Some(&Value::String("array".to_string())) {
                         tool_has_arrays = true;
                         total_array_params += 1;
 
@@ -164,7 +163,6 @@ async fn test_all_tools_array_schemas_are_valid_fixed() -> anyhow::Result<()> {
                             );
                         }
                     }
-                }
             }
 
             if tool_has_arrays {
