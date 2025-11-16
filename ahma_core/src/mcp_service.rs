@@ -1111,6 +1111,167 @@ impl AhmaMcpService {
     ) -> Result<CallToolResult, McpError> {
         let sequence = config.sequence.as_ref().unwrap(); // Safe due to prior check
         let step_delay_ms = config.step_delay_ms.unwrap_or(SEQUENCE_STEP_DELAY_MS);
+
+        // Determine if sequence should run synchronously
+        // - If force_synchronous is true, always run sync
+        // - If force_synchronous is false or None, default is async for sequence tools
+        let run_synchronously = config.force_synchronous.unwrap_or(false);
+
+        if run_synchronously {
+            self.handle_sequence_tool_sync(config, params, context, sequence, step_delay_ms)
+                .await
+        } else {
+            self.handle_sequence_tool_async(config, params, context, sequence, step_delay_ms)
+                .await
+        }
+    }
+
+    /// Handles synchronous sequence execution - blocks until all steps complete
+    async fn handle_sequence_tool_sync(
+        &self,
+        config: &crate::config::ToolConfig,
+        params: CallToolRequestParam,
+        _context: RequestContext<RoleServer>,
+        sequence: &[SequenceStep],
+        step_delay_ms: u64,
+    ) -> Result<CallToolResult, McpError> {
+        let mut final_result = CallToolResult::success(vec![]);
+        let mut all_outputs = Vec::new();
+
+        for (index, step) in sequence.iter().enumerate() {
+            if Self::should_skip_sequence_tool_step(&step.tool) {
+                let message = Self::format_sequence_step_skipped_message(step);
+                final_result.content.push(Content::text(message));
+                continue;
+            }
+
+            // Extract working directory from parent args
+            let parent_args = params.arguments.clone().unwrap_or_default();
+            let working_directory = parent_args
+                .get("working_directory")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| ".".to_string());
+
+            // Merge arguments, excluding meta-parameters
+            let mut merged_args = Map::new();
+            for (key, value) in parent_args.iter() {
+                if key != "working_directory" && key != "execution_mode" && key != "timeout_seconds"
+                {
+                    merged_args.insert(key.clone(), value.clone());
+                }
+            }
+            merged_args.extend(step.args.clone());
+
+            let step_tool_config = match self.configs.get(&step.tool) {
+                Some(cfg) => cfg,
+                None => {
+                    let error_message = format!(
+                        "Tool '{}' referenced in sequence step is not configured.",
+                        step.tool
+                    );
+                    return Err(McpError::internal_error(error_message, None));
+                }
+            };
+
+            let (subcommand_config, command_parts) = match self
+                .find_subcommand_config_from_args(step_tool_config, Some(step.subcommand.clone()))
+            {
+                Some(result) => result,
+                None => {
+                    let error_message = format!(
+                        "Subcommand '{}' for tool '{}' not found in sequence step.",
+                        step.subcommand, step.tool
+                    );
+                    return Err(McpError::internal_error(error_message, None));
+                }
+            };
+
+            // Execute synchronously and wait for result
+            let step_result = self
+                .adapter
+                .execute_sync_in_dir(
+                    &command_parts.join(" "),
+                    Some(merged_args),
+                    &working_directory,
+                    config.timeout_seconds,
+                    Some(subcommand_config),
+                )
+                .await;
+
+            match step_result {
+                Ok(output) => {
+                    let message = format!(
+                        "✓ Step {} completed: {} {}\n{}",
+                        index + 1,
+                        step.tool,
+                        step.subcommand,
+                        if output.is_empty() {
+                            "(no output)"
+                        } else {
+                            &output
+                        }
+                    );
+                    all_outputs.push(message.clone());
+                    tracing::info!(
+                        "Sequence step {} succeeded: {} {}",
+                        index + 1,
+                        step.tool,
+                        step.subcommand
+                    );
+                }
+                Err(e) => {
+                    let error_message = format!(
+                        "✗ Step {} FAILED: {} {}\nError: {}",
+                        index + 1,
+                        step.tool,
+                        step.subcommand,
+                        e
+                    );
+                    all_outputs.push(error_message.clone());
+                    tracing::error!(
+                        "Sequence step {} failed: {} {}: {}",
+                        index + 1,
+                        step.tool,
+                        step.subcommand,
+                        e
+                    );
+
+                    // Return failure immediately - don't continue with remaining steps
+                    final_result.content.push(Content::text(format!(
+                        "Sequence failed at step {}:\n\n{}",
+                        index + 1,
+                        all_outputs.join("\n\n")
+                    )));
+                    final_result.is_error = Some(true);
+                    return Ok(final_result);
+                }
+            }
+
+            // Add delay between steps
+            if step_delay_ms > 0 && index + 1 < sequence.len() {
+                tokio::time::sleep(Duration::from_millis(step_delay_ms)).await;
+            }
+        }
+
+        // All steps succeeded
+        final_result.content.push(Content::text(format!(
+            "All {} sequence steps completed successfully:\n\n{}",
+            sequence.len(),
+            all_outputs.join("\n\n")
+        )));
+        Ok(final_result)
+    }
+
+    /// Handles asynchronous sequence execution - starts all steps and returns immediately
+    async fn handle_sequence_tool_async(
+        &self,
+        _config: &crate::config::ToolConfig,
+        params: CallToolRequestParam,
+        context: RequestContext<RoleServer>,
+        sequence: &[SequenceStep],
+        step_delay_ms: u64,
+    ) -> Result<CallToolResult, McpError> {
         let mut final_result = CallToolResult::success(vec![]);
 
         for (index, step) in sequence.iter().enumerate() {
