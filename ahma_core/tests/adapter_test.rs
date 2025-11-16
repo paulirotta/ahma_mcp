@@ -140,7 +140,7 @@ async fn test_execute_sync_with_subcommand_config() {
             file_arg: Some(false),
             file_flag: None,
         }]),
-        asynchronous: Some(true),
+        force_synchronous: None,
         timeout_seconds: None,
         enabled: true,
         guidance_key: None,

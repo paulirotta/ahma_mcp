@@ -8,7 +8,6 @@
   "subcommand": [
     {
       "name": "script",
-      "asynchronous": true,
       "description": "Execute a Python script file.\n\n**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- DO NOT await for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.",
       "options": [
         {
@@ -49,11 +48,11 @@
           "type": "string",
           "description": "Warning control in format action:message:category:module:lineno (-W)"
         }
-      ]
+      ],
+      "force_synchronous": false
     },
     {
       "name": "code",
-      "asynchronous": false,
       "guidance_key": "python_sync",
       "description": "Execute Python code passed as string",
       "options": [
@@ -89,11 +88,11 @@
           "type": "string",
           "description": "Warning control in format action:message:category:module:lineno (-W)"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "module",
-      "asynchronous": true,
       "description": "Run library module as a script\n\n**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- DO NOT await for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.",
       "options": [
         {
@@ -133,12 +132,12 @@
           "type": "string",
           "description": "Warning control in format action:message:category:module:lineno (-W)"
         }
-      ]
+      ],
+      "force_synchronous": false
     },
     {
       "name": "version",
       "description": "Print Python version and exit",
-      "asynchronous": false,
       "guidance_key": "python_sync",
       "options": [
         {
@@ -152,12 +151,12 @@
           "type": "boolean",
           "description": "Print detailed build information (-VV)"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "help",
       "description": "Print help information",
-      "asynchronous": false,
       "guidance_key": "python_sync",
       "options": [
         {
@@ -171,11 +170,11 @@
           "type": "string",
           "description": "Type of help: 'general' (default), 'env' (environment variables), 'xoptions' (implementation options), 'all' (complete help)"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "interactive",
-      "asynchronous": true,
       "description": "Start interactive Python interpreter\n\n**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- DO NOT await for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.",
       "options": [
         {
@@ -219,12 +218,12 @@
           "type": "string",
           "description": "Warning control in format action:message:category:module:lineno (-W)"
         }
-      ]
+      ],
+      "force_synchronous": false
     },
     {
       "name": "check",
       "description": "Check Python script syntax without executing",
-      "asynchronous": false,
       "guidance_key": "python_sync",
       "options": [
         {
@@ -245,7 +244,8 @@
           "type": "boolean",
           "description": "Verbose output - trace import statements (-v)"
         }
-      ]
+      ],
+      "force_synchronous": true
     }
   ]
 }

@@ -43,7 +43,7 @@ async fn test_simple_sequence_execution() -> Result<()> {
         "description": "Test sequence with echo commands",
         "command": "sequence",
         "enabled": true,
-        "asynchronous": false,
+        "force_synchronous": true,
         "timeout_seconds": 30,
         "sequence": [
             {
@@ -244,7 +244,7 @@ async fn test_sequence_with_invalid_tool() -> Result<()> {
         "description": "Sequence with invalid tool",
         "command": "sequence",
         "enabled": true,
-        "asynchronous": false,
+        "force_synchronous": true,
         "timeout_seconds": 30,
         "sequence": [
             {
@@ -313,7 +313,7 @@ async fn test_sequence_delay_is_applied() -> Result<()> {
         "description": "Sequence to test timing",
         "command": "sequence",
         "enabled": true,
-        "asynchronous": false,
+        "force_synchronous": true,
         "timeout_seconds": 30,
         "sequence": [
             {

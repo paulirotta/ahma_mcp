@@ -30,6 +30,14 @@ impl Client {
     }
 
     pub async fn start_process(&mut self, tools_dir: Option<&str>) -> Result<()> {
+        self.start_process_with_args(tools_dir, &[]).await
+    }
+
+    pub async fn start_process_with_args(
+        &mut self,
+        tools_dir: Option<&str>,
+        extra_args: &[&str],
+    ) -> Result<()> {
         let client = ()
             .serve(TokioChildProcess::new(Command::new("cargo").configure(
                 |cmd| {
@@ -41,6 +49,9 @@ impl Client {
                         .arg("--");
                     if let Some(dir) = tools_dir {
                         cmd.arg("--tools-dir").arg(dir);
+                    }
+                    for arg in extra_args {
+                        cmd.arg(arg);
                     }
                 },
             ))?)

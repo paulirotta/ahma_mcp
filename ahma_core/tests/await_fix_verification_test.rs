@@ -21,7 +21,7 @@ async fn setup_mcp_service_with_long_running_tool() -> Result<(TempDir, Client)>
         "subcommand": [
             {
                 "name": "default",
-                "asynchronous": true,
+                "force_synchronous": false,
                 "description": "Sleeps for a given duration. Runs asynchronously in background. Returns operation_id immediately. Results delivered via notification when complete. Continue with other tasks.",
                 "positional_args": [
                     {
@@ -38,8 +38,9 @@ async fn setup_mcp_service_with_long_running_tool() -> Result<(TempDir, Client)>
     std::fs::write(&tool_config_path, tool_config_content)?;
 
     let mut client = Client::new();
+    // Start with --async flag to enable async execution
     client
-        .start_process(Some(tools_dir.to_str().unwrap()))
+        .start_process_with_args(Some(tools_dir.to_str().unwrap()), &["--async"])
         .await?;
 
     // Give the server a moment to start

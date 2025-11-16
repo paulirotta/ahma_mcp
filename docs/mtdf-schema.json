@@ -4,13 +4,6 @@
   "description": "Represents the complete configuration for a command-line tool.",
   "type": "object",
   "properties": {
-    "asynchronous": {
-      "description": "Default asynchronous behavior for all subcommands (can be overridden per subcommand)",
-      "type": [
-        "boolean",
-        "null"
-      ]
-    },
     "availability_check": {
       "description": "Runtime availability probe executed at server startup.",
       "anyOf": [
@@ -31,6 +24,13 @@
     "enabled": {
       "type": "boolean",
       "default": true
+    },
+    "force_synchronous": {
+      "description": "Force synchronous execution even when --async flag is set (overrides CLI flag)\nIf true: always runs synchronously, ignoring --async\nIf false or None: obeys the --async CLI flag (default behavior)",
+      "type": [
+        "boolean",
+        "null"
+      ]
     },
     "guidance_key": {
       "description": "Key to look up guidance in tool_guidance.json",
@@ -268,13 +268,6 @@
       "description": "Configuration for a subcommand, allowing for nested commands.",
       "type": "object",
       "properties": {
-        "asynchronous": {
-          "description": "Override asynchronous behavior for this subcommand",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
         "availability_check": {
           "description": "Runtime availability probe executed at server startup.",
           "anyOf": [
@@ -292,6 +285,13 @@
         "enabled": {
           "type": "boolean",
           "default": true
+        },
+        "force_synchronous": {
+          "description": "Force synchronous execution even when --async flag is set (overrides CLI flag)\nIf true: always runs synchronously, ignoring --async\nIf false or None: obeys the --async CLI flag (default behavior)",
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "guidance_key": {
           "description": "Key to look up guidance in tool_guidance.json",

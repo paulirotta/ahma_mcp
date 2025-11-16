@@ -290,7 +290,9 @@ impl MtdfValidator {
         }
 
         // Check for logical inconsistency: a synchronous command should not have async keywords.
-        if !subcommand.asynchronous.unwrap_or(false) {
+        // force_synchronous=true means always sync, force_synchronous=false/None means can be async (with --async flag)
+        // The default behavior is synchronous, so we only warn if async keywords are in a force_synchronous=true command
+        if subcommand.force_synchronous == Some(true) {
             let desc_lower = subcommand.description.to_lowercase();
             let async_keywords = [
                 "operation_id",
@@ -303,29 +305,13 @@ impl MtdfValidator {
                 errors.push(SchemaValidationError {
                     error_type: ValidationErrorType::LogicalInconsistency,
                     field_path: format!("{}.description", path),
-                    message: "Description mentions async behavior but subcommand is synchronous by default".to_string(),
-                    suggestion: Some("Either change asynchronous to true or update description to reflect synchronous behavior".to_string()),
-                });
-            }
-        } else {
-            // It's an async command, check if description is missing async keywords
-            let desc_lower = subcommand.description.to_lowercase();
-            let async_keywords = [
-                "operation_id",
-                "notification",
-                "asynchronously",
-                "async",
-                "background",
-            ];
-            if !async_keywords.iter().any(|&kw| desc_lower.contains(kw)) {
-                errors.push(SchemaValidationError {
-                    error_type: ValidationErrorType::LogicalInconsistency,
-                    field_path: format!("{}.description", path),
-                    message: "Description does not mention async behavior but subcommand is marked as asynchronous".to_string(),
-                    suggestion: Some("Update description to include keywords like 'operation_id' or 'async' to reflect asynchronous behavior".to_string()),
+                    message: "Description mentions async behavior but subcommand is forced synchronous".to_string(),
+                    suggestion: Some("Either change force_synchronous to false or update description to reflect synchronous behavior".to_string()),
                 });
             }
         }
+        // Note: We don't validate for missing async keywords when force_synchronous=false/None
+        // because the default is synchronous execution (only async with --async flag)
 
         // Validate nested subcommands
         if let Some(ref nested) = subcommand.subcommand {

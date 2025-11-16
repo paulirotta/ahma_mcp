@@ -16,7 +16,7 @@ _Create agents from your command line tools with one JSON file, then watch them 
 - **Easy Tool Definition**: Add any command-line tool to your AI's arsenal by creating a single JSON file. No recompilation needed.
 - **Sequence Tools**: Chain multiple commands into a single, powerful workflow (e.g., `rust_quality_check` runs format → lint → test → build).
 - **Safe & Scoped**: Tools are safely scoped to the project's working directory.
-- **Force Async Mode**: Use `--asynchronous` flag to make all tools execute asynchronously for maximum concurrency.
+- **Force Async Mode**: Use `--async` flag to make all tools execute asynchronously for maximum concurrency.
 
 ### How it Works: AI-driven workflow
 

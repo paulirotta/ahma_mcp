@@ -4,7 +4,6 @@
   "command": "gh",
   "enabled": true,
   "timeout_seconds": 180,
-  "asynchronous": false,
   "hints": {
     "custom": {
       "default": "Use --tool_args -- to pass flags exactly as you would to the gh CLI. Prefer --repo to operate on specific repositories."
@@ -347,5 +346,6 @@
         }
       ]
     }
-  ]
+  ],
+  "force_synchronous": true
 }

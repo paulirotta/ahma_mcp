@@ -81,9 +81,9 @@ async fn test_synchronous_flag_overrides_async_tools() -> Result<()> {
 
     baseline_client.cancel().await?;
 
-    // With --asynchronous flag, force async mode for all tools
+    // With --async flag, force async mode for all tools
     let override_client =
-        test_client::new_client_with_args(Some(&tools_dir_str), &["--asynchronous"]).await?;
+        test_client::new_client_with_args(Some(&tools_dir_str), &["--async"]).await?;
     let override_args = build_args("echo WITH_OVERRIDE", &working_dir);
     let override_response = override_client
         .call_tool(CallToolRequestParam {
@@ -101,7 +101,7 @@ async fn test_synchronous_flag_overrides_async_tools() -> Result<()> {
 
     assert!(
         override_text.contains("Asynchronous operation started with ID"),
-        "Expected async start message with --asynchronous flag, got '{}'",
+        "Expected async start message with --async flag, got '{}'",
         override_text
     );
     assert!(

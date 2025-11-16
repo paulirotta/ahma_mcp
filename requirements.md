@@ -21,14 +21,14 @@ These are the non-negotiable principles of the project.
 - **R2.1**: Operations **must** execute synchronously by default. When an AI invokes a tool, the server executes the command and returns the complete result in a single response.
 - **R2.2**: This provides immediate feedback and simplifies the AI interaction model for most common development tasks.
 - **R2.3**: Synchronous operations block until completion and return their final result directly. They do not use operation IDs or send completion notifications.
-- **R2.4**: For long-running operations that should not block, tools can be marked as asynchronous using the `"asynchronous": true` configuration (see R3.1).
+- **R2.4**: For long-running operations that should not block, tools can be marked as asynchronous using the `"force_synchronous": false` configuration (see R3.1).
 
 ### R3: Selective Asynchronous Override
 
-- **R3.1**: Long-running, non-blocking operations (e.g., `cargo build`, `npm install`) **can** be marked as asynchronous in their JSON configuration (`"asynchronous": true`).
+- **R3.1**: Long-running, non-blocking operations (e.g., `cargo build`, `npm install`) **can** be marked as asynchronous in their JSON configuration (`"force_synchronous": false`).
 - **R3.2**: Asynchronous operations **must** immediately return an `operation_id` and a `started` status, then execute the command in the background.
 - **R3.3**: Upon completion of an asynchronous operation, the system **must** automatically push the final result (success or failure) to the AI client via an MCP progress notification.
-- **R3.4**: Launching `ahma_mcp` with the `--asynchronous` flag **must** override all tool configuration defaults for that session, forcing every tool invocation to execute asynchronously.
+- **R3.4**: Launching `ahma_mcp` with the `--async` flag **must** override all tool configuration defaults for that session, forcing every tool invocation to execute asynchronously.
 - **R3.5**: Tool descriptions for async operations **must** explicitly guide the AI to continue with other tasks and not to wait, processing the result notification when it arrives.
 
 ### R4: Performance
@@ -66,7 +66,7 @@ All tools are defined in `.json` files in the `tools/` directory. This is the MC
     {
       "name": "subcommand_name",
       "description": "What this subcommand does. Include async guidance if asynchronous: true.",
-      "asynchronous": false,
+      "force_synchronous": true,
       "options": [
         {
           "name": "option_name",

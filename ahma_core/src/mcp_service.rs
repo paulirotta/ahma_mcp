@@ -964,13 +964,16 @@ impl ServerHandler for AhmaMcpService {
 
             let timeout = arguments.get("timeout_seconds").and_then(|v| v.as_u64());
 
-            // Determine execution mode:
-            // 1. If force_asynchronous flag is set (via --asynchronous CLI), force async for all tools
-            // 2. Check explicit execution_mode argument (for advanced use)
-            // 3. Check subcommand config asynchronous setting
+            // Determine execution mode (default is synchronous):
+            // 1. If force_synchronous is true in config, ALWAYS use sync (ignore --async CLI flag)
+            // 2. If --async CLI flag was used (force_asynchronous=true), use async mode
+            // 3. Check explicit execution_mode argument (for advanced use)
             // 4. Default to synchronous
-            let execution_mode = if self.force_asynchronous {
-                // --asynchronous flag was used: FORCE async mode for all tools, overriding config
+            let execution_mode = if subcommand_config.force_synchronous == Some(true) {
+                // Config explicitly requires synchronous: FORCE sync mode, ignoring CLI --async flag
+                crate::adapter::ExecutionMode::Synchronous
+            } else if self.force_asynchronous {
+                // --async flag was used and not overridden by config: use async mode
                 crate::adapter::ExecutionMode::AsyncResultPush
             } else if let Some(mode_str) = arguments.get("execution_mode").and_then(|v| v.as_str())
             {
@@ -979,9 +982,6 @@ impl ServerHandler for AhmaMcpService {
                     "AsyncResultPush" => crate::adapter::ExecutionMode::AsyncResultPush,
                     _ => crate::adapter::ExecutionMode::Synchronous, // Default to sync
                 }
-            } else if subcommand_config.asynchronous == Some(true) {
-                // Use async mode if subcommand config explicitly specifies it
-                crate::adapter::ExecutionMode::AsyncResultPush
             } else {
                 // Default to synchronous mode
                 crate::adapter::ExecutionMode::Synchronous

@@ -4,7 +4,6 @@
   "command": "bash -c",
   "enabled": true,
   "timeout_seconds": 300,
-  "asynchronous": true,
   "hints": {
     "custom": {
       "default": "Shell command running asynchronously - consider planning next steps, reviewing output patterns, or working on other tasks while the command executes."
@@ -24,7 +23,8 @@
         }
       ],
       "options": [],
-      "asynchronous": true
+      "force_synchronous": false
     }
-  ]
+  ],
+  "force_synchronous": false
 }
