@@ -3,14 +3,12 @@
   "description": "Essential file operations toolkit providing secure, scoped access to common Unix commands. All file and directory paths are automatically validated and constrained to the current working scope for safety. These tools enable efficient AI-driven file management with pre-approved commands that speed up development workflows.",
   "command": "/bin/sh",
   "enabled": true,
-  "asynchronous": false,
   "timeout_seconds": 60,
   "guidance_key": "sync_behavior",
   "subcommand": [
     {
       "name": "ls",
       "description": "List directory contents with various formatting options",
-      "asynchronous": false,
       "positional_args": [
         {
           "name": "path",
@@ -69,12 +67,12 @@
           "type": "boolean",
           "description": "List one file per line"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "mv",
       "description": "Move (rename) files and directories",
-      "asynchronous": false,
       "positional_args": [
         {
           "name": "source",
@@ -116,12 +114,12 @@
           "type": "boolean",
           "description": "Verbose output, show what is being moved"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "cp",
       "description": "Copy files and directories",
-      "asynchronous": false,
       "positional_args": [
         {
           "name": "source",
@@ -181,12 +179,12 @@
           "type": "boolean",
           "description": "Create hard links instead of copying"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "rm",
       "description": "Remove files and directories",
-      "asynchronous": false,
       "positional_args": [
         {
           "name": "paths",
@@ -225,12 +223,12 @@
           "type": "boolean",
           "description": "Verbose output, show what is being removed"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "grep",
       "description": "Search text patterns in files",
-      "asynchronous": false,
       "positional_args": [
         {
           "name": "pattern",
@@ -305,12 +303,12 @@
           "type": "boolean",
           "description": "Use extended regular expressions"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "sed",
       "description": "Stream editor for filtering and transforming text",
-      "asynchronous": false,
       "positional_args": [
         {
           "name": "expression",
@@ -355,12 +353,12 @@
           "type": "boolean",
           "description": "Use extended regular expressions"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "touch",
       "description": "Create empty files or update timestamps",
-      "asynchronous": false,
       "positional_args": [
         {
           "name": "files",
@@ -393,12 +391,12 @@
           "type": "string",
           "description": "Use specified timestamp instead of current time (YYYY-MM-DD HH:MM:SS)"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "pwd",
       "description": "Print current working directory",
-      "asynchronous": false,
       "options": [
         {
           "name": "working_directory",
@@ -406,12 +404,12 @@
           "description": "Working directory for command execution",
           "format": "path"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "cd",
       "description": "Change working directory and list contents",
-      "asynchronous": false,
       "positional_args": [
         {
           "name": "path",
@@ -433,12 +431,12 @@
           "type": "boolean",
           "description": "List directory contents after changing"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "cat",
       "description": "Display file contents",
-      "asynchronous": false,
       "positional_args": [
         {
           "name": "files",
@@ -477,12 +475,12 @@
           "type": "boolean",
           "description": "Display TAB characters as ^I"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "find",
       "description": "Search for files and directories",
-      "asynchronous": false,
       "positional_args": [
         {
           "name": "path",
@@ -529,12 +527,12 @@
           "type": "integer",
           "description": "Maximum directory depth to search"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "head",
       "description": "Display first lines of files",
-      "asynchronous": false,
       "positional_args": [
         {
           "name": "files",
@@ -573,12 +571,12 @@
           "type": "boolean",
           "description": "Never print headers giving file names"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "tail",
       "description": "Display last lines of files",
-      "asynchronous": false,
       "positional_args": [
         {
           "name": "files",
@@ -623,12 +621,12 @@
           "type": "boolean",
           "description": "Never print headers giving file names"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "diff",
       "description": "Compare files line by line",
-      "asynchronous": false,
       "positional_args": [
         {
           "name": "file1",
@@ -682,7 +680,9 @@
           "type": "boolean",
           "description": "Report only whether files differ"
         }
-      ]
+      ],
+      "force_synchronous": true
     }
-  ]
+  ],
+  "force_synchronous": true
 }

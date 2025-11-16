@@ -4,7 +4,6 @@
   "command": "cargo",
   "enabled": true,
   "timeout_seconds": 600,
-  "asynchronous": false,
   "subcommand": [
     {
       "name": "build",
@@ -46,14 +45,14 @@
     {
       "name": "check",
       "description": "Type-check the current package without producing binaries.",
-      "asynchronous": false,
       "options": [
         {
           "name": "workspace",
           "type": "boolean",
           "description": "Check all packages in the workspace"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "test",
@@ -68,7 +67,6 @@
     },
     {
       "name": "fmt",
-      "asynchronous": false,
       "description": "Format code using rustfmt.",
       "options": [
         {
@@ -76,11 +74,11 @@
           "type": "boolean",
           "description": "Format all packages in the workspace"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "doc",
-      "asynchronous": false,
       "description": "Build documentation for the current package.",
       "options": [
         {
@@ -88,11 +86,11 @@
           "type": "boolean",
           "description": "Do not build documentation for dependencies"
         }
-      ]
+      ],
+      "force_synchronous": true
     },
     {
       "name": "clippy",
-      "asynchronous": false,
       "description": "Enhanced linting and code quality checks.",
       "options": [
         {
@@ -123,7 +121,8 @@
         ],
         "skip_subcommand_args": true
       },
-      "install_instructions": "Install with `rustup component add clippy`."
+      "install_instructions": "Install with `rustup component add clippy`.",
+      "force_synchronous": true
     },
     {
       "name": "audit",
@@ -208,5 +207,6 @@
         }
       ]
     }
-  ]
+  ],
+  "force_synchronous": true
 }

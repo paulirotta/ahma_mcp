@@ -100,7 +100,7 @@ fn test_tool_config_creation() {
                 file_flag: None,
             }]),
             positional_args: None,
-            asynchronous: None,
+            force_synchronous: None,
             timeout_seconds: None,
             guidance_key: None,
             subcommand: None,
@@ -111,7 +111,7 @@ fn test_tool_config_creation() {
         }]),
         input_schema: None,
         timeout_seconds: None,
-        asynchronous: None,
+        force_synchronous: None,
         hints: ToolHints::default(),
         enabled: true,
         guidance_key: None,
@@ -136,7 +136,7 @@ fn test_subcommand_config_creation() {
         enabled: true,
         options: None,
         positional_args: None,
-        asynchronous: Some(true),
+        force_synchronous: None,
         timeout_seconds: Some(300),
         guidance_key: Some("build".to_string()),
         subcommand: None,
@@ -148,7 +148,7 @@ fn test_subcommand_config_creation() {
 
     assert_eq!(subcommand.name, "build");
     assert!(subcommand.enabled);
-    assert_eq!(subcommand.asynchronous, Some(true));
+    assert_eq!(subcommand.force_synchronous, Some(true));
     assert_eq!(subcommand.timeout_seconds, Some(300));
     assert_eq!(subcommand.guidance_key, Some("build".to_string()));
 }
@@ -231,13 +231,13 @@ async fn test_service_with_configs() {
         name: "test_tool".to_string(),
         command: "echo".to_string(),
         description: "Test tool".to_string(),
-        asynchronous: Some(false),
+        force_synchronous: Some(true),
         timeout_seconds: Some(60),
         subcommand: Some(vec![SubcommandConfig {
             name: "test_sub".to_string(),
             description: "Test subcommand".to_string(),
             enabled: true,
-            asynchronous: Some(false),
+            force_synchronous: Some(true),
             timeout_seconds: Some(30),
             options: Some(vec![OptionConfig {
                 name: "verbose".to_string(),
@@ -335,7 +335,7 @@ fn test_tool_config_with_nested_subcommands() {
             enabled: true,
             options: None,
             positional_args: None,
-            asynchronous: None,
+            force_synchronous: None,
             timeout_seconds: None,
             guidance_key: None,
             subcommand: Some(vec![SubcommandConfig {
@@ -344,7 +344,7 @@ fn test_tool_config_with_nested_subcommands() {
                 enabled: true,
                 options: None,
                 positional_args: None,
-                asynchronous: None,
+                force_synchronous: None,
                 timeout_seconds: None,
                 guidance_key: None,
                 subcommand: None,
@@ -360,7 +360,7 @@ fn test_tool_config_with_nested_subcommands() {
         }]),
         input_schema: None,
         timeout_seconds: None,
-        asynchronous: None,
+        force_synchronous: None,
         hints: ToolHints::default(),
         enabled: true,
         guidance_key: None,
@@ -405,7 +405,7 @@ async fn test_service_with_tool_configs() {
                 alias: None,
             }]),
             positional_args: None,
-            asynchronous: None,
+            force_synchronous: None,
             timeout_seconds: None,
             guidance_key: None,
             subcommand: None,
@@ -416,7 +416,7 @@ async fn test_service_with_tool_configs() {
         }]),
         input_schema: None,
         timeout_seconds: None,
-        asynchronous: None,
+        force_synchronous: None,
         hints: ToolHints::default(),
         enabled: true,
         guidance_key: None,

@@ -23,7 +23,7 @@ fn test_guard_rail_detects_hardcoded_tool_conflicts() {
     {
       "name": "default",
       "description": "Test command",
-      "asynchronous": false,
+      "force_synchronous": true,
       "options": [
         {
           "name": "test",
@@ -47,7 +47,7 @@ fn test_guard_rail_detects_hardcoded_tool_conflicts() {
     {
       "name": "default",
       "description": "Test command",
-      "asynchronous": false,
+      "force_synchronous": true,
       "options": [
         {
           "name": "command",
@@ -111,7 +111,7 @@ fn test_guard_rail_allows_valid_configurations() {
     {
       "name": "default",
       "description": "Git operations",
-      "asynchronous": false,
+      "force_synchronous": true,
       "options": [
         {
           "name": "subcommand",

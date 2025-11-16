@@ -23,7 +23,7 @@ async fn test_json_tool_definition_loading() -> Result<()> {
                 "name": "default",
                 "description": "A test subcommand.",
                 "options": [],
-                "asynchronous": false
+                "force_synchronous": true
             }
         ],
         "timeout_seconds": 5,

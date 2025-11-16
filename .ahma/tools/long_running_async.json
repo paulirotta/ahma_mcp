@@ -1,20 +1,20 @@
 {
-    "name": "long_running_async",
-    "description": "An ahma testing tool that runs for a specified duration asynchronously",
-    "command": "sleep",
-    "enabled": true,
-    "subcommand": [
+  "name": "long_running_async",
+  "description": "An ahma testing tool that runs for a specified duration asynchronously",
+  "command": "sleep",
+  "enabled": true,
+  "subcommand": [
+    {
+      "name": "default",
+      "description": "**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- **DO NOT** await for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.\n\nSleep for a number of seconds.",
+      "positional_args": [
         {
-            "name": "default",
-            "asynchronous": true,
-            "description": "**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- **DO NOT** await for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.\n\nSleep for a number of seconds.",
-            "positional_args": [
-                {
-                    "name": "duration",
-                    "type": "string",
-                    "description": "The duration to sleep in seconds."
-                }
-            ]
+          "name": "duration",
+          "type": "string",
+          "description": "The duration to sleep in seconds."
         }
-    ]
+      ],
+      "force_synchronous": false
+    }
+  ]
 }

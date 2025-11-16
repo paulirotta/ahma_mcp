@@ -31,8 +31,8 @@ fn test_rust_quality_check_tool_structure() {
     );
 
     assert_eq!(
-        config.asynchronous,
-        Some(false),
+        config.force_synchronous,
+        Some(true),
         "Sequence should run synchronously (asynchronous: false)"
     );
 

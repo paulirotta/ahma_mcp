@@ -12,7 +12,7 @@ fn test_synchronous_inheritance_loading() -> Result<()> {
         "name": "test_tool",
         "description": "Test tool for synchronous inheritance",
         "command": "test",
-        "asynchronous": false,
+        "force_synchronous": true,
         "subcommand": [
             {
                 "name": "sub1",
@@ -22,7 +22,7 @@ fn test_synchronous_inheritance_loading() -> Result<()> {
             {
                 "name": "sub2", 
                 "description": "Subcommand with explicit synchronous override",
-                "asynchronous": true,
+                "force_synchronous": false,
                 "options": []
             }
         ]
@@ -32,15 +32,15 @@ fn test_synchronous_inheritance_loading() -> Result<()> {
     let config: ToolConfig = serde_json::from_str(json_config)?;
 
     // Tool-level asynchronous should be loaded as false (synchronous)
-    assert_eq!(config.asynchronous, Some(false));
+    assert_eq!(config.force_synchronous, Some(true));
 
     let subcommands = config.subcommand.as_ref().expect("Should have subcommands");
 
     // First subcommand should have None (will inherit tool-level sync)
-    assert_eq!(subcommands[0].asynchronous, None);
+    assert_eq!(subcommands[0].force_synchronous, None);
 
     // Second subcommand should have explicit override to async
-    assert_eq!(subcommands[1].asynchronous, Some(true));
+    assert_eq!(subcommands[1].force_synchronous, Some(true));
 
     Ok(())
 }
@@ -76,13 +76,13 @@ fn test_gh_tool_optimized_format() -> Result<()> {
     let config: ToolConfig = serde_json::from_str(&gh_json)?;
 
     // Should have tool-level asynchronous=false (synchronous) for inheritance pattern
-    assert_eq!(config.asynchronous, Some(false));
+    assert_eq!(config.force_synchronous, Some(true));
 
     // Subcommands should NOT have explicit asynchronous field and inherit from tool level
     if let Some(subcommands) = &config.subcommand {
         for subcommand in subcommands {
             assert_eq!(
-                subcommand.asynchronous, None,
+                subcommand.force_synchronous, None,
                 "Subcommand '{}' should inherit asynchronous behavior from tool level (should be None)",
                 subcommand.name
             );

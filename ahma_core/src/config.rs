@@ -17,7 +17,7 @@
 //!
 //! - **`CommandOverride`**: Allows for overriding default behaviors for specific subcommands.
 //!   For example, a `test` subcommand could be given a longer timeout or be forced to run
-//!   asynchronously, even if the tool's default is synchronous.
+//!   synchronously, even if the CLI --async flag is set.
 //!
 //! ## Configuration Loading
 //!
@@ -57,8 +57,11 @@ pub struct ToolConfig {
     pub input_schema: Option<Value>,
     /// Default timeout for operations in seconds
     pub timeout_seconds: Option<u64>,
-    /// Default asynchronous behavior for all subcommands (can be overridden per subcommand)
-    pub asynchronous: Option<bool>,
+    /// Force synchronous execution even when --async flag is set (overrides CLI flag)
+    /// If true: always runs synchronously, ignoring --async
+    /// If false or None: obeys the --async CLI flag (default behavior)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub force_synchronous: Option<bool>,
     #[serde(default)]
     pub hints: ToolHints,
     #[serde(default = "default_enabled")]
@@ -95,8 +98,11 @@ pub struct SubcommandConfig {
     pub positional_args: Option<Vec<PositionalArgsConfig>>,
     /// Override timeout for this specific subcommand
     pub timeout_seconds: Option<u64>,
-    /// Override asynchronous behavior for this subcommand
-    pub asynchronous: Option<bool>,
+    /// Force synchronous execution even when --async flag is set (overrides CLI flag)
+    /// If true: always runs synchronously, ignoring --async
+    /// If false or None: obeys the --async CLI flag (default behavior)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub force_synchronous: Option<bool>,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
     /// Key to look up guidance in tool_guidance.json

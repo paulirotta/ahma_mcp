@@ -38,8 +38,8 @@ async fn test_gh_tool_expansion_all_synchronous() {
 
     // Check that tool has asynchronous = false at tool level (synchronous execution)
     assert_eq!(
-        gh_tool.asynchronous,
-        Some(false),
+        gh_tool.force_synchronous,
+        Some(true),
         "Tool should have asynchronous=false (synchronous execution) for subcommand inheritance"
     );
 
@@ -52,8 +52,8 @@ async fn test_gh_tool_expansion_all_synchronous() {
         // With inheritance, subcommands should have None or false and be synchronous
         assert!(
             !subcommand
-                .asynchronous
-                .or(gh_tool.asynchronous)
+                .force_synchronous
+                .or(gh_tool.force_synchronous)
                 .unwrap_or(false),
             "Subcommand {} should be synchronous (asynchronous=false or None)",
             expected_name

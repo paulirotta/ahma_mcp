@@ -99,9 +99,9 @@ struct Cli {
     #[arg(short, long, global = true)]
     debug: bool,
 
-    /// Force asynchronous mode for all operations.
+    /// Force asynchronous mode for all operations (overrides default synchronous behavior).
     #[arg(long, global = true)]
-    asynchronous: bool,
+    r#async: bool,
 
     /// The name of the tool to execute (e.g., 'cargo_build').
     #[arg()]
@@ -462,7 +462,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     }
 
     // Create and start the MCP service
-    let force_async = cli.asynchronous;
+    let force_async = cli.r#async;
     let service_handler = AhmaMcpService::new(
         adapter.clone(),
         operation_monitor.clone(),
@@ -662,7 +662,7 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
             options: None,
             positional_args: None,
             timeout_seconds: config.timeout_seconds,
-            asynchronous: config.asynchronous,
+            force_synchronous: config.force_synchronous,
             enabled: true,
             guidance_key: config.guidance_key.clone(),
             sequence: config.sequence.clone(),
