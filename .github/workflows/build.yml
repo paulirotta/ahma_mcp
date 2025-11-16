@@ -227,7 +227,6 @@ jobs:
       - name: Show sccache stats
         run: sccache --show-stats
 
-
   #######################################
 
   job-android:
@@ -283,7 +282,7 @@ jobs:
         run: |
           ./gradlew tasks > /dev/null &
           echo "Gradle warming up slowly in background..."
-        working-directory: ./android_lifeline
+        working-directory: ./test-data/AndoidTestBasicViews
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -340,32 +339,26 @@ jobs:
           path: |
             ${{ github.workspace }}/.gradle
             ${{ runner.tool_cache }}/gradle
-            ./android_lifeline/.gradle
-            ./android_lifeline/app/build/intermediates
-            ./android_lifeline/app/build/outputs
-            ./android_lifeline/app/build/kotlin
-            ./android_lifeline/app/build/generated
-            ./android_lifeline/app/build/kspCaches
-            ./android_lifeline/app/build/tmp
-            ./android_lifeline/build/kotlin
-            ./android_lifeline/build/intermediates
+            ./test-data/AndoidTestBasicViews/.gradle
+            ./test-data/AndoidTestBasicViews/app/build/intermediates
+            ./test-data/AndoidTestBasicViews/app/build/outputs
+            ./test-data/AndoidTestBasicViews/app/build/kotlin
+            ./test-data/AndoidTestBasicViews/app/build/generated
+            ./test-data/AndoidTestBasicViews/app/build/kspCaches
+            ./test-data/AndoidTestBasicViews/app/build/tmp
+            ./test-data/AndoidTestBasicViews/build/kotlin
+            ./test-data/AndoidTestBasicViews/build/intermediates
           key: gradle-android-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
             gradle-android-${{ runner.os }}-
 
-      - name: Generate Rust stat2 Library and Kotlin Bindings
-        working-directory: ./rust/stat2
-        env:
-          DEBUG_BUILD: "true"
-        run: ./generate-kotlin-bindings.sh
-
       - name: Android Assemble Debug
         run: ./gradlew assembleDebug --parallel --daemon --configure-on-demand --build-cache --configuration-cache
-        working-directory: ./android_lifeline
+        working-directory: ./test-data/AndoidTestBasicViews
 
       - name: Android Test
         run: ./gradlew test --rerun-tasks --parallel --daemon --configure-on-demand --no-configuration-cache
-        working-directory: ./android_lifeline
+        working-directory: ./test-data/AndoidTestBasicViews
 
       - name: Show sccache stats
         run: sccache --show-stats
