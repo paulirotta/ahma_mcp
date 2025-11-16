@@ -1034,7 +1034,10 @@ impl ServerHandler for AhmaMcpService {
 
                     match job_id {
                         Ok(id) => {
-                            let message = format!("Asynchronous operation started with ID: {}", id);
+                            // Include tool hints to guide AI on handling async operations
+                            let hint = crate::tool_hints::preview(&id, tool_name);
+                            let message =
+                                format!("Asynchronous operation started with ID: {}{}", id, hint);
                             Ok(CallToolResult::success(vec![Content::text(message)]))
                         }
                         Err(e) => {
@@ -1295,27 +1298,29 @@ impl AhmaMcpService {
     }
 
     fn format_sequence_step_message(step: &SequenceStep, operation_id: &str) -> String {
+        let hint = crate::tool_hints::preview(operation_id, &step.tool);
         match step.description.as_deref() {
             Some(description) if !description.is_empty() => format!(
-                "Sequence step '{}' ({}) started with operation ID: {}",
-                step.tool, description, operation_id
+                "Sequence step '{}' ({}) started with operation ID: {}{}",
+                step.tool, description, operation_id, hint
             ),
             _ => format!(
-                "Sequence step '{}' started with operation ID: {}",
-                step.tool, operation_id
+                "Sequence step '{}' started with operation ID: {}{}",
+                step.tool, operation_id, hint
             ),
         }
     }
 
     fn format_subcommand_sequence_step_message(step: &SequenceStep, operation_id: &str) -> String {
+        let hint = crate::tool_hints::preview(operation_id, &step.subcommand);
         match step.description.as_deref() {
             Some(description) if !description.is_empty() => format!(
-                "Subcommand sequence step '{}' ({}) started with ID: {}",
-                step.subcommand, description, operation_id
+                "Subcommand sequence step '{}' ({}) started with ID: {}{}",
+                step.subcommand, description, operation_id, hint
             ),
             _ => format!(
-                "Subcommand sequence step '{}' started with ID: {}",
-                step.subcommand, operation_id
+                "Subcommand sequence step '{}' started with ID: {}{}",
+                step.subcommand, operation_id, hint
             ),
         }
     }
