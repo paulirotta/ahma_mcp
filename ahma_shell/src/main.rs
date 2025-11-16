@@ -658,9 +658,10 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     // Prefer programmatic arguments via environment variable
     if let Ok(env_args) = std::env::var("AHMA_MCP_ARGS") {
         if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(&env_args)
-            && let Some(map) = json_val.as_object() {
-                tool_args_map = map.clone();
-            }
+            && let Some(map) = json_val.as_object()
+        {
+            tool_args_map = map.clone();
+        }
     } else {
         let mut iter = cli.tool_args.into_iter().peekable();
         while let Some(arg) = iter.next() {
@@ -694,9 +695,9 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         && let Some(wd) = tool_args_map
             .get("working_directory")
             .and_then(|v| v.as_str())
-        {
-            working_directory = Some(wd.to_string());
-        }
+    {
+        working_directory = Some(wd.to_string());
+    }
 
     if let Some(args_from_map) = tool_args_map.get("args").and_then(|v| v.as_array()) {
         raw_args.extend(

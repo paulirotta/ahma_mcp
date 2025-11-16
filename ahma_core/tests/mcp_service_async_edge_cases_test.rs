@@ -256,10 +256,11 @@ async fn test_status_tool_filter_combinations() -> Result<()> {
 
     // Check that response mentions the filtered tools
     if let Some(content) = result.content.first()
-        && let Some(text_content) = content.as_text() {
-            let text = &text_content.text;
-            assert!(text.contains("cargo") || text.contains("Operations status"));
-        }
+        && let Some(text_content) = content.as_text()
+    {
+        let text = &text_content.text;
+        assert!(text.contains("cargo") || text.contains("Operations status"));
+    }
 
     // Test with both operation_id and tools filter
     let combined_filter_params = CallToolRequestParam {
@@ -306,16 +307,15 @@ async fn test_async_operation_with_real_execution() -> Result<()> {
 
     // Should return operation info immediately
     if let Some(content) = result.content.first()
-        && let Some(text_content) = content.as_text() {
-            let text = &text_content.text;
-            assert!(
-                text.contains("operation_id")
-                    || text.contains("started")
-                    || text.contains("job_id"),
-                "Async operation should return operation tracking info, got: {}",
-                text
-            );
-        }
+        && let Some(text_content) = content.as_text()
+    {
+        let text = &text_content.text;
+        assert!(
+            text.contains("operation_id") || text.contains("started") || text.contains("job_id"),
+            "Async operation should return operation tracking info, got: {}",
+            text
+        );
+    }
 
     // Test that we can query the status
     let status_params = CallToolRequestParam {

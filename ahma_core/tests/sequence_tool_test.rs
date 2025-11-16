@@ -166,23 +166,13 @@ async fn test_rust_quality_check_structure() -> Result<()> {
         "rust_quality_check should be a sequence tool"
     );
 
-    // Find the default sequence subcommand
-    let subcommands = config["subcommand"]
-        .as_array()
-        .expect("Should have subcommands array");
-
-    let default_sequence = subcommands
-        .iter()
-        .find(|sc| sc["name"].as_str() == Some("default"))
-        .expect("Should have default subcommand");
-
-    // Verify default sequence is configured as expected
+    // Sequence tools have top-level sequence, not subcommand-level
     assert!(
-        default_sequence["sequence"].is_array(),
-        "default subcommand should have sequence array"
+        config["sequence"].is_array(),
+        "Should have top-level sequence array for cross-tool orchestration"
     );
 
-    let sequence = default_sequence["sequence"].as_array().unwrap();
+    let sequence = config["sequence"].as_array().unwrap();
     assert_eq!(
         sequence.len(),
         7,
@@ -197,7 +187,6 @@ async fn test_rust_quality_check_structure() -> Result<()> {
         Some("generate_tool_schema"),
         "First step should regenerate the schema"
     );
-
     assert_eq!(sequence[1]["tool"].as_str(), Some("cargo"));
     assert_eq!(sequence[1]["subcommand"].as_str(), Some("run"));
     assert_eq!(
@@ -233,7 +222,7 @@ async fn test_rust_quality_check_structure() -> Result<()> {
 
     // Verify delay
     assert_eq!(
-        default_sequence["step_delay_ms"].as_u64(),
+        config["step_delay_ms"].as_u64(),
         Some(500),
         "Step delay should be 500ms"
     );

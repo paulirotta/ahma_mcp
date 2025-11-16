@@ -41,45 +41,46 @@ async fn test_array_parameters_have_items_property_fixed() -> anyhow::Result<()>
 
     for (param_name, param_schema) in properties {
         if let Some(param_obj) = param_schema.as_object()
-            && param_obj.get("type") == Some(&Value::String("array".to_string())) {
-                validated_arrays += 1;
-                println!("Validating array parameter: {}", param_name);
+            && param_obj.get("type") == Some(&Value::String("array".to_string()))
+        {
+            validated_arrays += 1;
+            println!("Validating array parameter: {}", param_name);
 
-                // CRITICAL FIX: Array parameters MUST have 'items' property
-                // This is what was missing and causing the catastrophic failure
-                assert!(
-                    param_obj.contains_key("items"),
-                    "CRITICAL: Array parameter '{}' MUST have 'items' property! \
+            // CRITICAL FIX: Array parameters MUST have 'items' property
+            // This is what was missing and causing the catastrophic failure
+            assert!(
+                param_obj.contains_key("items"),
+                "CRITICAL: Array parameter '{}' MUST have 'items' property! \
                      This is what caused VSCode GitHub Copilot Chat to fail with: \
                      'tool parameters array type must have items'",
-                    param_name
-                );
+                param_name
+            );
 
-                let items = param_obj
-                    .get("items")
-                    .expect("Items must be present")
-                    .as_object()
-                    .expect("Items must be an object");
+            let items = param_obj
+                .get("items")
+                .expect("Items must be present")
+                .as_object()
+                .expect("Items must be an object");
 
-                assert!(
-                    items.contains_key("type"),
-                    "Array items must have a type for parameter '{}'",
-                    param_name
-                );
+            assert!(
+                items.contains_key("type"),
+                "Array items must have a type for parameter '{}'",
+                param_name
+            );
 
-                // For command-line tools, array items should typically be strings
-                assert_eq!(
-                    items.get("type").unwrap(),
-                    &Value::String("string".to_string()),
-                    "Array items should be strings for CLI parameter '{}'",
-                    param_name
-                );
+            // For command-line tools, array items should typically be strings
+            assert_eq!(
+                items.get("type").unwrap(),
+                &Value::String("string".to_string()),
+                "Array items should be strings for CLI parameter '{}'",
+                param_name
+            );
 
-                println!(
-                    "✅ Array parameter '{}' has valid items property",
-                    param_name
-                );
-            }
+            println!(
+                "✅ Array parameter '{}' has valid items property",
+                param_name
+            );
+        }
     }
 
     // Check if cargo-audit is installed
@@ -140,29 +141,30 @@ async fn test_all_tools_array_schemas_are_valid_fixed() -> anyhow::Result<()> {
             let mut tool_has_arrays = false;
             for (param_name, param_schema) in props {
                 if let Some(param_obj) = param_schema.as_object()
-                    && param_obj.get("type") == Some(&Value::String("array".to_string())) {
-                        tool_has_arrays = true;
-                        total_array_params += 1;
+                    && param_obj.get("type") == Some(&Value::String("array".to_string()))
+                {
+                    tool_has_arrays = true;
+                    total_array_params += 1;
 
-                        // THE CRITICAL TEST: Array parameters must have items property
-                        assert!(
-                            param_obj.contains_key("items"),
-                            "Array parameter '{}' in tool '{}' MUST have 'items' property \
+                    // THE CRITICAL TEST: Array parameters must have items property
+                    assert!(
+                        param_obj.contains_key("items"),
+                        "Array parameter '{}' in tool '{}' MUST have 'items' property \
                              to prevent VSCode GitHub Copilot Chat catastrophic failure",
+                        param_name,
+                        tool.name
+                    );
+
+                    let items = param_obj.get("items").unwrap();
+                    if let Some(items_obj) = items.as_object() {
+                        assert!(
+                            items_obj.contains_key("type"),
+                            "Array items for '{}' in tool '{}' must have type field",
                             param_name,
                             tool.name
                         );
-
-                        let items = param_obj.get("items").unwrap();
-                        if let Some(items_obj) = items.as_object() {
-                            assert!(
-                                items_obj.contains_key("type"),
-                                "Array items for '{}' in tool '{}' must have type field",
-                                param_name,
-                                tool.name
-                            );
-                        }
                     }
+                }
             }
 
             if tool_has_arrays {

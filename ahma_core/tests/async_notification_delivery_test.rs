@@ -57,11 +57,11 @@ async fn test_async_notification_delivery() {
                     && content
                         .to_string()
                         .contains("Operation long_running_async finished")
-                    {
-                        let mut received_guard = notification_received_clone.lock().await;
-                        *received_guard = true;
-                        break;
-                    }
+                {
+                    let mut received_guard = notification_received_clone.lock().await;
+                    *received_guard = true;
+                    break;
+                }
             }
         }
     });

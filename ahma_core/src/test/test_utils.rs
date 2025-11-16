@@ -64,12 +64,13 @@ fn strip_backslash_before_quotes(s: &str) -> String {
     let mut chars = s.chars().peekable();
     while let Some(c) = chars.next() {
         if c == '\\'
-            && let Some('"') = chars.peek().copied() {
-                // Skip the backslash and keep the quote
-                out.push('"');
-                chars.next();
-                continue;
-            }
+            && let Some('"') = chars.peek().copied()
+        {
+            // Skip the backslash and keep the quote
+            out.push('"');
+            chars.next();
+            continue;
+        }
         out.push(c);
     }
     out

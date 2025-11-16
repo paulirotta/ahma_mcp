@@ -23,27 +23,21 @@ fn test_rust_quality_check_tool_structure() {
         config.command, "sequence",
         "Tool should be a sequence executor"
     );
-    let subcommands = config
-        .subcommand
-        .as_ref()
-        .expect("rust_quality_check should expose subcommands");
 
-    let default = subcommands
-        .iter()
-        .find(|sc| sc.name == "default")
-        .expect("default subcommand should be present");
+    // Sequence tools use top-level sequence, not subcommand-level
+    assert!(
+        config.sequence.is_some(),
+        "rust_quality_check must define a top-level sequence"
+    );
 
     assert_eq!(
-        default.asynchronous,
+        config.asynchronous,
         Some(false),
         "Sequence should run synchronously (asynchronous: false)"
     );
-    assert!(
-        default.sequence.is_some(),
-        "default subcommand must define a sequence"
-    );
+
     assert_eq!(
-        default.step_delay_ms,
+        config.step_delay_ms,
         Some(500),
         "Sequence should enforce a delay between steps"
     );
@@ -52,16 +46,11 @@ fn test_rust_quality_check_tool_structure() {
 #[test]
 fn test_rust_quality_check_sequence_steps() {
     let config = load_rust_quality_check_config();
-    let default = config
-        .subcommand
-        .as_ref()
-        .and_then(|subs| subs.iter().find(|sc| sc.name == "default"))
-        .expect("default subcommand should be present");
 
-    let sequence = default
+    let sequence = config
         .sequence
         .as_ref()
-        .expect("default subcommand must contain a sequence");
+        .expect("rust_quality_check must contain a top-level sequence");
 
     assert!(
         sequence.len() >= 6,

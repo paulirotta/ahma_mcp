@@ -330,9 +330,10 @@ impl AhmaMcpService {
 
         let mut description = tool_config.description.clone();
         if let Some(guidance_config) = self.guidance.as_ref()
-            && let Some(guidance_text) = guidance_config.guidance_blocks.get(&tool_name) {
-                description = format!("{}\n\n{}", guidance_text, description);
-            }
+            && let Some(guidance_text) = guidance_config.guidance_blocks.get(&tool_name)
+        {
+            description = format!("{}\n\n{}", guidance_text, description);
+        }
 
         let input_schema = self.generate_schema_for_tool_config(tool_config);
 
@@ -722,17 +723,18 @@ impl ServerHandler for AhmaMcpService {
 
                     for op in &completed_ops {
                         if let Some(end_time) = op.end_time
-                            && let Ok(execution_duration) = end_time.duration_since(op.start_time) {
-                                total_execution_time += execution_duration.as_secs_f64();
+                            && let Ok(execution_duration) = end_time.duration_since(op.start_time)
+                        {
+                            total_execution_time += execution_duration.as_secs_f64();
 
-                                if let Some(first_wait_time) = op.first_wait_time
-                                    && let Ok(wait_duration) =
-                                        first_wait_time.duration_since(op.start_time)
-                                    {
-                                        total_wait_time += wait_duration.as_secs_f64();
-                                        operations_with_waits += 1;
-                                    }
+                            if let Some(first_wait_time) = op.first_wait_time
+                                && let Ok(wait_duration) =
+                                    first_wait_time.duration_since(op.start_time)
+                            {
+                                total_wait_time += wait_duration.as_secs_f64();
+                                operations_with_waits += 1;
                             }
+                        }
                     }
 
                     if total_execution_time > 0.0 {
@@ -1117,8 +1119,29 @@ impl AhmaMcpService {
             let mut step_params = params.clone();
             step_params.name = step.tool.clone().into();
 
-            // Allow arguments to be overridden by the sequence step
-            let mut merged_args = params.arguments.clone().unwrap_or_default();
+            // Extract meta-parameters that should not be passed to tools
+            let parent_args = params.arguments.clone().unwrap_or_default();
+            let working_directory = parent_args
+                .get("working_directory")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| ".".to_string());
+
+            // Merge arguments, excluding meta-parameters from parent
+            let mut merged_args = Map::new();
+            for (key, value) in parent_args.iter() {
+                // Skip meta-parameters that are handled separately
+                if key != "working_directory" && key != "execution_mode" && key != "timeout_seconds"
+                {
+                    merged_args.insert(key.clone(), value.clone());
+                }
+            }
+            // Add working_directory back for the step to use
+            merged_args.insert(
+                "working_directory".to_string(),
+                Value::String(working_directory),
+            );
+            // Extend with step-specific args (which can override)
             merged_args.extend(step.args.clone());
             step_params.arguments = Some(merged_args);
 

@@ -60,15 +60,16 @@ async fn test_gradlew_sync_commands_interactive() -> Result<()> {
                 );
 
                 if let Some(content) = tool_result.content.first()
-                    && let Some(text_content) = content.as_text() {
-                        println!("✓ {} completed successfully", command);
-                        // Don't print full output, just verify it's not empty
-                        assert!(
-                            !text_content.text.trim().is_empty(),
-                            "Command {} should return non-empty output",
-                            command
-                        );
-                    }
+                    && let Some(text_content) = content.as_text()
+                {
+                    println!("✓ {} completed successfully", command);
+                    // Don't print full output, just verify it's not empty
+                    assert!(
+                        !text_content.text.trim().is_empty(),
+                        "Command {} should return non-empty output",
+                        command
+                    );
+                }
             }
             Err(e) => {
                 println!("✗ {} failed: {}", command, e);
@@ -135,13 +136,14 @@ async fn test_gradlew_working_directory_handling() -> Result<()> {
         Ok(_tool_result) => {
             // Should get some kind of error response
             if let Some(content) = _tool_result.content.first()
-                && let Some(text_content) = content.as_text() {
-                    // Should contain error message about directory not existing
-                    println!(
-                        "✓ Non-existent directory handled: {}",
-                        text_content.text.chars().take(100).collect::<String>()
-                    );
-                }
+                && let Some(text_content) = content.as_text()
+            {
+                // Should contain error message about directory not existing
+                println!(
+                    "✓ Non-existent directory handled: {}",
+                    text_content.text.chars().take(100).collect::<String>()
+                );
+            }
         }
         Err(_) => {
             println!("✓ Non-existent directory properly rejected");
@@ -167,9 +169,10 @@ async fn test_gradlew_working_directory_handling() -> Result<()> {
         Ok(tool_result) => {
             println!("✓ Missing working_directory handled gracefully");
             if let Some(content) = tool_result.content.first()
-                && let Some(text_content) = content.as_text() {
-                    assert!(!text_content.text.is_empty());
-                }
+                && let Some(text_content) = content.as_text()
+            {
+                assert!(!text_content.text.is_empty());
+            }
         }
         Err(e) => {
             println!("✓ Missing working_directory properly rejected: {}", e);
@@ -237,12 +240,13 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
         Ok(_tool_result) => {
             // Should get some error message about unknown task
             if let Some(content) = _tool_result.content.first()
-                && let Some(text_content) = content.as_text() {
-                    println!(
-                        "✓ Invalid subcommand handled: {}",
-                        text_content.text.chars().take(100).collect::<String>()
-                    );
-                }
+                && let Some(text_content) = content.as_text()
+            {
+                println!(
+                    "✓ Invalid subcommand handled: {}",
+                    text_content.text.chars().take(100).collect::<String>()
+                );
+            }
         }
         Err(_) => {
             println!("✓ Invalid subcommand properly rejected");
@@ -334,9 +338,10 @@ async fn test_gradlew_optional_parameters() -> Result<()> {
         Ok(tool_result) => {
             println!("✓ help --task command accepted");
             if let Some(content) = tool_result.content.first()
-                && let Some(text_content) = content.as_text() {
-                    assert!(!text_content.text.is_empty());
-                }
+                && let Some(text_content) = content.as_text()
+            {
+                assert!(!text_content.text.is_empty());
+            }
         }
         Err(e) => {
             println!("Note: help --task failed (possibly no Android SDK): {}", e);
@@ -445,9 +450,10 @@ async fn test_gradlew_error_handling() -> Result<()> {
             println!("✓ Invalid parameters handled gracefully");
             // Should get some error message
             if let Some(content) = tool_result.content.first()
-                && let Some(text_content) = content.as_text() {
-                    assert!(!text_content.text.is_empty());
-                }
+                && let Some(text_content) = content.as_text()
+            {
+                assert!(!text_content.text.is_empty());
+            }
         }
         Err(e) => {
             println!("✓ Invalid parameters properly rejected: {}", e);
