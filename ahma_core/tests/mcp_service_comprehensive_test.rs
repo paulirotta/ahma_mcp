@@ -58,13 +58,14 @@ async fn test_await_tool_comprehensive() -> Result<()> {
 
     // Verify response contains operation information
     if let Some(content) = result.content.first()
-        && let Some(text_content) = content.as_text() {
-            assert!(
-                text_content.text.contains("operation")
-                    || text_content.text.contains("await")
-                    || text_content.text.contains("complete")
-            );
-        }
+        && let Some(text_content) = content.as_text()
+    {
+        assert!(
+            text_content.text.contains("operation")
+                || text_content.text.contains("await")
+                || text_content.text.contains("complete")
+        );
+    }
 
     // Test await with only valid fields (no timeout_seconds)
     let mut valid_params = Map::new();
@@ -100,13 +101,14 @@ async fn test_status_tool_comprehensive() -> Result<()> {
 
     // Verify status provides operation information
     if let Some(content) = result.content.first()
-        && let Some(text_content) = content.as_text() {
-            assert!(
-                text_content.text.contains("Operations")
-                    || text_content.text.contains("status")
-                    || text_content.text.contains("operation")
-            );
-        }
+        && let Some(text_content) = content.as_text()
+    {
+        assert!(
+            text_content.text.contains("Operations")
+                || text_content.text.contains("status")
+                || text_content.text.contains("operation")
+        );
+    }
 
     // Test status with operation_id parameter
     let mut specific_params = Map::new();
@@ -143,15 +145,16 @@ async fn test_unknown_tool_error_handling() -> Result<()> {
         Ok(tool_result) => {
             // Check if error is communicated in response content
             if let Some(content) = tool_result.content.first()
-                && let Some(text_content) = content.as_text() {
-                    let text_lower = text_content.text.to_lowercase();
-                    assert!(
-                        text_lower.contains("error")
-                            || text_lower.contains("not found")
-                            || text_lower.contains("unknown")
-                            || text_lower.contains("invalid")
-                    );
-                }
+                && let Some(text_content) = content.as_text()
+            {
+                let text_lower = text_content.text.to_lowercase();
+                assert!(
+                    text_lower.contains("error")
+                        || text_lower.contains("not found")
+                        || text_lower.contains("unknown")
+                        || text_lower.contains("invalid")
+                );
+            }
         }
         Err(_) => {
             // Error response is also acceptable for unknown tools

@@ -237,7 +237,8 @@ async fn test_progress_update_success_failure() {
 
 #[tokio::test]
 async fn test_progress_update_operation_id() {
-    let updates = [ProgressUpdate::Started {
+    let updates = [
+        ProgressUpdate::Started {
             operation_id: "op_123".to_string(),
             command: "cmd".to_string(),
             description: "desc".to_string(),
@@ -276,7 +277,8 @@ async fn test_progress_update_operation_id() {
             success: true,
             duration_ms: 1000,
             full_output: "output".to_string(),
-        }];
+        },
+    ];
 
     let expected_ids = [
         "op_123", "op_456", "op_789", "op_abc", "op_def", "op_ghi", "op_jkl",

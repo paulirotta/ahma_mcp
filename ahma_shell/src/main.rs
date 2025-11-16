@@ -648,8 +648,36 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
 
     let configs_ref = configs.as_ref();
     let (config_key, config) = find_matching_tool(configs_ref, &tool_name)?;
-    let (subcommand_config, command_parts) =
-        resolve_cli_subcommand(config_key, config, &tool_name, None)?;
+
+    // Check if this is a top-level sequence tool (no subcommands, just sequence)
+    let is_top_level_sequence = config.command == "sequence" && config.sequence.is_some();
+
+    let (subcommand_config, command_parts) = if is_top_level_sequence {
+        // For top-level sequence tools, create a dummy subcommand config
+        // The actual sequence execution happens later
+        let dummy_subcommand = SubcommandConfig {
+            name: config.name.clone(),
+            description: config.description.clone(),
+            subcommand: None,
+            options: None,
+            positional_args: None,
+            timeout_seconds: config.timeout_seconds,
+            asynchronous: config.asynchronous,
+            enabled: true,
+            guidance_key: config.guidance_key.clone(),
+            sequence: config.sequence.clone(),
+            step_delay_ms: config.step_delay_ms,
+            availability_check: None,
+            install_instructions: None,
+        };
+        (
+            Box::leak(Box::new(dummy_subcommand)) as &SubcommandConfig,
+            vec![config.command.clone()],
+        )
+    } else {
+        let (sub, parts) = resolve_cli_subcommand(config_key, config, &tool_name, None)?;
+        (sub, parts)
+    };
 
     let mut raw_args = Vec::new();
     let mut working_directory: Option<String> = None;
@@ -658,9 +686,10 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     // Prefer programmatic arguments via environment variable
     if let Ok(env_args) = std::env::var("AHMA_MCP_ARGS") {
         if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(&env_args)
-            && let Some(map) = json_val.as_object() {
-                tool_args_map = map.clone();
-            }
+            && let Some(map) = json_val.as_object()
+        {
+            tool_args_map = map.clone();
+        }
     } else {
         let mut iter = cli.tool_args.into_iter().peekable();
         while let Some(arg) = iter.next() {
@@ -694,9 +723,9 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         && let Some(wd) = tool_args_map
             .get("working_directory")
             .and_then(|v| v.as_str())
-        {
-            working_directory = Some(wd.to_string());
-        }
+    {
+        working_directory = Some(wd.to_string());
+    }
 
     if let Some(args_from_map) = tool_args_map.get("args").and_then(|v| v.as_array()) {
         raw_args.extend(

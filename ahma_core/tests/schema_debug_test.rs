@@ -36,28 +36,27 @@ async fn test_dump_actual_schemas_for_debugging() -> anyhow::Result<()> {
 
         // Check for array parameters in this tool
         if let Some(properties) = tool.input_schema.get("properties")
-            && let Some(props_obj) = properties.as_object() {
-                for (param_name, param_schema) in props_obj {
-                    if let Some(param_obj) = param_schema.as_object()
-                        && param_obj.get("type") == Some(&Value::String("array".to_string())) {
-                            println!(
-                                "  🔍 Tool '{}' has array parameter '{}': {}",
-                                tool.name,
-                                param_name,
-                                serde_json::to_string(param_obj)?
-                            );
+            && let Some(props_obj) = properties.as_object()
+        {
+            for (param_name, param_schema) in props_obj {
+                if let Some(param_obj) = param_schema.as_object()
+                    && param_obj.get("type") == Some(&Value::String("array".to_string()))
+                {
+                    println!(
+                        "  🔍 Tool '{}' has array parameter '{}': {}",
+                        tool.name,
+                        param_name,
+                        serde_json::to_string(param_obj)?
+                    );
 
-                            if let Some(items) = param_obj.get("items") {
-                                println!(
-                                    "    ✅ Items property: {}",
-                                    serde_json::to_string(items)?
-                                );
-                            } else {
-                                println!("    ❌ MISSING items property!");
-                            }
-                        }
+                    if let Some(items) = param_obj.get("items") {
+                        println!("    ✅ Items property: {}", serde_json::to_string(items)?);
+                    } else {
+                        println!("    ❌ MISSING items property!");
+                    }
                 }
             }
+        }
     }
 
     // Focus specifically on consolidated cargo tool which now includes cargo-audit options
@@ -100,25 +99,27 @@ async fn test_release_build_schema_generation() -> anyhow::Result<()> {
     let schema = cargo_tool.input_schema.as_ref();
 
     if let Some(properties) = schema.get("properties")
-        && let Some(props_obj) = properties.as_object() {
-            for (param_name, param_schema) in props_obj {
-                if let Some(param_obj) = param_schema.as_object()
-                    && param_obj.get("type") == Some(&Value::String("array".to_string())) {
-                        println!(
-                            "Array param '{}': {}",
-                            param_name,
-                            serde_json::to_string(param_obj)?
-                        );
+        && let Some(props_obj) = properties.as_object()
+    {
+        for (param_name, param_schema) in props_obj {
+            if let Some(param_obj) = param_schema.as_object()
+                && param_obj.get("type") == Some(&Value::String("array".to_string()))
+            {
+                println!(
+                    "Array param '{}': {}",
+                    param_name,
+                    serde_json::to_string(param_obj)?
+                );
 
-                        // This is the critical check
-                        assert!(
-                            param_obj.contains_key("items"),
-                            "CRITICAL: Array parameter '{}' missing items property in RELEASE build!",
-                            param_name
-                        );
-                    }
+                // This is the critical check
+                assert!(
+                    param_obj.contains_key("items"),
+                    "CRITICAL: Array parameter '{}' missing items property in RELEASE build!",
+                    param_name
+                );
             }
         }
+    }
 
     client.cancel().await?;
     Ok(())

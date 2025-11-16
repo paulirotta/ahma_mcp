@@ -584,10 +584,15 @@ impl Adapter {
                 .unwrap_or_default();
 
             // Process all top-level key-value pairs as named arguments
-            // Skip special keys like "args" which are handled separately
+            // Skip special keys like "args" and meta-parameters that are handled separately
             for (key, value) in args_map {
-                if key == "args" {
-                    continue; // Skip "args" - it will be handled below
+                // Skip meta-parameters that should not become command-line arguments
+                if key == "args"
+                    || key == "working_directory"
+                    || key == "execution_mode"
+                    || key == "timeout_seconds"
+                {
+                    continue;
                 }
                 self.process_named_arg(
                     key,
@@ -601,13 +606,14 @@ impl Adapter {
 
             // Handle positional arguments from `{"args": [...]}`
             if let Some(inner_args) = args_map.get("args")
-                && let Some(positional_values) = inner_args.as_array() {
-                    for value in positional_values {
-                        if let Some(s) = Self::value_to_string(value).await? {
-                            final_args.push(s);
-                        }
+                && let Some(positional_values) = inner_args.as_array()
+            {
+                for value in positional_values {
+                    if let Some(s) = Self::value_to_string(value).await? {
+                        final_args.push(s);
                     }
                 }
+            }
         }
 
         Ok((program, final_args))
@@ -691,14 +697,15 @@ impl Adapter {
         // Standard value handling for non-boolean, non-file-arg options.
         // This can return None for `null` values.
         if let Some(value_str) = Self::value_to_string(value).await?
-            && !value_str.is_empty() {
-                if positional_arg_names.contains(key) {
-                    final_args.push(value_str);
-                } else {
-                    final_args.push(format!("--{}", key));
-                    final_args.push(value_str);
-                }
+            && !value_str.is_empty()
+        {
+            if positional_arg_names.contains(key) {
+                final_args.push(value_str);
+            } else {
+                final_args.push(format!("--{}", key));
+                final_args.push(value_str);
             }
+        }
         Ok(())
     }
 

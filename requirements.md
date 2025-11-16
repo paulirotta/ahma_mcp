@@ -178,3 +178,118 @@ When a new task is assigned:
 - **R9.3**: Use the double-dash (`--`) separator within `--tool_args` to forward raw positional arguments exactly as the target CLI expects when necessary.
 - **Example – rebuild after code changes**: `ahma_mcp --tool_name cargo_build --tool_args -- --release`
 - **Example – run quality checks**: `ahma_mcp rust_quality_check`
+
+## 5. Implementation Constraints and Architecture Decisions
+
+This section documents critical implementation details discovered through analysis and testing.
+
+### 5.1. Meta-Parameters
+
+**R10.1**: Certain parameters are "meta-parameters" that control the execution environment but should not be passed as command-line arguments to tools:
+- `working_directory`: Specifies where the command executes
+- `execution_mode`: Controls sync vs async execution  
+- `timeout_seconds`: Sets operation timeout
+
+**R10.2**: The adapter layer **must** filter out meta-parameters when constructing command-line arguments.
+
+**R10.3**: Sequence tools **must** preserve `working_directory` across steps but filter it from being passed as a CLI argument.
+
+### 5.2. Sequence Tool Architecture
+
+**R10.4**: There are two distinct types of sequence tools with different structural requirements:
+
+#### Top-Level Sequences (Cross-Tool Orchestration)
+- **R10.4.1**: Tools that orchestrate multiple different tools (e.g., `rust_quality_check` calling `cargo`, `ahma_validate`, etc.) **must** define their sequence at the top level of the tool configuration.
+- **R10.4.2**: Structure: `{"command": "sequence", "sequence": [{...}], "step_delay_ms": 500}`
+- **R10.4.3**: Each sequence step specifies `tool` and `subcommand` to invoke.
+- **R10.4.4**: Handled by `handle_sequence_tool()` in `mcp_service.rs`.
+
+#### Subcommand Sequences (Intra-Tool Workflows)
+- **R10.4.5**: Subcommands that need to execute multiple steps within the same tool context **may** define a sequence at the subcommand level.
+- **R10.4.6**: Structure: `{"subcommand": [{"name": "x", "sequence": [{...}]}]}`
+- **R10.4.7**: Used for complex workflows within a single tool.
+- **R10.4.8**: Handled by `handle_subcommand_sequence()` in `mcp_service.rs`.
+
+**R10.5**: The choice between top-level and subcommand-level sequences is architectural, not configuration preference. Cross-tool orchestration requires top-level sequences.
+
+### 5.3. Dependency Management
+
+**R11.1**: The project uses minimal, high-quality dependencies chosen for:
+- Reliability and maintenance
+- Performance
+- Minimal transitive dependencies
+- Clear licensing
+
+**R11.2**: Current core dependencies:
+- `rmcp`: MCP protocol implementation
+- `tokio`: Async runtime
+- `serde`/`serde_json`: Serialization
+- `anyhow`: Error handling
+- `tracing`: Structured logging
+
+**R11.3**: Before adding a new dependency, justify it in the PR description and consider alternatives.
+
+### 5.4. Error Handling Patterns
+
+**R12.1**: Use `anyhow::Result` for internal error propagation.
+
+**R12.2**: Convert to `McpError` at the MCP service boundary for client communication.
+
+**R12.3**: Include actionable context in error messages (e.g., "Install with `cargo install cargo-nextest`").
+
+**R12.4**: Log errors at appropriate levels:
+- `error!`: Operation failures affecting user workflows
+- `warn!`: Recoverable issues or deprecated usage
+- `info!`: Normal operation milestones
+- `debug!`: Detailed troubleshooting information
+
+### 5.5. Testing Philosophy
+
+**R13.1**: All new functionality **must** have tests.
+
+**R13.2**: Test organization:
+- Unit tests: In-module `#[cfg(test)]` blocks or `tests/` directory
+- Integration tests: Cross-module workflows
+- Regression tests: Bug fixes must include a test that would have caught the bug
+
+**R13.3**: Tests should be:
+- **Fast**: Most tests complete in <100ms
+- **Isolated**: No shared mutable state
+- **Deterministic**: Same input always produces same output
+- **Documented**: Test names describe what they verify
+
+**R13.4**: The `rust_quality_check` tool runs the full test suite and must pass before committing.
+
+## 6. Known Limitations and Future Work
+
+### 6.1. Current Limitations
+
+- Nested subcommands beyond 2 levels are not tested extensively
+- Schema validation is comprehensive but error messages could be more helpful
+- No built-in retry logic for transient failures
+- Limited Windows testing (primarily developed/tested on macOS/Linux)
+
+### 6.2. Planned Improvements
+
+See `ARCHITECTURE_UPGRADE_PLAN.md` for detailed roadmap including:
+- Enhanced type safety with newtype wrappers
+- Improved error messages with suggestions
+- Better tool discoverability and categorization
+- Performance optimizations
+- Enhanced documentation
+
+## 7. Version History
+
+- **v0.4.0** (2025-11-16): 
+  - Fixed sequence tool architecture (top-level vs subcommand-level)
+  - Fixed meta-parameter handling in command construction
+  - Updated tests to reflect correct sequence structure
+  - Added comprehensive architecture documentation
+- **v0.3.x**: Initial async/sync hybrid implementation
+- **v0.2.x**: Basic MCP server functionality
+- **v0.1.x**: Prototype
+
+---
+
+**Last Updated**: 2025-11-16
+**Status**: Living Document - Update with every architectural decision or significant change
