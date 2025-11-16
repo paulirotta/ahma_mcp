@@ -16,7 +16,7 @@ mod terminal_output_test;
 use anyhow::Result;
 mod common;
 use ahma_core::utils::logging::init_test_logging;
-use common::test_client::new_client;
+use common::test_client::{new_client, new_client_with_args};
 use rmcp::model::CallToolRequestParam;
 use serde_json::{Map, json};
 use std::borrow::Cow;
@@ -76,8 +76,8 @@ async fn test_call_tool_basic() -> Result<()> {
 #[tokio::test]
 async fn test_async_notification_delivery() -> Result<()> {
     init_test_logging();
-    // Use the client interface like other working tests
-    let client = new_client(Some(".ahma/tools")).await?;
+    // Use --async flag to enable async execution
+    let client = new_client_with_args(Some(".ahma/tools"), &["--async"]).await?;
 
     // Test that an async operation completes and we can check its status
     // This is a simpler but more reliable test of async notification delivery

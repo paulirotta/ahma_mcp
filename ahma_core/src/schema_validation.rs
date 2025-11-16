@@ -290,8 +290,9 @@ impl MtdfValidator {
         }
 
         // Check for logical inconsistency: a synchronous command should not have async keywords.
-        // force_synchronous=true means always sync, force_synchronous=false/None means can be async
-        if subcommand.force_synchronous.unwrap_or(false) {
+        // force_synchronous=true means always sync, force_synchronous=false/None means can be async (with --async flag)
+        // The default behavior is synchronous, so we only warn if async keywords are in a force_synchronous=true command
+        if subcommand.force_synchronous == Some(true) {
             let desc_lower = subcommand.description.to_lowercase();
             let async_keywords = [
                 "operation_id",
@@ -308,26 +309,9 @@ impl MtdfValidator {
                     suggestion: Some("Either change force_synchronous to false or update description to reflect synchronous behavior".to_string()),
                 });
             }
-        } else {
-            // It's potentially an async command (force_synchronous is false or None)
-            // Check if description is missing async keywords when it should be async
-            let desc_lower = subcommand.description.to_lowercase();
-            let async_keywords = [
-                "operation_id",
-                "notification",
-                "asynchronously",
-                "async",
-                "background",
-            ];
-            if !async_keywords.iter().any(|&kw| desc_lower.contains(kw)) {
-                errors.push(SchemaValidationError {
-                    error_type: ValidationErrorType::LogicalInconsistency,
-                    field_path: format!("{}.description", path),
-                    message: "Description does not mention async behavior but subcommand may execute asynchronously".to_string(),
-                    suggestion: Some("Update description to include keywords like 'operation_id' or 'async' to reflect asynchronous behavior, or set force_synchronous to true".to_string()),
-                });
-            }
         }
+        // Note: We don't validate for missing async keywords when force_synchronous=false/None
+        // because the default is synchronous execution (only async with --async flag)
 
         // Validate nested subcommands
         if let Some(ref nested) = subcommand.subcommand {

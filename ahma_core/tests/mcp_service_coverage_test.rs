@@ -148,7 +148,7 @@ fn test_subcommand_config_creation() {
 
     assert_eq!(subcommand.name, "build");
     assert!(subcommand.enabled);
-    assert_eq!(subcommand.force_synchronous, Some(true));
+    assert_eq!(subcommand.force_synchronous, None);
     assert_eq!(subcommand.timeout_seconds, Some(300));
     assert_eq!(subcommand.guidance_key, Some("build".to_string()));
 }

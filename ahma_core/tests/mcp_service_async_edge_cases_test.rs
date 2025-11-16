@@ -9,7 +9,7 @@ mod common;
 
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;
-use common::test_client::new_client;
+use common::test_client::{new_client, new_client_with_args};
 use rmcp::model::CallToolRequestParam;
 use serde_json::json;
 use std::borrow::Cow;
@@ -287,7 +287,7 @@ async fn test_status_tool_filter_combinations() -> Result<()> {
 #[tokio::test]
 async fn test_async_operation_with_real_execution() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client_with_args(Some(".ahma/tools"), &["--async"]).await?;
 
     // Start a real async operation (shell command)
     let async_params = CallToolRequestParam {

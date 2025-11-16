@@ -31,16 +31,16 @@ fn test_synchronous_inheritance_loading() -> Result<()> {
 
     let config: ToolConfig = serde_json::from_str(json_config)?;
 
-    // Tool-level asynchronous should be loaded as false (synchronous)
+    // Tool-level force_synchronous should be loaded as true (always sync)
     assert_eq!(config.force_synchronous, Some(true));
 
     let subcommands = config.subcommand.as_ref().expect("Should have subcommands");
 
-    // First subcommand should have None (will inherit tool-level sync)
+    // First subcommand should have None (will inherit tool-level force_synchronous=true)
     assert_eq!(subcommands[0].force_synchronous, None);
 
-    // Second subcommand should have explicit override to async
-    assert_eq!(subcommands[1].force_synchronous, Some(true));
+    // Second subcommand should have explicit override to allow async
+    assert_eq!(subcommands[1].force_synchronous, Some(false));
 
     Ok(())
 }
