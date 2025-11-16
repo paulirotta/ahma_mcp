@@ -648,8 +648,36 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
 
     let configs_ref = configs.as_ref();
     let (config_key, config) = find_matching_tool(configs_ref, &tool_name)?;
-    let (subcommand_config, command_parts) =
-        resolve_cli_subcommand(config_key, config, &tool_name, None)?;
+
+    // Check if this is a top-level sequence tool (no subcommands, just sequence)
+    let is_top_level_sequence = config.command == "sequence" && config.sequence.is_some();
+
+    let (subcommand_config, command_parts) = if is_top_level_sequence {
+        // For top-level sequence tools, create a dummy subcommand config
+        // The actual sequence execution happens later
+        let dummy_subcommand = SubcommandConfig {
+            name: config.name.clone(),
+            description: config.description.clone(),
+            subcommand: None,
+            options: None,
+            positional_args: None,
+            timeout_seconds: config.timeout_seconds,
+            asynchronous: config.asynchronous,
+            enabled: true,
+            guidance_key: config.guidance_key.clone(),
+            sequence: config.sequence.clone(),
+            step_delay_ms: config.step_delay_ms,
+            availability_check: None,
+            install_instructions: None,
+        };
+        (
+            Box::leak(Box::new(dummy_subcommand)) as &SubcommandConfig,
+            vec![config.command.clone()],
+        )
+    } else {
+        let (sub, parts) = resolve_cli_subcommand(config_key, config, &tool_name, None)?;
+        (sub, parts)
+    };
 
     let mut raw_args = Vec::new();
     let mut working_directory: Option<String> = None;
