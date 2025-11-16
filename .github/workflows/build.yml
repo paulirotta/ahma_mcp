@@ -226,3 +226,146 @@ jobs:
 
       - name: Show sccache stats
         run: sccache --show-stats
+
+
+  #######################################
+
+  job-android:
+    runs-on: macos-latest
+    env:
+      TERM: xterm-256color
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Get current day number
+        id: day-number
+        run: echo "day=$(date +%j)" >> $GITHUB_OUTPUT
+
+      - name: Cache Kotlin compiler
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.konan
+            ~/.kotlin
+            ~/.gradle/kotlin-compiler-embeddable
+            ~/Library/Caches/JetBrains/Kotlin
+            ~/Library/Caches/JetBrains/KotlinCompilerServer
+          key: kotlin-compiler-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
+          restore-keys: |
+            kotlin-compiler-${{ runner.os }}-
+
+      - name: Cache AGP and more Gradle directories
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/caches/jars-*
+            ~/.gradle/caches/transforms-*
+            ~/.gradle/caches/build-cache-*
+            ~/.gradle/daemon
+            ~/.gradle/wrapper
+          key: gradle-deeper-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
+          restore-keys: |
+            gradle-deeper-${{ runner.os }}-
+
+      - name: Preheat Gradle Daemon
+        run: |
+          ./gradlew tasks > /dev/null &
+          echo "Gradle warming up slowly in background..."
+        working-directory: ./android_lifeline
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Add Cargo Bin to PATH
+        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Cache Android Cargo build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/.package-cache
+            ~/.cargo/bin
+            ./rust/target
+          key: cargo-android-target-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
+          restore-keys: |
+            cargo-android-target-${{ runner.os }}-
+
+      - name: Cache sccache artifacts
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Mozilla.sccache
+          key: sccache-android-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
+          restore-keys: |
+            sccache-android-${{ runner.os }}-
+
+      - uses: cargo-bins/cargo-binstall@v1.10.9
+
+      - name: Install sccache
+        run: |
+          if ! command -v sccache &> /dev/null; then
+            echo "sccache not found, installing..."
+            cargo binstall sccache --no-confirm || cargo install sccache
+          else
+            echo "sccache is already installed"
+          fi
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          sccache --show-stats
+
+      - name: Check for cargo-ndk and install if missing
+        run: |
+          if ! command -v cargo-ndk &> /dev/null; then
+            echo "cargo-ndk not found, installing..."
+            cargo binstall cargo-ndk --no-confirm || cargo install cargo-ndk --locked
+          else
+            echo "cargo-ndk is already installed, skipping installation"
+          fi
+          cargo ndk --version
+
+      - name: Cache Android build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/.gradle
+            ${{ runner.tool_cache }}/gradle
+            ./android_lifeline/.gradle
+            ./android_lifeline/app/build/intermediates
+            ./android_lifeline/app/build/outputs
+            ./android_lifeline/app/build/kotlin
+            ./android_lifeline/app/build/generated
+            ./android_lifeline/app/build/kspCaches
+            ./android_lifeline/app/build/tmp
+            ./android_lifeline/build/kotlin
+            ./android_lifeline/build/intermediates
+          key: gradle-android-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
+          restore-keys: |
+            gradle-android-${{ runner.os }}-
+
+      - name: Generate Rust stat2 Library and Kotlin Bindings
+        working-directory: ./rust/stat2
+        env:
+          DEBUG_BUILD: "true"
+        run: ./generate-kotlin-bindings.sh
+
+      - name: Android Assemble Debug
+        run: ./gradlew assembleDebug --parallel --daemon --configure-on-demand --build-cache --configuration-cache
+        working-directory: ./android_lifeline
+
+      - name: Android Test
+        run: ./gradlew test --rerun-tasks --parallel --daemon --configure-on-demand --no-configuration-cache
+        working-directory: ./android_lifeline
+
+      - name: Show sccache stats
+        run: sccache --show-stats
