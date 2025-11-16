@@ -75,9 +75,16 @@ impl Client {
         if let Some(content) = result.content.first() {
             if let Some(text_content) = content.as_text() {
                 // Parse the response text which is in format: "Asynchronous operation started with ID: {id}"
+                // The response may also include tool hints after the ID, so extract just the ID
                 let text = &text_content.text;
                 if let Some(id_start) = text.find("ID: ") {
-                    let job_id = text[id_start + 4..].trim().to_string();
+                    // Extract just the operation ID (everything after "ID: " until first whitespace or newline)
+                    let id_text = &text[id_start + 4..];
+                    let job_id = id_text
+                        .split_whitespace()
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!("Could not extract operation ID"))?
+                        .to_string();
                     Ok(ToolCallResult {
                         status: "started".to_string(),
                         job_id,
