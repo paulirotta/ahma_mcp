@@ -186,6 +186,7 @@ This section documents critical implementation details discovered through analys
 ### 5.1. Meta-Parameters
 
 **R10.1**: Certain parameters are "meta-parameters" that control the execution environment but should not be passed as command-line arguments to tools:
+
 - `working_directory`: Specifies where the command executes
 - `execution_mode`: Controls sync vs async execution  
 - `timeout_seconds`: Sets operation timeout
@@ -199,12 +200,14 @@ This section documents critical implementation details discovered through analys
 **R10.4**: There are two distinct types of sequence tools with different structural requirements:
 
 #### Top-Level Sequences (Cross-Tool Orchestration)
+
 - **R10.4.1**: Tools that orchestrate multiple different tools (e.g., `rust_quality_check` calling `cargo`, `ahma_validate`, etc.) **must** define their sequence at the top level of the tool configuration.
 - **R10.4.2**: Structure: `{"command": "sequence", "sequence": [{...}], "step_delay_ms": 500}`
 - **R10.4.3**: Each sequence step specifies `tool` and `subcommand` to invoke.
 - **R10.4.4**: Handled by `handle_sequence_tool()` in `mcp_service.rs`.
 
 #### Subcommand Sequences (Intra-Tool Workflows)
+
 - **R10.4.5**: Subcommands that need to execute multiple steps within the same tool context **may** define a sequence at the subcommand level.
 - **R10.4.6**: Structure: `{"subcommand": [{"name": "x", "sequence": [{...}]}]}`
 - **R10.4.7**: Used for complex workflows within a single tool.
@@ -215,12 +218,14 @@ This section documents critical implementation details discovered through analys
 ### 5.3. Dependency Management
 
 **R11.1**: The project uses minimal, high-quality dependencies chosen for:
+
 - Reliability and maintenance
 - Performance
 - Minimal transitive dependencies
 - Clear licensing
 
 **R11.2**: Current core dependencies:
+
 - `rmcp`: MCP protocol implementation
 - `tokio`: Async runtime
 - `serde`/`serde_json`: Serialization
@@ -238,6 +243,7 @@ This section documents critical implementation details discovered through analys
 **R12.3**: Include actionable context in error messages (e.g., "Install with `cargo install cargo-nextest`").
 
 **R12.4**: Log errors at appropriate levels:
+
 - `error!`: Operation failures affecting user workflows
 - `warn!`: Recoverable issues or deprecated usage
 - `info!`: Normal operation milestones
@@ -248,11 +254,13 @@ This section documents critical implementation details discovered through analys
 **R13.1**: All new functionality **must** have tests.
 
 **R13.2**: Test organization:
+
 - Unit tests: In-module `#[cfg(test)]` blocks or `tests/` directory
 - Integration tests: Cross-module workflows
 - Regression tests: Bug fixes must include a test that would have caught the bug
 
 **R13.3**: Tests should be:
+
 - **Fast**: Most tests complete in <100ms
 - **Isolated**: No shared mutable state
 - **Deterministic**: Same input always produces same output
@@ -272,6 +280,7 @@ This section documents critical implementation details discovered through analys
 ### 6.2. Planned Improvements
 
 See `ARCHITECTURE_UPGRADE_PLAN.md` for detailed roadmap including:
+
 - Enhanced type safety with newtype wrappers
 - Improved error messages with suggestions
 - Better tool discoverability and categorization
@@ -280,7 +289,7 @@ See `ARCHITECTURE_UPGRADE_PLAN.md` for detailed roadmap including:
 
 ## 7. Version History
 
-- **v0.4.0** (2025-11-16): 
+- **v0.4.0** (2025-11-16):
   - Fixed sequence tool architecture (top-level vs subcommand-level)
   - Fixed meta-parameter handling in command construction
   - Updated tests to reflect correct sequence structure

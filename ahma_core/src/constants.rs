@@ -54,8 +54,8 @@ pub const TOOL_HINT_TEMPLATE: &str = "\n\n### ASYNC AHMA OPERATION: {operation_t
  - If you’ll need these results soon, schedule a later `status` check instead of polling.\n\
  - If you have nothing else to do and need results to proceed, use `await`.\n\
 3. Tips:\n\
- - **AVOID POLLING:** Do not repeatedly call `status` - this is inefficient and wastes resources.\n\
- - **Use `await` to block until operation ID(s) complete.**\n\
+ - **AVOID POLLING:** Do not repeatedly call `status`.\n\
+ - **Use `await` instead to block until operation ID(s) complete.**\n\
  - Batch actions: start multiple concurrent tools, then await for all IDs at once.\n\
 Next: Continue useful work now. Use `await` when you actually need the results.\n\n";
 
@@ -67,7 +67,7 @@ pub const CONCURRENCY_HINT_TEMPLATE: &str = "CONCURRENCY HINT: You waited for '{
 /// Template for the status polling detection guidance.
 /// Placeholders: {count}, {operation_id}
 pub const STATUS_POLLING_HINT_TEMPLATE: &str = "**STATUS POLLING ANTI-PATTERN DETECTED:** You've called status {count} times for operation '{operation_id}'. \
-  This is inefficient! Instead of repeatedly polling, use 'await' with the operation ID to get automatic completion notifications.\n";
+  Instead, you **must** use 'await' with the operation ID to get automatic completion notifications.\n";
 
 /// Standard delay between sequential tool invocations to avoid file lock contention.
 /// Particularly important for Cargo operations that may hold Cargo.lock.

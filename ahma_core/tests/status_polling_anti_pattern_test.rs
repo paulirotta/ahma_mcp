@@ -22,8 +22,7 @@ async fn test_status_tool_includes_anti_pattern_guidance() {
 
     // Template should guide LLM away from polling behavior
     assert!(
-        STATUS_POLLING_HINT_TEMPLATE.contains("inefficient")
-            || STATUS_POLLING_HINT_TEMPLATE.contains("ANTI-PATTERN"),
+        STATUS_POLLING_HINT_TEMPLATE.contains("use 'await'"),
         "Template should clearly indicate this is bad practice"
     );
 }
