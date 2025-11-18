@@ -14,7 +14,7 @@
 //! ## Usage Example
 //!
 //! ```rust,no_run
-//! use ahma_mcp::callback_system::{CallbackSender, LoggingCallbackSender, ProgressUpdate};
+//! use ahma_core::callback_system::{CallbackSender, LoggingCallbackSender, ProgressUpdate};
 //!
 //! #[tokio::main]
 //! async fn main() {

@@ -69,6 +69,46 @@ This modular architecture ensures clean separation of concerns and enables futur
 
 The compiled binary will be at `target/release/ahma_mcp`.
 
+## Usage Modes
+
+`ahma_mcp` supports three modes of operation:
+
+### 1. STDIO Mode (Default)
+
+Direct MCP server over stdio for integration with MCP clients:
+
+```bash
+ahma_mcp --mode stdio --tools-dir ./tools
+```
+
+### 2. HTTP Bridge Mode
+
+HTTP server that proxies requests to the stdio MCP server:
+
+```bash
+# Start HTTP bridge on default port (3000)
+ahma_mcp --mode http
+
+# Custom port
+ahma_mcp --mode http --http-port 8080 --http-host 127.0.0.1
+```
+
+Then send JSON-RPC requests to `http://localhost:3000/mcp`:
+
+```bash
+curl -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+### 3. CLI Mode
+
+Execute a single tool command:
+
+```bash
+ahma_mcp cargo_build --working-directory . -- --release
+```
+
 ## VS Code MCP Integration
 
 To use `ahma_mcp` with GitHub Copilot in VS Code:
@@ -89,7 +129,8 @@ To use `ahma_mcp` with GitHub Copilot in VS Code:
                 "cwd": "${workspaceFolder}",
                 "command": "/path/to/your/ahma_mcp/target/release/ahma_mcp", // Use absolute path
                 "args": [
-                    "--server",
+                    "--mode",
+                    "stdio",
                     "--tools-dir",
                     "tools"
                 ],

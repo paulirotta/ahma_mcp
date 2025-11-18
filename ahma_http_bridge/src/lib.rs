@@ -1,0 +1,31 @@
+//! # Ahma HTTP Bridge
+//!
+//! A simple HTTP-to-stdio bridge for MCP servers.
+//!
+//! This crate provides an HTTP server that proxies JSON-RPC requests to a
+//! stdio-based MCP server subprocess. This allows HTTP clients to communicate
+//! with MCP servers that use the stdio transport.
+//!
+//! ## Example
+//!
+//! ```rust,no_run
+//! use ahma_http_bridge::{BridgeConfig, start_bridge};
+//!
+//! #[tokio::main]
+//! async fn main() -> anyhow::Result<()> {
+//!     let config = BridgeConfig {
+//!         bind_addr: "127.0.0.1:3000".parse().unwrap(),
+//!         server_command: "ahma_mcp".to_string(),
+//!         server_args: vec!["--tools-dir".to_string(), "./tools".to_string()],
+//!     };
+//!     
+//!     start_bridge(config).await?;
+//!     Ok(())
+//! }
+//! ```
+
+pub mod bridge;
+pub mod error;
+
+pub use bridge::{BridgeConfig, start_bridge};
+pub use error::{BridgeError, Result};

@@ -13,6 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 ahma_core = {path = "../ahma_core"}
+ahma_http_bridge = { path = "../ahma_http_bridge" }
 ahma_http_mcp_client = { path = "../ahma_http_mcp_client" }
 anyhow.workspace = true
 clap.workspace = true

@@ -73,17 +73,29 @@ use tracing::{info, instrument};
     author,
     version,
     about,
-    long_about = "ahma_mcp runs in two modes:
-1. Server Mode: Runs as a persistent MCP server over stdio.
-   Example: ahma_mcp --server
+    long_about = "ahma_mcp runs in three modes:
 
-2. CLI Mode: Executes a single command and prints the result to stdout.
+1. STDIO Mode (default): MCP server over stdio for direct integration.
+   Example: ahma_mcp --mode stdio
+
+2. HTTP Mode: HTTP bridge server that proxies to stdio MCP server.
+   Example: ahma_mcp --mode http --http-port 3000
+
+3. CLI Mode: Execute a single command and print result to stdout.
    Example: ahma_mcp cargo_build --working-directory . -- --release"
 )]
 struct Cli {
-    /// Run in persistent MCP server mode.
-    #[arg(long)]
-    server: bool,
+    /// Server mode: 'stdio' (default) or 'http'
+    #[arg(long, default_value = "stdio", value_parser = ["stdio", "http"])]
+    mode: String,
+
+    /// HTTP server port (only used in http mode)
+    #[arg(long, default_value = "3000")]
+    http_port: u16,
+
+    /// HTTP server host (only used in http mode)
+    #[arg(long, default_value = "127.0.0.1")]
+    http_host: String,
 
     /// Path to the directory containing tool JSON configuration files.
     #[arg(long, global = true, default_value = ".ahma/tools")]
@@ -134,24 +146,41 @@ async fn main() -> Result<()> {
             .init();
     */
 
-    if cli.server || cli.tool_name.is_none() {
-        // Check if stdin is a terminal (interactive mode)
-        if std::io::stdin().is_terminal() && !cli.server {
-            eprintln!(
-                "\n❌ Error: ahma_mcp is an MCP server designed for JSON-RPC communication over stdio.\n"
-            );
-            eprintln!("It cannot be run directly from an interactive terminal.\n");
-            eprintln!("Usage options:");
-            eprintln!("  1. Run as MCP server (requires MCP client with stdio transport):");
-            eprintln!("     Configure in your MCP client's configuration file\n");
-            eprintln!("  2. Execute a single tool command:");
-            eprintln!("     ahma_mcp <tool_name> [tool_arguments...]\n");
-            eprintln!("For more information, run: ahma_mcp --help\n");
-            std::process::exit(1);
+    // Determine mode based on CLI arguments
+    let is_server_mode = cli.tool_name.is_none();
+    
+    if is_server_mode {
+        match cli.mode.as_str() {
+            "http" => {
+                tracing::info!("Running in HTTP bridge mode");
+                run_http_bridge_mode(cli).await
+            }
+            "stdio" => {
+                // Check if stdin is a terminal (interactive mode)
+                if std::io::stdin().is_terminal() {
+                    eprintln!(
+                        "\n❌ Error: ahma_mcp is an MCP server designed for JSON-RPC communication over stdio.\n"
+                    );
+                    eprintln!("It cannot be run directly from an interactive terminal.\n");
+                    eprintln!("Usage options:");
+                    eprintln!("  1. Run as stdio MCP server (requires MCP client):");
+                    eprintln!("     ahma_mcp --mode stdio\n");
+                    eprintln!("  2. Run as HTTP bridge server:");
+                    eprintln!("     ahma_mcp --mode http --http-port 3000\n");
+                    eprintln!("  3. Execute a single tool command:");
+                    eprintln!("     ahma_mcp <tool_name> [tool_arguments...]\n");
+                    eprintln!("For more information, run: ahma_mcp --help\n");
+                    std::process::exit(1);
+                }
+                
+                tracing::info!("Running in STDIO server mode");
+                run_server_mode(cli).await
+            }
+            _ => {
+                eprintln!("Invalid mode: {}. Use 'stdio' or 'http'", cli.mode);
+                std::process::exit(1);
+            }
         }
-
-        tracing::info!("Running in Server mode");
-        run_server_mode(cli).await
     } else {
         tracing::info!("Running in CLI mode");
         run_cli_mode(cli).await
@@ -371,6 +400,51 @@ fn should_skip(set: &Option<HashSet<String>>, value: &str) -> bool {
     set.as_ref()
         .map(|items| items.contains(&value.to_ascii_lowercase()))
         .unwrap_or(false)
+}
+
+async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
+    use ahma_http_bridge::{BridgeConfig, start_bridge};
+    
+    let bind_addr = format!("{}:{}", cli.http_host, cli.http_port)
+        .parse()
+        .context("Invalid HTTP host/port")?;
+    
+    tracing::info!("Starting HTTP bridge on {}", bind_addr);
+    
+    // Build the command to run the stdio MCP server
+    let server_command = env::current_exe()
+        .context("Failed to get current executable path")?
+        .to_string_lossy()
+        .to_string();
+    
+    let mut server_args = vec![
+        "--mode".to_string(),
+        "stdio".to_string(),
+        "--tools-dir".to_string(),
+        cli.tools_dir.to_string_lossy().to_string(),
+        "--guidance-file".to_string(),
+        cli.guidance_file.to_string_lossy().to_string(),
+        "--timeout".to_string(),
+        cli.timeout.to_string(),
+    ];
+    
+    if cli.debug {
+        server_args.push("--debug".to_string());
+    }
+    
+    if cli.r#async {
+        server_args.push("--async".to_string());
+    }
+    
+    let config = BridgeConfig {
+        bind_addr,
+        server_command,
+        server_args,
+    };
+    
+    start_bridge(config).await?;
+    
+    Ok(())
 }
 
 async fn run_server_mode(cli: Cli) -> Result<()> {
