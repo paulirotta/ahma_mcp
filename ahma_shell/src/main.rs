@@ -50,9 +50,10 @@ use ahma_core::{
     tool_availability::evaluate_tool_availability,
     utils::logging::init_logging,
 };
+use ahma_http_mcp_client::client::HttpMcpTransport;
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
-use rmcp::ServiceExt;
+use rmcp::{ServiceExt, client::McpClient};
 use serde_json::{Value, from_str};
 use std::{
     collections::{HashMap, HashSet},
@@ -106,6 +107,10 @@ struct Cli {
     /// The name of the tool to execute (e.g., 'cargo_build').
     #[arg()]
     tool_name: Option<String>,
+
+    /// Path to the mcp.json file for client configurations.
+    #[arg(long, global = true, default_value = ".vscode/mcp.json")]
+    mcp_config: PathBuf,
 
     /// Arguments for the tool.
     #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
@@ -372,6 +377,40 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     tracing::info!("Tools directory: {:?}", cli.tools_dir);
     tracing::info!("Guidance file: {:?}", cli.guidance_file);
     tracing::info!("Command timeout: {}s", cli.timeout);
+
+    // --- MCP Client Mode ---
+    if cli.mcp_config.exists() {
+        let mcp_config = ahma_core::config::load_mcp_config(&cli.mcp_config)?;
+        if let Some(server_config) = mcp_config.servers.values().next() {
+            if let ahma_core::config::ServerConfig::Http(http_config) = server_config {
+                tracing::info!(
+                    "Running in MCP HTTP Client mode, connecting to {}",
+                    http_config.url
+                );
+
+                let url = url::Url::parse(&http_config.url)?;
+
+                let transport = HttpMcpTransport::new(
+                    url,
+                    http_config.client_id.clone(),
+                    http_config.client_secret.clone(),
+                )?;
+
+                let mut client = McpClient::new(transport, "ahma_mcp_http_client".to_string())?;
+
+                client.start().await?;
+                tracing::info!("MCP HTTP Client started. Waiting for messages...");
+
+                // This will run forever, listening for messages.
+                client.wait_for_disconnect().await?;
+
+                return Ok(());
+            }
+        }
+    }
+
+    // --- Standard Server Mode ---
+    tracing::info!("Running in standard child-process server mode.");
 
     // Load guidance configuration
     let guidance_config = if cli.guidance_file.exists() {

@@ -268,6 +268,16 @@ This section documents critical implementation details discovered through analys
 
 **R13.4**: The `rust_quality_check` tool runs the full test suite and must pass before committing.
 
+### R14: HTTP MCP Client and OAuth Authentication
+
+- **R14.1**: `ahma_mcp` **must** be able to act as an MCP client for HTTP-based MCP servers, enabling it to connect to services like the Atlassian MCP server.
+- **R14.2**: This functionality **must** be implemented in a new, dedicated crate within the existing Cargo workspace to maintain modularity as per principle R6.
+- **R14.3**: The client **must** support the OAuth 2.0 authorization code flow for user authentication.
+- **R14.4**: When authentication is required, the system **must** provide the user with a URL to open in their web browser. If possible, the system should attempt to open the browser automatically; otherwise, it must display the link clearly for the user to copy.
+- **R14.5**: After successful user authentication in the browser, the client **must** handle the OAuth callback, retrieve the authorization code, and exchange it for an access token and a refresh token. These tokens must be securely stored.
+- **R14.6**: All subsequent requests to the MCP server **must** be authenticated using the stored access token. The client must also be capable of using the refresh token to obtain a new access token when the current one expires.
+- **R14.7**: The `mcp.json` configuration file **must** be extended to support definitions for HTTP-based MCP servers, including their URL, as demonstrated in the Cursor configuration example.
+
 ## 6. Known Limitations and Future Work
 
 ### 6.1. Current Limitations
@@ -289,6 +299,8 @@ See `ARCHITECTURE_UPGRADE_PLAN.md` for detailed roadmap including:
 
 ## 7. Version History
 
+- **v0.5.0** (2025-11-18):
+  - Added requirement for HTTP MCP Client with OAuth support.
 - **v0.4.0** (2025-11-16):
   - Fixed sequence tool architecture (top-level vs subcommand-level)
   - Fixed meta-parameter handling in command construction
@@ -300,5 +312,5 @@ See `ARCHITECTURE_UPGRADE_PLAN.md` for detailed roadmap including:
 
 ---
 
-**Last Updated**: 2025-11-16
+**Last Updated**: 2025-11-18
 **Status**: Living Document - Update with every architectural decision or significant change

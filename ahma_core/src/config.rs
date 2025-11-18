@@ -218,6 +218,33 @@ pub struct SequenceStep {
     pub description: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpConfig {
+    pub servers: HashMap<String, ServerConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum ServerConfig {
+    #[serde(rename = "child_process")]
+    ChildProcess(ChildProcessConfig),
+    #[serde(rename = "http")]
+    Http(HttpServerConfig),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChildProcessConfig {
+    pub command: String,
+    pub args: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HttpServerConfig {
+    pub url: String,
+    pub client_id: Option<String>,
+    pub client_secret: Option<String>,
+}
+
 // Helper functions for serde defaults
 fn default_enabled() -> bool {
     true
@@ -225,6 +252,18 @@ fn default_enabled() -> bool {
 
 fn is_false(b: &bool) -> bool {
     !*b
+}
+
+pub fn load_mcp_config(config_path: &std::path::Path) -> anyhow::Result<McpConfig> {
+    if !config_path.exists() {
+        return Ok(McpConfig {
+            servers: HashMap::new(),
+        });
+    }
+
+    let contents = std::fs::read_to_string(config_path)?;
+    let config: McpConfig = serde_json::from_str(&contents)?;
+    Ok(config)
 }
 
 /// Load all tool configurations from a directory
