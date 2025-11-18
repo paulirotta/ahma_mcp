@@ -10,10 +10,10 @@ pub enum McpHttpError {
     UrlParse(#[from] url::ParseError),
     #[error("OAuth2 error: {0}")]
     OAuth2(String),
+    #[error("OAuth2 configuration error: {0}")]
+    OAuth2Config(#[from] oauth2::ConfigurationError),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("MCP error: {0}")]
-    Mcp(#[from] rmcp::McpError),
     #[error("Authentication failed: {0}")]
     Auth(String),
     #[error("Missing access token")]

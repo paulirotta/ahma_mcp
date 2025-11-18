@@ -345,6 +345,7 @@ impl AhmaMcpService {
             input_schema,
             output_schema: None,
             annotations: None,
+            meta: None,
         }
     }
 
@@ -576,6 +577,7 @@ impl ServerHandler for AhmaMcpService {
                 input_schema: self.generate_input_schema_for_wait(),
                 output_schema: None,
                 annotations: None,
+                meta: None,
             });
 
             // Hard-wired status command - always available
@@ -587,6 +589,7 @@ impl ServerHandler for AhmaMcpService {
                 input_schema: self.generate_input_schema_for_status(),
                 output_schema: None,
                 annotations: None,
+                meta: None,
             });
 
             for config in self.configs.values() {

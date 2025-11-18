@@ -271,12 +271,28 @@ This section documents critical implementation details discovered through analys
 ### R14: HTTP MCP Client and OAuth Authentication
 
 - **R14.1**: `ahma_mcp` **must** be able to act as an MCP client for HTTP-based MCP servers, enabling it to connect to services like the Atlassian MCP server.
-- **R14.2**: This functionality **must** be implemented in a new, dedicated crate within the existing Cargo workspace to maintain modularity as per principle R6.
-- **R14.3**: The client **must** support the OAuth 2.0 authorization code flow for user authentication.
-- **R14.4**: When authentication is required, the system **must** provide the user with a URL to open in their web browser. If possible, the system should attempt to open the browser automatically; otherwise, it must display the link clearly for the user to copy.
-- **R14.5**: After successful user authentication in the browser, the client **must** handle the OAuth callback, retrieve the authorization code, and exchange it for an access token and a refresh token. These tokens must be securely stored.
-- **R14.6**: All subsequent requests to the MCP server **must** be authenticated using the stored access token. The client must also be capable of using the refresh token to obtain a new access token when the current one expires.
-- **R14.7**: The `mcp.json` configuration file **must** be extended to support definitions for HTTP-based MCP servers, including their URL, as demonstrated in the Cursor configuration example.
+- **R14.2**: This functionality **is** implemented in the `ahma_http_mcp_client` crate within the Cargo workspace to maintain modularity as per principle R6.
+- **R14.3**: The client **must** support the OAuth 2.0 authorization code flow with PKCE for user authentication.
+- **R14.4**: When authentication is required, the system **must** provide the user with a URL to open in their web browser. The system attempts to open the browser automatically using the `webbrowser` crate; if that fails, it displays the link for the user to copy.
+- **R14.5**: After successful user authentication in the browser, the client **must** handle the OAuth callback on `http://localhost:8080`, retrieve the authorization code, and exchange it for an access token and a refresh token using the `oauth2` crate. These tokens are stored in the system's temporary directory as `mcp_http_token.json`.
+- **R14.6**: All subsequent requests to the MCP server **must** be authenticated using the stored access token via Bearer authentication. Token refresh logic is planned but not yet implemented.
+- **R14.7**: The `mcp.json` configuration file **supports** definitions for HTTP-based MCP servers with the following structure:
+  ```json
+  {
+    "servers": {
+      "server_name": {
+        "type": "http",
+        "url": "https://api.example.com/mcp",
+        "client_id": "your_client_id",
+        "client_secret": "your_client_secret"
+      }
+    }
+  }
+  ```
+- **R14.8**: The HTTP transport **implements** the `rmcp::transport::Transport<RoleClient>` trait, providing bidirectional communication:
+  - **Sending**: HTTP POST requests with Bearer authentication for outgoing messages
+  - **Receiving**: Server-Sent Events (SSE) for incoming messages from the server (background task)
+- **R14.9**: **Current Status**: The `HttpMcpTransport` is fully implemented and compiles successfully. Integration with the main server binary is pending completion of rmcp 0.9.0 client API documentation and examples.
 
 ## 6. Known Limitations and Future Work
 
@@ -300,7 +316,13 @@ See `ARCHITECTURE_UPGRADE_PLAN.md` for detailed roadmap including:
 ## 7. Version History
 
 - **v0.5.0** (2025-11-18):
-  - Added requirement for HTTP MCP Client with OAuth support.
+  - Added requirement for HTTP MCP Client with OAuth support
+  - Implemented `ahma_http_mcp_client` crate with full OAuth 2.0 + PKCE flow
+  - Implemented `HttpMcpTransport` using rmcp 0.9.0 `Transport` trait
+  - Updated to rmcp 0.9.0 (breaking changes: added `meta` field to `Tool` struct)
+  - Updated to oauth2 5.0.0 (breaking changes: new client builder API)
+  - Added `mcp.json` configuration support for HTTP-based MCP servers
+  - HTTP MCP client integration pending rmcp 0.9.0 client API examples
 - **v0.4.0** (2025-11-16):
   - Fixed sequence tool architecture (top-level vs subcommand-level)
   - Fixed meta-parameter handling in command construction

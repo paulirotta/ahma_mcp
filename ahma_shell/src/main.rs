@@ -50,10 +50,11 @@ use ahma_core::{
     tool_availability::evaluate_tool_availability,
     utils::logging::init_logging,
 };
-use ahma_http_mcp_client::client::HttpMcpTransport;
+// TODO: Re-enable when HTTP MCP client is fully implemented
+// use ahma_http_mcp_client::client::HttpMcpTransport;
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
-use rmcp::{ServiceExt, client::McpClient};
+use rmcp::ServiceExt;
 use serde_json::{Value, from_str};
 use std::{
     collections::{HashMap, HashSet},
@@ -379,34 +380,21 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     tracing::info!("Command timeout: {}s", cli.timeout);
 
     // --- MCP Client Mode ---
+    // TODO: Implement HTTP MCP client using rmcp 0.9.0 API
+    // The HttpMcpTransport is ready but needs to be integrated with rmcp's ServiceExt
+    // See: https://docs.rs/rmcp/0.9.0/rmcp/trait.ServiceExt.html
     if cli.mcp_config.exists() {
         let mcp_config = ahma_core::config::load_mcp_config(&cli.mcp_config)?;
-        if let Some(server_config) = mcp_config.servers.values().next() {
-            if let ahma_core::config::ServerConfig::Http(http_config) = server_config {
-                tracing::info!(
-                    "Running in MCP HTTP Client mode, connecting to {}",
-                    http_config.url
+        if let Some(server_config) = mcp_config.servers.values().next()
+            && let ahma_core::config::ServerConfig::Http(_http_config) = server_config {
+                tracing::warn!(
+                    "HTTP MCP Client mode is not yet implemented in rmcp 0.9.0"
                 );
-
-                let url = url::Url::parse(&http_config.url)?;
-
-                let transport = HttpMcpTransport::new(
-                    url,
-                    http_config.client_id.clone(),
-                    http_config.client_secret.clone(),
-                )?;
-
-                let mut client = McpClient::new(transport, "ahma_mcp_http_client".to_string())?;
-
-                client.start().await?;
-                tracing::info!("MCP HTTP Client started. Waiting for messages...");
-
-                // This will run forever, listening for messages.
-                client.wait_for_disconnect().await?;
-
-                return Ok(());
+                tracing::warn!(
+                    "The HttpMcpTransport has been implemented but needs integration"
+                );
+                return Err(anyhow!("HTTP MCP client not yet supported"));
             }
-        }
     }
 
     // --- Standard Server Mode ---

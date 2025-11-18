@@ -1,14 +1,21 @@
-use crate::error::{McpHttpError, Result};
-use futures::{Stream, StreamExt};
+use crate::error::McpHttpError;
+use futures::StreamExt;
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, RedirectUrl,
     Scope, TokenResponse, TokenUrl, basic::BasicClient,
 };
+use rmcp::{
+    RoleClient,
+    service::{RxJsonRpcMessage, TxJsonRpcMessage},
+    transport::Transport,
+};
 use serde::{Deserialize, Serialize};
-use std::{io::Write, path::PathBuf, pin::Pin, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{Mutex, mpsc};
 use tracing::{debug, error, info};
 use url::Url;
+
+type Result<T> = std::result::Result<T, McpHttpError>;
 
 const TOKEN_FILE: &str = "mcp_http_token.json";
 
@@ -44,46 +51,147 @@ fn load_token() -> Result<Option<StoredToken>> {
     }
 }
 
+type ConfiguredOAuthClient = oauth2::Client<
+    oauth2::StandardErrorResponse<oauth2::basic::BasicErrorResponseType>,
+    oauth2::StandardTokenResponse<oauth2::EmptyExtraTokenFields, oauth2::basic::BasicTokenType>,
+    oauth2::StandardTokenIntrospectionResponse<
+        oauth2::EmptyExtraTokenFields,
+        oauth2::basic::BasicTokenType,
+    >,
+    oauth2::StandardRevocableToken,
+    oauth2::StandardErrorResponse<oauth2::RevocationErrorResponseType>,
+    oauth2::EndpointSet,
+    oauth2::EndpointNotSet,
+    oauth2::EndpointNotSet,
+    oauth2::EndpointNotSet,
+    oauth2::EndpointSet,
+>;
+
 pub struct HttpMcpTransport {
     client: reqwest::Client,
     url: Url,
     token: Arc<Mutex<Option<StoredToken>>>,
-    oauth_client: Option<BasicClient>,
-    sender: mpsc::Sender<McpMessage>,
+    oauth_client: Option<ConfiguredOAuthClient>,
+    receiver: Arc<Mutex<mpsc::Receiver<RxJsonRpcMessage<RoleClient>>>>,
+    sender: mpsc::Sender<RxJsonRpcMessage<RoleClient>>,
 }
 
 impl HttpMcpTransport {
     pub fn new(url: Url, client_id: Option<String>, client_secret: Option<String>) -> Result<Self> {
         let oauth_client =
             if let (Some(client_id), Some(client_secret)) = (client_id, client_secret) {
-                Some(
-                    BasicClient::new(
-                        ClientId::new(client_id),
-                        Some(ClientSecret::new(client_secret)),
-                        AuthUrl::new("https://auth.atlassian.com/authorize".to_string())?,
-                        Some(TokenUrl::new(
-                            "https://auth.atlassian.com/oauth/token".to_string(),
-                        )?),
-                    )
-                    .set_redirect_uri(RedirectUrl::new("http://localhost:8080".to_string())?),
-                )
+                let mut client = BasicClient::new(ClientId::new(client_id))
+                    .set_client_secret(ClientSecret::new(client_secret))
+                    .set_auth_uri(AuthUrl::new(
+                        "https://auth.atlassian.com/authorize".to_string(),
+                    )?)
+                    .set_token_uri(TokenUrl::new(
+                        "https://auth.atlassian.com/oauth/token".to_string(),
+                    )?);
+                client =
+                    client.set_redirect_uri(RedirectUrl::new("http://localhost:8080".to_string())?);
+                Some(client)
             } else {
                 None
             };
 
-        let (sender, _) = mpsc::channel(100);
+        let (sender, receiver) = mpsc::channel(100);
 
-        Ok(Self {
+        let transport = Self {
             client: reqwest::Client::new(),
             url,
             token: Arc::new(Mutex::new(load_token()?)),
             oauth_client,
+            receiver: Arc::new(Mutex::new(receiver)),
             sender,
-        })
+        };
+
+        // Start SSE listener in background
+        transport.start_sse_listener();
+
+        Ok(transport)
+    }
+
+    /// Start a background task to listen for SSE messages from the server
+    fn start_sse_listener(&self) {
+        let url = self.url.clone();
+        let token_arc = self.token.clone();
+        let tx = self.sender.clone();
+
+        tokio::spawn(async move {
+            loop {
+                let access_token = match token_arc.lock().await.as_ref() {
+                    Some(t) => t.access_token.clone(),
+                    None => {
+                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                        continue;
+                    }
+                };
+
+                let response = match reqwest::Client::new()
+                    .get(url.clone())
+                    .bearer_auth(&access_token)
+                    .send()
+                    .await
+                {
+                    Ok(res) if res.status().is_success() => res,
+                    Ok(res) => {
+                        error!("SSE connection failed with status: {}", res.status());
+                        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                        continue;
+                    }
+                    Err(e) => {
+                        error!("SSE connection failed: {}", e);
+                        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                        continue;
+                    }
+                };
+
+                use futures::TryStreamExt;
+                let mut stream = response
+                    .bytes_stream()
+                    .map_err(std::io::Error::other);
+
+                while let Some(item) = stream.next().await {
+                    match item {
+                        Ok(chunk) => {
+                            for line in chunk.split(|&b| b == b'\n') {
+                                let line_str = String::from_utf8_lossy(line);
+                                if line_str.starts_with("data: ") {
+                                    let data = &line_str["data: ".len()..].trim();
+                                    if !data.is_empty() {
+                                        match serde_json::from_str::<RxJsonRpcMessage<RoleClient>>(
+                                            data,
+                                        ) {
+                                            Ok(msg) => {
+                                                if let Err(e) = tx.send(msg).await {
+                                                    error!(
+                                                        "Failed to send message to channel: {}",
+                                                        e
+                                                    );
+                                                }
+                                            }
+                                            Err(e) => {
+                                                error!("Failed to deserialize message: {}", e);
+                                                debug!("Invalid data: {}", data);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            error!("Error in SSE stream: {}", e);
+                            break;
+                        }
+                    }
+                }
+            }
+        });
     }
 
     async fn ensure_authenticated(&self) -> Result<()> {
-        let mut token_lock = self.token.lock().await;
+        let token_lock = self.token.lock().await;
         if token_lock.is_some() {
             // TODO: check for expiration and refresh
             return Ok(());
@@ -104,7 +212,10 @@ impl HttpMcpTransport {
         }
     }
 
-    async fn perform_oauth_flow(&self, oauth_client: &BasicClient) -> Result<StoredToken> {
+    async fn perform_oauth_flow(
+        &self,
+        oauth_client: &ConfiguredOAuthClient,
+    ) -> Result<StoredToken> {
         let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
 
         let scopes = vec![
@@ -144,10 +255,11 @@ impl HttpMcpTransport {
             return Err(McpHttpError::Auth("CSRF token mismatch".to_string()));
         }
 
+        let http_client = reqwest::Client::new();
         let token_result = oauth_client
             .exchange_code(AuthorizationCode::new(code))
             .set_pkce_verifier(pkce_verifier)
-            .request_async(async_http_client)
+            .request_async(&http_client)
             .await
             .map_err(|e| McpHttpError::OAuth2(format!("{:?}", e)))?;
 
@@ -208,120 +320,52 @@ impl HttpMcpTransport {
     }
 }
 
-#[async_trait::async_trait]
-impl McpTransport for HttpMcpTransport {
-    async fn send(&self, msg: McpMessageWithSession) -> std::result::Result<(), McpError> {
-        if let Err(e) = self.ensure_authenticated().await {
-            error!("Authentication failed: {}", e);
-            return Err(McpError::new_custom("Authentication", &e.to_string(), true));
+impl Transport<RoleClient> for HttpMcpTransport {
+    type Error = McpHttpError;
+
+    fn send(
+        &mut self,
+        item: TxJsonRpcMessage<RoleClient>,
+    ) -> impl std::future::Future<Output = std::result::Result<(), Self::Error>> + Send + 'static
+    {
+        let client = self.client.clone();
+        let url = self.url.clone();
+        let token = self.token.clone();
+
+        async move {
+            // Ensure authenticated
+            let token_lock = token.lock().await;
+            let access_token = token_lock
+                .as_ref()
+                .map(|t| t.access_token.clone())
+                .ok_or(McpHttpError::MissingAccessToken)?;
+            drop(token_lock);
+
+            let res = client
+                .post(url)
+                .bearer_auth(access_token)
+                .json(&item)
+                .send()
+                .await?;
+
+            if !res.status().is_success() {
+                let status = res.status();
+                let text = res.text().await.unwrap_or_default();
+                let err_msg = format!("HTTP Error: {} - {}", status, text);
+                error!("{}", err_msg);
+                return Err(McpHttpError::Custom(err_msg));
+            }
+
+            Ok(())
         }
-
-        let token = self.token.lock().await;
-        let access_token = token
-            .as_ref()
-            .map(|t| t.access_token.clone())
-            .ok_or_else(|| McpError::new_custom("Authentication", "Missing access token", true))?;
-        drop(token);
-
-        let res = self
-            .client
-            .post(self.url.clone())
-            .bearer_auth(access_token)
-            .json(&msg)
-            .send()
-            .await
-            .map_err(|e| McpError::new_transport(&e.to_string(), false))?;
-
-        if !res.status().is_success() {
-            let status = res.status();
-            let text = res.text().await.unwrap_or_default();
-            let err_msg = format!("HTTP Error: {} - {}", status, text);
-            error!("{}", err_msg);
-            return Err(McpError::new_transport(&err_msg, true));
-        }
-
-        Ok(())
     }
 
-    fn messages(
-        &mut self,
-    ) -> Pin<Box<dyn Stream<Item = std::result::Result<McpMessage, McpError>> + Send>> {
-        let url = self.url.clone();
-        let token_arc = self.token.clone();
-        let (tx, mut rx) = mpsc::channel(100);
-        self.sender = tx.clone();
+    async fn receive(&mut self) -> Option<RxJsonRpcMessage<RoleClient>> {
+        let mut receiver = self.receiver.lock().await;
+        receiver.recv().await
+    }
 
-        tokio::spawn(async move {
-            loop {
-                let access_token = match token_arc.lock().await.as_ref() {
-                    Some(t) => t.access_token.clone(),
-                    None => {
-                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                        continue;
-                    }
-                };
-
-                let mut stream = match reqwest::Client::new()
-                    .get(url.clone())
-                    .bearer_auth(&access_token)
-                    .send()
-                    .await
-                {
-                    Ok(res) if res.status().is_success() => res.bytes_stream(),
-                    Ok(res) => {
-                        error!("SSE connection failed with status: {}", res.status());
-                        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                        continue;
-                    }
-                    Err(e) => {
-                        error!("SSE connection failed: {}", e);
-                        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                        continue;
-                    }
-                };
-
-                while let Some(item) = stream.next().await {
-                    match item {
-                        Ok(chunk) => {
-                            for line in chunk.split(|&b| b == b'\n') {
-                                let line_str = String::from_utf8_lossy(line);
-                                if line_str.starts_with("data: ") {
-                                    let data = &line_str["data: ".len()..].trim();
-                                    if !data.is_empty() {
-                                        match serde_json::from_str::<rmcp::model::McpMessage>(data)
-                                        {
-                                            Ok(msg) => {
-                                                if let Err(e) = tx.send(msg).await {
-                                                    error!(
-                                                        "Failed to send McpMessage to channel: {}",
-                                                        e
-                                                    );
-                                                }
-                                            }
-                                            Err(e) => {
-                                                error!("Failed to deserialize McpMessage: {}", e);
-                                                debug!("Invalid data: {}", data);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            error!("Error in SSE stream: {}", e);
-                            break;
-                        }
-                    }
-                }
-            }
-        });
-
-        let stream = async_stream::stream! {
-            while let Some(msg) = rx.recv().await {
-                yield Ok(msg);
-            }
-        };
-
-        Box::pin(stream)
+    async fn close(&mut self) -> std::result::Result<(), Self::Error> {
+        Ok(())
     }
 }
