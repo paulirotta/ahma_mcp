@@ -1,5 +1,6 @@
 [workspace]
-members = ["ahma_core", "ahma_shell", "ahma_validate", "generate_tool_schema", "ahma_http_mcp_client"]
+members = ["ahma_core", "ahma_shell", "ahma_validate", "generate_tool_schema", "ahma_http_bridge", "ahma_http_mcp_client"]
+# Note: ahma_http_mcp_server is excluded until rmcp integration is complete
 resolver = "2"
 
 [workspace.package]
