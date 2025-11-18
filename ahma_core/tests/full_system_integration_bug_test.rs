@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod full_system_integration_bug_test {
+mod tests {
     use ahma_core::adapter::Adapter;
     use ahma_core::callback_system::{CallbackSender, ProgressUpdate};
     use ahma_core::config::load_tool_configs;

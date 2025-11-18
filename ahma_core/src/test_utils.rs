@@ -324,9 +324,8 @@ async fn main() {
     }
 }
 
-#[allow(clippy::module_inception)]
+#[allow(clippy::module_inception, dead_code)]
 pub mod test_utils {
-    #![allow(dead_code)]
     use crate::{
         adapter::Adapter,
         client::Client,

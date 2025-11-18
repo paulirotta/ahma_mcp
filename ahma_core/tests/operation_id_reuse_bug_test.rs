@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod operation_id_reuse_bug_test {
+mod tests {
     use ahma_core::operation_monitor::{
         MonitorConfig, Operation, OperationMonitor, OperationStatus,
     };

@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod realistic_endless_notification_test {
+mod tests {
     use ahma_core::adapter::Adapter;
     use ahma_core::config::load_tool_configs;
     use ahma_core::mcp_service::AhmaMcpService;

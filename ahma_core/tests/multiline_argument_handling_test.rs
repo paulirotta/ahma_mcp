@@ -1,6 +1,4 @@
-mod common;
-
-use crate::common::get_workspace_path;
+use ahma_core::test_utils::get_workspace_path;
 use ahma_core::utils::logging::init_test_logging;
 /// Test multi-line argument handling functionality
 ///

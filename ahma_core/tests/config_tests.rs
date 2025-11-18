@@ -4,7 +4,7 @@
 //! and other miscellaneous tests into a single test binary
 //! to optimize cargo nextest test discovery time.
 
-use ahma_core::test_utils as common;
+pub use ahma_core::test_utils as common;
 
 #[path = "ai_callback_clarity_test.rs"]
 mod ai_callback_clarity_test;

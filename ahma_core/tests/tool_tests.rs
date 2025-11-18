@@ -3,7 +3,7 @@
 //! This module consolidates all tool-specific tests into a single test binary
 //! to optimize cargo nextest test discovery time.
 
-use ahma_core::test_utils as common;
+pub use ahma_core::test_utils as common;
 
 #[path = "advanced_await_functionality_test.rs"]
 mod advanced_await_functionality_test;
