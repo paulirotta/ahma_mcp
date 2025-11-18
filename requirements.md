@@ -171,6 +171,46 @@ When a new task is assigned:
 6. After any code changes affecting tool execution, restart the server (`cargo build--release`) and test interactively.
 7. **Before stopping work**, you **must** run the `ahma_mcp rust_quality_check` tool and verify that all checks pass. This sequence now includes schema generation and validation, providing a comprehensive pre-flight check. Do not mark work as complete until this quality check succeeds.
 
+### 4.3. CRITICAL: Use ahma_mcp MCP Server for All Operations
+
+**R8.5**: AI maintainers working in Cursor **MUST** use the `ahma_mcp` MCP server for ALL development operations. **DO NOT** use terminal commands via `run_terminal_cmd` tool.
+
+**Why**: We dogfood our own project to rapidly identify and fix issues during development. This ensures the project works correctly in real-world usage and catches bugs immediately.
+
+**How to use ahma_mcp MCP server in Cursor**:
+- The `ahma_mcp` server is configured in Cursor's MCP settings and runs automatically
+- AI assistants in Cursor have access to MCP tools exposed by ahma_mcp
+- Use these MCP tools directly via the MCP protocol (they appear as available tools in Cursor)
+- Tool naming convention: `{command}_{subcommand}` (e.g., `cargo_build`, `cargo_nextest_run`, `cargo_clippy`)
+
+**Examples of correct usage**:
+- ❌ WRONG: `run_terminal_cmd("cargo nextest run")`
+- ✅ CORRECT: Call MCP tool `cargo_nextest_run` via Cursor's MCP interface
+- ❌ WRONG: `run_terminal_cmd("cargo build --release")`  
+- ✅ CORRECT: Call MCP tool `cargo_build` with `release: true` parameter
+- ❌ WRONG: `run_terminal_cmd("cargo clippy --fix")`
+- ✅ CORRECT: Call MCP tool `cargo_clippy` with `fix: true` parameter
+
+**R8.6**: If an MCP tool is missing, broken, or doesn't work as expected, that is a **bug in ahma_mcp** that must be fixed. Document the issue and only work around it if absolutely necessary for urgent fixes.
+
+**R8.7**: **Terminal Fallback for Broken ahma_mcp State**:
+- If the ahma_mcp MCP server is not responding or returning errors, you **MAY** temporarily use `run_terminal_cmd` as a fallback
+- When using terminal fallback, you **MUST**:
+  1. Add a TODO task to fix the ahma_mcp errors that caused the fallback
+  2. After making any code changes, run `cargo build --release` via terminal
+  3. The mcp.json watch configuration will detect the binary change and restart the server
+  4. After restart, **immediately** switch back to using MCP tools and verify they work
+  5. If MCP tools still don't work, investigate and fix the root cause before proceeding
+- This fallback is **temporary** - the goal is always to have ahma_mcp working so we can dogfood it
+
+**R8.8**: **Restarting ahma_mcp Server**:
+- After code changes: Run `cargo build --release` (via MCP tool or terminal fallback)
+- The mcp.json configuration watches the binary and automatically restarts the server
+- Verify restart by calling a simple MCP tool like `status` or `cargo_check`
+- If server doesn't restart automatically, reload Cursor window (Cmd+Shift+P → "Developer: Reload Window")
+
+**R8.9**: For AI sessions outside of Cursor (e.g., in other contexts), use the command-line interface: `ahma_mcp --tool_name <tool> --tool_args <args>` to invoke tools directly.
+
 ### 4.3. Copilot CLI Verification
 
 - **R9.1**: Copilot LLMs **should** validate code and tool changes by invoking `ahma_mcp` directly from the command line using the `--tool_name` and `--tool_args` parameters. This keeps validation steps reproducible and scriptable during autonomous runs.

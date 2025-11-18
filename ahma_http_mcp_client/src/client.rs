@@ -33,6 +33,7 @@ fn get_token_path() -> Result<PathBuf> {
     Ok(path)
 }
 
+#[allow(dead_code)] // Will be used for token refresh
 fn save_token(token: &StoredToken) -> Result<()> {
     let path = get_token_path()?;
     let file = std::fs::File::create(path)?;
@@ -71,6 +72,7 @@ pub struct HttpMcpTransport {
     client: reqwest::Client,
     url: Url,
     token: Arc<Mutex<Option<StoredToken>>>,
+    #[allow(dead_code)] // Will be used for token refresh
     oauth_client: Option<ConfiguredOAuthClient>,
     receiver: Arc<Mutex<mpsc::Receiver<RxJsonRpcMessage<RoleClient>>>>,
     sender: mpsc::Sender<RxJsonRpcMessage<RoleClient>>,
@@ -148,9 +150,7 @@ impl HttpMcpTransport {
                 };
 
                 use futures::TryStreamExt;
-                let mut stream = response
-                    .bytes_stream()
-                    .map_err(std::io::Error::other);
+                let mut stream = response.bytes_stream().map_err(std::io::Error::other);
 
                 while let Some(item) = stream.next().await {
                     match item {
@@ -190,6 +190,7 @@ impl HttpMcpTransport {
         });
     }
 
+    #[allow(dead_code)] // Will be used when HTTP client is integrated
     async fn ensure_authenticated(&self) -> Result<()> {
         let token_lock = self.token.lock().await;
         if token_lock.is_some() {
@@ -212,6 +213,7 @@ impl HttpMcpTransport {
         }
     }
 
+    #[allow(dead_code)] // Will be used when HTTP client is integrated
     async fn perform_oauth_flow(
         &self,
         oauth_client: &ConfiguredOAuthClient,
@@ -279,6 +281,7 @@ impl HttpMcpTransport {
         Ok(stored_token)
     }
 
+    #[allow(dead_code)] // Will be used when HTTP client is integrated
     async fn listen_for_callback_async(&self) -> Result<(String, CsrfToken)> {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:8080").await?;
         info!("Listening on http://127.0.0.1:8080 for OAuth callback.");

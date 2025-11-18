@@ -384,17 +384,26 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     // The HttpMcpTransport is ready but needs to be integrated with rmcp's ServiceExt
     // See: https://docs.rs/rmcp/0.9.0/rmcp/trait.ServiceExt.html
     if cli.mcp_config.exists() {
-        let mcp_config = ahma_core::config::load_mcp_config(&cli.mcp_config)?;
-        if let Some(server_config) = mcp_config.servers.values().next()
-            && let ahma_core::config::ServerConfig::Http(_http_config) = server_config {
-                tracing::warn!(
-                    "HTTP MCP Client mode is not yet implemented in rmcp 0.9.0"
-                );
-                tracing::warn!(
-                    "The HttpMcpTransport has been implemented but needs integration"
-                );
-                return Err(anyhow!("HTTP MCP client not yet supported"));
+        // Try to load the MCP config, but ignore if it's not a valid ahma_mcp config
+        // (e.g., if it's a Cursor/VSCode MCP server config with "type": "stdio")
+        match ahma_core::config::load_mcp_config(&cli.mcp_config) {
+            Ok(mcp_config) => {
+                if let Some(server_config) = mcp_config.servers.values().next()
+                    && let ahma_core::config::ServerConfig::Http(_http_config) = server_config {
+                        tracing::warn!(
+                            "HTTP MCP Client mode is not yet implemented in rmcp 0.9.0"
+                        );
+                        tracing::warn!(
+                            "The HttpMcpTransport has been implemented but needs integration"
+                        );
+                        return Err(anyhow!("HTTP MCP client not yet supported"));
+                    }
             }
+            Err(e) => {
+                // Ignore config parse errors - the file might be a Cursor/VSCode MCP config
+                tracing::debug!("Could not parse mcp.json as ahma_mcp config (this is OK if it's a Cursor/VSCode MCP config): {}", e);
+            }
+        }
     }
 
     // --- Standard Server Mode ---
