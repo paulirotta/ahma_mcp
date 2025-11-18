@@ -167,7 +167,6 @@ pub mod test_client {
                         .arg("--package")
                         .arg("ahma_shell")
                         .arg("--bin")
-                        .arg("--bin")
                         .arg("ahma_mcp")
                         .arg("--");
                     if let Some(dir) = tools_dir {

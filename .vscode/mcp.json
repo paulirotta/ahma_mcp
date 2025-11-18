@@ -1,13 +1,26 @@
 {
     "servers": {
-        "Ahma": {
+        "ahma_mcp": {
             "type": "stdio",
             "cwd": "${workspaceFolder}",
             "command": "target/release/ahma_mcp",
             "args": [
                 "--tools-dir",
                 ".ahma/tools"
-            ]
+            ],
+            "dev": {
+                "command": "cargo",
+                "args": [
+                    "run",
+                    "--release",
+                    "--",
+                    "--tools-dir",
+                    ".ahma/tools"
+                ],
+                "watch": [
+                    "target/release/ahma_mcp"
+                ]
+            }
         }
     },
     "inputs": []

@@ -1,17 +1,4 @@
 //! Integration tests for the ahma_mcp service.
-mod adapter_test;
-mod callback_system_test;
-
-mod config_test;
-mod generate_schema_test;
-mod logging_test;
-mod main_test;
-mod mcp_callback_test;
-mod mcp_service_test;
-mod operation_monitor_test;
-mod schema_validation_test;
-mod shell_pool_test;
-mod terminal_output_test;
 
 use ahma_core::test_utils as common;
 use ahma_core::utils::logging::init_test_logging;
