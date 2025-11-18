@@ -1,0 +1,24 @@
+[package]
+name = "ahma_http_mcp_client"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-stream = "0.3.5"
+async-trait.workspace = true
+futures.workspace = true
+oauth2 = { version = "5.0.0", features = ["reqwest"] }
+reqwest = { version = "0.12.5", features = ["json", "stream"] }
+rmcp = { workspace = true, features = ["client"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-util", "net"] }
+tracing.workspace = true
+url = "2.5.2"
+webbrowser = "1.0.1"

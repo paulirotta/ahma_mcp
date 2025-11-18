@@ -50,6 +50,8 @@ use ahma_core::{
     tool_availability::evaluate_tool_availability,
     utils::logging::init_logging,
 };
+// TODO: Re-enable when HTTP MCP client is fully implemented
+// use ahma_http_mcp_client::client::HttpMcpTransport;
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use rmcp::ServiceExt;
@@ -106,6 +108,10 @@ struct Cli {
     /// The name of the tool to execute (e.g., 'cargo_build').
     #[arg()]
     tool_name: Option<String>,
+
+    /// Path to the mcp.json file for client configurations.
+    #[arg(long, global = true, default_value = ".vscode/mcp.json")]
+    mcp_config: PathBuf,
 
     /// Arguments for the tool.
     #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
@@ -372,6 +378,36 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     tracing::info!("Tools directory: {:?}", cli.tools_dir);
     tracing::info!("Guidance file: {:?}", cli.guidance_file);
     tracing::info!("Command timeout: {}s", cli.timeout);
+
+    // --- MCP Client Mode ---
+    // TODO: Implement HTTP MCP client using rmcp 0.9.0 API
+    // The HttpMcpTransport is ready but needs to be integrated with rmcp's ServiceExt
+    // See: https://docs.rs/rmcp/0.9.0/rmcp/trait.ServiceExt.html
+    if cli.mcp_config.exists() {
+        // Try to load the MCP config, but ignore if it's not a valid ahma_mcp config
+        // (e.g., if it's a Cursor/VSCode MCP server config with "type": "stdio")
+        match ahma_core::config::load_mcp_config(&cli.mcp_config) {
+            Ok(mcp_config) => {
+                if let Some(server_config) = mcp_config.servers.values().next()
+                    && let ahma_core::config::ServerConfig::Http(_http_config) = server_config {
+                        tracing::warn!(
+                            "HTTP MCP Client mode is not yet implemented in rmcp 0.9.0"
+                        );
+                        tracing::warn!(
+                            "The HttpMcpTransport has been implemented but needs integration"
+                        );
+                        return Err(anyhow!("HTTP MCP client not yet supported"));
+                    }
+            }
+            Err(e) => {
+                // Ignore config parse errors - the file might be a Cursor/VSCode MCP config
+                tracing::debug!("Could not parse mcp.json as ahma_mcp config (this is OK if it's a Cursor/VSCode MCP config): {}", e);
+            }
+        }
+    }
+
+    // --- Standard Server Mode ---
+    tracing::info!("Running in standard child-process server mode.");
 
     // Load guidance configuration
     let guidance_config = if cli.guidance_file.exists() {

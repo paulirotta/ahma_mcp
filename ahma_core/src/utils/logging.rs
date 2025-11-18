@@ -63,15 +63,33 @@ pub fn init_logging(log_level: &str, log_to_file: bool) -> Result<()> {
         if log_to_file {
             if let Some(proj_dirs) = ProjectDirs::from("com", "AhmaMcp", "ahma_mcp") {
                 let log_dir = proj_dirs.cache_dir();
-                let file_appender = tracing_appender::rolling::daily(log_dir, "ahma_mcp.log");
-                let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+                
+                // Try to create the log directory and file appender, fall back to stderr if it fails
+                let file_appender_result = std::panic::catch_unwind(|| {
+                    // Ensure directory exists
+                    let _ = std::fs::create_dir_all(log_dir);
+                    tracing_appender::rolling::daily(log_dir, "ahma_mcp.log")
+                });
+                
+                match file_appender_result {
+                    Ok(file_appender) => {
+                        let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
-                tracing_subscriber::registry()
-                    .with(env_filter)
-                    .with(layer().with_writer(non_blocking).with_ansi(false))
-                    .init();
-                // The guard is intentionally leaked to ensure logs are flushed on exit.
-                Box::leak(Box::new(_guard));
+                        tracing_subscriber::registry()
+                            .with(env_filter)
+                            .with(layer().with_writer(non_blocking).with_ansi(false))
+                            .init();
+                        // The guard is intentionally leaked to ensure logs are flushed on exit.
+                        Box::leak(Box::new(_guard));
+                    }
+                    Err(_) => {
+                        // Fallback to stderr if file appender creation panics (permission denied, etc.)
+                        tracing_subscriber::registry()
+                            .with(env_filter)
+                            .with(layer().with_writer(stderr))
+                            .init();
+                    }
+                }
             } else {
                 // Fallback to stderr if project directory is not available.
                 tracing_subscriber::registry()
