@@ -1,4 +1,5 @@
 //! Integration tests for sequence tools - composite tools that execute multiple steps
+
 mod common;
 
 use crate::common::{get_workspace_path, test_client::new_client};

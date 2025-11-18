@@ -5,7 +5,7 @@
 //! - Async notification delivery edge cases  
 //! - Tool schema generation validation
 //! - Error handling for malformed MCP messages
-mod common;
+use ahma_core::test_utils as common;
 
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;

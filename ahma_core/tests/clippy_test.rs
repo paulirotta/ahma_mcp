@@ -1,5 +1,5 @@
 //! Test for running clippy and fixing warnings.
-mod common;
+use ahma_core::test_utils as common;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParam;
 use serde_json::json;

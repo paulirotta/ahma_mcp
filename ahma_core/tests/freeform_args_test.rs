@@ -1,6 +1,6 @@
-mod common;
-use crate::common::test_project::create_full_rust_test_project;
+use ahma_core::test_utils as common;
 use anyhow::Result;
+use common::test_project::create_full_rust_test_project;
 use serde_json::json;
 
 #[tokio::test]

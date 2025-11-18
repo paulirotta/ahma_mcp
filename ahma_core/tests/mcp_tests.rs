@@ -1,10 +1,7 @@
 //! Consolidated MCP service tests
-//! 
+//!
 //! This module consolidates all MCP-related tests into a single test binary
 //! to optimize cargo nextest test discovery time.
-
-#[path = "common/mod.rs"]
-mod common;
 
 #[path = "mcp_callback_test.rs"]
 mod mcp_callback_test;

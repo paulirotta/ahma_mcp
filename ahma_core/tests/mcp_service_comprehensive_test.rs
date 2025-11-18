@@ -1,4 +1,4 @@
-mod common;
+use ahma_core::test_utils as common;
 /// Comprehensive integration tests for mcp_service.rs coverage improvement
 ///
 /// Target: Improve mcp_service.rs coverage from 59.44% to 85%+

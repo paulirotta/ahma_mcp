@@ -1,10 +1,7 @@
 //! Consolidated operation monitor tests
-//! 
+//!
 //! This module consolidates all operation monitor-related tests into a single test binary
 //! to optimize cargo nextest test discovery time.
-
-#[path = "common/mod.rs"]
-mod common;
 
 #[path = "operation_cancellation_test.rs"]
 mod operation_cancellation_test;

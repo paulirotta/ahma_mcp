@@ -1,5 +1,3 @@
-mod common;
-
 use ahma_core::client::Client;
 use anyhow::Result;
 use std::time::{Duration, Instant};

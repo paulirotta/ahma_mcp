@@ -1,4 +1,4 @@
-mod common;
+use ahma_core::test_utils as common;
 
 use ahma_core::config::load_tool_configs;
 use ahma_core::utils::logging::init_test_logging;

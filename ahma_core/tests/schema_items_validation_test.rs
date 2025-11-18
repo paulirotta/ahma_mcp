@@ -1,6 +1,6 @@
 //! Test to reproduce and fix the VSCode GitHub Copilot Chat catastrophic failure
 //! Error: "tool parameters array type must have items"
-mod common;
+use ahma_core::test_utils as common;
 
 use ahma_core::utils::logging::init_test_logging;
 use common::test_client::new_client;

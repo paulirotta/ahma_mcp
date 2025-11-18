@@ -7,7 +7,7 @@
 //! - But users may add them anyway for documentation/IDE support
 //!   MAINTENANCE: Update expected counts when adding new CLI tool integrations
 
-mod common;
+use ahma_core::test_utils as common;
 
 use anyhow::Result;
 

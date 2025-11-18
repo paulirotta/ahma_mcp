@@ -63,14 +63,14 @@ pub fn init_logging(log_level: &str, log_to_file: bool) -> Result<()> {
         if log_to_file {
             if let Some(proj_dirs) = ProjectDirs::from("com", "AhmaMcp", "ahma_mcp") {
                 let log_dir = proj_dirs.cache_dir();
-                
+
                 // Try to create the log directory and file appender, fall back to stderr if it fails
                 let file_appender_result = std::panic::catch_unwind(|| {
                     // Ensure directory exists
                     let _ = std::fs::create_dir_all(log_dir);
                     tracing_appender::rolling::daily(log_dir, "ahma_mcp.log")
                 });
-                
+
                 match file_appender_result {
                     Ok(file_appender) => {
                         let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);

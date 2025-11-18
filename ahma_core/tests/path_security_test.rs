@@ -1,5 +1,5 @@
 //! Tests for path security and sandboxing
-mod common;
+use ahma_core::test_utils as common;
 
 use ahma_core::utils::logging::init_test_logging;
 use common::test_client::new_client;

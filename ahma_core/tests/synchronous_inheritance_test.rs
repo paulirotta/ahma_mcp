@@ -1,4 +1,4 @@
-mod common;
+use ahma_core::test_utils as common;
 
 use ahma_core::config::ToolConfig;
 use anyhow::Result;

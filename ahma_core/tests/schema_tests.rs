@@ -1,10 +1,7 @@
 //! Consolidated schema validation tests
-//! 
+//!
 //! This module consolidates all schema validation-related tests into a single test binary
 //! to optimize cargo nextest test discovery time.
-
-#[path = "common/mod.rs"]
-mod common;
 
 #[path = "array_schema_validation_failing_test.rs"]
 mod array_schema_validation_failing_test;

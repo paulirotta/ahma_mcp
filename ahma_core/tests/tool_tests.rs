@@ -1,10 +1,9 @@
 //! Consolidated tool-specific tests
-//! 
+//!
 //! This module consolidates all tool-specific tests into a single test binary
 //! to optimize cargo nextest test discovery time.
 
-#[path = "common/mod.rs"]
-mod common;
+use ahma_core::test_utils as common;
 
 #[path = "advanced_await_functionality_test.rs"]
 mod advanced_await_functionality_test;
