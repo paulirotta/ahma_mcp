@@ -148,7 +148,7 @@ async fn main() -> Result<()> {
 
     // Determine mode based on CLI arguments
     let is_server_mode = cli.tool_name.is_none();
-    
+
     if is_server_mode {
         match cli.mode.as_str() {
             "http" => {
@@ -172,7 +172,7 @@ async fn main() -> Result<()> {
                     eprintln!("For more information, run: ahma_mcp --help\n");
                     std::process::exit(1);
                 }
-                
+
                 tracing::info!("Running in STDIO server mode");
                 run_server_mode(cli).await
             }
@@ -404,19 +404,19 @@ fn should_skip(set: &Option<HashSet<String>>, value: &str) -> bool {
 
 async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
     use ahma_http_bridge::{BridgeConfig, start_bridge};
-    
+
     let bind_addr = format!("{}:{}", cli.http_host, cli.http_port)
         .parse()
         .context("Invalid HTTP host/port")?;
-    
+
     tracing::info!("Starting HTTP bridge on {}", bind_addr);
-    
+
     // Build the command to run the stdio MCP server
     let server_command = env::current_exe()
         .context("Failed to get current executable path")?
         .to_string_lossy()
         .to_string();
-    
+
     let mut server_args = vec![
         "--mode".to_string(),
         "stdio".to_string(),
@@ -427,23 +427,23 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         "--timeout".to_string(),
         cli.timeout.to_string(),
     ];
-    
+
     if cli.debug {
         server_args.push("--debug".to_string());
     }
-    
+
     if cli.r#async {
         server_args.push("--async".to_string());
     }
-    
+
     let config = BridgeConfig {
         bind_addr,
         server_command,
         server_args,
     };
-    
+
     start_bridge(config).await?;
-    
+
     Ok(())
 }
 
@@ -463,19 +463,21 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
         match ahma_core::config::load_mcp_config(&cli.mcp_config) {
             Ok(mcp_config) => {
                 if let Some(server_config) = mcp_config.servers.values().next()
-                    && let ahma_core::config::ServerConfig::Http(_http_config) = server_config {
-                        tracing::warn!(
-                            "HTTP MCP Client mode is not yet implemented in rmcp 0.9.0"
-                        );
-                        tracing::warn!(
-                            "The HttpMcpTransport has been implemented but needs integration"
-                        );
-                        return Err(anyhow!("HTTP MCP client not yet supported"));
-                    }
+                    && let ahma_core::config::ServerConfig::Http(_http_config) = server_config
+                {
+                    tracing::warn!("HTTP MCP Client mode is not yet implemented in rmcp 0.9.0");
+                    tracing::warn!(
+                        "The HttpMcpTransport has been implemented but needs integration"
+                    );
+                    return Err(anyhow!("HTTP MCP client not yet supported"));
+                }
             }
             Err(e) => {
                 // Ignore config parse errors - the file might be a Cursor/VSCode MCP config
-                tracing::debug!("Could not parse mcp.json as ahma_mcp config (this is OK if it's a Cursor/VSCode MCP config): {}", e);
+                tracing::debug!(
+                    "Could not parse mcp.json as ahma_mcp config (this is OK if it's a Cursor/VSCode MCP config): {}",
+                    e
+                );
             }
         }
     }

@@ -2,11 +2,11 @@
 
 use crate::error::{BridgeError, Result};
 use axum::{
+    Json, Router,
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
-    Json, Router,
 };
 use serde_json::Value;
 use std::{net::SocketAddr, process::Stdio, sync::Arc};
@@ -67,17 +67,17 @@ impl McpProcess {
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
             .spawn()
-            .map_err(|e| {
-                BridgeError::ServerProcess(format!("Failed to spawn server: {}", e))
-            })?;
+            .map_err(|e| BridgeError::ServerProcess(format!("Failed to spawn server: {}", e)))?;
 
-        let stdin = child.stdin.take().ok_or_else(|| {
-            BridgeError::ServerProcess("Failed to get stdin handle".to_string())
-        })?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| BridgeError::ServerProcess("Failed to get stdin handle".to_string()))?;
 
-        let stdout = child.stdout.take().ok_or_else(|| {
-            BridgeError::ServerProcess("Failed to get stdout handle".to_string())
-        })?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| BridgeError::ServerProcess("Failed to get stdout handle".to_string()))?;
 
         let stdout = BufReader::new(stdout);
 
@@ -212,8 +212,9 @@ async fn handle_mcp_request(
                             "code": -32603,
                             "message": format!("Failed to spawn MCP server: {}", e)
                         }
-                    }))
-                ).into_response();
+                    })),
+                )
+                    .into_response();
             }
         }
     }
@@ -230,8 +231,9 @@ async fn handle_mcp_request(
                     "code": -32603,
                     "message": format!("Failed to send request: {}", e)
                 }
-            }))
-        ).into_response();
+            })),
+        )
+            .into_response();
     }
 
     // Receive the response from the MCP server
@@ -245,8 +247,9 @@ async fn handle_mcp_request(
                     "code": -32603,
                     "message": format!("Failed to receive response: {}", e)
                 }
-            }))
-        ).into_response(),
+            })),
+        )
+            .into_response(),
     }
 }
 
@@ -262,4 +265,3 @@ mod tests {
         assert!(config.server_args.is_empty());
     }
 }
-
