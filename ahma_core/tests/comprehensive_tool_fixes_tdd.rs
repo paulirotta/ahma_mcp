@@ -1,9 +1,8 @@
-mod common;
-
 /// TDD tests to identify and fix clippy and nextest issues
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod comprehensive_tool_fixes_tdd {
-    use super::common::{get_tools_dir, get_workspace_path};
+    use ahma_core::test_utils::{get_tools_dir, get_workspace_path};
 
     #[test]
     fn test_clippy_should_run_on_all_targets_including_tests() {

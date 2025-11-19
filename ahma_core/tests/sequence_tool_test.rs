@@ -1,7 +1,7 @@
 //! Integration tests for sequence tools - composite tools that execute multiple steps
-mod common;
 
-use crate::common::{get_workspace_path, test_client::new_client};
+use ahma_core::test_utils::get_workspace_path;
+use ahma_core::test_utils::test_client::new_client;
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParam;

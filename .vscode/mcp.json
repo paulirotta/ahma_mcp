@@ -9,9 +9,6 @@
                 ".ahma/tools"
             ],
             "dev": {
-                "watch": [
-                    "target/release/ahma_mcp"
-                ],
                 "command": "cargo",
                 "args": [
                     "run",
@@ -19,6 +16,9 @@
                     "--",
                     "--tools-dir",
                     ".ahma/tools"
+                ],
+                "watch": [
+                    "target/release/ahma_mcp"
                 ]
             }
         }

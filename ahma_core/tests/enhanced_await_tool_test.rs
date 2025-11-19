@@ -1,5 +1,5 @@
 /// Enhanced Wait Tool Test Suite
-mod common;
+use ahma_core::test_utils as common;
 ///
 /// PURPOSE: Validates the enhanced await tool functionality implemented to address:
 /// "I think 'await' should have an optional timeout, and a default timeout of 240sec"

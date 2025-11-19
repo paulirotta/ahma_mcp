@@ -157,8 +157,8 @@ impl HttpMcpTransport {
                         Ok(chunk) => {
                             for line in chunk.split(|&b| b == b'\n') {
                                 let line_str = String::from_utf8_lossy(line);
-                                if line_str.starts_with("data: ") {
-                                    let data = &line_str["data: ".len()..].trim();
+                                if let Some(stripped) = line_str.strip_prefix("data: ") {
+                                    let data = stripped.trim();
                                     if !data.is_empty() {
                                         match serde_json::from_str::<RxJsonRpcMessage<RoleClient>>(
                                             data,

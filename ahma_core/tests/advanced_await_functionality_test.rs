@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod advanced_await_functionality_test {
     use tokio::time::Instant;
 

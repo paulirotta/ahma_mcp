@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "ahma_core"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -28,7 +28,7 @@ dependencies = [
 
 [[package]]
 name = "ahma_http_bridge"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -44,7 +44,7 @@ dependencies = [
 
 [[package]]
 name = "ahma_http_mcp_client"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -64,7 +64,7 @@ dependencies = [
 
 [[package]]
 name = "ahma_shell"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ahma_core",
  "ahma_http_bridge",
@@ -84,7 +84,7 @@ dependencies = [
 
 [[package]]
 name = "ahma_validate"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ahma_core",
  "anyhow",
@@ -705,7 +705,7 @@ dependencies = [
 
 [[package]]
 name = "generate_tool_schema"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ahma_core",
  "schemars",

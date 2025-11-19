@@ -1,5 +1,5 @@
 //! Test for loading tool definitions from JSON files.
-mod common;
+use ahma_core::test_utils as common;
 
 use anyhow::Result;
 use common::test_client::new_client;

@@ -1,5 +1,5 @@
 //! TDD tests for tool configuration and execution issues
-mod common;
+use ahma_core::test_utils as common;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParam;
 use serde_json::json;

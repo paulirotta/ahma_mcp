@@ -7,7 +7,7 @@
 /// The root cause appears to be incorrect handling of boolean flags
 /// where "--long" is being passed as a path argument instead of being
 /// converted to the "-l" flag format.
-mod common;
+use ahma_core::test_utils as common;
 
 use common::test_client::new_client;
 use rmcp::model::CallToolRequestParam;

@@ -59,11 +59,7 @@ pub mod tool_availability;
 pub mod tool_hints;
 pub mod utils;
 
-// Test utilities (conditionally compiled)
-#[cfg(test)]
-pub mod test;
-
-#[cfg(test)]
+// Test utilities
 pub mod test_utils;
 
 // Re-export main types for easier use

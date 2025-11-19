@@ -1,5 +1,5 @@
 /// Intelligent Await Timeout Test Suite
-mod common;
+use ahma_core::test_utils as common;
 ///
 /// PURPOSE: Tests the intelligent timeout behavior for the await tool:
 /// 1. The await tool uses intelligent timeout calculation only (no timeout parameter)

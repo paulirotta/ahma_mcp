@@ -1,4 +1,4 @@
-mod common;
+use ahma_core::test_utils as common;
 
 /// Critical Development Workflow Invariants Test
 ///

@@ -1,4 +1,4 @@
-mod common;
+use ahma_core::test_utils as common;
 
 use common::test_utils::setup_test_environment_with_io;
 use rmcp::{

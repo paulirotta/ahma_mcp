@@ -1,5 +1,5 @@
 //! Test VS Code MCP configuration for JSON tool definitions
-mod common;
+use ahma_core::test_utils as common;
 
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;

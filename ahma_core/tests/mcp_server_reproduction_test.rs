@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod mcp_server_reproduction_test {
+mod tests {
     use ahma_core::operation_monitor::{
         MonitorConfig, Operation, OperationMonitor, OperationStatus,
     };

@@ -1,4 +1,4 @@
-mod common;
+use ahma_core::test_utils as common;
 
 use common::get_workspace_dir;
 use std::process::Command;
