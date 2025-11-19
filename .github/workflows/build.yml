@@ -360,5 +360,19 @@ jobs:
         run: ./gradlew test --rerun-tasks --parallel --daemon --configure-on-demand --no-configuration-cache
         working-directory: ./test-data/AndoidTestBasicViews
 
+      - uses: taiki-e/install-action@nextest
+
+      - name: Ensure cargo-nextest is installed (fallback)
+        run: |
+          if ! command -v cargo-nextest &> /dev/null; then
+            echo "cargo-nextest not found, installing..."
+            cargo binstall cargo-nextest --no-confirm || cargo install cargo-nextest --locked
+          else
+            echo "cargo-nextest already installed"
+          fi
+
+      - name: Run macOS-only gradlew integration test
+        run: cargo nextest run --locked -p ahma_core gradlew_interactive_test::test_gradlew_working_directory_handling
+
       - name: Show sccache stats
         run: sccache --show-stats
