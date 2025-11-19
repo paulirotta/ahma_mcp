@@ -83,6 +83,10 @@ async fn test_gradlew_sync_commands_interactive() -> Result<()> {
 }
 
 /// Test gradlew with various working directory scenarios
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "Runs in the macOS Android CI job where Gradle tooling is available"
+)]
 #[tokio::test]
 async fn test_gradlew_working_directory_handling() -> Result<()> {
     let client = new_client(Some(".ahma/tools")).await?;

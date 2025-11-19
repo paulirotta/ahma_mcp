@@ -180,15 +180,15 @@ fn test_install_guidance_formatter_includes_all_hints() {
         "tool guidance should list missing_tool"
     );
     assert!(
-        guidance.contains("brew install missing-tool"),
-        "tool guidance should contain install hint"
+        guidance.contains("install: brew install missing-tool"),
+        "tool guidance should contain explicit install command"
     );
     assert!(
         guidance.contains("cargo::nextest_run"),
         "subcommand guidance should include fully qualified name"
     );
     assert!(
-        guidance.contains("cargo install cargo-nextest"),
-        "subcommand guidance should contain nextest install hint"
+        guidance.contains("install: cargo install cargo-nextest"),
+        "subcommand guidance should contain nextest install command"
     );
 }
