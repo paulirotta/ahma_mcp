@@ -10,6 +10,13 @@ This document is the single source of truth for the `ahma_mcp` project. It outli
 
 These are the non-negotiable principles of the project.
 
+### R0: Runtime Terminology Alignment (Updated 2025-11-19)
+
+- **R0.1**: The running MCP server that Cursor/VS Code connects to is now named **"Ahama"** in `mcp.json` (e.g., `servers.Ahama`). This naming is reserved for conversations about the live MCP experience.
+- **R0.2**: The Git repository, source code, and compiled binary remain `ahma_mcp`. When referencing build steps, code changes, or CLI invocations (e.g., `ahma_mcp rust_quality_check`), always use `ahma_mcp`.
+- **R0.3**: All written guidance and AI conversations **must** explicitly distinguish whether they are referring to `Ahama` (the running MCP service) or `ahma_mcp` (the project used to build it) to avoid ambiguity.
+- **R0.4**: Any instruction that restarts the MCP experience **must** frame it as: "build the `ahma_mcp` binary, which restarts the `Ahama` entry defined in `mcp.json`".
+
 ### R1: Configuration-Driven Tools
 
 - **R1.1**: The system **must** adapt any command-line tool for use as a set of MCP tools based on declarative JSON configuration files.
@@ -136,16 +143,16 @@ See .ahma/tools/rust_quality_check.json
 
 ### 4.1. Server Restart and Testing
 
-**R8.1**: Always use `ahma_mcp` running in VS Code to interactively test the server.
+**R8.1**: Always use **Ahama** (the `mcp.json` server entry backed by the `ahma_mcp` binary) running in VS Code to interactively test the server.
 
 **R8.2**: To restart the server after code changes:
 
-- Run `cargo build --release` (either via terminal or `ahma_mcp` MCP tool)
+- Run `cargo build --release` (either via terminal or `ahma_mcp` MCP tool) to rebuild the binary that powers Ahama
 - Reload the VS Code window (Cmd+Shift+P → "Developer: Reload Window") to restart the MCP server
 - Alternatively, kill the running `ahma_mcp` process and VS Code will restart it automatically
 - The server reads tool configurations from `.ahma/tools/` on each startup
 
-**R8.3**: Interactive Testing Process:
+**R8.3**: Interactive Testing Process (Ahama runtime):
 
 1. Make code or configuration changes
 2. Run `cargo build --release` to trigger server restart
@@ -173,17 +180,19 @@ When a new task is assigned:
 
 ### 4.3. CRITICAL: Use ahma_mcp MCP Server for All Operations
 
-**R8.5**: AI maintainers working in Cursor **MUST** use the `ahma_mcp` MCP server for ALL development operations. **DO NOT** use terminal commands via `run_terminal_cmd` tool.
+**R8.5**: AI maintainers working in Cursor **MUST** use the **Ahama** MCP server (built from `ahma_mcp`) for ALL development operations. **DO NOT** use terminal commands via `run_terminal_cmd` tool.
 
 **Why**: We dogfood our own project to rapidly identify and fix issues during development. This ensures the project works correctly in real-world usage and catches bugs immediately.
 
-**How to use ahma_mcp MCP server in Cursor**:
+**How to use the Ahama MCP server in Cursor**:
+
 - The `ahma_mcp` server is configured in Cursor's MCP settings and runs automatically
 - AI assistants in Cursor have access to MCP tools exposed by ahma_mcp
 - Use these MCP tools directly via the MCP protocol (they appear as available tools in Cursor)
 - Tool naming convention: `{command}_{subcommand}` (e.g., `cargo_build`, `cargo_nextest_run`, `cargo_clippy`)
 
 **Examples of correct usage**:
+
 - ❌ WRONG: `run_terminal_cmd("cargo nextest run")`
 - ✅ CORRECT: Call MCP tool `cargo_nextest_run` via Cursor's MCP interface
 - ❌ WRONG: `run_terminal_cmd("cargo build --release")`  
@@ -193,20 +202,24 @@ When a new task is assigned:
 
 **R8.6**: If an MCP tool is missing, broken, or doesn't work as expected, that is a **bug in ahma_mcp** that must be fixed. Document the issue and only work around it if absolutely necessary for urgent fixes.
 
-**R8.7**: **Terminal Fallback for Broken ahma_mcp State**:
+**R8.7**: **Terminal Fallback for Broken Ahama State**:
+
 - If the ahma_mcp MCP server is not responding or returning errors, you **MAY** temporarily use `run_terminal_cmd` as a fallback
-- When using terminal fallback, you **MUST**:
+- When using terminal fallback, you **MUST** do all of the following:
+
   1. Add a TODO task to fix the ahma_mcp errors that caused the fallback
   2. After making any code changes, run `cargo build --release` via terminal
   3. The mcp.json watch configuration will detect the binary change and restart the server
-  4. After restart, **immediately** switch back to using MCP tools and verify they work
+  4. After restart, **immediately** switch back to using MCP tools and verify Ahama responds
   5. If MCP tools still don't work, investigate and fix the root cause before proceeding
+
 - This fallback is **temporary** - the goal is always to have ahma_mcp working so we can dogfood it
 
-**R8.8**: **Restarting ahma_mcp Server**:
+**R8.8**: **Restarting Ahama (via ahma_mcp build)**:
+
 - After code changes: Run `cargo build --release` (via MCP tool or terminal fallback)
 - The mcp.json configuration watches the binary and automatically restarts the server
-- Verify restart by calling a simple MCP tool like `status` or `cargo_check`
+- Verify restart by calling a simple MCP tool like `status` or `cargo_check` via Ahama
 - If server doesn't restart automatically, reload Cursor window (Cmd+Shift+P → "Developer: Reload Window")
 
 **R8.9**: For AI sessions outside of Cursor (e.g., in other contexts), use the command-line interface: `ahma_mcp --tool_name <tool> --tool_args <args>` to invoke tools directly.
@@ -317,6 +330,7 @@ This section documents critical implementation details discovered through analys
 - **R14.5**: After successful user authentication in the browser, the client **must** handle the OAuth callback on `http://localhost:8080`, retrieve the authorization code, and exchange it for an access token and a refresh token using the `oauth2` crate. These tokens are stored in the system's temporary directory as `mcp_http_token.json`.
 - **R14.6**: All subsequent requests to the MCP server **must** be authenticated using the stored access token via Bearer authentication. Token refresh logic is planned but not yet implemented.
 - **R14.7**: The `mcp.json` configuration file **supports** definitions for HTTP-based MCP servers with the following structure:
+
   ```json
   {
     "servers": {
@@ -329,6 +343,7 @@ This section documents critical implementation details discovered through analys
     }
   }
   ```
+
 - **R14.8**: The HTTP transport **implements** the `rmcp::transport::Transport<RoleClient>` trait, providing bidirectional communication:
   - **Sending**: HTTP POST requests with Bearer authentication for outgoing messages
   - **Receiving**: Server-Sent Events (SSE) for incoming messages from the server (background task)
