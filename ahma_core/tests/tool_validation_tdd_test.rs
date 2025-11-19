@@ -91,6 +91,27 @@ mod tool_validation_tdd_tests {
         });
 
         assert!(has_nextest, "cargo.json must embed nextest run subcommand");
+
+        let has_llvm_cov = subcommands
+            .iter()
+            .any(|sub| sub["name"].as_str() == Some("llvm-cov"));
+        assert!(
+            has_llvm_cov,
+            "cargo.json must expose cargo llvm-cov subcommand"
+        );
+
+        let llvm_cov = subcommands
+            .iter()
+            .find(|sub| sub["name"].as_str() == Some("llvm-cov"))
+            .expect("llvm-cov subcommand should be defined");
+        assert!(
+            llvm_cov["availability_check"].as_object().is_some(),
+            "llvm-cov must include an availability_check so missing installs are caught early"
+        );
+        assert!(
+            llvm_cov["install_instructions"].as_str().is_some(),
+            "llvm-cov must provide install instructions for startup guidance"
+        );
     }
 
     #[test]

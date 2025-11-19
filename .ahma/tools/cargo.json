@@ -206,6 +206,77 @@
           "install_instructions": "Install with `cargo install cargo-nextest` and ensure it is on PATH."
         }
       ]
+    },
+    {
+      "name": "llvm-cov",
+      "description": "Run llvm-cov to collect and report code coverage for the workspace.",
+      "options": [
+        {
+          "name": "workspace",
+          "type": "boolean",
+          "description": "Run coverage across the entire workspace"
+        },
+        {
+          "name": "package",
+          "type": "string",
+          "description": "Restrict coverage to a specific package"
+        },
+        {
+          "name": "lcov",
+          "type": "boolean",
+          "description": "Emit an lcov.info report"
+        },
+        {
+          "name": "html",
+          "type": "boolean",
+          "description": "Generate an HTML coverage report"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "description": "Emit JSON summary output"
+        },
+        {
+          "name": "open",
+          "type": "boolean",
+          "description": "Open the coverage report in the default browser"
+        },
+        {
+          "name": "no-report",
+          "type": "boolean",
+          "description": "Collect data without generating a report"
+        },
+        {
+          "name": "output-path",
+          "type": "string",
+          "description": "Custom path for generated coverage artifacts",
+          "format": "path"
+        },
+        {
+          "name": "output-dir",
+          "type": "string",
+          "description": "Directory to emit HTML or text coverage reports",
+          "format": "path"
+        },
+        {
+          "name": "args",
+          "type": "array",
+          "description": "Additional arguments forwarded after the `--` separator.",
+          "items": {
+            "type": "string"
+          }
+        }
+      ],
+      "timeout_seconds": 1800,
+      "availability_check": {
+        "command": "cargo",
+        "args": [
+          "llvm-cov",
+          "--version"
+        ],
+        "skip_subcommand_args": true
+      },
+      "install_instructions": "Install with `cargo install cargo-llvm-cov`."
     }
   ],
   "force_synchronous": true

@@ -47,7 +47,7 @@ use ahma_core::{
     mcp_service::{AhmaMcpService, GuidanceConfig},
     operation_monitor::{MonitorConfig, OperationMonitor},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
-    tool_availability::evaluate_tool_availability,
+    tool_availability::{evaluate_tool_availability, format_install_guidance},
     utils::logging::init_logging,
 };
 // TODO: Re-enable when HTTP MCP client is fully implemented
@@ -556,6 +556,16 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
                 );
             }
         }
+    }
+
+    if !availability_summary.disabled_tools.is_empty()
+        || !availability_summary.disabled_subcommands.is_empty()
+    {
+        let install_guidance = format_install_guidance(&availability_summary);
+        tracing::warn!(
+            "Startup tool guidance (share with users who need to install prerequisites):\n{}",
+            install_guidance
+        );
     }
 
     let configs = Arc::new(availability_summary.filtered_configs);
