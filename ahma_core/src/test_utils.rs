@@ -185,6 +185,46 @@ pub mod test_client {
             .await?;
         Ok(client)
     }
+
+    #[allow(dead_code)]
+    pub async fn new_client_in_dir(
+        tools_dir: Option<&str>,
+        extra_args: &[&str],
+        working_dir: &Path,
+    ) -> Result<RunningService<RoleClient, ()>> {
+        let workspace_dir = get_workspace_dir();
+        let client = ()
+            .serve(TokioChildProcess::new(Command::new("cargo").configure(
+                |cmd| {
+                    cmd.current_dir(working_dir)
+                        .arg("run")
+                        .arg("--manifest-path")
+                        .arg(workspace_dir.join("Cargo.toml"))
+                        .arg("--package")
+                        .arg("ahma_shell")
+                        .arg("--bin")
+                        .arg("ahma_mcp")
+                        .arg("--");
+                    if let Some(dir) = tools_dir {
+                        let tools_path = if Path::new(dir).is_absolute() {
+                            Path::new(dir).to_path_buf()
+                        } else {
+                            // If tools_dir is relative, it should be relative to the working_dir
+                            // or we should resolve it relative to workspace if that's what tests expect.
+                            // Most tests pass ".ahma/tools" which is in workspace.
+                            // If we change CWD, we must resolve it absolutely.
+                            get_workspace_path(dir)
+                        };
+                        cmd.arg("--tools-dir").arg(tools_path);
+                    }
+                    for arg in extra_args {
+                        cmd.arg(arg);
+                    }
+                },
+            ))?)
+            .await?;
+        Ok(client)
+    }
 }
 
 // Test project module
@@ -381,37 +421,17 @@ pub mod test_utils {
     }
 
     /// Create a temporary directory with tool configs for testing
-    pub async fn create_temp_tools_dir() -> super::Result<TempDir> {
+    pub async fn create_temp_tools_dir() -> super::Result<(TempDir, Client)> {
         let temp_dir = tempdir()?;
-        let tools_dir = temp_dir.path();
-        let tool_config_path = tools_dir.join("test_tool.json");
+        let tools_dir = temp_dir.path().join("tools");
+        tokio::fs::create_dir_all(&tools_dir).await?;
 
-        let tool_config_content = r#"
-        {
-            "name": "test_tool",
-            "description": "A test tool",
-            "command": "echo",
-            "timeout_seconds": 10,
-            "synchronous": true,
-            "enabled": true,
-            "subcommand": [
-                {
-                    "name": "default",
-                    "description": "echo a message",
-                    "positional_args": [
-                        {
-                            "name": "message",
-                            "option_type": "string",
-                            "description": "message to echo",
-                            "required": true
-                        }
-                    ]
-                }
-            ]
-        }
-        "#;
-        std::fs::write(&tool_config_path, tool_config_content)?;
-        Ok(temp_dir)
+        let mut client = Client::new();
+        client
+            .start_process(Some(tools_dir.to_str().unwrap()))
+            .await?;
+
+        Ok((temp_dir, client))
     }
 
     /// Read a file and return its contents as a string

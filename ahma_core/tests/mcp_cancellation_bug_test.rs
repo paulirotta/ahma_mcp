@@ -46,7 +46,9 @@ async fn test_mcp_cancellation_does_not_trigger_canceled_canceled_message() {
 
     // Create adapter
     let adapter = Arc::new(
-        Adapter::new(operation_monitor.clone(), shell_pool).expect("Failed to create adapter"),
+        Adapter::new(operation_monitor.clone(), shell_pool)
+            .expect("Failed to create adapter")
+            .with_root(temp_dir.path().to_path_buf()),
     );
 
     // Create empty tool configs (we don't need real tools for this test)

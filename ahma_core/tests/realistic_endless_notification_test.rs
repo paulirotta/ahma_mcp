@@ -48,7 +48,7 @@ mod tests {
                     "_subcommand".to_string(),
                     serde_json::Value::String("version".to_string()),
                 )])),
-                "/Users/paul/github/ahma_mcp",
+                ".",
                 Some(30),
             )
             .await
@@ -115,23 +115,11 @@ mod tests {
         // Start multiple operations
         let op_ids = vec![
             adapter
-                .execute_async_in_dir(
-                    "cargo",
-                    "version",
-                    None,
-                    "/Users/paul/github/ahma_mcp",
-                    Some(30),
-                )
+                .execute_async_in_dir("cargo", "version", None, ".", Some(30))
                 .await
                 .expect("Failed to execute first async operation"),
             adapter
-                .execute_async_in_dir(
-                    "cargo",
-                    "--version",
-                    None,
-                    "/Users/paul/github/ahma_mcp",
-                    Some(30),
-                )
+                .execute_async_in_dir("cargo", "--version", None, ".", Some(30))
                 .await
                 .expect("Failed to execute second async operation"),
         ];

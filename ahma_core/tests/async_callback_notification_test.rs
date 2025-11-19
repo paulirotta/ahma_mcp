@@ -23,7 +23,9 @@ async fn test_async_operations_complete_and_are_tracked() {
     };
     let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
     let adapter = Arc::new(
-        Adapter::new(operation_monitor.clone(), shell_pool).expect("Failed to create adapter"),
+        Adapter::new(operation_monitor.clone(), shell_pool)
+            .expect("Failed to create adapter")
+            .with_root(temp_dir.path().to_path_buf()),
     );
 
     println!("🚀 Starting a fast operation that should complete quickly...");
@@ -133,7 +135,9 @@ async fn test_operation_monitoring_provides_clear_results() {
     };
     let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
     let adapter = Arc::new(
-        Adapter::new(operation_monitor.clone(), shell_pool).expect("Failed to create adapter"),
+        Adapter::new(operation_monitor.clone(), shell_pool)
+            .expect("Failed to create adapter")
+            .with_root(temp_dir.path().to_path_buf()),
     );
 
     // Test with a command that produces both success and failure cases

@@ -85,15 +85,12 @@ mod tests {
         let tracking_callback = Arc::new(TrackingCallback::new());
         println!("✅ Full system initialized");
 
+        let current_dir = std::env::current_dir().unwrap();
+        let current_dir_str = current_dir.to_str().unwrap();
+
         // Start an operation
         let operation_id = adapter
-            .execute_async_in_dir(
-                "cargo",
-                "version",
-                None,
-                "/Users/paul/github/ahma_mcp",
-                Some(30),
-            )
+            .execute_async_in_dir("cargo", "version", None, current_dir_str, Some(30))
             .await
             .expect("Failed to execute async operation");
         println!("🚀 Started operation: {}", operation_id);
@@ -166,26 +163,17 @@ mod tests {
         let adapter =
             Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager).unwrap());
 
+        let current_dir = std::env::current_dir().unwrap();
+        let current_dir_str = current_dir.to_str().unwrap();
+
         // Start multiple operations
         let op_ids = vec![
             adapter
-                .execute_async_in_dir(
-                    "cargo",
-                    "version",
-                    None,
-                    "/Users/paul/github/ahma_mcp",
-                    Some(30),
-                )
+                .execute_async_in_dir("cargo", "version", None, current_dir_str, Some(30))
                 .await
                 .expect("Failed to execute first async operation"),
             adapter
-                .execute_async_in_dir(
-                    "cargo",
-                    "--version",
-                    None,
-                    "/Users/paul/github/ahma_mcp",
-                    Some(30),
-                )
+                .execute_async_in_dir("cargo", "--version", None, current_dir_str, Some(30))
                 .await
                 .expect("Failed to execute second async operation"),
         ];

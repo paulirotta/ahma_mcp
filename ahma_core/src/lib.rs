@@ -52,6 +52,7 @@ pub mod logging;
 pub mod mcp_callback;
 pub mod mcp_service;
 pub mod operation_monitor;
+pub mod path_security;
 pub mod schema_validation;
 pub mod shell_pool;
 pub mod terminal_output;
