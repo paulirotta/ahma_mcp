@@ -49,6 +49,7 @@ dependencies = [
  "anyhow",
  "async-stream",
  "async-trait",
+ "clap",
  "futures",
  "oauth2",
  "reqwest",
@@ -58,6 +59,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "url",
  "webbrowser",
 ]
