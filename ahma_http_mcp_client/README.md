@@ -29,6 +29,18 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
+## Examples
+
+### Atlassian Client
+
+An example client that connects to the Atlassian MCP server using OAuth2 is provided in `examples/atlassian_client.rs`.
+
+To run it:
+
+```bash
+cargo run --example atlassian_client -- --client-id YOUR_CLIENT_ID --client-secret YOUR_CLIENT_SECRET
+```
+
 ## License
 
 MIT OR Apache-2.0

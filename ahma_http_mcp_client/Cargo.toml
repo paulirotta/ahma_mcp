@@ -1,8 +1,8 @@
 [package]
-name = "ahma_http_mcp_client"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
+name = "ahma_http_mcp_client"
 readme.workspace = true
 rust-version.workspace = true
 version.workspace = true
@@ -12,13 +12,17 @@ anyhow.workspace = true
 async-stream = "0.3.6"
 async-trait.workspace = true
 futures.workspace = true
-oauth2 = { version = "5.0.0", features = ["reqwest"] }
-reqwest = { version = "0.12.24", features = ["json", "stream"] }
-rmcp = { workspace = true, features = ["client"] }
+oauth2 = {version = "5.0.0", features = ["reqwest"]}
+reqwest = {version = "0.12.24", features = ["json", "stream"]}
+rmcp = {workspace = true, features = ["client"]}
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-util", "net"] }
+tokio = {workspace = true, features = ["rt-multi-thread", "macros", "io-util", "net"]}
 tracing.workspace = true
 url = "2.5.7"
 webbrowser = "1.0.6"
+
+[dev-dependencies]
+clap = {version = "4.5.4", features = ["derive"]}
+tracing-subscriber = "0.3"

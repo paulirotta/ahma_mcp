@@ -191,7 +191,7 @@ impl HttpMcpTransport {
     }
 
     #[allow(dead_code)] // Will be used when HTTP client is integrated
-    async fn ensure_authenticated(&self) -> Result<()> {
+    pub async fn ensure_authenticated(&self) -> Result<()> {
         let token_lock = self.token.lock().await;
         if token_lock.is_some() {
             // TODO: check for expiration and refresh
