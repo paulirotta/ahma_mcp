@@ -57,6 +57,7 @@ These are the non-negotiable principles of the project.
 - **R6.5**: The MTDF JSON Schema generation logic **must** be implemented in the `generate_tool_schema` binary crate.
 - **R6.6**: The core library **must** expose a clean public API that allows other crates (like future `ahma_web` or `ahma_okta` components) to leverage the tool execution engine without tight coupling.
 - **R6.7**: This separation ensures that adding new interfaces (web, authentication) or changing the CLI does not require modifications to core business logic.
+- **R6.8**: The root `Cargo.toml` **must** define `default-members = ["ahma_shell"]` so that `cargo run` executes the main MCP server binary by default.
 
 ### R7: Security First (Added 2025-01-27)
 

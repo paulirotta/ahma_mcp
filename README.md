@@ -67,9 +67,33 @@ This modular architecture ensures clean separation of concerns and enables futur
     git clone https://github.com/paulirotta/ahma_mcp.git
     cd ahma_mcp
     cargo build --release
+    cargo run --release -- --help
     ```
 
-2. **Run tests to verify installation**:
+2. **Add the MCP definition**:
+
+    In your global `mcp.json` file add the following (e.g., Mac: `~/Library/Application Support/Code/User/mcp.json` or `~/Library/Application Support/Cursor/User/mcp.json`, or Linux: `~/.config/Code/User/mcp.json` or `~/.config/Cursor/User/mcp.json`).
+
+    Update paths as needed. `--async` in the example below is optional
+
+    ```json
+    {
+        "servers": {
+                "Ahma": {
+                "type": "stdio",
+                "cwd": "~/github/ahma_mcp/",
+                "command": "~/github/ahma_mcp/target/release/ahma_mcp",
+                "args": [
+                    "--async",
+                    "--tools-dir",
+                    "~/github/ahma_mcp/.ahma/tools"
+                ]
+            }
+        }
+    }
+    ```
+
+3. **Run tests to verify installation**:
 
     ```bash
     cargo test
