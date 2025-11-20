@@ -10,7 +10,7 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 axum = { version = "0.8.7", features = ["http2", "tokio"] }
-bytes = "1.9"
+bytes = "1.11"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

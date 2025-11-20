@@ -297,7 +297,7 @@ jobs:
             ~/.cargo/git
             ~/.cargo/.package-cache
             ~/.cargo/bin
-            ./rust/target
+            ./target
           key: cargo-android-target-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
             cargo-android-target-${{ runner.os }}-
@@ -310,7 +310,7 @@ jobs:
           restore-keys: |
             sccache-android-${{ runner.os }}-
 
-      - uses: cargo-bins/cargo-binstall@v1.10.9
+      - uses: cargo-bins/cargo-binstall@main
 
       - name: Install sccache
         run: |

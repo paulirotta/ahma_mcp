@@ -1,8 +1,8 @@
 [package]
-name = "ahma_http_mcp_server"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
+name = "ahma_http_mcp_server"
 readme.workspace = true
 rust-version.workspace = true
 version.workspace = true
@@ -12,11 +12,11 @@ name = "ahma_http_mcp_server"
 path = "src/main.rs"
 
 [dependencies]
-ahma_core = { path = "../ahma_core" }
+ahma_core = {path = "../ahma_core"}
 anyhow.workspace = true
 async-trait.workspace = true
-axum = { version = "0.7", features = ["http2", "tokio", "tower-log"] }
-axum-server = { version = "0.7", features = ["tls-rustls"] }
+axum = {version = "0.8.7", features = ["http2", "tokio", "tower-log"]}
+axum-server = {version = "0.7.3", features = ["tls-rustls"]}
 bytes = "1.9"
 clap.workspace = true
 futures.workspace = true
@@ -24,19 +24,19 @@ h3 = "0.0.8"
 h3-quinn = "0.0.10"
 http = "1.2"
 http-body-util = "0.1"
-hyper = { version = "1.5", features = ["server", "http2"] }
-hyper-util = { version = "0.1", features = ["tokio"] }
-quinn = "0.11"
-rcgen = "0.13"
-rmcp = { workspace = true, features = ["server"] }
-rustls = { version = "0.23", features = ["ring"] }
+hyper = {version = "1.5", features = ["server", "http2"]}
+hyper-util = {version = "0.1", features = ["tokio"]}
+quinn = "0.11.9"
+rcgen = "0.14.5"
+rmcp = {workspace = true, features = ["server"]}
+rustls = {version = "0.23", features = ["ring"]}
 rustls-pemfile = "2.2"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-util", "net", "sync", "time"] }
-tokio-util = { workspace = true, features = ["io"] }
-tower = { version = "0.5", features = ["util"] }
-tower-http = { version = "0.6", features = ["trace", "cors"] }
-tracing.workspace = true
+tokio = {workspace = true, features = ["rt-multi-thread", "macros", "io-util", "net", "sync", "time"]}
+tokio-util = {workspace = true, features = ["io"]}
+tower = {version = "0.5", features = ["util"]}
+tower-http = {version = "0.6", features = ["trace", "cors"]}
 tracing-subscriber.workspace = true
+tracing.workspace = true

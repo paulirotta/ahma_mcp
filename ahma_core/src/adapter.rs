@@ -215,9 +215,10 @@ impl Adapter {
             || program == "/bin/bash"
             || program == "/bin/zsh")
             && let Some(pos) = args_vec.iter().position(|a| a == "-c")
-                && let Some(script) = args_vec.get(pos + 1) {
-                    path_security::validate_command(script, &safe_wd)?;
-                }
+            && let Some(script) = args_vec.get(pos + 1)
+        {
+            path_security::validate_command(script, &safe_wd)?;
+        }
 
         let timeout = timeout_seconds
             .map(Duration::from_secs)
@@ -354,9 +355,10 @@ impl Adapter {
             || program_with_subcommand == "/bin/bash"
             || program_with_subcommand == "/bin/zsh")
             && let Some(pos) = args_vec.iter().position(|a| a == "-c")
-                && let Some(script) = args_vec.get(pos + 1) {
-                    path_security::validate_command(script, &safe_wd)?;
-                }
+            && let Some(script) = args_vec.get(pos + 1)
+        {
+            path_security::validate_command(script, &safe_wd)?;
+        }
 
         let op_id = operation_id.unwrap_or_else(generate_operation_id);
         let op_id_clone = op_id.clone();

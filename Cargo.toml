@@ -1,4 +1,12 @@
 [workspace]
+default-members = [
+  "ahma_core",
+  "ahma_shell",
+  "ahma_validate",
+  "generate_tool_schema",
+  "ahma_http_bridge",
+  "ahma_http_mcp_client",
+]
 members = ["ahma_core", "ahma_shell", "ahma_validate", "generate_tool_schema", "ahma_http_bridge", "ahma_http_mcp_client"]
 # Note: ahma_http_mcp_server is excluded until rmcp integration is complete
 resolver = "2"
@@ -31,7 +39,7 @@ tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = {version = "0.3.20", features = ["env-filter"]}
 # CLI dependencies
-clap = {version = "4.5.51", features = ["derive"]}
+clap = {version = "4.5.53", features = ["derive"]}
 
 [profile.coverage]
 debug = true

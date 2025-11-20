@@ -11,7 +11,8 @@
             "subcommand": "run",
             "description": "Generate the MTDF schema to ensure it's up-to-date.",
             "args": {
-                "bin": "generate_tool_schema"
+                "bin": "generate_tool_schema",
+                "package": "generate_tool_schema"
             }
         },
         {
@@ -19,7 +20,8 @@
             "subcommand": "run",
             "description": "Validate all tool configurations against the latest schema.",
             "args": {
-                "bin": "ahma_validate"
+                "bin": "ahma_validate",
+                "package": "ahma_validate"
             }
         },
         {
