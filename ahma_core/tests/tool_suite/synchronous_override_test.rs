@@ -52,7 +52,8 @@ async fn test_synchronous_flag_overrides_async_tools() -> Result<()> {
     let working_dir = temp_dir.path().to_string_lossy().to_string();
 
     // Baseline: without --asynchronous flag, expect synchronous (direct output)
-    let baseline_client = test_client::new_client_with_args(Some(&tools_dir_str), &[]).await?;
+    let baseline_client =
+        test_client::new_client_in_dir(Some(&tools_dir_str), &[], temp_dir.path()).await?;
     let baseline_args = build_args("echo WITHOUT_OVERRIDE", &working_dir);
     let baseline_response = baseline_client
         .call_tool(CallToolRequestParam {
@@ -83,7 +84,7 @@ async fn test_synchronous_flag_overrides_async_tools() -> Result<()> {
 
     // With --async flag, force async mode for all tools
     let override_client =
-        test_client::new_client_with_args(Some(&tools_dir_str), &["--async"]).await?;
+        test_client::new_client_in_dir(Some(&tools_dir_str), &["--async"], temp_dir.path()).await?;
     let override_args = build_args("echo WITH_OVERRIDE", &working_dir);
     let override_response = override_client
         .call_tool(CallToolRequestParam {

@@ -1,7 +1,7 @@
 //! Integration tests for sequence tools - composite tools that execute multiple steps
 
 use ahma_core::test_utils::get_workspace_path;
-use ahma_core::test_utils::test_client::new_client;
+use ahma_core::test_utils::test_client::{new_client, new_client_in_dir};
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParam;
@@ -46,7 +46,7 @@ async fn test_simple_sequence_execution() -> Result<()> {
         "timeout_seconds": 30,
         "sequence": [
             {
-                "tool": "shell_async",
+                "tool": "sandboxed_shell",
                 "subcommand": "default",
                 "args": {
                     "command": "echo 'Step 1'"
@@ -54,7 +54,7 @@ async fn test_simple_sequence_execution() -> Result<()> {
                 "description": "First step"
             },
             {
-                "tool": "shell_async",
+                "tool": "sandboxed_shell",
                 "subcommand": "default",
                 "args": {
                     "command": "echo 'Step 2'"
@@ -65,10 +65,10 @@ async fn test_simple_sequence_execution() -> Result<()> {
         "step_delay_ms": 100
     });
 
-    // Copy shell_async.json to the test tools directory
+    // Copy sandboxed_shell.json to the test tools directory
     std::fs::copy(
-        get_workspace_path(".ahma/tools/shell_async.json"),
-        tools_dir.join("shell_async.json"),
+        get_workspace_path(".ahma/tools/sandboxed_shell.json"),
+        tools_dir.join("sandboxed_shell.json"),
     )?;
 
     std::fs::write(
@@ -76,7 +76,7 @@ async fn test_simple_sequence_execution() -> Result<()> {
         serde_json::to_string_pretty(&simple_sequence)?,
     )?;
 
-    let client = new_client(Some(tools_dir.to_str().unwrap())).await?;
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path()).await?;
 
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("test_sequence"),
@@ -123,8 +123,8 @@ async fn test_simple_sequence_execution() -> Result<()> {
     );
 
     assert!(
-        combined_message.contains("shell_async"),
-        "Message should reference shell_async tool: {}",
+        combined_message.contains("sandboxed_shell"),
+        "Message should reference sandboxed_shell tool: {}",
         combined_message
     );
 
@@ -308,7 +308,7 @@ async fn test_sequence_delay_is_applied() -> Result<()> {
         "timeout_seconds": 30,
         "sequence": [
             {
-                "tool": "shell_async",
+                "tool": "sandboxed_shell",
                 "subcommand": "default",
                 "args": {
                     "command": "echo 'A'"
@@ -316,7 +316,7 @@ async fn test_sequence_delay_is_applied() -> Result<()> {
                 "description": "Step A"
             },
             {
-                "tool": "shell_async",
+                "tool": "sandboxed_shell",
                 "subcommand": "default",
                 "args": {
                     "command": "echo 'B'"
@@ -324,7 +324,7 @@ async fn test_sequence_delay_is_applied() -> Result<()> {
                 "description": "Step B"
             },
             {
-                "tool": "shell_async",
+                "tool": "sandboxed_shell",
                 "subcommand": "default",
                 "args": {
                     "command": "echo 'C'"
@@ -336,8 +336,8 @@ async fn test_sequence_delay_is_applied() -> Result<()> {
     });
 
     std::fs::copy(
-        get_workspace_path(".ahma/tools/shell_async.json"),
-        tools_dir.join("shell_async.json"),
+        get_workspace_path(".ahma/tools/sandboxed_shell.json"),
+        tools_dir.join("sandboxed_shell.json"),
     )?;
 
     std::fs::write(
@@ -345,7 +345,7 @@ async fn test_sequence_delay_is_applied() -> Result<()> {
         serde_json::to_string_pretty(&timed_sequence)?,
     )?;
 
-    let client = new_client(Some(tools_dir.to_str().unwrap())).await?;
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path()).await?;
 
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("timed_sequence"),
@@ -397,8 +397,8 @@ async fn test_sequence_delay_is_applied() -> Result<()> {
     }
 
     assert!(
-        result_text.contains("shell_async"),
-        "Result should mention shell_async tool: {}",
+        result_text.contains("sandboxed_shell"),
+        "Result should mention sandboxed_shell tool: {}",
         result_text
     );
 

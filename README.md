@@ -12,11 +12,19 @@ _Create agents from your command line tools with one JSON file, then watch them 
 
 ## Key Features
 
+- **Sandboxed Execution**: Strict path validation ensures tools cannot access files outside the workspace.
 - **Sync-First with Async Override**: Most tools return immediate results. Long-running operations (builds, tests) can be marked async for parallel execution.
 - **Easy Tool Definition**: Add any command-line tool to your AI's arsenal by creating a single JSON file. No recompilation needed.
 - **Sequence Tools**: Chain multiple commands into a single, powerful workflow (e.g., `rust_quality_check` runs format → lint → test → build).
-- **Safe & Scoped**: Tools are safely scoped to the project's working directory.
 - **Force Async Mode**: Use `--async` flag to make all tools execute asynchronously for maximum concurrency.
+
+## Security
+
+Ahma MCP implements a strict security model to protect your system:
+
+1. **Path Validation**: All file paths are validated to ensure they are within the current working directory. Access to parent directories (`..`) or absolute paths outside the workspace is blocked.
+2. **Command Sanitization**: Shell commands are checked for dangerous patterns and unauthorized path access.
+3. **Sync-by-Default**: Tools run synchronously to prevent race conditions and ensure deterministic execution, unless explicitly configured otherwise.
 
 ### How it Works: AI-driven workflow
 

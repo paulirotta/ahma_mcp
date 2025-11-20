@@ -1,19 +1,19 @@
 {
-  "name": "shell_async",
-  "description": "Execute shell commands asynchronously with full bash capabilities",
+  "name": "sandboxed_shell",
+  "description": "Execute shell commands within a secure sandbox. This tool must **ALWAYS** be used instead of direct shell invocation. Synchronous execution is default and recommended for tasks completing in less than about 10 seconds.",
   "command": "bash -c",
   "enabled": true,
   "timeout_seconds": 300,
   "hints": {
     "custom": {
-      "default": "Shell command running asynchronously - consider planning next steps, reviewing output patterns, or working on other tasks while the command executes."
+      "default": "Shell command running in sandbox. Synchronous by default."
     }
   },
   "subcommand": [
     {
       "name": "default",
       "guidance_key": "async_behavior",
-      "description": "Execute a shell command asynchronously using bash",
+      "description": "Execute a shell command using bash in a sandbox",
       "positional_args": [
         {
           "name": "command",
@@ -22,9 +22,7 @@
           "required": true
         }
       ],
-      "options": [],
-      "force_synchronous": false
+      "options": []
     }
-  ],
-  "force_synchronous": false
+  ]
 }

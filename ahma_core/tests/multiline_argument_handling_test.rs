@@ -83,7 +83,9 @@ async fn test_multiline_argument_with_echo() {
         Duration::from_secs(30),
     )));
     let shell_pool = Arc::new(ShellPoolManager::new(ShellPoolConfig::default()));
-    let adapter = Adapter::new(monitor.clone(), shell_pool).expect("Failed to create adapter");
+    let adapter = Adapter::new(monitor.clone(), shell_pool)
+        .expect("Failed to create adapter")
+        .with_root(std::path::PathBuf::from("/"));
 
     // Create a config for echo that supports file arguments
     let echo_config = SubcommandConfig {
@@ -196,7 +198,9 @@ async fn test_multiline_git_commit_with_real_tool() {
         Duration::from_secs(30),
     )));
     let shell_pool = Arc::new(ShellPoolManager::new(ShellPoolConfig::default()));
-    let adapter = Adapter::new(monitor.clone(), shell_pool).expect("Failed to create adapter");
+    let adapter = Adapter::new(monitor.clone(), shell_pool)
+        .expect("Failed to create adapter")
+        .with_root(temp_dir.path().to_path_buf());
 
     // Load the real git tool configuration
     let git_tool_path = get_workspace_path(".ahma/tools/git.json");
@@ -350,7 +354,9 @@ async fn test_multiline_git_commit_message() {
         Duration::from_secs(30),
     )));
     let shell_pool = Arc::new(ShellPoolManager::new(ShellPoolConfig::default()));
-    let adapter = Adapter::new(monitor.clone(), shell_pool).expect("Failed to create adapter");
+    let adapter = Adapter::new(monitor.clone(), shell_pool)
+        .expect("Failed to create adapter")
+        .with_root(temp_dir.path().to_path_buf());
 
     // Create a config for git commit with file_arg support
     let commit_config = SubcommandConfig {
@@ -495,7 +501,9 @@ async fn test_special_characters_in_arguments() {
         Duration::from_secs(30),
     )));
     let shell_pool = Arc::new(ShellPoolManager::new(ShellPoolConfig::default()));
-    let adapter = Adapter::new(monitor, shell_pool).expect("Failed to create adapter");
+    let adapter = Adapter::new(monitor, shell_pool)
+        .expect("Failed to create adapter")
+        .with_root(std::path::PathBuf::from("/"));
 
     // Test with a simple echo command that handles special characters
     let echo_config = SubcommandConfig {

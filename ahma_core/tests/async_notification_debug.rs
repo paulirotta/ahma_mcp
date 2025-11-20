@@ -45,6 +45,9 @@ mod async_notification_test {
 
         println!("Starting a quick async operation...");
 
+        let current_dir = std::env::current_dir().unwrap();
+        let current_dir_str = current_dir.to_str().unwrap();
+
         // Test using direct adapter call to see what happens with the fix
         let job_id = adapter
             .execute_async_in_dir(
@@ -54,7 +57,7 @@ mod async_notification_test {
                     "_subcommand".to_string(),
                     serde_json::Value::String("version".to_string()),
                 )])),
-                "/Users/paul/github/ahma_mcp",
+                current_dir_str,
                 Some(10),
             )
             .await

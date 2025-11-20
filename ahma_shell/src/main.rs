@@ -262,17 +262,9 @@ fn resolve_cli_subcommand<'a>(
             .find(|candidate| candidate.name == *part && candidate.enabled)
         {
             if sub.name == "default" && is_default_call {
-                if subcommand_override.is_none() || trimmed == "default" {
-                    let segments: Vec<&str> = config_key.split('_').collect();
-                    let derived = if segments.len() > 2 {
-                        segments[1..].join("-")
-                    } else {
-                        segments.last().unwrap_or(&"").to_string()
-                    };
-                    if !derived.is_empty() && derived != config.command {
-                        command_parts.push(derived);
-                    }
-                }
+                // Logic to derive subcommand from tool name (e.g. cargo_build -> cargo build)
+                // is removed because it causes issues for tools like shell_async (bash -c async).
+                // If a tool needs a subcommand, it should be explicit in the config or the command.
             } else if sub.name != "default" {
                 command_parts.push(sub.name.clone());
             }
@@ -873,11 +865,23 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         args_map.insert(k.clone(), v.clone());
     }
 
+    let mut positional_iter = subcommand_config
+        .positional_args
+        .as_ref()
+        .map(|v| v.iter())
+        .unwrap_or_else(|| [].iter());
+
     for arg in &raw_args {
         if let Some((key, value)) = arg.split_once('=') {
             args_map.insert(key.to_string(), Value::String(value.to_string()));
         } else {
-            args_map.insert(arg.clone(), Value::String(String::new()));
+            // Try to map to next positional arg
+            if let Some(pos_arg) = positional_iter.next() {
+                args_map.insert(pos_arg.name.clone(), Value::String(arg.clone()));
+            } else {
+                // Fallback: treat as key with empty value (old behavior)
+                args_map.insert(arg.clone(), Value::String(String::new()));
+            }
         }
     }
 

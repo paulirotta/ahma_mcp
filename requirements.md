@@ -10,7 +10,7 @@ This document is the single source of truth for the `ahma_mcp` project. It outli
 
 These are the non-negotiable principles of the project.
 
-### R0: Runtime Terminology Alignment (Updated 2025-11-19)
+### R0: Runtime Terminology Alignment
 
 - **R0.1**: The running MCP server that Cursor/VS Code connects to is now named **"Ahama"** in `mcp.json` (e.g., `servers.Ahama`). This naming is reserved for conversations about the live MCP experience.
 - **R0.2**: The Git repository, source code, and compiled binary remain `ahma_mcp`. When referencing build steps, code changes, or CLI invocations (e.g., `ahma_mcp rust_quality_check`), always use `ahma_mcp`.
@@ -57,6 +57,13 @@ These are the non-negotiable principles of the project.
 - **R6.5**: The MTDF JSON Schema generation logic **must** be implemented in the `generate_tool_schema` binary crate.
 - **R6.6**: The core library **must** expose a clean public API that allows other crates (like future `ahma_web` or `ahma_okta` components) to leverage the tool execution engine without tight coupling.
 - **R6.7**: This separation ensures that adding new interfaces (web, authentication) or changing the CLI does not require modifications to core business logic.
+
+### R7: Security First (Added 2025-01-27)
+
+- **R7.1**: The system **must** enforce strict path validation for all file system operations.
+- **R7.2**: Access **must** be restricted to the current working directory and its subdirectories.
+- **R7.3**: Any attempt to access paths outside the workspace (e.g., `/`, `../`) **must** be rejected immediately.
+- **R7.4**: Command arguments **must** be validated to prevent shell injection and unauthorized path access.
 
 ## 3. Tool Definition (MTDF Schema)
 

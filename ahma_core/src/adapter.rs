@@ -37,10 +37,9 @@
 //!   asynchronous operations are executed with minimal overhead, which is critical for a
 //!   responsive user experience in a server context.
 
-use crate::{
-    operation_monitor::{Operation, OperationMonitor, OperationStatus},
-    shell_pool::ShellPoolManager,
-};
+use crate::operation_monitor::{Operation, OperationMonitor, OperationStatus};
+use crate::path_security;
+use crate::shell_pool::ShellPoolManager;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -94,6 +93,8 @@ pub struct Adapter {
     task_handles: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     /// Temporary files created for multi-line arguments - cleaned up automatically when dropped
     temp_files: Arc<Mutex<Vec<NamedTempFile>>>,
+    /// The root directory for path validation (sandbox root).
+    root_path: std::path::PathBuf,
 }
 
 impl Adapter {
@@ -104,7 +105,14 @@ impl Adapter {
             shell_pool,
             task_handles: Arc::new(Mutex::new(HashMap::new())),
             temp_files: Arc::new(Mutex::new(Vec::new())),
+            root_path: std::env::current_dir()?,
         })
+    }
+
+    /// Sets a custom root path for the adapter (useful for testing).
+    pub fn with_root(mut self, root: std::path::PathBuf) -> Self {
+        self.root_path = root;
+        self
     }
 
     /// Gracefully shuts down the adapter by cancelling active operations, aborting tasks,
@@ -190,9 +198,26 @@ impl Adapter {
         timeout_seconds: Option<u64>,
         subcommand_config: Option<&crate::config::SubcommandConfig>,
     ) -> Result<String, anyhow::Error> {
+        // Validate working directory
+        let safe_wd =
+            path_security::validate_path(std::path::Path::new(working_dir), &self.root_path)?;
+        let safe_wd_str = safe_wd.to_string_lossy().to_string();
+
         let (program, args_vec) = self
-            .prepare_command_and_args(command, args.as_ref(), subcommand_config)
+            .prepare_command_and_args(command, args.as_ref(), subcommand_config, &safe_wd)
             .await?;
+
+        // Heuristic check for shell commands
+        if (program == "bash"
+            || program == "sh"
+            || program == "zsh"
+            || program == "/bin/sh"
+            || program == "/bin/bash"
+            || program == "/bin/zsh")
+            && let Some(pos) = args_vec.iter().position(|a| a == "-c")
+                && let Some(script) = args_vec.get(pos + 1) {
+                    path_security::validate_command(script, &safe_wd)?;
+                }
 
         let timeout = timeout_seconds
             .map(Duration::from_secs)
@@ -209,7 +234,7 @@ impl Adapter {
             direct_cmd
         };
 
-        cmd.current_dir(working_dir)
+        cmd.current_dir(&safe_wd_str)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
@@ -311,9 +336,31 @@ impl Adapter {
             subcommand_config,
         } = options;
 
+        // Validate working directory
+        let safe_wd =
+            path_security::validate_path(std::path::Path::new(working_dir), &self.root_path)?;
+        let safe_wd_str = safe_wd.to_string_lossy().to_string();
+
+        // Validate command arguments
+        let (program_with_subcommand, args_vec) = self
+            .prepare_command_and_args(command, args.as_ref(), subcommand_config, &safe_wd)
+            .await?;
+
+        // Heuristic check for shell commands
+        if (program_with_subcommand == "bash"
+            || program_with_subcommand == "sh"
+            || program_with_subcommand == "zsh"
+            || program_with_subcommand == "/bin/sh"
+            || program_with_subcommand == "/bin/bash"
+            || program_with_subcommand == "/bin/zsh")
+            && let Some(pos) = args_vec.iter().position(|a| a == "-c")
+                && let Some(script) = args_vec.get(pos + 1) {
+                    path_security::validate_command(script, &safe_wd)?;
+                }
+
         let op_id = operation_id.unwrap_or_else(generate_operation_id);
         let op_id_clone = op_id.clone();
-        let wd = working_dir.to_string();
+        let wd = safe_wd_str.clone();
 
         let timeout_duration = timeout.map(Duration::from_secs);
 
@@ -330,10 +377,6 @@ impl Adapter {
         let shell_pool = self.shell_pool.clone();
         let command = command.to_string();
         let wd_clone = wd.clone();
-
-        let (program_with_subcommand, args_vec) = self
-            .prepare_command_and_args(&command, args.as_ref(), subcommand_config)
-            .await?;
 
         let task_handles = self.task_handles.clone();
 
@@ -564,6 +607,7 @@ impl Adapter {
         command: &str,
         args: Option<&Map<String, Value>>,
         subcommand_config: Option<&crate::config::SubcommandConfig>,
+        working_dir: &std::path::Path,
     ) -> Result<(String, Vec<String>)> {
         let mut parts: Vec<&str> = command.split_whitespace().collect();
         let program = parts.remove(0).to_string();
@@ -600,6 +644,7 @@ impl Adapter {
                     &positional_arg_names,
                     subcommand_config,
                     &mut final_args,
+                    working_dir,
                 )
                 .await?;
             }
@@ -627,6 +672,7 @@ impl Adapter {
         positional_arg_names: &HashSet<String>,
         subcommand_config: Option<&crate::config::SubcommandConfig>,
         final_args: &mut Vec<String>,
+        working_dir: &std::path::Path,
     ) -> Result<()> {
         // Find if there's a specific config for this argument that indicates file handling
         let file_arg_config = subcommand_config
@@ -694,16 +740,44 @@ impl Adapter {
             return Ok(());
         }
 
+        // Check if this option is defined as path type in config
+        let is_path_option = subcommand_config
+            .and_then(|sc| sc.options.as_deref())
+            .map(|options| {
+                options
+                    .iter()
+                    .any(|opt| opt.name == key && opt.format.as_deref() == Some("path"))
+            })
+            .unwrap_or(false);
+
+        // Also check positional args
+        let is_positional_path = subcommand_config
+            .and_then(|sc| sc.positional_args.as_deref())
+            .map(|args| {
+                args.iter()
+                    .any(|arg| arg.name == key && arg.format.as_deref() == Some("path"))
+            })
+            .unwrap_or(false);
+
         // Standard value handling for non-boolean, non-file-arg options.
         // This can return None for `null` values.
         if let Some(value_str) = Self::value_to_string(value).await?
             && !value_str.is_empty()
         {
+            let final_value = if is_path_option || is_positional_path {
+                let path = std::path::Path::new(&value_str);
+                path_security::validate_path(path, working_dir)?
+                    .to_string_lossy()
+                    .to_string()
+            } else {
+                value_str
+            };
+
             if positional_arg_names.contains(key) {
-                final_args.push(value_str);
+                final_args.push(final_value);
             } else {
                 final_args.push(format!("--{}", key));
-                final_args.push(value_str);
+                final_args.push(final_value);
             }
         }
         Ok(())
