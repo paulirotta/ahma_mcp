@@ -39,6 +39,11 @@
           "name": "bin",
           "type": "string",
           "description": "Name of the binary to run"
+        },
+        {
+          "name": "package",
+          "type": "string",
+          "description": "Package to run"
         }
       ]
     },
