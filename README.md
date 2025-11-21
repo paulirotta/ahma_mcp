@@ -4,21 +4,24 @@ _Create agents from your command line tools with one JSON file, then watch them 
 
 | | |
 | --- | ---: |
-| [![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![Rust](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org/) | ![Ahma MCP Logo](./assets/ahma.png) |
+| [![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![Rust](https://img.shields.io/badge/Rust-1.90%2B-B7410E.svg)](https://www.rust-lang.org/) | ![Ahma MCP Logo](./assets/ahma.png) |
 
-`ahma_mcp` rapidly adapts command-line tools for AI consumption. By default, AI tool calls execute synchronously and return immediate results. For long-running operations, tools can be marked as asynchronous: the AI receives immediate confirmation with an operation ID and can continue working while the command executes in the background, receiving results via automatic notifications when complete.
+`ahma_mcp` is a toolbox for safely wrapping command line tools for AI use. This is done by creating (use AI) a ´.ahma/tools/somenewtool.json´. 
 
-**Ahma** (Finnish for wolverine) is a tenacious and agile tool, enabling efficient workflows that complete complex tasks faster than traditional synchronous-only approaches.
+"Ahma" is Finnish for wolverine. An ahama is fast and fearless, able to eat just about anything. Use the existing tools or add a PR for new ones you crate.
+
+This project is actively used and still undergoing rapid evolution. http MCP is still a work in progress, setup isn't as smooth as we like yet and expect breaking changes including CLI parameters.
+
+We adapt concepts from [Requirements Engineering](https://en.wikipedia.org/wiki/Requirements_engineering), Test Driven Development (TDD) and AI coding tools into `requirements.md`
 
 ## Key Features
 
-- **Sandboxed Execution**: Strict path validation ensures tools cannot access files outside the workspace.
-- **Sync-First with Async Override**: Most tools return immediate results. Long-running operations (builds, tests) can be marked async for parallel execution.
+- **Sandboxed Execution**: Strict path validation prevents accessing files outside the workspace.
+- **Synchronous By Default with Async Support**: Synchronous operations use less context so prefer them for short operations. Command line `--async` allows the LLM continue work and receive the results when ready. Supports for multiple concurrent long-running operations (builds, tests).
 - **Easy Tool Definition**: Add any command-line tool to your AI's arsenal by creating a single JSON file. No recompilation needed.
 - **Sequence Tools**: Chain multiple commands into a single, powerful workflow (e.g., `rust_quality_check` runs format → lint → test → build).
-- **Force Async Mode**: Use `--async` flag to make all tools execute asynchronously for maximum concurrency.
 
-## Security
+## Security Sandbox
 
 Ahma MCP implements a strict security model to protect your system:
 
@@ -26,21 +29,23 @@ Ahma MCP implements a strict security model to protect your system:
 2. **Command Sanitization**: Shell commands are checked for dangerous patterns and unauthorized path access.
 3. **Sync-by-Default**: Tools run synchronously to prevent race conditions and ensure deterministic execution, unless explicitly configured otherwise.
 
-### How it Works: AI-driven workflow
+### Example async tool use: AI-driven workflow
 
-Here's an example of Claude Sonnet 3.5's workflow, where it uses tools and thinks concurrently:
+Synchronous is simpler when the turns are fast. Async can be helpful for long-running tool calls.
+
+Here's an example of Claude Sonnet 4.5's workflow. Notice both the tool and the AI are working at the same time:
 
 > Now let me run the tests again using the MCP server:
 >
 > _Ran cargo_test ahma_mcp (MCP Server)_
 >
-> While the tests run, let me continue with updating the product requirements document:
+> While the tests run, let me continue with updating the requirements document:
 >
-> _Read product-requirements.md_
+> _Read requirements.md_
 >
 > Let me add the JSON schema requirements to the product requirements:
 >
-> _product-requirements.md+21-6_
+> _requirements.md+21-6_
 >
 > Now let me check on the test results:
 >
