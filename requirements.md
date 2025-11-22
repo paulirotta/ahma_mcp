@@ -203,7 +203,7 @@ When a new task is assigned:
 
 - ❌ WRONG: `run_terminal_cmd("cargo nextest run")`
 - ✅ CORRECT: Call MCP tool `cargo_nextest_run` via Cursor's MCP interface
-- ❌ WRONG: `run_terminal_cmd("cargo build --release")`  
+- ❌ WRONG: `run_terminal_cmd("cargo build --release")`
 - ✅ CORRECT: Call MCP tool `cargo_build` with `release: true` parameter
 - ❌ WRONG: `run_terminal_cmd("cargo clippy --fix")`
 - ✅ CORRECT: Call MCP tool `cargo_clippy` with `fix: true` parameter
@@ -249,7 +249,7 @@ This section documents critical implementation details discovered through analys
 **R10.1**: Certain parameters are "meta-parameters" that control the execution environment but should not be passed as command-line arguments to tools:
 
 - `working_directory`: Specifies where the command executes
-- `execution_mode`: Controls sync vs async execution  
+- `execution_mode`: Controls sync vs async execution
 - `timeout_seconds`: Sets operation timeout
 
 **R10.2**: The adapter layer **must** filter out meta-parameters when constructing command-line arguments.
@@ -336,16 +336,18 @@ This section documents critical implementation details discovered through analys
 - Use `tempfile::tempdir()` or `tempfile::TempDir::new()` to create isolated test workspaces
 - The `TempDir` type automatically cleans up on drop, ensuring no test artifacts remain
 - Common patterns:
+
   ```rust
   use tempfile::tempdir;  // or use tempfile::TempDir;
-  
+
   let temp_dir = tempdir().unwrap();  // Auto-cleanup on drop
   let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await.unwrap();
-  
+
   // Create test files/directories within temp_dir.path()
   let test_file = temp_dir.path().join("test.txt");
   fs::write(&test_file, "test content").unwrap();
   ```
+
 - For tests requiring complex project structures, use helper functions like `create_full_rust_test_project()` which return `TempDir` instances
 - Test directories are automatically removed when the `TempDir` value goes out of scope
 - This ensures tests can run in parallel without conflicts and leaves no artifacts in the repository
