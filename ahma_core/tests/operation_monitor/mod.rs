@@ -5,5 +5,5 @@ mod cancellation;
 mod comprehensive;
 mod id_reuse_bug;
 pub mod stress;
-pub mod tool_hints;
 pub mod timeout_enforcement_test;
+pub mod tool_hints;

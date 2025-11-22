@@ -205,11 +205,10 @@ impl OperationMonitor {
                 }
 
                 let timeout = op.timeout_duration.unwrap_or(self.config.default_timeout);
-                if let Ok(elapsed) = now.duration_since(op.start_time) {
-                    if elapsed > timeout {
+                if let Ok(elapsed) = now.duration_since(op.start_time)
+                    && elapsed > timeout {
                         timed_out_ops.push((op.id.clone(), elapsed, timeout));
                     }
-                }
             }
         }
 
@@ -225,8 +224,8 @@ impl OperationMonitor {
 
     async fn timeout_operation(&self, operation_id: &str, reason: String) {
         let mut ops = self.operations.write().await;
-        if let Some(op) = ops.get_mut(operation_id) {
-            if !op.state.is_terminal() {
+        if let Some(op) = ops.get_mut(operation_id)
+            && !op.state.is_terminal() {
                 tracing::warn!("Timing out operation: {} - {}", operation_id, reason);
 
                 op.state = OperationStatus::TimedOut;
@@ -252,7 +251,6 @@ impl OperationMonitor {
                 let mut ops = self.operations.write().await;
                 ops.remove(operation_id);
             }
-        }
     }
 
     /// Returns all currently active (non-terminal) operations.

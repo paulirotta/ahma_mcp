@@ -9,7 +9,7 @@ async fn test_operation_timeout_enforcement() {
     // Create a monitor with a default timeout
     let config = MonitorConfig::with_timeout(Duration::from_secs(5));
     let monitor = Arc::new(OperationMonitor::new(config));
-    
+
     // Start the background monitor
     OperationMonitor::start_background_monitor(monitor.clone());
 
@@ -34,8 +34,11 @@ async fn test_operation_timeout_enforcement() {
     sleep(Duration::from_millis(1500)).await;
 
     // Check status
-    let op = monitor.wait_for_operation(&op_id).await.expect("Operation should exist");
-    
+    let op = monitor
+        .wait_for_operation(&op_id)
+        .await
+        .expect("Operation should exist");
+
     // This assertion is expected to fail until we implement the background monitor
     assert_eq!(
         op.state,
