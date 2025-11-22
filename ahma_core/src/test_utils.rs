@@ -507,4 +507,17 @@ pub mod test_utils {
 
         Ok((temp_dir, client))
     }
+
+    /// Helper to assert that formatting a JSON string via TerminalOutput contains all expected substrings.
+    /// Falls back to raw string if parsing fails (mirroring format_content behavior).
+    #[allow(dead_code)]
+    pub fn assert_formatted_json_contains(raw: &str, expected: &[&str]) {
+        let formatted = crate::terminal_output::TerminalOutput::format_content(raw);
+        for token in expected {
+            assert!(
+                formatted.contains(token),
+                "Formatted content missing token: {token}"
+            );
+        }
+    }
 }

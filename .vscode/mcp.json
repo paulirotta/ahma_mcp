@@ -1,27 +1,18 @@
 {
-    "servers": {
-        "ahma_mcp": {
-            "type": "stdio",
-            "cwd": "${workspaceFolder}",
-            "command": "target/release/ahma_mcp",
-            "args": [
-                "--tools-dir",
-                ".ahma/tools"
-            ],
-            "dev": {
-                "command": "cargo",
-                "args": [
-                    "run",
-                    "--release",
-                    "--",
-                    "--tools-dir",
-                    ".ahma/tools"
-                ],
-                "watch": [
-                    "target/release/ahma_mcp"
-                ]
-            }
-        }
-    },
-    "inputs": []
+	"servers": {
+		"Ahma": {
+			"type": "stdio",
+			"command": "target/release/ahma_mcp",
+			"args": [
+				"--async",
+				"--tools-dir",
+				".ahma/tools"
+			]
+		},
+		"Ahma-localhost": {
+			"url": "http://localhost:3000",
+			"type": "http"
+		}
+	},
+	"inputs": []
 }
