@@ -4,5 +4,6 @@ mod basic;
 mod cancellation;
 mod comprehensive;
 mod id_reuse_bug;
-mod stress;
-mod tool_hints;
+pub mod stress;
+pub mod timeout_enforcement_test;
+pub mod tool_hints;

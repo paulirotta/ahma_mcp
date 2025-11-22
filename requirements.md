@@ -329,6 +329,27 @@ This section documents critical implementation details discovered through analys
 
 **R13.4**: The `rust_quality_check` tool runs the full test suite and must pass before committing.
 
+**R13.5**: Test File Isolation (CRITICAL):
+
+- **ALL tests MUST use temporary directories** via the `tempfile` crate to prevent repository pollution
+- **NEVER** create test files or directories directly in the repository structure
+- Use `tempfile::tempdir()` or `tempfile::TempDir::new()` to create isolated test workspaces
+- The `TempDir` type automatically cleans up on drop, ensuring no test artifacts remain
+- Common patterns:
+  ```rust
+  use tempfile::tempdir;  // or use tempfile::TempDir;
+  
+  let temp_dir = tempdir().unwrap();  // Auto-cleanup on drop
+  let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await.unwrap();
+  
+  // Create test files/directories within temp_dir.path()
+  let test_file = temp_dir.path().join("test.txt");
+  fs::write(&test_file, "test content").unwrap();
+  ```
+- For tests requiring complex project structures, use helper functions like `create_full_rust_test_project()` which return `TempDir` instances
+- Test directories are automatically removed when the `TempDir` value goes out of scope
+- This ensures tests can run in parallel without conflicts and leaves no artifacts in the repository
+
 ### R14: HTTP MCP Client and OAuth Authentication
 
 - **R14.1**: `ahma_mcp` **must** be able to act as an MCP client for HTTP-based MCP servers, enabling it to connect to services like the Atlassian MCP server.

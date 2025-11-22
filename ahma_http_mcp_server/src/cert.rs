@@ -57,8 +57,14 @@ fn generate_localhost_cert() -> Result<(String, String)> {
 }
 
 /// Load or generate certificates for localhost
-pub async fn get_or_create_localhost_certs() -> Result<(Vec<u8>, Vec<u8>)> {
-    let cert_dir = get_cert_dir()?;
+pub async fn get_or_create_localhost_certs(
+    cert_dir_override: Option<&std::path::Path>,
+) -> Result<(Vec<u8>, Vec<u8>)> {
+    let cert_dir = if let Some(d) = cert_dir_override {
+        d.to_path_buf()
+    } else {
+        get_cert_dir()?
+    };
     let cert_path = cert_dir.join(CERT_FILE);
     let key_path = cert_dir.join(KEY_FILE);
     
@@ -150,7 +156,8 @@ mod tests {
     
     #[tokio::test]
     async fn test_cert_generation() {
-        let result = get_or_create_localhost_certs().await;
+        let temp_dir = tempfile::tempdir().unwrap();
+        let result = get_or_create_localhost_certs(Some(temp_dir.path())).await;
         assert!(result.is_ok());
         
         let (cert_pem, key_pem) = result.unwrap();

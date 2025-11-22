@@ -34,7 +34,9 @@ async fn test_operation_cancellation_functionality() {
 
     // Create adapter
     let adapter = Arc::new(
-        Adapter::new(operation_monitor.clone(), shell_pool).expect("Failed to create adapter"),
+        Adapter::new(operation_monitor.clone(), shell_pool)
+            .expect("Failed to create adapter")
+            .with_root(temp_dir.path().to_path_buf()),
     );
 
     println!("🧪 Starting operation cancellation test...");

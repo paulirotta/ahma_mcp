@@ -95,6 +95,11 @@ impl AhmaMcpService {
         guidance: Arc<Option<GuidanceConfig>>,
         force_asynchronous: bool,
     ) -> Result<Self, anyhow::Error> {
+        // Start the background monitor for operation timeouts
+        crate::operation_monitor::OperationMonitor::start_background_monitor(
+            operation_monitor.clone(),
+        );
+
         Ok(Self {
             adapter,
             operation_monitor,

@@ -1,4 +1,5 @@
 use ahma_core::terminal_output::TerminalOutput;
+use ahma_core::test_utils::test_utils::assert_formatted_json_contains;
 use ahma_core::utils::logging::init_test_logging;
 use serde_json::json;
 
@@ -26,25 +27,26 @@ fn test_format_content_json_pretty_printing() {
     init_test_logging();
     // Simple JSON object
     let json_input = r#"{"name":"test","version":"1.0.0"}"#;
-    let formatted = TerminalOutput::format_content(json_input);
-    assert!(formatted.contains("{\n"));
-    assert!(formatted.contains("  \"name\": \"test\""));
-    assert!(formatted.contains("  \"version\": \"1.0.0\""));
+    assert_formatted_json_contains(
+        json_input,
+        &["{\n", "  \"name\": \"test\"", "  \"version\": \"1.0.0\""],
+    );
 
     // Nested JSON
     let nested_json = r#"{"user":{"id":123,"name":"Alice","settings":{"theme":"dark"}}}"#;
-    let formatted = TerminalOutput::format_content(nested_json);
-    assert!(formatted.contains("\"user\": {"));
-    assert!(formatted.contains("    \"id\": 123")); // Nested indentation
-    assert!(formatted.contains("    \"settings\": {"));
-    assert!(formatted.contains("      \"theme\": \"dark\""));
+    assert_formatted_json_contains(
+        nested_json,
+        &[
+            "\"user\": {",
+            "    \"id\": 123",
+            "    \"settings\": {",
+            "      \"theme\": \"dark\"",
+        ],
+    );
 
     // JSON array
     let array_json = r#"[{"id":1,"name":"first"},{"id":2,"name":"second"}]"#;
-    let formatted = TerminalOutput::format_content(array_json);
-    assert!(formatted.contains("[\n"));
-    assert!(formatted.contains("  {\n"));
-    assert!(formatted.contains("    \"id\": 1"));
+    assert_formatted_json_contains(array_json, &["[\n", "  {\n", "    \"id\": 1"]);
 }
 
 #[test]

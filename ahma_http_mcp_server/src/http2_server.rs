@@ -52,7 +52,7 @@ pub async fn start_http2_server<H: ServerHandler + Send + Sync + Clone + 'static
     
     if config.enable_tls {
         // Get or create certificates
-        let (cert_pem, key_pem) = get_or_create_localhost_certs()
+        let (cert_pem, key_pem) = get_or_create_localhost_certs(None)
             .await
             .map_err(|e| ServerError::Certificate(e))?;
         
