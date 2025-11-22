@@ -1,8 +1,7 @@
 //! Expanded path security edge case tests (See agent-plan.md Phase A)
 use ahma_core::test_utils as common;
 use ahma_core::utils::logging::init_test_logging;
-use common::get_workspace_path;
-use common::test_client::new_client;
+use common::test_client::new_client_in_dir;
 use rmcp::model::CallToolRequestParam;
 use serde_json::json;
 use std::{fs, path::Path};
@@ -10,7 +9,10 @@ use std::{fs, path::Path};
 #[tokio::test]
 async fn test_path_validation_nested_parent_segments() {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await.unwrap();
+    let temp_dir = tempfile::tempdir().unwrap();
+    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+        .await
+        .unwrap();
     // Deep relative escape attempt
     let params = CallToolRequestParam {
         name: "sandboxed_shell".into(),
@@ -33,12 +35,15 @@ async fn test_path_validation_nested_parent_segments() {
 #[tokio::test]
 async fn test_path_validation_unicode_directory() {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await.unwrap();
+    let temp_dir = tempfile::tempdir().unwrap();
+    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+        .await
+        .unwrap();
     // Create a unicode directory inside workspace
-    let unicode_dir = get_workspace_path("测试目录");
+    let unicode_dir = temp_dir.path().join("test_dir_unicode");
     let _ = fs::create_dir_all(&unicode_dir); // ignore if exists
     let rel = unicode_dir
-        .strip_prefix(get_workspace_path("."))
+        .strip_prefix(temp_dir.path())
         .unwrap_or(&unicode_dir);
     let rel_str = rel.to_string_lossy();
     let params = CallToolRequestParam {
@@ -65,14 +70,17 @@ async fn test_path_validation_symlink_escape() {
     #[cfg(unix)]
     {
         use std::os::unix::fs::symlink;
-        let client = new_client(Some(".ahma/tools")).await.unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+            .await
+            .unwrap();
         // Create symlink inside workspace pointing outside (e.g. /etc)
-        let link_path = get_workspace_path("escape_link");
+        let link_path = temp_dir.path().join("escape_link");
         // If link exists from prior run remove and recreate
         let _ = fs::remove_file(&link_path);
         symlink(Path::new("/etc"), &link_path).unwrap();
         let rel = link_path
-            .strip_prefix(get_workspace_path("."))
+            .strip_prefix(temp_dir.path())
             .unwrap_or(&link_path);
         let params = CallToolRequestParam {
             name: "sandboxed_shell".into(),
@@ -96,15 +104,18 @@ async fn test_path_validation_symlink_internal() {
     #[cfg(unix)]
     {
         use std::os::unix::fs::symlink;
-        let client = new_client(Some(".ahma/tools")).await.unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+            .await
+            .unwrap();
         // Create a directory and symlink pointing to it inside workspace
-        let target_dir = get_workspace_path("internal_target");
+        let target_dir = temp_dir.path().join("internal_target");
         let _ = fs::create_dir_all(&target_dir);
-        let link_path = get_workspace_path("internal_link");
+        let link_path = temp_dir.path().join("internal_link");
         let _ = fs::remove_file(&link_path);
         symlink(&target_dir, &link_path).unwrap();
         let rel = link_path
-            .strip_prefix(get_workspace_path("."))
+            .strip_prefix(temp_dir.path())
             .unwrap_or(&link_path);
         let params = CallToolRequestParam {
             name: "sandboxed_shell".into(),
@@ -125,7 +136,10 @@ async fn test_path_validation_symlink_internal() {
 #[tokio::test]
 async fn test_path_validation_reserved_names() {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await.unwrap();
+    let temp_dir = tempfile::tempdir().unwrap();
+    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+        .await
+        .unwrap();
     for wd in [".", "./", "././."] {
         let params = CallToolRequestParam {
             name: "sandboxed_shell".into(),

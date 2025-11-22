@@ -212,7 +212,7 @@ impl PrewarmedShell {
     /// Create a new prewarmed shell for the specified working directory
     pub async fn new(
         working_dir: impl AsRef<Path>,
-        _config: &ShellPoolConfig,
+        config: &ShellPoolConfig,
     ) -> Result<Self, ShellError> {
         let working_dir = working_dir.as_ref().to_path_buf();
         let shell_id = format!("sh_{}", SHELL_ID_COUNTER.fetch_add(1, Ordering::Relaxed));
@@ -223,66 +223,71 @@ impl PrewarmedShell {
             &working_dir
         );
 
-        // Spawn bash process with JSON communication
-        let mut process = Command::new("bash")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped()) // capture stderr for diagnostics
-            .current_dir(&working_dir)
-            .spawn()?;
+        // Wrap initialization in timeout
+        timeout(config.shell_spawn_timeout, async {
+            // Spawn bash process with JSON communication
+            let mut process = Command::new("bash")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped()) // capture stderr for diagnostics
+                .current_dir(&working_dir)
+                .spawn()?;
 
-        let stdin = process.stdin.take().ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::BrokenPipe, "Failed to get stdin")
-        })?;
+            let stdin = process.stdin.take().ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::BrokenPipe, "Failed to get stdin")
+            })?;
 
-        let stdout = process.stdout.take().ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::BrokenPipe, "Failed to get stdout")
-        })?;
+            let stdout = process.stdout.take().ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::BrokenPipe, "Failed to get stdout")
+            })?;
 
-        let stdout_reader = BufReader::new(stdout);
-        // Spawn a background task to read and log stderr lines for diagnostics
-        if let Some(stderr) = process.stderr.take() {
-            tokio::spawn(async move {
-                let mut reader = BufReader::new(stderr);
-                loop {
-                    let mut line = String::new();
-                    match reader.read_line(&mut line).await {
-                        Ok(0) => break, // EOF
-                        Ok(_) => {
-                            if !line.trim().is_empty() {
-                                tracing::warn!(target: "shell_stderr", "shell stderr: {}", line.trim_end());
+            let stdout_reader = BufReader::new(stdout);
+            // Spawn a background task to read and log stderr lines for diagnostics
+            if let Some(stderr) = process.stderr.take() {
+                tokio::spawn(async move {
+                    let mut reader = BufReader::new(stderr);
+                    loop {
+                        let mut line = String::new();
+                        match reader.read_line(&mut line).await {
+                            Ok(0) => break, // EOF
+                            Ok(_) => {
+                                if !line.trim().is_empty() {
+                                    tracing::warn!(target: "shell_stderr", "shell stderr: {}", line.trim_end());
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(target: "shell_stderr", "error reading shell stderr: {}", e);
+                                break;
                             }
                         }
-                        Err(e) => {
-                            tracing::warn!(target: "shell_stderr", "error reading shell stderr: {}", e);
-                            break;
-                        }
                     }
-                }
-            });
-        }
+                });
+            }
 
-        let mut shell = Self {
-            id: shell_id.clone(),
-            process,
-            stdin,
-            stdout_reader,
-            working_dir: working_dir.clone(),
-            config: _config.clone(),
-            last_used: Instant::now(),
-            is_healthy: true,
-            command_lock: Mutex::new(()),
-        };
+            let mut shell = Self {
+                id: shell_id.clone(),
+                process,
+                stdin,
+                stdout_reader,
+                working_dir: working_dir.clone(),
+                config: config.clone(),
+                last_used: Instant::now(),
+                is_healthy: true,
+                command_lock: Mutex::new(()),
+            };
 
-        // Initialize the shell with our command protocol handler
-        shell.initialize_protocol().await?;
+            // Initialize the shell with our command protocol handler
+            shell.initialize_protocol().await?;
 
-        tracing::info!(
-            "Successfully spawned shell {} for directory: {:?}",
-            shell_id,
-            &working_dir
-        );
-        Ok(shell)
+            tracing::info!(
+                "Successfully spawned shell {} for directory: {:?}",
+                shell_id,
+                &working_dir
+            );
+            Ok(shell)
+        })
+        .await
+        .map_err(|_| ShellError::Timeout)?
     }
 
     /// Initialize the shell with our JSON command protocol

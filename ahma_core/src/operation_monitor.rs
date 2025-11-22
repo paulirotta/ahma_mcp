@@ -179,6 +179,82 @@ impl OperationMonitor {
         ops.get(operation_id).cloned()
     }
 
+    /// Starts a background task that periodically checks for timed-out operations.
+    /// This ensures that operations that exceed their timeout are cancelled even if
+    /// the executor fails to handle them.
+    pub fn start_background_monitor(monitor: Arc<Self>) {
+        tokio::spawn(async move {
+            let check_interval = Duration::from_secs(1);
+            loop {
+                monitor.check_timeouts().await;
+                tokio::time::sleep(check_interval).await;
+            }
+        });
+    }
+
+    /// Checks all active operations for timeouts and cancels them if necessary.
+    pub async fn check_timeouts(&self) {
+        let now = SystemTime::now();
+        let mut timed_out_ops = Vec::new();
+
+        {
+            let ops = self.operations.read().await;
+            for op in ops.values() {
+                if op.state.is_terminal() {
+                    continue;
+                }
+
+                let timeout = op.timeout_duration.unwrap_or(self.config.default_timeout);
+                if let Ok(elapsed) = now.duration_since(op.start_time) {
+                    if elapsed > timeout {
+                        timed_out_ops.push((op.id.clone(), elapsed, timeout));
+                    }
+                }
+            }
+        }
+
+        for (op_id, elapsed, timeout) in timed_out_ops {
+            let reason = format!(
+                "Operation timed out after {:.1}s (limit: {:.1}s)",
+                elapsed.as_secs_f64(),
+                timeout.as_secs_f64()
+            );
+            self.timeout_operation(&op_id, reason).await;
+        }
+    }
+
+    async fn timeout_operation(&self, operation_id: &str, reason: String) {
+        let mut ops = self.operations.write().await;
+        if let Some(op) = ops.get_mut(operation_id) {
+            if !op.state.is_terminal() {
+                tracing::warn!("Timing out operation: {} - {}", operation_id, reason);
+
+                op.state = OperationStatus::TimedOut;
+                op.end_time = Some(SystemTime::now());
+                op.cancellation_token.cancel();
+
+                op.result = Some(serde_json::json!({
+                    "timed_out": true,
+                    "reason": reason
+                }));
+
+                // Notify waiters
+                op.completion_notifier.notify_waiters();
+
+                // Move to history
+                let timed_out_op = op.clone();
+                drop(ops); // Release lock
+
+                let mut history = self.completion_history.write().await;
+                history.insert(operation_id.to_string(), timed_out_op);
+
+                // Remove from active
+                let mut ops = self.operations.write().await;
+                ops.remove(operation_id);
+            }
+        }
+    }
+
     /// Returns all currently active (non-terminal) operations.
     ///
     /// Note: Completed operations are accessible via `get_completed_operations`.

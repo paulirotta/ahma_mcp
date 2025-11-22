@@ -27,9 +27,13 @@ async fn new_async_client(
 }
 
 fn make_workdir(prefix: &str) -> Result<(TempDir, PathBuf)> {
+    let target_dir = std::env::current_dir()?.join("target");
+    if !target_dir.exists() {
+        std::fs::create_dir_all(&target_dir)?;
+    }
     let dir = Builder::new()
         .prefix(&format!("shell_async_{}_", prefix))
-        .tempdir()?;
+        .tempdir_in(&target_dir)?;
     let path = dir.path().to_path_buf();
     Ok((dir, path))
 }

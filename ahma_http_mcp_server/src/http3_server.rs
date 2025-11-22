@@ -34,7 +34,7 @@ pub async fn start_http3_server<H: ServerHandler + Send + Sync + Clone + 'static
     info!("Starting HTTP/3 server on {}", config.bind_addr);
     
     // Get or create certificates
-    let (cert_pem, key_pem) = get_or_create_localhost_certs()
+    let (cert_pem, key_pem) = get_or_create_localhost_certs(None)
         .await
         .map_err(|e| ServerError::Certificate(e))?;
     
