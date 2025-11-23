@@ -251,19 +251,6 @@ jobs:
         id: day-number
         run: echo "day=$(date +%j)" >> $GITHUB_OUTPUT
 
-      - name: Cache Kotlin compiler
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.konan
-            ~/.kotlin
-            ~/.gradle/kotlin-compiler-embeddable
-            ~/Library/Caches/JetBrains/Kotlin
-            ~/Library/Caches/JetBrains/KotlinCompilerServer
-          key: kotlin-compiler-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
-          restore-keys: |
-            kotlin-compiler-${{ runner.os }}-
-
       - name: Cache AGP and more Gradle directories
         uses: actions/cache@v4
         with:
@@ -277,6 +264,14 @@ jobs:
           key: gradle-deeper-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
             gradle-deeper-${{ runner.os }}-
+
+      - name: Cache Gradle Kotlin DSL
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle/caches/kotlin-dsl
+          key: kotlin-dsl-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
+          restore-keys: |
+            kotlin-dsl-${{ runner.os }}-
 
       - name: Preheat Gradle Daemon
         run: |
