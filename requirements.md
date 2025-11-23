@@ -66,6 +66,14 @@ These are the non-negotiable principles of the project.
 - **R7.3**: Any attempt to access paths outside the workspace (e.g., `/`, `../`) **must** be rejected immediately.
 - **R7.4**: Command arguments **must** be validated to prevent shell injection and unauthorized path access.
 
+### R8: HTTP Bridge (Added 2025-11-23)
+
+- **R8.1**: The system **must** support an HTTP bridge mode (`ahma_mcp --mode http`) that exposes the MCP server over HTTP/SSE.
+- **R8.2**: The bridge **must** support Server-Sent Events (SSE) at `/sse` for server-to-client notifications and events.
+- **R8.3**: The bridge **must** support JSON-RPC requests via POST at `/mcp`.
+- **R8.4**: The bridge **must** handle concurrent requests by matching JSON-RPC IDs.
+- **R8.5**: The bridge **must** be robust against underlying process crashes, automatically restarting the `ahma_mcp` stdio process if it terminates.
+
 ## 3. Tool Definition (MTDF Schema)
 
 All tools are defined in `.json` files in the `tools/` directory. This is the MCP Tool Definition Format (MTDF).
