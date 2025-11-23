@@ -48,6 +48,56 @@
       ]
     },
     {
+      "name": "add",
+      "description": "Add dependencies to a Cargo.toml manifest file.",
+      "options": [
+        {
+          "name": "features",
+          "type": "string",
+          "description": "Space or comma separated list of features to activate"
+        },
+        {
+          "name": "package",
+          "type": "string",
+          "description": "Package to add the dependency to"
+        },
+        {
+          "name": "dev",
+          "type": "boolean",
+          "description": "Add as development dependency"
+        },
+        {
+          "name": "build",
+          "type": "boolean",
+          "description": "Add as build dependency"
+        },
+        {
+          "name": "no-default-features",
+          "type": "boolean",
+          "description": "Disable default features"
+        },
+        {
+          "name": "optional",
+          "type": "boolean",
+          "description": "Mark the dependency as optional"
+        },
+        {
+          "name": "rename",
+          "type": "string",
+          "description": "Rename the dependency"
+        }
+      ],
+      "positional_args": [
+        {
+          "name": "dependencies",
+          "type": "string",
+          "description": "The dependencies to add",
+          "required": true
+        }
+      ],
+      "force_synchronous": true
+    },
+    {
       "name": "check",
       "description": "Type-check the current package without producing binaries.",
       "options": [

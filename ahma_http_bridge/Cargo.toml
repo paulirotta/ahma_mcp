@@ -11,10 +11,14 @@ version.workspace = true
 anyhow.workspace = true
 axum = { version = "0.8.7", features = ["http2", "tokio"] }
 bytes = "1.11"
+dashmap = "6.1.0"
+futures.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-util", "process", "sync"] }
+tokio-stream = { version = "0.1.17", features = ["sync"] }
 tokio-util = { workspace = true, features = ["io", "codec"] }
 tower-http = { version = "0.6", features = ["trace", "cors"] }
 tracing.workspace = true
+uuid = { version = "1.18.1", features = ["v4", "serde"] }
