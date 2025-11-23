@@ -5,18 +5,20 @@ use axum::{
     Json, Router,
     extract::State,
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Response, Sse},
     routing::{get, post},
 };
+use dashmap::DashMap;
+use futures::stream::StreamExt;
 use serde_json::Value;
-use std::{net::SocketAddr, process::Stdio, sync::Arc};
+use std::{convert::Infallible, net::SocketAddr, process::Stdio, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    process::{Child, Command},
-    sync::Mutex,
+    process::Command,
+    sync::{broadcast, mpsc, oneshot},
 };
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// Configuration for the HTTP bridge
 #[derive(Debug, Clone)]
@@ -41,131 +43,50 @@ impl Default for BridgeConfig {
 
 /// Shared state for the bridge
 struct BridgeState {
-    process: Arc<Mutex<Option<McpProcess>>>,
-    config: BridgeConfig,
-}
-
-/// Wrapper for the MCP server process
-struct McpProcess {
-    child: Child,
-    stdin: tokio::process::ChildStdin,
-    stdout: BufReader<tokio::process::ChildStdout>,
-}
-
-impl McpProcess {
-    /// Spawn a new MCP server process
-    async fn spawn(config: &BridgeConfig) -> Result<Self> {
-        info!(
-            "Spawning MCP server: {} {}",
-            config.server_command,
-            config.server_args.join(" ")
-        );
-
-        let mut child = Command::new(&config.server_command)
-            .args(&config.server_args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()
-            .map_err(|e| BridgeError::ServerProcess(format!("Failed to spawn server: {}", e)))?;
-
-        let stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| BridgeError::ServerProcess("Failed to get stdin handle".to_string()))?;
-
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| BridgeError::ServerProcess("Failed to get stdout handle".to_string()))?;
-
-        let stdout = BufReader::new(stdout);
-
-        Ok(Self {
-            child,
-            stdin,
-            stdout,
-        })
-    }
-
-    /// Send a JSON-RPC message to the server
-    async fn send(&mut self, message: &Value) -> Result<()> {
-        let json_str = serde_json::to_string(message)?;
-        debug!("Sending to MCP server: {}", json_str);
-
-        self.stdin
-            .write_all(json_str.as_bytes())
-            .await
-            .map_err(|e| BridgeError::Communication(format!("Failed to write: {}", e)))?;
-
-        self.stdin
-            .write_all(b"\n")
-            .await
-            .map_err(|e| BridgeError::Communication(format!("Failed to write newline: {}", e)))?;
-
-        self.stdin
-            .flush()
-            .await
-            .map_err(|e| BridgeError::Communication(format!("Failed to flush: {}", e)))?;
-
-        Ok(())
-    }
-
-    /// Receive a JSON-RPC message from the server
-    async fn receive(&mut self) -> Result<Value> {
-        let mut line = String::new();
-
-        self.stdout
-            .read_line(&mut line)
-            .await
-            .map_err(|e| BridgeError::Communication(format!("Failed to read: {}", e)))?;
-
-        if line.is_empty() {
-            return Err(BridgeError::Communication(
-                "Server closed connection".to_string(),
-            ));
-        }
-
-        debug!("Received from MCP server: {}", line.trim());
-
-        let value: Value = serde_json::from_str(&line)?;
-        Ok(value)
-    }
-
-    /// Check if the process is still running
-    fn is_alive(&mut self) -> bool {
-        self.child.try_wait().ok().flatten().is_none()
-    }
-}
-
-impl Drop for McpProcess {
-    fn drop(&mut self) {
-        if self.is_alive() {
-            info!("Terminating MCP server process");
-            let _ = self.child.start_kill();
-        }
-    }
+    /// Channel to send messages to the MCP process manager
+    sender: mpsc::Sender<Value>,
+    /// Broadcast channel for SSE events (notifications)
+    broadcast_tx: broadcast::Sender<String>,
+    /// Map of request IDs to response channels
+    pending_requests: Arc<DashMap<String, oneshot::Sender<Value>>>,
 }
 
 /// Start the HTTP bridge server
 pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
     info!("Starting HTTP bridge on {}", config.bind_addr);
 
-    let state = BridgeState {
-        process: Arc::new(Mutex::new(None)),
-        config: config.clone(),
-    };
+    // Channels
+    let (tx, rx) = mpsc::channel(100);
+    let (broadcast_tx, _) = broadcast::channel(100);
+    let pending_requests = Arc::new(DashMap::new());
+
+    // Start the process manager
+    let manager_broadcast = broadcast_tx.clone();
+    let manager_pending = pending_requests.clone();
+    let manager_config = config.clone();
+
+    tokio::spawn(async move {
+        manage_process(manager_config, rx, manager_broadcast, manager_pending).await;
+    });
+
+    let state = Arc::new(BridgeState {
+        sender: tx,
+        broadcast_tx,
+        pending_requests,
+    });
 
     // Build the router
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/mcp", post(handle_mcp_request))
+        .route("/sse", get(handle_sse))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
-        .with_state(Arc::new(state));
+        .with_state(state);
 
     info!("HTTP bridge listening on http://{}", config.bind_addr);
     info!("POST JSON-RPC messages to http://{}/mcp", config.bind_addr);
+    info!("SSE endpoint at http://{}/sse", config.bind_addr);
 
     // Start the server
     let listener = tokio::net::TcpListener::bind(config.bind_addr)
@@ -179,9 +100,120 @@ pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
     Ok(())
 }
 
+async fn manage_process(
+    config: BridgeConfig,
+    mut rx: mpsc::Receiver<Value>,
+    broadcast_tx: broadcast::Sender<String>,
+    pending_requests: Arc<DashMap<String, oneshot::Sender<Value>>>,
+) {
+    loop {
+        info!(
+            "Spawning MCP server: {} {}",
+            config.server_command,
+            config.server_args.join(" ")
+        );
+
+        let mut child = match Command::new(&config.server_command)
+            .args(&config.server_args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                error!("Failed to spawn MCP server: {}", e);
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                continue;
+            }
+        };
+
+        let mut stdin = child.stdin.take().expect("Failed to get stdin");
+        let stdout = child.stdout.take().expect("Failed to get stdout");
+        let mut stdout_reader = BufReader::new(stdout).lines();
+
+        loop {
+            tokio::select! {
+                // Handle outgoing messages (HTTP -> Stdio)
+                Some(msg) = rx.recv() => {
+                    if let Ok(json_str) = serde_json::to_string(&msg) {
+                        debug!("Sending to MCP server: {}", json_str);
+                        if let Err(e) = stdin.write_all(json_str.as_bytes()).await {
+                            error!("Failed to write to stdin: {}", e);
+                            break;
+                        }
+                        if let Err(e) = stdin.write_all(b"\n").await {
+                            error!("Failed to write newline to stdin: {}", e);
+                            break;
+                        }
+                        if let Err(e) = stdin.flush().await {
+                            error!("Failed to flush stdin: {}", e);
+                            break;
+                        }
+                    }
+                }
+
+                // Handle incoming messages (Stdio -> HTTP/SSE)
+                Ok(Some(line)) = stdout_reader.next_line() => {
+                    if line.is_empty() { continue; }
+                    debug!("Received from MCP server: {}", line);
+
+                    if let Ok(value) = serde_json::from_str::<Value>(&line) {
+                        // Check if it's a response to a pending request
+                        if let Some(id) = value.get("id") {
+                            let id_str = if id.is_string() {
+                                id.as_str().unwrap().to_string()
+                            } else {
+                                id.to_string()
+                            };
+
+                            if let Some((_, sender)) = pending_requests.remove(&id_str) {
+                                let _ = sender.send(value);
+                                continue;
+                            }
+                        }
+
+                        // If not a response, or ID not found, treat as notification/event
+                        // Broadcast to SSE clients
+                        let _ = broadcast_tx.send(line);
+                    } else {
+                        warn!("Failed to parse JSON from server: {}", line);
+                    }
+                }
+
+                // Process exit
+                _ = child.wait() => {
+                    warn!("MCP server process exited");
+                    break;
+                }
+            }
+        }
+
+        // Clean up pending requests on crash
+        pending_requests.clear();
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
+
 /// Health check endpoint
 async fn health_check() -> impl IntoResponse {
     (StatusCode::OK, "OK")
+}
+
+/// Handle SSE connections
+async fn handle_sse(State(state): State<Arc<BridgeState>>) -> impl IntoResponse {
+    let rx = state.broadcast_tx.subscribe();
+
+    let stream = tokio_stream::wrappers::BroadcastStream::new(rx).map(
+        |msg| -> std::result::Result<_, Infallible> {
+            match msg {
+                Ok(json_str) => Ok(axum::response::sse::Event::default().data(json_str)),
+                Err(_) => Ok(axum::response::sse::Event::default().comment("missed messages")),
+            }
+        },
+    );
+
+    Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::default())
 }
 
 /// Handle MCP JSON-RPC requests
@@ -191,65 +223,86 @@ async fn handle_mcp_request(
 ) -> Response {
     debug!("Received HTTP request");
 
-    // Get or create the MCP process
-    let mut process_guard = state.process.lock().await;
-
-    if process_guard.is_none() || !process_guard.as_mut().unwrap().is_alive() {
-        if process_guard.is_some() {
-            warn!("MCP server process died, restarting...");
+    // If the request has an ID, we expect a response
+    let id_opt = payload.get("id").map(|id| {
+        if id.is_string() {
+            id.as_str().unwrap().to_string()
+        } else {
+            id.to_string()
         }
+    });
 
-        match McpProcess::spawn(&state.config).await {
-            Ok(process) => {
-                *process_guard = Some(process);
-            }
-            Err(e) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({
-                        "jsonrpc": "2.0",
-                        "error": {
-                            "code": -32603,
-                            "message": format!("Failed to spawn MCP server: {}", e)
-                        }
-                    })),
-                )
-                    .into_response();
-            }
-        }
+    let (response_tx, response_rx) = if id_opt.is_some() {
+        let (tx, rx) = oneshot::channel();
+        (Some(tx), Some(rx))
+    } else {
+        (None, None)
+    };
+
+    if let Some(id) = &id_opt {
+        state
+            .pending_requests
+            .insert(id.clone(), response_tx.unwrap());
     }
 
-    let process = process_guard.as_mut().unwrap();
-
-    // Send the request to the MCP server
-    if let Err(e) = process.send(&payload).await {
+    // Send to process
+    if let Err(e) = state.sender.send(payload).await {
+        error!("Failed to send request to server process: {}", e);
+        if let Some(id) = &id_opt {
+            state.pending_requests.remove(id);
+        }
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({
                 "jsonrpc": "2.0",
                 "error": {
                     "code": -32603,
-                    "message": format!("Failed to send request: {}", e)
+                    "message": "Failed to send request to server process"
                 }
             })),
         )
             .into_response();
     }
 
-    // Receive the response from the MCP server
-    match process.receive().await {
-        Ok(response) => Json(response).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({
-                "jsonrpc": "2.0",
-                "error": {
-                    "code": -32603,
-                    "message": format!("Failed to receive response: {}", e)
+    // If we expect a response, wait for it
+    if let Some(rx) = response_rx {
+        match tokio::time::timeout(Duration::from_secs(60), rx).await {
+            Ok(Ok(response)) => Json(response).into_response(),
+            Ok(Err(_)) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "error": {
+                        "code": -32603,
+                        "message": "Channel closed before response received"
+                    }
+                })),
+            )
+                .into_response(),
+            Err(_) => {
+                if let Some(id) = &id_opt {
+                    state.pending_requests.remove(id);
                 }
-            })),
+                (
+                    StatusCode::GATEWAY_TIMEOUT,
+                    Json(serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "error": {
+                            "code": -32000,
+                            "message": "Request timed out"
+                        }
+                    })),
+                )
+                    .into_response()
+            }
+        }
+    } else {
+        // Notification, return success immediately
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({"jsonrpc": "2.0", "result": null})),
         )
-            .into_response(),
+            .into_response()
     }
 }
 
