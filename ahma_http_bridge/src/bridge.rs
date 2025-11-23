@@ -213,6 +213,12 @@ async fn handle_sse(State(state): State<Arc<BridgeState>>) -> impl IntoResponse 
         },
     );
 
+    let initial_event = axum::response::sse::Event::default()
+        .event("endpoint")
+        .data("/mcp");
+
+    let stream = tokio_stream::StreamExt::chain(tokio_stream::once(Ok(initial_event)), stream);
+
     Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::default())
 }
 

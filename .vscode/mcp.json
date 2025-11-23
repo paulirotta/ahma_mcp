@@ -11,7 +11,7 @@
 			]
 		},
 		"Ahma-localhost": {
-			"url": "http://localhost:3000",
+			"url": "http://localhost:3000/sse",
 			"type": "http"
 		}
 	},
