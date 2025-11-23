@@ -24,5 +24,5 @@ url = "2.5.7"
 webbrowser = "1.0.6"
 
 [dev-dependencies]
-clap = {version = "4.5.4", features = ["derive"]}
+clap = {version = "4.5.53", features = ["derive"]}
 tracing-subscriber = "0.3"
