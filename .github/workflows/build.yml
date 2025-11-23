@@ -265,14 +265,6 @@ jobs:
           restore-keys: |
             gradle-deeper-${{ runner.os }}-
 
-      - name: Cache Gradle Kotlin DSL
-        uses: actions/cache@v4
-        with:
-          path: ~/.gradle/caches/kotlin-dsl
-          key: kotlin-dsl-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
-          restore-keys: |
-            kotlin-dsl-${{ runner.os }}-
-
       - name: Preheat Gradle Daemon
         run: |
           ./gradlew tasks > /dev/null &
