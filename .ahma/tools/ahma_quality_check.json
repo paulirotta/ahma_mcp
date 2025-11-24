@@ -1,6 +1,6 @@
 {
     "name": "ahma_quality_check",
-    "description": "Comprehensive quality pipeline for the ahma_mcp project: generate schema, validate tools, format, lint with auto-fix, test, and build. This is project-specific and includes ahma_mcp schema generation and validation steps. For generic Rust projects, use rust_quality_check instead.",
+    "description": "Comprehensive quality pipeline for the ahma_mcp project: generate schema, validate tools, format, lint with auto-fix, test, and build. This is project-specific and includes ahma_mcp schema generation and validation steps. For generic Rust projects, use cargo qualitycheck instead.",
     "command": "sequence",
     "enabled": true,
     "timeout_seconds": 1800,

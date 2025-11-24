@@ -72,7 +72,7 @@ pub const STATUS_POLLING_HINT_TEMPLATE: &str = "**STATUS POLLING ANTI-PATTERN DE
 /// Standard delay between sequential tool invocations to avoid file lock contention.
 /// Particularly important for Cargo operations that may hold Cargo.lock.
 /// This delay is used:
-/// - Between steps in sequence tools (e.g., rust_quality_check)
+/// - Between steps in sequence tools (e.g., cargo qualitycheck subcommand)
 /// - When spawning related commands that may conflict on shared resources
 /// - In any scenario where temporal separation prevents race conditions
 pub const SEQUENCE_STEP_DELAY_MS: u64 = 100;

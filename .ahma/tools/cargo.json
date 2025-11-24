@@ -180,6 +180,61 @@
       "force_synchronous": true
     },
     {
+      "name": "qualitycheck",
+      "description": "Comprehensive Rust code quality pipeline: format, lint with auto-fix, test, and build. Runs each step sequentially with proper delays to avoid Cargo.lock contention. This tool runs SYNCHRONOUSLY and provides complete results in a single response, making it ideal for pre-commit validation and CI preparation.",
+      "enabled": true,
+      "force_synchronous": true,
+      "timeout_seconds": 1800,
+      "sequence": [
+        {
+          "tool": "cargo",
+          "subcommand": "fmt",
+          "description": "Format code using rustfmt.",
+          "args": {
+            "all": true
+          }
+        },
+        {
+          "tool": "cargo",
+          "subcommand": "clippy",
+          "description": "Lint code and automatically fix issues.",
+          "args": {
+            "fix": true,
+            "allow-dirty": true,
+            "workspace": true
+          }
+        },
+        {
+          "tool": "cargo",
+          "subcommand": "clippy",
+          "description": "Lint tests and automatically fix issues.",
+          "args": {
+            "fix": true,
+            "tests": true,
+            "allow-dirty": true,
+            "workspace": true
+          }
+        },
+        {
+          "tool": "cargo",
+          "subcommand": "nextest_run",
+          "description": "Run the test suite using nextest.",
+          "args": {
+            "workspace": true
+          }
+        },
+        {
+          "tool": "cargo",
+          "subcommand": "build",
+          "description": "Compile the entire workspace.",
+          "args": {
+            "workspace": true
+          }
+        }
+      ],
+      "step_delay_ms": 500
+    },
+    {
       "name": "audit",
       "description": "Audit dependencies for security vulnerabilities using cargo-audit.",
       "options": [
