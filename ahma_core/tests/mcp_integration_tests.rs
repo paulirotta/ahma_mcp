@@ -69,12 +69,12 @@ async fn test_async_notification_delivery() -> Result<()> {
     // Test that an async operation completes and we can check its status
     // This is a simpler but more reliable test of async notification delivery
 
-    // 1. Start a long-running async operation using shell_async with sleep
+    // 1. Start a long-running async operation using bash with sleep
     let async_tool_params = json!({
         "command": "sleep 1"
     });
     let call_params = CallToolRequestParam {
-        name: Cow::Borrowed("shell_async"),
+        name: Cow::Borrowed("bash"),
         arguments: async_tool_params.as_object().cloned(),
     };
 

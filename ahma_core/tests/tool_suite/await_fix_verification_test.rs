@@ -7,11 +7,11 @@ async fn setup_mcp_service_with_long_running_tool() -> Result<(TempDir, Client)>
     // Create a temporary directory for tool configs
     let temp_dir = tempfile::tempdir()?;
     let tools_dir = temp_dir.path();
-    let tool_config_path = tools_dir.join("shell_async.json");
+    let tool_config_path = tools_dir.join("bash.json");
 
     let tool_config_content = r#"
     {
-        "name": "shell_async",
+        "name": "bash",
         "description": "Execute shell commands asynchronously. Runs in background. Returns operation_id immediately. Results pushed via notification when complete. Continue with other tasks.",
         "command": "bash -c",
         "timeout_seconds": 30,

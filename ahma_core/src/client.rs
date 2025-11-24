@@ -70,7 +70,7 @@ impl Client {
         let service = self.get_service()?;
 
         let params = CallToolRequestParam {
-            name: Cow::Borrowed("shell_async"),
+            name: Cow::Borrowed("bash"),
             arguments: Some(
                 json!({
                     "subcommand": "default",

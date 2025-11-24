@@ -54,9 +54,7 @@ async fn test_async_notification_delivery() {
             if let Ok(notification) = serde_json::from_str::<Notification>(&msg) {
                 // params is now JsonObject (Map<String, Value>) not Option<JsonValue>
                 if let Some(content) = notification.params.get("content")
-                    && content
-                        .to_string()
-                        .contains("Operation shell_async finished")
+                    && content.to_string().contains("Operation bash finished")
                 {
                     let mut received_guard = notification_received_clone.lock().await;
                     *received_guard = true;
