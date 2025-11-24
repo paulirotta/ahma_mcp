@@ -1,4 +1,7 @@
-use crate::error::McpHttpError;
+use crate::{
+    error::{McpHttpError, Result},
+    sse::{SseEvent, SseEventParser, resolve_rpc_url},
+};
 use futures::StreamExt;
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, RedirectUrl,
@@ -10,47 +13,16 @@ use rmcp::{
     transport::Transport,
 };
 use serde::{Deserialize, Serialize};
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    env, fs,
+    io::{BufReader, BufWriter, Write},
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
+};
 use tokio::sync::{Mutex, mpsc};
-use tracing::{debug, error, info};
+use tracing::{error, info};
 use url::Url;
-
-type Result<T> = std::result::Result<T, McpHttpError>;
-
-const TOKEN_FILE: &str = "mcp_http_token.json";
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct StoredToken {
-    access_token: String,
-    refresh_token: Option<String>,
-    expires_in: Option<u64>,
-    scopes: Option<Vec<String>>,
-}
-
-fn get_token_path() -> Result<PathBuf> {
-    let mut path = std::env::temp_dir();
-    path.push(TOKEN_FILE);
-    Ok(path)
-}
-
-#[allow(dead_code)] // Will be used for token refresh
-fn save_token(token: &StoredToken) -> Result<()> {
-    let path = get_token_path()?;
-    let file = std::fs::File::create(path)?;
-    serde_json::to_writer(file, token)?;
-    Ok(())
-}
-
-fn load_token() -> Result<Option<StoredToken>> {
-    let path = get_token_path()?;
-    if path.exists() {
-        let file = std::fs::File::open(path)?;
-        let token = serde_json::from_reader(file)?;
-        Ok(Some(token))
-    } else {
-        Ok(None)
-    }
-}
 
 type ConfiguredOAuthClient = oauth2::Client<
     oauth2::StandardErrorResponse<oauth2::basic::BasicErrorResponseType>,
@@ -68,9 +40,13 @@ type ConfiguredOAuthClient = oauth2::Client<
     oauth2::EndpointSet,
 >;
 
+const RPC_ENDPOINT_WAIT_ATTEMPTS: usize = 300;
+const RPC_ENDPOINT_WAIT_DELAY_MS: u64 = 100;
+const TOKEN_FILE_NAME: &str = "mcp_http_token.json";
 pub struct HttpMcpTransport {
     client: reqwest::Client,
-    url: Url,
+    sse_url: Url,
+    rpc_endpoint: Arc<Mutex<Option<Url>>>,
     token: Arc<Mutex<Option<StoredToken>>>,
     #[allow(dead_code)] // Will be used for token refresh
     oauth_client: Option<ConfiguredOAuthClient>,
@@ -106,7 +82,8 @@ impl HttpMcpTransport {
 
         let transport = Self {
             client: reqwest::Client::new(),
-            url,
+            sse_url: url,
+            rpc_endpoint: Arc::new(Mutex::new(None)),
             token: Arc::new(Mutex::new(load_token()?)),
             oauth_client,
             receiver: Arc::new(Mutex::new(receiver)),
@@ -121,9 +98,11 @@ impl HttpMcpTransport {
 
     /// Start a background task to listen for SSE messages from the server
     fn start_sse_listener(&self) {
-        let url = self.url.clone();
+        let sse_url = self.sse_url.clone();
         let token_arc = self.token.clone();
+        let rpc_endpoint = self.rpc_endpoint.clone();
         let tx = self.sender.clone();
+        let http_client = self.client.clone();
 
         tokio::spawn(async move {
             loop {
@@ -135,8 +114,8 @@ impl HttpMcpTransport {
                     }
                 };
 
-                let response = match reqwest::Client::new()
-                    .get(url.clone())
+                let response = match http_client
+                    .get(sse_url.clone())
                     .bearer_auth(&access_token)
                     .send()
                     .await
@@ -156,32 +135,30 @@ impl HttpMcpTransport {
 
                 use futures::TryStreamExt;
                 let mut stream = response.bytes_stream().map_err(std::io::Error::other);
+                let mut parser = SseEventParser::new();
+                let mut buffer: Vec<u8> = Vec::new();
 
                 while let Some(item) = stream.next().await {
                     match item {
                         Ok(chunk) => {
-                            for line in chunk.split(|&b| b == b'\n') {
-                                let line_str = String::from_utf8_lossy(line);
-                                if let Some(stripped) = line_str.strip_prefix("data: ") {
-                                    let data = stripped.trim();
-                                    if !data.is_empty() {
-                                        match serde_json::from_str::<RxJsonRpcMessage<RoleClient>>(
-                                            data,
-                                        ) {
-                                            Ok(msg) => {
-                                                if let Err(e) = tx.send(msg).await {
-                                                    error!(
-                                                        "Failed to send message to channel: {}",
-                                                        e
-                                                    );
-                                                }
-                                            }
-                                            Err(e) => {
-                                                error!("Failed to deserialize message: {}", e);
-                                                debug!("Invalid data: {}", data);
-                                            }
-                                        }
-                                    }
+                            buffer.extend_from_slice(&chunk);
+
+                            while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
+                                let mut line_bytes: Vec<u8> = buffer.drain(..=pos).collect();
+                                if matches!(line_bytes.last(), Some(b'\n')) {
+                                    line_bytes.pop();
+                                }
+                                if matches!(line_bytes.last(), Some(b'\r')) {
+                                    line_bytes.pop();
+                                }
+
+                                let line_str = String::from_utf8_lossy(&line_bytes).to_string();
+                                if let Some(event) = parser.feed_line(&line_str)
+                                    && let Err(err) =
+                                        Self::process_sse_event(&sse_url, event, &rpc_endpoint, &tx)
+                                            .await
+                                {
+                                    error!("Failed to process SSE event: {}", err);
                                 }
                             }
                         }
@@ -191,8 +168,62 @@ impl HttpMcpTransport {
                         }
                     }
                 }
+
+                if !buffer.is_empty() {
+                    let line_str = String::from_utf8_lossy(&buffer).to_string();
+                    if let Some(event) = parser.feed_line(&line_str)
+                        && let Err(err) =
+                            Self::process_sse_event(&sse_url, event, &rpc_endpoint, &tx).await
+                    {
+                        error!("Failed to process SSE event: {}", err);
+                    }
+                }
             }
         });
+    }
+
+    async fn process_sse_event(
+        base_url: &Url,
+        event: SseEvent,
+        rpc_endpoint: &Arc<Mutex<Option<Url>>>,
+        tx: &mpsc::Sender<RxJsonRpcMessage<RoleClient>>,
+    ) -> Result<()> {
+        if event.event_type.as_deref() == Some("endpoint") {
+            let resolved = resolve_rpc_url(base_url, event.data.trim())?;
+            let mut endpoint_lock = rpc_endpoint.lock().await;
+            let update_needed = endpoint_lock
+                .as_ref()
+                .map(|current| current != &resolved)
+                .unwrap_or(true);
+
+            if update_needed {
+                info!("RPC endpoint set to {}", resolved);
+                *endpoint_lock = Some(resolved);
+            }
+            return Ok(());
+        }
+
+        if event.data.trim().is_empty() {
+            return Ok(());
+        }
+
+        let message: RxJsonRpcMessage<RoleClient> = serde_json::from_str(&event.data)?;
+        tx.send(message)
+            .await
+            .map_err(|e| McpHttpError::Custom(format!("Failed to deliver SSE message: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn wait_for_rpc_endpoint(rpc_endpoint: Arc<Mutex<Option<Url>>>) -> Result<Url> {
+        for _ in 0..RPC_ENDPOINT_WAIT_ATTEMPTS {
+            if let Some(url) = rpc_endpoint.lock().await.clone() {
+                return Ok(url);
+            }
+            tokio::time::sleep(Duration::from_millis(RPC_ENDPOINT_WAIT_DELAY_MS)).await;
+        }
+
+        Err(McpHttpError::MissingRpcEndpoint)
     }
 
     #[allow(dead_code)] // Will be used when HTTP client is integrated
@@ -337,10 +368,12 @@ impl Transport<RoleClient> for HttpMcpTransport {
     ) -> impl std::future::Future<Output = std::result::Result<(), Self::Error>> + Send + 'static
     {
         let client = self.client.clone();
-        let url = self.url.clone();
         let token = self.token.clone();
+        let rpc_endpoint = self.rpc_endpoint.clone();
 
         async move {
+            let rpc_url = Self::wait_for_rpc_endpoint(rpc_endpoint).await?;
+
             // Ensure authenticated
             let token_lock = token.lock().await;
             let access_token = token_lock
@@ -350,7 +383,7 @@ impl Transport<RoleClient> for HttpMcpTransport {
             drop(token_lock);
 
             let res = client
-                .post(url)
+                .post(rpc_url)
                 .bearer_auth(access_token)
                 .json(&item)
                 .send()
@@ -376,4 +409,41 @@ impl Transport<RoleClient> for HttpMcpTransport {
     async fn close(&mut self) -> std::result::Result<(), Self::Error> {
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct StoredToken {
+    access_token: String,
+    refresh_token: Option<String>,
+    expires_in: Option<u64>,
+    scopes: Option<Vec<String>>,
+}
+
+fn load_token() -> Result<Option<StoredToken>> {
+    let path = token_file_path()?;
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let file = fs::File::open(path)?;
+    let reader = BufReader::new(file);
+    let token = serde_json::from_reader(reader)?;
+    Ok(Some(token))
+}
+
+fn save_token(token: &StoredToken) -> Result<()> {
+    let path = token_file_path()?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let file = fs::File::create(path)?;
+    let mut writer = BufWriter::new(file);
+    serde_json::to_writer_pretty(&mut writer, token)?;
+    writer.flush()?;
+    Ok(())
+}
+
+fn token_file_path() -> Result<PathBuf> {
+    Ok(env::temp_dir().join(TOKEN_FILE_NAME))
 }

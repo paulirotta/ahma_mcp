@@ -206,9 +206,10 @@ impl OperationMonitor {
 
                 let timeout = op.timeout_duration.unwrap_or(self.config.default_timeout);
                 if let Ok(elapsed) = now.duration_since(op.start_time)
-                    && elapsed > timeout {
-                        timed_out_ops.push((op.id.clone(), elapsed, timeout));
-                    }
+                    && elapsed > timeout
+                {
+                    timed_out_ops.push((op.id.clone(), elapsed, timeout));
+                }
             }
         }
 
@@ -225,32 +226,33 @@ impl OperationMonitor {
     async fn timeout_operation(&self, operation_id: &str, reason: String) {
         let mut ops = self.operations.write().await;
         if let Some(op) = ops.get_mut(operation_id)
-            && !op.state.is_terminal() {
-                tracing::warn!("Timing out operation: {} - {}", operation_id, reason);
+            && !op.state.is_terminal()
+        {
+            tracing::warn!("Timing out operation: {} - {}", operation_id, reason);
 
-                op.state = OperationStatus::TimedOut;
-                op.end_time = Some(SystemTime::now());
-                op.cancellation_token.cancel();
+            op.state = OperationStatus::TimedOut;
+            op.end_time = Some(SystemTime::now());
+            op.cancellation_token.cancel();
 
-                op.result = Some(serde_json::json!({
-                    "timed_out": true,
-                    "reason": reason
-                }));
+            op.result = Some(serde_json::json!({
+                "timed_out": true,
+                "reason": reason
+            }));
 
-                // Notify waiters
-                op.completion_notifier.notify_waiters();
+            // Notify waiters
+            op.completion_notifier.notify_waiters();
 
-                // Move to history
-                let timed_out_op = op.clone();
-                drop(ops); // Release lock
+            // Move to history
+            let timed_out_op = op.clone();
+            drop(ops); // Release lock
 
-                let mut history = self.completion_history.write().await;
-                history.insert(operation_id.to_string(), timed_out_op);
+            let mut history = self.completion_history.write().await;
+            history.insert(operation_id.to_string(), timed_out_op);
 
-                // Remove from active
-                let mut ops = self.operations.write().await;
-                ops.remove(operation_id);
-            }
+            // Remove from active
+            let mut ops = self.operations.write().await;
+            ops.remove(operation_id);
+        }
     }
 
     /// Returns all currently active (non-terminal) operations.
