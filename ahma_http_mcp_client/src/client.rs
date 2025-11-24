@@ -79,23 +79,28 @@ pub struct HttpMcpTransport {
 }
 
 impl HttpMcpTransport {
-    pub fn new(url: Url, client_id: Option<String>, client_secret: Option<String>) -> Result<Self> {
-        let oauth_client =
-            if let (Some(client_id), Some(client_secret)) = (client_id, client_secret) {
-                let mut client = BasicClient::new(ClientId::new(client_id))
-                    .set_client_secret(ClientSecret::new(client_secret))
-                    .set_auth_uri(AuthUrl::new(
-                        "https://auth.atlassian.com/authorize".to_string(),
-                    )?)
-                    .set_token_uri(TokenUrl::new(
-                        "https://auth.atlassian.com/oauth/token".to_string(),
-                    )?);
-                client =
-                    client.set_redirect_uri(RedirectUrl::new("http://localhost:8080".to_string())?);
-                Some(client)
-            } else {
-                None
-            };
+    pub fn new(
+        url: Url,
+        atlassian_client_id: Option<String>,
+        atlassian_client_secret: Option<String>,
+    ) -> Result<Self> {
+        let oauth_client = if let (Some(atlassian_client_id), Some(atlassian_client_secret)) =
+            (atlassian_client_id, atlassian_client_secret)
+        {
+            let mut client = BasicClient::new(ClientId::new(atlassian_client_id))
+                .set_client_secret(ClientSecret::new(atlassian_client_secret))
+                .set_auth_uri(AuthUrl::new(
+                    "https://auth.atlassian.com/authorize".to_string(),
+                )?)
+                .set_token_uri(TokenUrl::new(
+                    "https://auth.atlassian.com/oauth/token".to_string(),
+                )?);
+            client =
+                client.set_redirect_uri(RedirectUrl::new("http://localhost:8080".to_string())?);
+            Some(client)
+        } else {
+            None
+        };
 
         let (sender, receiver) = mpsc::channel(100);
 

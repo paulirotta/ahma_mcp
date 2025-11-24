@@ -241,8 +241,8 @@ pub struct ChildProcessConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpServerConfig {
     pub url: String,
-    pub client_id: Option<String>,
-    pub client_secret: Option<String>,
+    pub atlassian_client_id: Option<String>,
+    pub atlassian_client_secret: Option<String>,
 }
 
 // Helper functions for serde defaults

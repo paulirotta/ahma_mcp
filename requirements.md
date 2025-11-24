@@ -376,8 +376,8 @@ This section documents critical implementation details discovered through analys
       "server_name": {
         "type": "http",
         "url": "https://api.example.com/mcp",
-        "client_id": "your_client_id",
-        "client_secret": "your_client_secret"
+        "atlassian_client_id": "your_client_id",
+        "atlassian_client_secret": "your_client_secret"
       }
     }
   }

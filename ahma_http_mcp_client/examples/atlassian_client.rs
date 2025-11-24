@@ -9,11 +9,11 @@ use url::Url;
 struct Args {
     /// Atlassian Client ID
     #[arg(long)]
-    client_id: String,
+    atlassian_client_id: String,
 
     /// Atlassian Client Secret
     #[arg(long)]
-    client_secret: String,
+    atlassian_client_secret: String,
 }
 
 #[tokio::main]
@@ -26,7 +26,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Connecting to Atlassian MCP server at {}", url);
 
-    let transport = HttpMcpTransport::new(url, Some(args.client_id), Some(args.client_secret))?;
+    let transport = HttpMcpTransport::new(
+        url,
+        Some(args.atlassian_client_id),
+        Some(args.atlassian_client_secret),
+    )?;
 
     println!("Authenticating...");
     transport.ensure_authenticated().await?;
