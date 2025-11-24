@@ -240,6 +240,8 @@ When a new task is assigned:
 
 **R8.9**: For AI sessions outside of Cursor (e.g., in other contexts), use the command-line interface: `ahma_mcp --tool_name <tool> --tool_args <args>` to invoke tools directly.
 
+**R8.10**: Launching the binary without an explicit `--mode` or `--tool_name` is intentionally rejected, and **interactive terminals are blocked even when `--mode stdio` is provided**. The stdio server only runs when stdin is **not** a TTY (i.e., when a real MCP client spawns the process and attaches pipes). Local testing should therefore happen through an MCP client (`mcp.json`, LM Studio, etc.) or through `--mode http`. To execute a single tool outside the client, run `ahma_mcp --tool_name <tool> ...`. Update `mcp.json` entries to pass the desired mode explicitly.
+
 ### 4.3. Copilot CLI Verification
 
 - **R9.1**: Copilot LLMs **should** validate code and tool changes by invoking `ahma_mcp` directly from the command line using the `--tool_name` and `--tool_args` parameters. This keeps validation steps reproducible and scriptable during autonomous runs.

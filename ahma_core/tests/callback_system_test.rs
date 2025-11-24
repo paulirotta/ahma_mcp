@@ -126,7 +126,7 @@ async fn test_progress_update_terminal_state() {
         command: "cargo build".to_string(),
         description: "Building".to_string(),
     };
-    assert!(!started.is_terminal());
+    assert!(!started.is_terminal_state());
 
     let progress = ProgressUpdate::Progress {
         operation_id: "op_123".to_string(),
@@ -134,35 +134,35 @@ async fn test_progress_update_terminal_state() {
         percentage: Some(50.0),
         current_step: None,
     };
-    assert!(!progress.is_terminal());
+    assert!(!progress.is_terminal_state());
 
     let output = ProgressUpdate::Output {
         operation_id: "op_123".to_string(),
         line: "Building crate".to_string(),
         is_stderr: false,
     };
-    assert!(!output.is_terminal());
+    assert!(!output.is_terminal_state());
 
     let completed = ProgressUpdate::Completed {
         operation_id: "op_123".to_string(),
         message: "Done".to_string(),
         duration_ms: 1000,
     };
-    assert!(completed.is_terminal());
+    assert!(completed.is_terminal_state());
 
     let failed = ProgressUpdate::Failed {
         operation_id: "op_123".to_string(),
         error: "Error".to_string(),
         duration_ms: 1000,
     };
-    assert!(failed.is_terminal());
+    assert!(failed.is_terminal_state());
 
     let cancelled = ProgressUpdate::Cancelled {
         operation_id: "op_123".to_string(),
         message: "Cancelled".to_string(),
         duration_ms: 1000,
     };
-    assert!(cancelled.is_terminal());
+    assert!(cancelled.is_terminal_state());
 
     let final_result = ProgressUpdate::FinalResult {
         operation_id: "op_123".to_string(),
@@ -173,7 +173,7 @@ async fn test_progress_update_terminal_state() {
         duration_ms: 1000,
         full_output: "Success".to_string(),
     };
-    assert!(final_result.is_terminal());
+    assert!(final_result.is_terminal_state());
 }
 
 #[tokio::test]
