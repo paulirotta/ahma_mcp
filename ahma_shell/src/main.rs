@@ -263,7 +263,7 @@ fn resolve_cli_subcommand<'a>(
         {
             if sub.name == "default" && is_default_call {
                 // Logic to derive subcommand from tool name (e.g. cargo_build -> cargo build)
-                // is removed because it causes issues for tools like shell_async (bash -c async).
+                // is removed because it causes issues for tools like bash (bash -c async).
                 // If a tool needs a subcommand, it should be explicit in the config or the command.
             } else if sub.name != "default" {
                 command_parts.push(sub.name.clone());
