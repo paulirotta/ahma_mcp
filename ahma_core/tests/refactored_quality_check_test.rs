@@ -5,8 +5,8 @@ use std::process::Command;
 
 #[test]
 fn test_run_new_quality_check_sequence() {
-    // This test runs the new quality check sequence which should
-    // include schema generation and validation.
+    // This test runs the ahma_quality_check sequence which includes
+    // schema generation and validation specific to the ahma_mcp project.
     let output = Command::new("cargo")
         .current_dir(get_workspace_dir())
         .env(
@@ -20,7 +20,7 @@ fn test_run_new_quality_check_sequence() {
             "--bin",
             "ahma_mcp",
             "--",
-            "rust_quality_check",
+            "ahma_quality_check",
         ])
         .output()
         .expect("Failed to execute quality check");

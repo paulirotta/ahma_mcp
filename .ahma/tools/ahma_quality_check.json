@@ -1,11 +1,29 @@
 {
-    "name": "rust_quality_check",
-    "description": "Comprehensive Rust code quality pipeline: format, lint with auto-fix, test, and build. Runs each step sequentially with proper delays to avoid Cargo.lock contention. CRITICAL: Always use this tool instead of VS Code tasks for quality checks. This tool runs SYNCHRONOUSLY and provides complete results, unlike tasks which run asynchronously and may not show failures. Use this for pre-commit validation, CI preparation, or whenever you need to verify code quality.",
+    "name": "ahma_quality_check",
+    "description": "Comprehensive quality pipeline for the ahma_mcp project: generate schema, validate tools, format, lint with auto-fix, test, and build. This is project-specific and includes ahma_mcp schema generation and validation steps. For generic Rust projects, use rust_quality_check instead.",
     "command": "sequence",
     "enabled": true,
     "timeout_seconds": 1800,
     "force_synchronous": true,
     "sequence": [
+        {
+            "tool": "cargo",
+            "subcommand": "run",
+            "description": "Generate the MTDF schema to ensure it's up-to-date.",
+            "args": {
+                "bin": "generate_tool_schema",
+                "package": "generate_tool_schema"
+            }
+        },
+        {
+            "tool": "cargo",
+            "subcommand": "run",
+            "description": "Validate all tool configurations against the latest schema.",
+            "args": {
+                "bin": "ahma_validate",
+                "package": "ahma_validate"
+            }
+        },
         {
             "tool": "cargo",
             "subcommand": "fmt",

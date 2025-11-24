@@ -55,9 +55,10 @@ These are the non-negotiable principles of the project.
 - **R6.3**: The main MCP server logic **must** live in the `ahma_shell` binary crate, which depends on `ahma_core`.
 - **R6.4**: Tool configuration validation logic **must** be implemented in the `ahma_validate` binary crate. This provides a fast, focused way to check tool definitions for correctness without starting the full server.
 - **R6.5**: The MTDF JSON Schema generation logic **must** be implemented in the `generate_tool_schema` binary crate.
-- **R6.6**: The core library **must** expose a clean public API that allows other crates (like future `ahma_web` or `ahma_okta` components) to leverage the tool execution engine without tight coupling.
-- **R6.7**: This separation ensures that adding new interfaces (web, authentication) or changing the CLI does not require modifications to core business logic.
-- **R6.8**: The root `Cargo.toml` **must** define `default-members = ["ahma_shell"]` so that `cargo run` executes the main MCP server binary by default.
+- **R6.6**: Project-specific quality assurance tools (e.g., `ahma_quality_check`) **may** include schema generation and validation steps as part of their workflow, while generic tools (e.g., `rust_quality_check`) **must** remain reusable across projects.
+- **R6.7**: The core library **must** expose a clean public API that allows other crates (like future `ahma_web` or `ahma_okta` components) to leverage the tool execution engine without tight coupling.
+- **R6.8**: This separation ensures that adding new interfaces (web, authentication) or changing the CLI does not require modifications to core business logic.
+- **R6.9**: The root `Cargo.toml` **must** define `default-members = ["ahma_shell"]` so that `cargo run` executes the main MCP server binary by default.
 
 ### R7: Security First (Added 2025-01-27)
 
@@ -136,7 +137,9 @@ Before committing any changes, developers **must** run the comprehensive quality
 
 The Ahama MCP server (defined in your IDE's `mcp.json`) is already running and provides access to all cargo tools. Talk to the server to see what tools are available, then use these MCP tools directly. For example, use the `bash` tool to run any command in a shell with sandboxing tests to make sure it is within the current working directory of the project.
 
-Use the `rust_quality_check` tool to ensure code quality.
+**For the ahma_mcp project:** Use the `ahma_quality_check` tool, which includes schema generation and tool validation specific to this project.
+
+**For generic Rust projects:** Use the `rust_quality_check` tool, which provides standard Rust quality checks (format, lint, test, build) without project-specific steps.
 
 Only if all these steps pass should the code be considered ready for commit. This process prevents regressions and ensures that the project remains in a consistently healthy state.
 
@@ -168,8 +171,8 @@ See .ahma/tools/rust_quality_check.json
 3. Test the modified tool immediately through the MCP interface
 4. If a tool does not work correctly, fix it immediately and restart
 5. Verify the fix works before proceeding
-4. If a tool does not work correctly, fix it immediately and restart
-5. Verify the fix works before proceeding
+6. If a tool does not work correctly, fix it immediately and restart
+7. Verify the fix works before proceeding
 
 **R8.4**: Follow strict TDD principles:
 
@@ -270,17 +273,18 @@ This section documents critical implementation details discovered through analys
 
 #### Top-Level Sequences (Cross-Tool Orchestration)
 
-- **R10.4.1**: Tools that orchestrate multiple different tools (e.g., `rust_quality_check` calling `cargo`, `ahma_validate`, etc.) **must** define their sequence at the top level of the tool configuration.
+- **R10.4.1**: Tools that orchestrate multiple different tools (e.g., `rust_quality_check` calling `cargo fmt`, `cargo clippy`, etc.) **must** define their sequence at the top level of the tool configuration.
 - **R10.4.2**: Structure: `{"command": "sequence", "sequence": [{...}], "step_delay_ms": 500}`
 - **R10.4.3**: Each sequence step specifies `tool` and `subcommand` to invoke.
 - **R10.4.4**: Handled by `handle_sequence_tool()` in `mcp_service.rs`.
+- **R10.4.5**: Sequence tools **must** be generic and reusable across projects. Project-specific validation or generation steps belong in build scripts, not in generic quality check tools.
 
 #### Subcommand Sequences (Intra-Tool Workflows)
 
-- **R10.4.5**: Subcommands that need to execute multiple steps within the same tool context **may** define a sequence at the subcommand level.
-- **R10.4.6**: Structure: `{"subcommand": [{"name": "x", "sequence": [{...}]}]}`
-- **R10.4.7**: Used for complex workflows within a single tool.
-- **R10.4.8**: Handled by `handle_subcommand_sequence()` in `mcp_service.rs`.
+- **R10.4.6**: Subcommands that need to execute multiple steps within the same tool context **may** define a sequence at the subcommand level.
+- **R10.4.7**: Structure: `{"subcommand": [{"name": "x", "sequence": [{...}]}]}`
+- **R10.4.8**: Used for complex workflows within a single tool.
+- **R10.4.9**: Handled by `handle_subcommand_sequence()` in `mcp_service.rs`.
 
 **R10.5**: The choice between top-level and subcommand-level sequences is architectural, not configuration preference. Cross-tool orchestration requires top-level sequences.
 
