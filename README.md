@@ -6,7 +6,7 @@ _Create agents from your command line tools with one JSON file, then watch them 
 | --- | ---: |
 | [![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![Rust](https://img.shields.io/badge/Rust-1.90%2B-B7410E.svg)](https://www.rust-lang.org/) | ![Ahma MCP Logo](./assets/ahma.png) |
 
-`ahma_mcp` is a toolbox for safely wrapping command line tools for AI use. This is done by creating (use AI) a ´.ahma/tools/somenewtool.json´. 
+`ahma_mcp` is a toolbox for safely wrapping command line tools for AI use. This is done by creating (use AI) a ´.ahma/tools/somenewtool.json´.
 
 "Ahma" is Finnish for wolverine. An ahama is fast and fearless, able to eat just about anything. Use the existing tools or add a PR for new ones you crate.
 
@@ -19,7 +19,7 @@ We adapt concepts from [Requirements Engineering](https://en.wikipedia.org/wiki/
 - **Sandboxed Execution**: Strict path validation prevents accessing files outside the workspace.
 - **Synchronous By Default with Async Support**: Synchronous operations use less context so prefer them for short operations. Command line `--async` allows the LLM continue work and receive the results when ready. Supports for multiple concurrent long-running operations (builds, tests).
 - **Easy Tool Definition**: Add any command-line tool to your AI's arsenal by creating a single JSON file. No recompilation needed.
-- **Sequence Tools**: Chain multiple commands into a single, powerful workflow (e.g., `rust_quality_check` runs format → lint → test → build).
+- **Sequence Tools**: Chain multiple commands into a single, powerful workflow (e.g., `cargo_qualitycheck` runs format → lint → test → build).
 
 ## Security Sandbox
 
