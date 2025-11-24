@@ -1,5 +1,5 @@
 {
-    "name": "shell_async",
+    "name": "bash",
     "description": "Execute a shell command asynchronously",
     "command": "bash -c",
     "timeout_seconds": 30,

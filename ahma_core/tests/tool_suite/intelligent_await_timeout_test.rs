@@ -157,7 +157,7 @@ async fn test_intelligent_timeout_with_long_operations() -> Result<()> {
 
     // Start operation with long timeout
     let long_op_param = CallToolRequestParam {
-        name: "shell_async".into(),
+        name: "bash".into(),
         arguments: Some({
             let mut args = serde_json::Map::new();
             args.insert("command".to_string(), json!("sleep 600")); // 10 minutes
