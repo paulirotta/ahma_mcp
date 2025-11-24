@@ -7,25 +7,25 @@ pub async fn setup_mcp_service_with_client() -> Result<(TempDir, Client)> {
     // Create a temporary directory for tool configs
     let temp_dir = tempfile::tempdir()?;
     let tools_dir = temp_dir.path();
-    let tool_config_path = tools_dir.join("long_running_async.json");
+    let tool_config_path = tools_dir.join("shell_async.json");
 
     let tool_config_content = r#"
     {
-        "name": "long_running_async",
-        "description": "A long running async command",
-        "command": "sleep",
+        "name": "shell_async",
+        "description": "Execute shell commands asynchronously",
+        "command": "bash -c",
         "timeout_seconds": 30,
-        "synchronous": false,
+        "force_synchronous": false,
         "enabled": true,
         "subcommand": [
             {
                 "name": "default",
-                "description": "sleeps for a given duration",
+                "description": "Execute a shell command asynchronously",
                 "positional_args": [
                     {
-                        "name": "duration",
-                        "option_type": "string",
-                        "description": "duration to sleep",
+                        "name": "command",
+                        "type": "string",
+                        "description": "shell command to execute",
                         "required": true
                     }
                 ]

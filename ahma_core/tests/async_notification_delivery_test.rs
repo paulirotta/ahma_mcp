@@ -56,7 +56,7 @@ async fn test_async_notification_delivery() {
                 if let Some(content) = notification.params.get("content")
                     && content
                         .to_string()
-                        .contains("Operation long_running_async finished")
+                        .contains("Operation shell_async finished")
                 {
                     let mut received_guard = notification_received_clone.lock().await;
                     *received_guard = true;
