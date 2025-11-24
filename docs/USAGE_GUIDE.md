@@ -329,11 +329,11 @@ Sequence tools provide a simplified interface for multi-step workflows. Instead 
 
 ### Rust Quality Check
 
-The `rust_quality_check` sequence tool executes a comprehensive code quality pipeline:
+The `cargo_qualitycheck` subcommand executes a comprehensive code quality pipeline:
 
 ```bash
 # Single command for complete quality check
-rust_quality_check
+cargo_qualitycheck
 
 # Executes in sequence:
 # 1. cargo fmt        - Format code
@@ -363,7 +363,7 @@ rust_quality_check
 vim src/main.rs
 
 # Run comprehensive quality check
-rust_quality_check --working_directory .
+cargo_qualitycheck --working_directory .
 
 # Review aggregated output from all steps
 # If any step fails, see exactly which step and why
@@ -378,10 +378,10 @@ git commit -m "feature: implement new functionality"
 
 ```bash
 # Check different project
-rust_quality_check --working_directory /path/to/project
+cargo_qualitycheck --working_directory /path/to/project
 
 # Check current directory (default)
-rust_quality_check
+cargo_qualitycheck
 ```
 
 **Understanding Sequence Tool Behavior:**

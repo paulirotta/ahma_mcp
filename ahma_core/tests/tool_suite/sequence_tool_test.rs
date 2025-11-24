@@ -133,42 +133,52 @@ async fn test_simple_sequence_execution() -> Result<()> {
 }
 
 #[tokio::test]
-async fn test_rust_quality_check_structure() -> Result<()> {
+async fn test_cargo_qualitycheck_structure() -> Result<()> {
     init_test_logging();
 
-    // Test that the rust_quality_check.json file contains the dedicated sequence
-    let config_path = get_workspace_path(".ahma/tools/rust_quality_check.json");
-    assert!(config_path.exists(), "rust_quality_check.json should exist");
+    // Test that the cargo.json file contains the qualitycheck subcommand sequence
+    let config_path = get_workspace_path(".ahma/tools/cargo.json");
+    assert!(config_path.exists(), "cargo.json should exist");
 
     let config_content = std::fs::read_to_string(config_path)?;
     let config: serde_json::Value = serde_json::from_str(&config_content)?;
 
-    // Verify structure
+    // Verify top-level structure
     assert_eq!(
         config["name"].as_str(),
-        Some("rust_quality_check"),
-        "Tool name should be rust_quality_check"
+        Some("cargo"),
+        "Tool name should be cargo"
     );
     assert_eq!(
         config["command"].as_str(),
-        Some("sequence"),
-        "rust_quality_check should be a sequence tool"
+        Some("cargo"),
+        "cargo should use cargo command"
     );
 
-    // Sequence tools have top-level sequence, not subcommand-level
+    // Find the qualitycheck subcommand
+    let subcommands = config["subcommand"]
+        .as_array()
+        .expect("cargo should have subcommands array");
+
+    let qualitycheck = subcommands
+        .iter()
+        .find(|s| s["name"].as_str() == Some("qualitycheck"))
+        .expect("cargo should have qualitycheck subcommand");
+
+    // Subcommand sequences are at the subcommand level, not top-level
     assert!(
-        config["sequence"].is_array(),
-        "Should have top-level sequence array for cross-tool orchestration"
+        qualitycheck["sequence"].is_array(),
+        "Should have subcommand-level sequence array within qualitycheck"
     );
 
-    let sequence = config["sequence"].as_array().unwrap();
+    let sequence = qualitycheck["sequence"].as_array().unwrap();
     assert_eq!(
         sequence.len(),
         5,
-        "Generic rust_quality_check should have 5 steps: fmt, clippy, clippy tests, nextest, build (no schema generation or validation)"
+        "Generic qualitycheck should have 5 steps: fmt, clippy, clippy tests, nextest, build (no schema generation or validation)"
     );
 
-    // Verify each step - note: indices shifted down by 2 since we removed schema gen and validation
+    // Verify each step
     assert_eq!(sequence[0]["tool"].as_str(), Some("cargo"));
     assert_eq!(sequence[0]["subcommand"].as_str(), Some("fmt"));
     assert_eq!(sequence[0]["args"]["all"].as_bool(), Some(true));
@@ -196,7 +206,7 @@ async fn test_rust_quality_check_structure() -> Result<()> {
 
     // Verify delay
     assert_eq!(
-        config["step_delay_ms"].as_u64(),
+        qualitycheck["step_delay_ms"].as_u64(),
         Some(500),
         "Step delay should be 500ms"
     );

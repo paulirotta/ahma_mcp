@@ -560,8 +560,8 @@ fn test_sequence_tool_config() {
     args.insert("workspace".to_string(), json!(true));
 
     let config = ToolConfig {
-        name: "rust_quality_check".to_string(),
-        description: "Comprehensive Rust quality check".to_string(),
+        name: "example_sequence".to_string(),
+        description: "Example sequence tool for testing".to_string(),
         command: "sequence".to_string(),
         subcommand: None,
         input_schema: None,
@@ -589,7 +589,7 @@ fn test_sequence_tool_config() {
         install_instructions: None,
     };
 
-    assert_eq!(config.name, "rust_quality_check");
+    assert_eq!(config.name, "example_sequence");
     assert_eq!(config.command, "sequence");
     assert!(config.sequence.is_some());
     assert_eq!(config.sequence.as_ref().unwrap().len(), 2);

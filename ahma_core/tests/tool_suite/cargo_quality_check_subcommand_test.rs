@@ -1,63 +1,74 @@
-/// TDD tests for the dedicated rust_quality_check sequence tool.
-use ahma_core::config::ToolConfig;
+/// TDD tests for the cargo qualitycheck subcommand sequence.
+use ahma_core::config::{SubcommandConfig, ToolConfig};
 use serde_json::Value;
 use std::path::PathBuf;
 
-fn load_rust_quality_check_config() -> ToolConfig {
+fn load_cargo_config() -> ToolConfig {
     let config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("Failed to get workspace root")
-        .join(".ahma/tools/rust_quality_check.json");
+        .join(".ahma/tools/cargo.json");
 
-    let json_content =
-        std::fs::read_to_string(&config_path).expect("Failed to read rust_quality_check.json");
+    let json_content = std::fs::read_to_string(&config_path).expect("Failed to read cargo.json");
 
-    serde_json::from_str(&json_content).expect("Failed to parse rust_quality_check.json")
+    serde_json::from_str(&json_content).expect("Failed to parse cargo.json")
+}
+
+fn find_qualitycheck_subcommand(config: &ToolConfig) -> &SubcommandConfig {
+    config
+        .subcommand
+        .as_ref()
+        .expect("cargo.json should have subcommands")
+        .iter()
+        .find(|s| s.name == "qualitycheck")
+        .expect("cargo.json should have qualitycheck subcommand")
 }
 
 #[test]
-fn test_rust_quality_check_tool_structure() {
-    let config = load_rust_quality_check_config();
+fn test_cargo_qualitycheck_subcommand_structure() {
+    let config = load_cargo_config();
+    let qualitycheck = find_qualitycheck_subcommand(&config);
 
     assert_eq!(
-        config.command, "sequence",
-        "Tool should be a sequence executor"
+        qualitycheck.name, "qualitycheck",
+        "Subcommand should be named qualitycheck (no underscore)"
     );
 
-    // Sequence tools use top-level sequence, not subcommand-level
+    // Subcommand sequences are defined at the subcommand level
     assert!(
-        config.sequence.is_some(),
-        "rust_quality_check must define a top-level sequence"
+        qualitycheck.sequence.is_some(),
+        "qualitycheck must define a subcommand-level sequence"
     );
 
     assert_eq!(
-        config.force_synchronous,
+        qualitycheck.force_synchronous,
         Some(true),
-        "Sequence should run synchronously (asynchronous: false)"
+        "Sequence should run synchronously"
     );
 
     assert_eq!(
-        config.step_delay_ms,
+        qualitycheck.step_delay_ms,
         Some(500),
         "Sequence should enforce a delay between steps"
     );
 }
 
 #[test]
-fn test_rust_quality_check_sequence_steps() {
-    let config = load_rust_quality_check_config();
+fn test_cargo_qualitycheck_sequence_steps() {
+    let config = load_cargo_config();
+    let qualitycheck = find_qualitycheck_subcommand(&config);
 
-    let sequence = config
+    let sequence = qualitycheck
         .sequence
         .as_ref()
-        .expect("rust_quality_check must contain a top-level sequence");
+        .expect("qualitycheck must contain a subcommand-level sequence");
 
-    // rust_quality_check is now generic and should have exactly 5 steps:
+    // qualitycheck is generic and should have exactly 5 steps:
     // fmt, clippy (code), clippy (tests), nextest_run, build
     assert_eq!(
         sequence.len(),
         5,
-        "Generic rust_quality_check should have 5 steps (no schema generation or validation)"
+        "Generic qualitycheck should have 5 steps (no schema generation or validation)"
     );
 
     // Should NOT have schema generation or validation (those are in ahma_quality_check)
@@ -70,7 +81,7 @@ fn test_rust_quality_check_sequence_steps() {
     });
     assert!(
         !has_generate_schema,
-        "Generic rust_quality_check should NOT regenerate the schema"
+        "Generic qualitycheck should NOT regenerate the schema"
     );
 
     let has_validate = sequence.iter().any(|step| {
@@ -82,7 +93,7 @@ fn test_rust_quality_check_sequence_steps() {
     });
     assert!(
         !has_validate,
-        "Generic rust_quality_check should NOT validate tool configurations"
+        "Generic qualitycheck should NOT validate tool configurations"
     );
 
     // Should have the standard Rust quality check steps
