@@ -171,7 +171,7 @@ impl fmt::Display for ProgressUpdate {
 
 impl ProgressUpdate {
     /// Check if this update represents a terminal state (operation is complete)
-    pub fn is_terminal(&self) -> bool {
+    pub fn is_terminal_state(&self) -> bool {
         matches!(
             self,
             ProgressUpdate::Completed { .. }
