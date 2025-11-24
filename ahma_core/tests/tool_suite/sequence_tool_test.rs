@@ -164,50 +164,35 @@ async fn test_rust_quality_check_structure() -> Result<()> {
     let sequence = config["sequence"].as_array().unwrap();
     assert_eq!(
         sequence.len(),
-        7,
-        "Should have 7 steps: schema generation, validation, fmt, clippy, clippy tests, nextest, build"
+        5,
+        "Generic rust_quality_check should have 5 steps: fmt, clippy, clippy tests, nextest, build (no schema generation or validation)"
     );
 
-    // Verify each step
+    // Verify each step - note: indices shifted down by 2 since we removed schema gen and validation
     assert_eq!(sequence[0]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[0]["subcommand"].as_str(), Some("run"));
-    assert_eq!(
-        sequence[0]["args"]["bin"].as_str(),
-        Some("generate_tool_schema"),
-        "First step should regenerate the schema"
-    );
+    assert_eq!(sequence[0]["subcommand"].as_str(), Some("fmt"));
+    assert_eq!(sequence[0]["args"]["all"].as_bool(), Some(true));
+
     assert_eq!(sequence[1]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[1]["subcommand"].as_str(), Some("run"));
-    assert_eq!(
-        sequence[1]["args"]["bin"].as_str(),
-        Some("ahma_validate"),
-        "Second step should run ahma_validate"
-    );
+    assert_eq!(sequence[1]["subcommand"].as_str(), Some("clippy"));
+    assert_eq!(sequence[1]["args"]["fix"].as_bool(), Some(true));
+    assert_eq!(sequence[1]["args"]["allow-dirty"].as_bool(), Some(true));
+    assert_eq!(sequence[1]["args"]["workspace"].as_bool(), Some(true));
 
     assert_eq!(sequence[2]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[2]["subcommand"].as_str(), Some("fmt"));
-    assert_eq!(sequence[2]["args"]["all"].as_bool(), Some(true));
+    assert_eq!(sequence[2]["subcommand"].as_str(), Some("clippy"));
+    assert_eq!(sequence[2]["args"]["fix"].as_bool(), Some(true));
+    assert_eq!(sequence[2]["args"]["tests"].as_bool(), Some(true));
+    assert_eq!(sequence[2]["args"]["allow-dirty"].as_bool(), Some(true));
+    assert_eq!(sequence[2]["args"]["workspace"].as_bool(), Some(true));
 
     assert_eq!(sequence[3]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[3]["subcommand"].as_str(), Some("clippy"));
-    assert_eq!(sequence[3]["args"]["fix"].as_bool(), Some(true));
-    assert_eq!(sequence[3]["args"]["allow-dirty"].as_bool(), Some(true));
+    assert_eq!(sequence[3]["subcommand"].as_str(), Some("nextest_run"));
     assert_eq!(sequence[3]["args"]["workspace"].as_bool(), Some(true));
 
     assert_eq!(sequence[4]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[4]["subcommand"].as_str(), Some("clippy"));
-    assert_eq!(sequence[4]["args"]["fix"].as_bool(), Some(true));
-    assert_eq!(sequence[4]["args"]["tests"].as_bool(), Some(true));
-    assert_eq!(sequence[4]["args"]["allow-dirty"].as_bool(), Some(true));
+    assert_eq!(sequence[4]["subcommand"].as_str(), Some("build"));
     assert_eq!(sequence[4]["args"]["workspace"].as_bool(), Some(true));
-
-    assert_eq!(sequence[5]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[5]["subcommand"].as_str(), Some("nextest_run"));
-    assert_eq!(sequence[5]["args"]["workspace"].as_bool(), Some(true));
-
-    assert_eq!(sequence[6]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[6]["subcommand"].as_str(), Some("build"));
-    assert_eq!(sequence[6]["args"]["workspace"].as_bool(), Some(true));
 
     // Verify delay
     assert_eq!(

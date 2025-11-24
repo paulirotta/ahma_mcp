@@ -52,11 +52,15 @@ fn test_rust_quality_check_sequence_steps() {
         .as_ref()
         .expect("rust_quality_check must contain a top-level sequence");
 
-    assert!(
-        sequence.len() >= 6,
-        "Sequence should include the full pipeline"
+    // rust_quality_check is now generic and should have exactly 5 steps:
+    // fmt, clippy (code), clippy (tests), nextest_run, build
+    assert_eq!(
+        sequence.len(),
+        5,
+        "Generic rust_quality_check should have 5 steps (no schema generation or validation)"
     );
 
+    // Should NOT have schema generation or validation (those are in ahma_quality_check)
     let has_generate_schema = sequence.iter().any(|step| {
         step.subcommand == "run"
             && step
@@ -64,7 +68,10 @@ fn test_rust_quality_check_sequence_steps() {
                 .get("bin")
                 .is_some_and(|value| value == &Value::String("generate_tool_schema".into()))
     });
-    assert!(has_generate_schema, "Sequence should regenerate the schema");
+    assert!(
+        !has_generate_schema,
+        "Generic rust_quality_check should NOT regenerate the schema"
+    );
 
     let has_validate = sequence.iter().any(|step| {
         step.subcommand == "run"
@@ -73,8 +80,12 @@ fn test_rust_quality_check_sequence_steps() {
                 .get("bin")
                 .is_some_and(|value| value == &Value::String("ahma_validate".into()))
     });
-    assert!(has_validate, "Sequence should validate tool configurations");
+    assert!(
+        !has_validate,
+        "Generic rust_quality_check should NOT validate tool configurations"
+    );
 
+    // Should have the standard Rust quality check steps
     assert!(
         sequence.iter().any(|step| step.subcommand == "fmt"),
         "Sequence should format the workspace"
