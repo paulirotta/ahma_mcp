@@ -388,6 +388,12 @@ This section documents critical implementation details discovered through analys
   - **Receiving**: Server-Sent Events (SSE) for incoming messages from the server (background task)
 - **R14.9**: **Current Status**: The `HttpMcpTransport` is fully implemented and compiles successfully. Integration with the main server binary is pending completion of rmcp 0.9.0 client API documentation and examples.
 
+### R15: Unified Shell Output (Added 2025-11-24)
+
+- **R15.1**: All shell commands launched through `tokio::process::Command` **must** redirect stderr to stdout using `2>&1` so AI clients receive a single, chronologically ordered stream of output.
+- **R15.2**: The adapter layer **must** automatically append `2>&1` to any shell script executed via `sh`, `bash`, or `zsh` `-c` invocations before the command is run.
+- **R15.3**: Tests **must** cover this behavior to prevent regressions when new shell entry points are added.
+
 ## 6. Known Limitations and Future Work
 
 ### 6.1. Current Limitations

@@ -1,5 +1,5 @@
 use crate::{
-    error::McpHttpError,
+    error::{McpHttpError, Result},
     sse::{SseEvent, SseEventParser, resolve_rpc_url},
 };
 use futures::StreamExt;
@@ -13,49 +13,16 @@ use rmcp::{
     transport::Transport,
 };
 use serde::{Deserialize, Serialize};
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    env, fs,
+    io::{BufReader, BufWriter, Write},
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
+};
 use tokio::sync::{Mutex, mpsc};
 use tracing::{error, info};
 use url::Url;
-
-type Result<T> = std::result::Result<T, McpHttpError>;
-
-const TOKEN_FILE: &str = "mcp_http_token.json";
-const RPC_ENDPOINT_WAIT_ATTEMPTS: u32 = 300;
-const RPC_ENDPOINT_WAIT_DELAY_MS: u64 = 100;
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct StoredToken {
-    access_token: String,
-    refresh_token: Option<String>,
-    expires_in: Option<u64>,
-    scopes: Option<Vec<String>>,
-}
-
-fn get_token_path() -> Result<PathBuf> {
-    let mut path = std::env::temp_dir();
-    path.push(TOKEN_FILE);
-    Ok(path)
-}
-
-#[allow(dead_code)] // Will be used for token refresh
-fn save_token(token: &StoredToken) -> Result<()> {
-    let path = get_token_path()?;
-    let file = std::fs::File::create(path)?;
-    serde_json::to_writer(file, token)?;
-    Ok(())
-}
-
-fn load_token() -> Result<Option<StoredToken>> {
-    let path = get_token_path()?;
-    if path.exists() {
-        let file = std::fs::File::open(path)?;
-        let token = serde_json::from_reader(file)?;
-        Ok(Some(token))
-    } else {
-        Ok(None)
-    }
-}
 
 type ConfiguredOAuthClient = oauth2::Client<
     oauth2::StandardErrorResponse<oauth2::basic::BasicErrorResponseType>,
@@ -73,6 +40,9 @@ type ConfiguredOAuthClient = oauth2::Client<
     oauth2::EndpointSet,
 >;
 
+const RPC_ENDPOINT_WAIT_ATTEMPTS: usize = 300;
+const RPC_ENDPOINT_WAIT_DELAY_MS: u64 = 100;
+const TOKEN_FILE_NAME: &str = "mcp_http_token.json";
 pub struct HttpMcpTransport {
     client: reqwest::Client,
     sse_url: Url,
@@ -439,4 +409,41 @@ impl Transport<RoleClient> for HttpMcpTransport {
     async fn close(&mut self) -> std::result::Result<(), Self::Error> {
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct StoredToken {
+    access_token: String,
+    refresh_token: Option<String>,
+    expires_in: Option<u64>,
+    scopes: Option<Vec<String>>,
+}
+
+fn load_token() -> Result<Option<StoredToken>> {
+    let path = token_file_path()?;
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let file = fs::File::open(path)?;
+    let reader = BufReader::new(file);
+    let token = serde_json::from_reader(reader)?;
+    Ok(Some(token))
+}
+
+fn save_token(token: &StoredToken) -> Result<()> {
+    let path = token_file_path()?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let file = fs::File::create(path)?;
+    let mut writer = BufWriter::new(file);
+    serde_json::to_writer_pretty(&mut writer, token)?;
+    writer.flush()?;
+    Ok(())
+}
+
+fn token_file_path() -> Result<PathBuf> {
+    Ok(env::temp_dir().join(TOKEN_FILE_NAME))
 }

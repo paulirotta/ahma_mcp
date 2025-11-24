@@ -208,15 +208,7 @@ impl Adapter {
             .await?;
 
         // Heuristic check for shell commands
-        if (program == "bash"
-            || program == "sh"
-            || program == "zsh"
-            || program == "/bin/sh"
-            || program == "/bin/bash"
-            || program == "/bin/zsh")
-            && let Some(pos) = args_vec.iter().position(|a| a == "-c")
-            && let Some(script) = args_vec.get(pos + 1)
-        {
+        if let Some(script) = Self::shell_script_slice(&program, &args_vec) {
             path_security::validate_command(script, &safe_wd)?;
         }
 
@@ -348,15 +340,7 @@ impl Adapter {
             .await?;
 
         // Heuristic check for shell commands
-        if (program_with_subcommand == "bash"
-            || program_with_subcommand == "sh"
-            || program_with_subcommand == "zsh"
-            || program_with_subcommand == "/bin/sh"
-            || program_with_subcommand == "/bin/bash"
-            || program_with_subcommand == "/bin/zsh")
-            && let Some(pos) = args_vec.iter().position(|a| a == "-c")
-            && let Some(script) = args_vec.get(pos + 1)
-        {
+        if let Some(script) = Self::shell_script_slice(&program_with_subcommand, &args_vec) {
             path_security::validate_command(script, &safe_wd)?;
         }
 
@@ -663,7 +647,59 @@ impl Adapter {
             }
         }
 
+        Self::maybe_append_shell_redirect(&program, &mut final_args);
+
         Ok((program, final_args))
+    }
+
+    fn maybe_append_shell_redirect(program: &str, args: &mut Vec<String>) {
+        if let Some(idx) = Self::shell_script_index(program, args.as_slice())
+            && let Some(script) = args.get_mut(idx)
+        {
+            Self::ensure_shell_redirect(script);
+        }
+    }
+
+    fn shell_script_slice<'a>(program: &str, args: &'a [String]) -> Option<&'a str> {
+        let idx = Self::shell_script_index(program, args)?;
+        args.get(idx).map(|s| s.as_str())
+    }
+
+    fn shell_script_index(program: &str, args: &[String]) -> Option<usize> {
+        if !Self::is_shell_program(program) {
+            return None;
+        }
+        let command_idx = args.iter().position(|a| a == "-c")?;
+        let script_idx = command_idx + 1;
+        if script_idx < args.len() {
+            Some(script_idx)
+        } else {
+            None
+        }
+    }
+
+    fn ensure_shell_redirect(script: &mut String) {
+        if script.trim_end().ends_with("2>&1") {
+            return;
+        }
+
+        let needs_space = script
+            .chars()
+            .last()
+            .map(|c| !c.is_whitespace())
+            .unwrap_or(false);
+
+        if needs_space {
+            script.push(' ');
+        }
+        script.push_str("2>&1");
+    }
+
+    fn is_shell_program(program: &str) -> bool {
+        matches!(
+            program,
+            "sh" | "bash" | "zsh" | "/bin/sh" | "/bin/bash" | "/bin/zsh"
+        )
     }
 
     /// Helper to process a single named argument.
@@ -867,5 +903,61 @@ impl Adapter {
         } else {
             format!("'{}'", value)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils;
+    use serde_json::json;
+    use std::path::Path;
+
+    fn test_adapter() -> Arc<Adapter> {
+        test_utils::create_test_config(Path::new(".")).expect("adapter")
+    }
+
+    #[tokio::test]
+    async fn shell_commands_append_redirect_once() {
+        let adapter = test_adapter();
+        let mut args_map = Map::new();
+        args_map.insert("args".to_string(), json!(["echo hi"]));
+
+        let (program, args_vec) = adapter
+            .prepare_command_and_args("/bin/sh -c", Some(&args_map), None, Path::new("."))
+            .await
+            .expect("command");
+
+        assert_eq!(program, "/bin/sh");
+        assert_eq!(args_vec, vec!["-c".to_string(), "echo hi 2>&1".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn shell_commands_do_not_duplicate_redirect() {
+        let adapter = test_adapter();
+        let mut args_map = Map::new();
+        args_map.insert("args".to_string(), json!(["ls 2>&1"]));
+
+        let (_, args_vec) = adapter
+            .prepare_command_and_args("/bin/sh -c", Some(&args_map), None, Path::new("."))
+            .await
+            .expect("command");
+
+        assert_eq!(args_vec, vec!["-c".to_string(), "ls 2>&1".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn non_shell_commands_remain_unchanged() {
+        let adapter = test_adapter();
+        let mut args_map = Map::new();
+        args_map.insert("args".to_string(), json!(["--version"]));
+
+        let (program, args_vec) = adapter
+            .prepare_command_and_args("git", Some(&args_map), None, Path::new("."))
+            .await
+            .expect("command");
+
+        assert_eq!(program, "git");
+        assert_eq!(args_vec, vec!["--version".to_string()]);
     }
 }
