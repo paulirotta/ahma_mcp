@@ -291,7 +291,7 @@ async fn test_async_operation_with_real_execution() -> Result<()> {
 
     // Start a real async operation (shell command)
     let async_params = CallToolRequestParam {
-        name: Cow::Borrowed("shell_async"),
+        name: Cow::Borrowed("bash"),
         arguments: Some(
             json!({
                 "command": "echo 'test async execution'"
