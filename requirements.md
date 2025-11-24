@@ -130,20 +130,13 @@ To ensure code quality, stability, and adherence to these requirements, all AI m
 
 ### 4.1. Pre-Commit Quality Check
 
-Before committing any changes, developers **must** run the comprehensive quality check tool:
+Before committing any changes, developers **must** run the comprehensive quality check. **IMPORTANT**: Ahama is already running as an MCP server in your IDE - use it directly via MCP tools, not via terminal commands.
 
-```bash
-ahma_mcp rust_quality_check
-```
+**How to run quality checks via Ahama MCP:**
 
-This command is a sequence tool that performs the following essential steps in order:
+The Ahama MCP server (defined in your IDE's `mcp.json`) is already running and provides access to all cargo tools. Talk to the server to see what tools are available, then use these MCP tools directly. For example, use the `bash` tool to run any command in a shell with sandboxing tests to make sure it is within the current working directory of the project.
 
-1. **`generate_tool_schema`**: Regenerates the MTDF JSON schema to ensure it is up-to-date with any changes in the core data structures.
-2. **`ahma_validate`**: Validates all tool configurations against the latest schema.
-3. **`cargo fmt`**: Formats all Rust code.
-4. **`cargo clippy`**: Lints the code and automatically applies fixes.
-5. **`cargo nextest run`**: Runs the entire test suite.
-6. **`cargo build`**: Compiles the project.
+Use the `rust_quality_check` tool to ensure code quality.
 
 Only if all these steps pass should the code be considered ready for commit. This process prevents regressions and ensures that the project remains in a consistently healthy state.
 
@@ -157,22 +150,24 @@ See .ahma/tools/rust_quality_check.json
 
 ## 4. Development & Testing Workflow
 
-### 4.1. Server Restart and Testing
+### 4.2. Server Restart and Testing
 
-**R8.1**: Always use **Ahama** (the `mcp.json` server entry backed by the `ahma_mcp` binary) running in VS Code to interactively test the server.
+**R8.1**: Always use **Ahama** - the MCP server already running in your IDE (VS Code/Cursor) as defined in `mcp.json`. The server is backed by the `ahma_mcp` binary and provides all tools via the MCP protocol.
 
 **R8.2**: To restart the server after code changes:
 
-- Run `cargo build --release` (either via terminal or `ahma_mcp` MCP tool) to rebuild the binary that powers Ahama
-- Reload the VS Code window (Cmd+Shift+P → "Developer: Reload Window") to restart the MCP server
-- Alternatively, kill the running `ahma_mcp` process and VS Code will restart it automatically
+- Use Ahama's `cargo` tool with `build` subcommand and `release: true` option via MCP
+- Reload the IDE window (Cmd+Shift+P → "Developer: Reload Window") to restart the MCP server
+- Alternatively, kill the running `ahma_mcp` process and the IDE will restart it automatically
 - The server reads tool configurations from `.ahma/tools/` on each startup
 
 **R8.3**: Interactive Testing Process (Ahama runtime):
 
 1. Make code or configuration changes
-2. Run `cargo build --release` to trigger server restart
+2. Use Ahama's `cargo build` MCP tool (with `release: true`) to trigger server restart
 3. Test the modified tool immediately through the MCP interface
+4. If a tool does not work correctly, fix it immediately and restart
+5. Verify the fix works before proceeding
 4. If a tool does not work correctly, fix it immediately and restart
 5. Verify the fix works before proceeding
 
@@ -182,7 +177,7 @@ See .ahma/tools/rust_quality_check.json
 - Use interactive testing to diagnose and verify fixes
 - Never leave broken tools—fix and test immediately
 
-### 4.2. AI Maintainer Workflow
+### 4.3. AI Maintainer Workflow
 
 When a new task is assigned:
 
@@ -190,65 +185,68 @@ When a new task is assigned:
 2. Your primary task is to implement the changes described herein.
 3. If the task involves adding or changing tool behavior, you **must** achieve this by editing the JSON files in the `.ahma/tools/` directory.
 4. You **must not** modify the Rust source code to add tool-specific logic.
-5. Follow the existing development principles: write tests for new functionality and ensure all code is formatted (`cargo fmt`) and free of linter warnings (`cargo clippy`).
-6. After any code changes affecting tool execution, restart the server (`cargo build--release`) and test interactively.
-7. **Before stopping work**, you **must** run the `ahma_mcp rust_quality_check` tool and verify that all checks pass. This sequence now includes schema generation and validation, providing a comprehensive pre-flight check. Do not mark work as complete until this quality check succeeds.
+5. Follow the existing development principles: write tests for new functionality and ensure all code is formatted and free of linter warnings.
+6. After any code changes affecting tool execution, restart the server using Ahama's `cargo build` MCP tool (with `release: true`) and test interactively.
+7. **Before stopping work**, you **must** use Ahama's `rust_quality_check` sequence tool (or run individual quality checks via Ahama's `cargo` MCP tools) and verify that all checks pass. This provides a comprehensive pre-flight check. Do not mark work as complete until this quality check succeeds.
 
-### 4.3. CRITICAL: Use ahma_mcp MCP Server for All Operations
+### 4.4. CRITICAL: Always Use Ahama MCP Server (Already Running in Your IDE)
 
-**R8.5**: AI maintainers working in Cursor **MUST** use the **Ahama** MCP server (built from `ahma_mcp`) for ALL development operations. **DO NOT** use terminal commands via `run_terminal_cmd` tool.
+**R8.5**: AI maintainers working in Cursor/VS Code **MUST** use the **Ahama** MCP server for ALL development operations. Ahama is **already running** in your IDE as configured in `mcp.json`. **DO NOT** use terminal commands via `run_in_terminal` tool.
 
 **Why**: We dogfood our own project to rapidly identify and fix issues during development. This ensures the project works correctly in real-world usage and catches bugs immediately.
 
-**How to use the Ahama MCP server in Cursor**:
+**How Ahama works in your IDE**:
 
-- The `ahma_mcp` server is configured in Cursor's MCP settings and runs automatically
-- AI assistants in Cursor have access to MCP tools exposed by ahma_mcp
-- Use these MCP tools directly via the MCP protocol (they appear as available tools in Cursor)
+- The `ahma_mcp` binary is already running as an MCP server named "Ahama" (configured in your IDE's `mcp.json`)
+- AI assistants in Cursor/VS Code have direct access to MCP tools exposed by Ahama
+- Use these MCP tools directly via the MCP protocol (they appear as available tools)
 - Tool naming convention: `{command}_{subcommand}` (e.g., `cargo_build`, `cargo_nextest_run`, `cargo_clippy`)
+- Or use the tool name with subcommand parameter: `cargo` with `{"subcommand": "build", "release": true}`
 
 **Examples of correct usage**:
 
 - ❌ WRONG: `run_terminal_cmd("cargo nextest run")`
-- ✅ CORRECT: Call MCP tool `cargo_nextest_run` via Cursor's MCP interface
+- ✅ CORRECT: Call MCP tool `cargo` with `{"subcommand": "nextest", "nextest_subcommand": "run"}` via Ahama
 - ❌ WRONG: `run_terminal_cmd("cargo build --release")`
-- ✅ CORRECT: Call MCP tool `cargo_build` with `release: true` parameter
+- ✅ CORRECT: Call MCP tool `cargo` with `{"subcommand": "build", "release": true}` via Ahama
 - ❌ WRONG: `run_terminal_cmd("cargo clippy --fix")`
-- ✅ CORRECT: Call MCP tool `cargo_clippy` with `fix: true` parameter
+- ✅ CORRECT: Call MCP tool `cargo` with `{"subcommand": "clippy", "fix": true, "allow-dirty": true}` via Ahama
+- ❌ WRONG: `run_terminal_cmd("cargo fmt")`
+- ✅ CORRECT: Call MCP tool `cargo` with `{"subcommand": "fmt"}` via Ahama
 
 **R8.6**: If an MCP tool is missing, broken, or doesn't work as expected, that is a **bug in ahma_mcp** that must be fixed. Document the issue and only work around it if absolutely necessary for urgent fixes.
 
-**R8.7**: **Terminal Fallback for Broken Ahama State**:
+**R8.7**: **Terminal Fallback for Broken Ahama State** (RARE - should almost never happen):
 
-- If the ahma_mcp MCP server is not responding or returning errors, you **MAY** temporarily use `run_terminal_cmd` as a fallback
+- If the Ahama MCP server is completely non-responsive or returning errors for all tools, you **MAY** temporarily use `run_terminal_cmd` as a fallback
 - When using terminal fallback, you **MUST** do all of the following:
 
   1. Add a TODO task to fix the ahma_mcp errors that caused the fallback
-  2. After making any code changes, run `cargo build --release` via terminal
+  2. After making any code changes, use terminal to run `cargo build --release`
   3. The mcp.json watch configuration will detect the binary change and restart the server
-  4. After restart, **immediately** switch back to using MCP tools and verify Ahama responds
+  4. After restart, **immediately** switch back to using Ahama MCP tools and verify they respond
   5. If MCP tools still don't work, investigate and fix the root cause before proceeding
 
-- This fallback is **temporary** - the goal is always to have ahma_mcp working so we can dogfood it
+- This fallback is **temporary and rare** - the goal is always to have Ahama working so we can dogfood it
 
-**R8.8**: **Restarting Ahama (via ahma_mcp build)**:
+**R8.8**: **Restarting Ahama** (after code changes):
 
-- After code changes: Run `cargo build --release` (via MCP tool or terminal fallback)
+- Use Ahama's `cargo` MCP tool with `{"subcommand": "build", "release": true}`
 - The mcp.json configuration watches the binary and automatically restarts the server
-- Verify restart by calling a simple MCP tool like `status` or `cargo_check` via Ahama
-- If server doesn't restart automatically, reload Cursor window (Cmd+Shift+P → "Developer: Reload Window")
+- Verify restart by calling a simple MCP tool like `status` or `cargo` with `{"subcommand": "check"}` via Ahama
+- If server doesn't restart automatically, reload the IDE window (Cmd+Shift+P → "Developer: Reload Window")
 
-**R8.9**: For AI sessions outside of Cursor (e.g., in other contexts), use the command-line interface: `ahma_mcp --tool_name <tool> --tool_args <args>` to invoke tools directly.
+**R8.9**: For CLI testing outside the IDE (e.g., in shell scripts), use: `ahma_mcp --tool_name <tool> --tool_args <args>` to invoke tools directly.
 
-**R8.10**: Launching the binary without an explicit `--mode` or `--tool_name` is intentionally rejected, and **interactive terminals are blocked even when `--mode stdio` is provided**. The stdio server only runs when stdin is **not** a TTY (i.e., when a real MCP client spawns the process and attaches pipes). Local testing should therefore happen through an MCP client (`mcp.json`, LM Studio, etc.) or through `--mode http`. To execute a single tool outside the client, run `ahma_mcp --tool_name <tool> ...`. Update `mcp.json` entries to pass the desired mode explicitly.
+**R8.10**: Launching the binary without an explicit `--mode` or `--tool_name` is intentionally rejected, and **interactive terminals are blocked even when `--mode stdio` is provided**. The stdio server only runs when stdin is **not** a TTY (i.e., when a real MCP client spawns the process and attaches pipes). Local testing should therefore happen through the Ahama MCP server already running in your IDE. To execute a single tool outside the IDE, run `ahma_mcp --tool_name <tool> ...`.
 
-### 4.3. Copilot CLI Verification
+### 4.5. Copilot CLI Verification
 
-- **R9.1**: Copilot LLMs **should** validate code and tool changes by invoking `ahma_mcp` directly from the command line using the `--tool_name` and `--tool_args` parameters. This keeps validation steps reproducible and scriptable during autonomous runs.
+- **R9.1**: For command-line verification outside the IDE, you can invoke `ahma_mcp` directly using the `--tool_name` and `--tool_args` parameters. This keeps validation steps reproducible and scriptable.
 - **R9.2**: Always pass the MCP tool identifier to `--tool_name`, and supply the exact arguments that would normally be provided through the MCP interface via `--tool_args`.
 - **R9.3**: Use the double-dash (`--`) separator within `--tool_args` to forward raw positional arguments exactly as the target CLI expects when necessary.
-- **Example – rebuild after code changes**: `ahma_mcp --tool_name cargo_build --tool_args -- --release`
-- **Example – run quality checks**: `ahma_mcp rust_quality_check`
+- **Example – rebuild after code changes**: `ahma_mcp --tool_name cargo --tool_args '{"subcommand": "build", "release": true}'`
+- **Example – run quality checks**: `ahma_mcp --tool_name rust_quality_check`
 
 ## 5. Implementation Constraints and Architecture Decisions
 

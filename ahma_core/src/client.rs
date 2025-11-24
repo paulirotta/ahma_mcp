@@ -66,15 +66,15 @@ impl Client {
             .ok_or_else(|| anyhow::anyhow!("Client not initialized"))
     }
 
-    pub async fn long_running_async(&mut self, duration: &str) -> Result<ToolCallResult> {
+    pub async fn shell_async_sleep(&mut self, duration: &str) -> Result<ToolCallResult> {
         let service = self.get_service()?;
 
         let params = CallToolRequestParam {
-            name: Cow::Borrowed("long_running_async"),
+            name: Cow::Borrowed("bash"),
             arguments: Some(
                 json!({
                     "subcommand": "default",
-                    "args": [duration]
+                    "args": [format!("sleep {}", duration)]
                 })
                 .as_object()
                 .unwrap()

@@ -7,25 +7,25 @@ async fn setup_mcp_service_with_long_running_tool() -> Result<(TempDir, Client)>
     // Create a temporary directory for tool configs
     let temp_dir = tempfile::tempdir()?;
     let tools_dir = temp_dir.path();
-    let tool_config_path = tools_dir.join("long_running_async.json");
+    let tool_config_path = tools_dir.join("bash.json");
 
     let tool_config_content = r#"
     {
-        "name": "long_running_async",
-        "description": "A long running async command. Runs in background. Returns operation_id immediately. Results pushed via notification when complete. Continue with other tasks.",
-        "command": "sleep",
+        "name": "bash",
+        "description": "Execute shell commands asynchronously. Runs in background. Returns operation_id immediately. Results pushed via notification when complete. Continue with other tasks.",
+        "command": "bash -c",
         "timeout_seconds": 30,
         "enabled": true,
         "subcommand": [
             {
                 "name": "default",
                 "force_synchronous": false,
-                "description": "Sleeps for a given duration. Runs asynchronously in background. Returns operation_id immediately. Results delivered via notification when complete. Continue with other tasks.",
+                "description": "Execute a shell command asynchronously. Runs in background. Returns operation_id immediately. Results delivered via notification when complete. Continue with other tasks.",
                 "positional_args": [
                     {
-                        "name": "duration",
+                        "name": "command",
                         "type": "string",
-                        "description": "duration to sleep",
+                        "description": "shell command to execute",
                         "required": true
                     }
                 ]
@@ -53,7 +53,7 @@ async fn test_await_blocks_correctly() -> Result<()> {
 
     // Start a long-running asynchronous task (e.g., sleep for 2 seconds)
     let start_time = Instant::now();
-    let long_running_task = client.long_running_async("2").await?;
+    let long_running_task = client.shell_async_sleep("2").await?;
     assert_eq!(
         long_running_task.status, "started",
         "Task should be in 'started' state initially."
@@ -116,7 +116,7 @@ async fn test_await_detects_pending_operation_without_delay() -> Result<()> {
     let (_temp_dir, mut client) = setup_mcp_service_with_long_running_tool().await?;
 
     // Launch an async operation and immediately await it.
-    let long_running_task = client.long_running_async("1").await?;
+    let long_running_task = client.shell_async_sleep("1").await?;
     assert_eq!(long_running_task.status, "started");
 
     let await_start = Instant::now();
