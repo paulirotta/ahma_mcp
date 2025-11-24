@@ -7,6 +7,10 @@ use url::Url;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+    /// MCP server SSE endpoint (defaults to Atlassian)
+    #[arg(long, default_value = "https://mcp.atlassian.com/v1/sse")]
+    server_url: Url,
+
     /// Atlassian Client ID
     #[arg(long)]
     atlassian_client_id: String,
@@ -14,6 +18,10 @@ struct Args {
     /// Atlassian Client Secret
     #[arg(long)]
     atlassian_client_secret: String,
+
+    /// Query string to send to the Confluence search tool
+    #[arg(long, default_value = "MCP")]
+    query: String,
 }
 
 #[tokio::main]
@@ -22,12 +30,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args = Args::parse();
 
-    let url = Url::parse("https://mcp.atlassian.com/v1/sse")?;
-
-    println!("Connecting to Atlassian MCP server at {}", url);
+    println!("Connecting to Atlassian MCP server at {}", args.server_url);
 
     let transport = HttpMcpTransport::new(
-        url,
+        args.server_url.clone(),
         Some(args.atlassian_client_id),
         Some(args.atlassian_client_secret),
     )?;
@@ -59,12 +65,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(tool) = search_tool {
         println!("\nFound search tool: {}", tool.name);
-        println!("Searching for 'MCP'...");
+        println!("Searching for '{}'...", args.query);
 
         let params = CallToolRequestParam {
             name: Cow::from(tool.name.clone()),
             arguments: Some(
-                serde_json::json!({ "query": "MCP" })
+                serde_json::json!({ "query": args.query })
                     .as_object()
                     .unwrap()
                     .clone(),

@@ -18,6 +18,8 @@ pub enum McpHttpError {
     Auth(String),
     #[error("Missing access token")]
     MissingAccessToken,
+    #[error("RPC endpoint not announced yet")]
+    MissingRpcEndpoint,
     #[error("Token refresh failed")]
     TokenRefreshFailed,
     #[error("Custom error: {0}")]
