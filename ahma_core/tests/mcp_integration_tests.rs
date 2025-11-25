@@ -74,7 +74,7 @@ async fn test_async_notification_delivery() -> Result<()> {
         "command": "sleep 1"
     });
     let call_params = CallToolRequestParam {
-        name: Cow::Borrowed("bash"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: async_tool_params.as_object().cloned(),
     };
 

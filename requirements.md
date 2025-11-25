@@ -136,7 +136,7 @@ Before committing any changes, developers **must** run the comprehensive quality
 
 **How to run quality checks via Ahama MCP:**
 
-The Ahama MCP server (defined in your IDE's `mcp.json`) is already running and provides access to all cargo tools. Talk to the server to see what tools are available, then use these MCP tools directly. For example, use the `bash` tool to run any command in a shell with sandboxing tests to make sure it is within the current working directory of the project.
+The Ahama MCP server (defined in your IDE's `mcp.json`) is already running and provides access to all cargo tools. Talk to the server to see what tools are available, then use these MCP tools directly. For example, use the `sandboxed_shell` tool to run any command in a shell with sandboxing that prevents access outside of the current working directory.
 
 **For the ahma_mcp project:** Use the `ahma_quality_check` tool, which includes schema generation and tool validation specific to this project.
 
@@ -198,6 +198,35 @@ When a new task is assigned:
 **R8.5**: AI maintainers working in Cursor/VS Code **MUST** use the **Ahama** MCP server for ALL development operations. Ahama is **already running** in your IDE as configured in `mcp.json`. **DO NOT** use terminal commands via `run_in_terminal` tool.
 
 **Why**: We dogfood our own project to rapidly identify and fix issues during development. This ensures the project works correctly in real-world usage and catches bugs immediately.
+
+### 4.4.1 CRITICAL: Use `sandboxed_shell` MCP Tool Instead of Terminal
+
+**R8.5.1**: **NEVER** use `run_in_terminal` or similar IDE terminal tools. **ALWAYS** use the `sandboxed_shell` MCP tool instead.
+
+**Why this matters for LLM efficiency**:
+
+- Using `run_in_terminal` triggers GUI "Allow" permission dialogs that slow down development
+- Each terminal command requires user approval, breaking your workflow
+- The `sandboxed_shell` MCP tool runs immediately without GUI interruptions
+- You will complete tasks **much faster** using MCP tools
+
+**Security benefits of `sandboxed_shell`**:
+
+- All file paths are validated and constrained to the current working directory
+- Prevents accidental access to files outside the project (e.g., `/`, `~/`, `../`)
+- Commands are executed in a controlled sandbox environment
+- Path traversal attacks are blocked automatically
+
+**Examples**:
+
+- ❌ WRONG: `run_in_terminal("sed -i '' 's/old/new/g' file.rs")`
+- ✅ CORRECT: Call MCP tool `sandboxed_shell` with `{"command": "sed -i '' 's/old/new/g' file.rs"}`
+- ❌ WRONG: `run_in_terminal("grep -r 'pattern' src/")`
+- ✅ CORRECT: Call MCP tool `sandboxed_shell` with `{"command": "grep -r 'pattern' src/"}`
+- ❌ WRONG: `run_in_terminal("find . -name '*.rs' -exec wc -l {} +")`
+- ✅ CORRECT: Call MCP tool `sandboxed_shell` with `{"command": "find . -name '*.rs' -exec wc -l {} +"}`
+
+**R8.5.2**: The `sandboxed_shell` tool supports all standard shell features: pipes, redirects, variables, command substitution, etc. There is no functionality loss compared to terminal access.
 
 **How Ahama works in your IDE**:
 
