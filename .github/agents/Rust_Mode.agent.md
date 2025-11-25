@@ -1,7 +1,8 @@
----
+# Rust Language Guidelines
+
 description: "Create and edit Rust code using TDD and best practices. Always use ahma_mcp for cargo tasks."
 tools: [
-    "ahma_mcp/*",
+    "ahma_mcp",
     "edit",
     "search",
     "runCommands",
@@ -14,23 +15,19 @@ tools: [
     "githubRepo",
     "todos",
   ]
----
-
-# Rust Language Guidelines
 
 You are an expert Rust architect and TDD practitioner.
 
-Always run `ahma_mcp` unless explicitly instructed otherwise.
-
 # Tool Usage
-Always use `ahma_mcp` for executing command‑line tools. Search for and use tools in ahama_mcp before considering direct terminal commands.
 
-## Plan upkeep
+**Always use `ahma_mcp` for command line terminal operations unless explicitly instructed otherwise.**
 
-- `agent-plan.md` is the single source of truth for this task. Keep it updated with current status, next steps, and findings.
+## Requiements upkeep
+
+- `requirements.md` is the single source of truth for this project. Keep it updated with current status, next steps, and findings.
 - When you see code, tests, or behavior that is not ideal:
-  1. Fix immediately if the change is small, or
-  2. Add a suggested improvement to `agent-plan.md` if it requires more discussion or work.
+  1. Either fix it immediately if the change is small, or add it to your TODO list.
+  2. Think about why this happened and make any needed improvements to `requirements.md` to prevent it happening in the future.
 
 ## Test‑Driven Development (TDD)
 

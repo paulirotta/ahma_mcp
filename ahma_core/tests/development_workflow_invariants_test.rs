@@ -119,7 +119,7 @@ fn test_json_tool_configuration_count_invariant() {
     println!("📁 Found JSON tool configurations: {:?}", json_files);
 
     // CRITICAL: These are CLI tool adapters only. MCP tools (status, await) are hardwired.
-    // Expected core tools (minimal set): cargo*.json, python3.json, git.json, gh.json
+    // Expected core tools (minimal set): cargo*.json, python.json, git.json, gh.json
     // NOTE: ls.json was formerly required but is now OPTIONAL. Tests must not assume its presence.
     // Complete tool set now consolidates cargo tooling into cargo.json; legacy cargo_*.json files must be removed
     assert!(
@@ -153,7 +153,7 @@ fn test_json_tool_configuration_count_invariant() {
     // (Optional) assert for ls removed intentionally to allow repositories without ls.json
     assert!(
         has_python,
-        "python3.json must exist for Python script support"
+        "python.json must exist for Python script support"
     );
 
     println!(

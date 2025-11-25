@@ -1,14 +1,15 @@
 {
-  "name": "python3",
+  "name": "python",
   "description": "Python interpreter for running Python scripts and modules",
-  "command": "python3",
+  "command": "python",
   "enabled": true,
   "timeout_seconds": 300,
   "guidance_key": "python_async",
+  "force_synchronous": true,
   "subcommand": [
     {
       "name": "script",
-      "description": "Execute a Python script file.\n\n**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- DO NOT await for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.",
+      "description": "Execute a Python script file synchronously. The tool will wait for the script to complete before returning the result.",
       "options": [
         {
           "name": "working_directory",
@@ -48,8 +49,7 @@
           "type": "string",
           "description": "Warning control in format action:message:category:module:lineno (-W)"
         }
-      ],
-      "force_synchronous": false
+      ]
     },
     {
       "name": "code",
@@ -88,8 +88,7 @@
           "type": "string",
           "description": "Warning control in format action:message:category:module:lineno (-W)"
         }
-      ],
-      "force_synchronous": true
+      ]
     },
     {
       "name": "module",
@@ -151,8 +150,7 @@
           "type": "boolean",
           "description": "Print detailed build information (-VV)"
         }
-      ],
-      "force_synchronous": true
+      ]
     },
     {
       "name": "help",
@@ -170,8 +168,7 @@
           "type": "string",
           "description": "Type of help: 'general' (default), 'env' (environment variables), 'xoptions' (implementation options), 'all' (complete help)"
         }
-      ],
-      "force_synchronous": true
+      ]
     },
     {
       "name": "interactive",
@@ -244,8 +241,7 @@
           "type": "boolean",
           "description": "Verbose output - trace import statements (-v)"
         }
-      ],
-      "force_synchronous": true
+      ]
     }
   ]
 }

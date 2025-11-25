@@ -98,6 +98,76 @@
       "force_synchronous": true
     },
     {
+      "name": "upgrade",
+      "description": "Upgrade dependencies in Cargo.toml to their latest versions. Requires cargo-edit to be installed.",
+      "availability_check": {
+        "command": "cargo",
+        "args": [
+          "upgrade",
+          "--version"
+        ],
+        "skip_subcommand_args": true
+      },
+      "install_instructions": "Install with: cargo install cargo-edit",
+      "options": [
+        {
+          "name": "workspace",
+          "type": "boolean",
+          "description": "Upgrade all packages in the workspace"
+        },
+        {
+          "name": "incompatible",
+          "type": "boolean",
+          "description": "Allow upgrading to incompatible versions (breaking semver)"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "description": "Print changes to be made without actually making them"
+        },
+        {
+          "name": "package",
+          "type": "string",
+          "description": "Package to upgrade dependencies for"
+        }
+      ],
+      "positional_args": [
+        {
+          "name": "dependencies",
+          "type": "string",
+          "description": "Specific dependencies to upgrade (optional, upgrades all if omitted)"
+        }
+      ],
+      "force_synchronous": true
+    },
+    {
+      "name": "update",
+      "description": "Update dependencies in Cargo.lock to their latest compatible versions within semver constraints.",
+      "options": [
+        {
+          "name": "workspace",
+          "type": "boolean",
+          "description": "Update all packages in the workspace"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "description": "Print changes without actually updating Cargo.lock"
+        },
+        {
+          "name": "package",
+          "type": "string",
+          "description": "Update only the specified package"
+        },
+        {
+          "name": "precise",
+          "type": "string",
+          "description": "Update a specific package to exactly this version"
+        }
+      ],
+      "force_synchronous": true
+    },
+    {
       "name": "check",
       "description": "Type-check the current package without producing binaries.",
       "options": [
@@ -319,7 +389,7 @@
     },
     {
       "name": "llvm-cov",
-      "description": "Run llvm-cov to collect and report code coverage for the workspace.",
+      "description": "Collect and report test coverage metrics using LLVM source-based code coverage. Use this to identify untested code paths and prioritize which tests to add.",
       "options": [
         {
           "name": "workspace",

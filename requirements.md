@@ -29,6 +29,8 @@ These are the non-negotiable principles of the project.
 - **R2.2**: This provides immediate feedback and simplifies the AI interaction model for most common development tasks.
 - **R2.3**: Synchronous operations block until completion and return their final result directly. They do not use operation IDs or send completion notifications.
 - **R2.4**: For long-running operations that should not block, tools can be marked as asynchronous using the `"force_synchronous": false` configuration (see R3.1).
+- **R2.5**: Commands that modify project configuration files (e.g., `Cargo.toml`, `package.json`) **must** use `"force_synchronous": true` to prevent race conditions and ensure the AI receives confirmation before proceeding with dependent operations. Examples include `cargo add`, `cargo upgrade`, `npm install --save`.
+- **R2.6**: **Inheritance**: `force_synchronous` can be set at the tool level or subcommand level. Subcommand-level settings override tool-level settings. If a subcommand does not specify `force_synchronous`, it inherits from the tool level. This allows setting a default for an entire tool while overriding specific subcommands as needed.
 
 ### R3: Selective Asynchronous Override
 
@@ -84,14 +86,16 @@ All tools are defined in `.json` files in the `tools/` directory. This is the MC
 
 ```json
 {
+  "name": "tool_name",
+  "description": "What this tool does.",
   "command": "base_executable",
   "enabled": true,
   "timeout_seconds": 600,
+  "force_synchronous": true,
   "subcommand": [
     {
       "name": "subcommand_name",
-      "description": "What this subcommand does. Include async guidance if asynchronous: true.",
-      "force_synchronous": true,
+      "description": "What this subcommand does. Include async guidance if force_synchronous: false.",
       "options": [
         {
           "name": "option_name",
@@ -108,6 +112,11 @@ All tools are defined in `.json` files in the `tools/` directory. This is the MC
           "required": true
         }
       ]
+    },
+    {
+      "name": "async_subcommand",
+      "description": "This subcommand runs async. Include async guidance here.",
+      "force_synchronous": false
     }
   ]
 }
@@ -117,7 +126,7 @@ All tools are defined in `.json` files in the `tools/` directory. This is the MC
 
 - `command`: The base command-line executable (e.g., `git`, `cargo`).
 - `subcommand`: An array of subcommands exposed as individual MCP tools. The final tool name will be `{command}_{name}` (e.g., `git_commit`).
-- `asynchronous`: `false` for sync (default), `true` for async.
+- `force_synchronous`: Can be set at tool level or subcommand level. Subcommand-level overrides tool-level. Set to `true` for commands that must complete before dependent operations (e.g., `cargo add`). Set to `false` for long-running commands that can run in the background (e.g., `cargo build`).
 - `options`: An array of command-line flags (e.g., `--release`).
 - `positional_args`: An array of positional arguments.
 - `format: "path"`: **CRITICAL**: Any option or argument that accepts a file path **must** include this for security validation.
@@ -394,6 +403,15 @@ This section documents critical implementation details discovered through analys
 - For tests requiring complex project structures, use helper functions like `create_full_rust_test_project()` which return `TempDir` instances
 - Test directories are automatically removed when the `TempDir` value goes out of scope
 - This ensures tests can run in parallel without conflicts and leaves no artifacts in the repository
+
+**R13.6**: CLI Binary Integration Testing:
+
+- All CLI binaries (`ahma_mcp`, `ahma_validate`, `ahma_list_tools`, `generate_tool_schema`) **must** have integration tests
+- Integration tests are located in `ahma_core/tests/cli_binary_integration_test.rs`
+- Each binary should have tests for: `--help`, `--version`, and basic functionality
+- Tests invoke binaries as external processes using `std::process::Command`
+- These tests verify end-to-end CLI functionality that unit tests cannot cover
+- Note: Binary coverage is not tracked by `cargo llvm-cov` since binaries run as subprocesses
 
 ### R14: HTTP MCP Client and OAuth Authentication
 
