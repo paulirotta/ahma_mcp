@@ -1,0 +1,27 @@
+[package]
+description = "CLI tool to dump all MCP tool information from an MCP server"
+edition.workspace = true
+license.workspace = true
+name = "ahma_list_tools"
+readme.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "ahma_list_tools"
+path = "src/main.rs"
+
+[dependencies]
+ahma_core = {path = "../ahma_core"}
+anyhow.workspace = true
+clap.workspace = true
+dirs = "6.0.0"
+reqwest = {version = "0.12.24", features = ["json"]}
+rmcp.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

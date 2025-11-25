@@ -59,6 +59,7 @@ These are the non-negotiable principles of the project.
 - **R6.7**: The core library **must** expose a clean public API that allows other crates (like future `ahma_web` or `ahma_okta` components) to leverage the tool execution engine without tight coupling.
 - **R6.8**: This separation ensures that adding new interfaces (web, authentication) or changing the CLI does not require modifications to core business logic.
 - **R6.9**: The root `Cargo.toml` **must** define `default-members = ["ahma_shell"]` so that `cargo run` executes the main MCP server binary by default.
+- **R6.10**: The `ahma_list_tools` binary crate **must** provide a CLI utility to dump all MCP tool information from an MCP server (stdio or HTTP mode) to the terminal, useful for tests and development verification.
 
 ### R7: Security First (Added 2025-01-27)
 

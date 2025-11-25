@@ -57,10 +57,12 @@ Here's an example of Claude Sonnet 4.5's workflow. Notice both the tool and the 
 
 ### Project Structure
 
-`ahma_mcp` is organized as a Cargo workspace with two main crates:
+`ahma_mcp` is organized as a Cargo workspace with several crates:
 
 - **`ahma_core`**: Library crate containing all core functionality (tool execution, configuration, async orchestration, MCP service)
 - **`ahma_shell`**: Binary crate providing the CLI interface and server startup logic
+- **`ahma_validate`**: Binary crate for validating tool configuration files against the MTDF schema
+- **`ahma_list_tools`**: Binary crate to dump all MCP tool information from an MCP server (stdio or HTTP) to the terminal for testing and development
 
 This modular architecture ensures clean separation of concerns and enables future extensions (e.g., web interface, authentication).
 
@@ -188,6 +190,10 @@ This project is guided by a clear set of principles and requirements.
 - **`docs/CONSTITUTION.md`**: This document outlines the core development principles for human contributors, ensuring consistency and quality.
 
 For a list of available tools and instructions on how to add your own, please refer to the `requirements.md` file and the examples in the `tools/` directory.
+
+## Developer Scripts
+
+- **`scripts/ahma-inspector.sh`**: Builds ahma_mcp and launches the MCP Inspector web interface (`npx @modelcontextprotocol/inspector`) for interactive debugging and testing of your tool definitions.
 
 ## Troubleshooting
 
