@@ -44,7 +44,7 @@ async fn test_schema_generation_normalizes_option_types() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
         .await
         .unwrap();
 
@@ -147,7 +147,7 @@ async fn test_schema_generation_array_with_items() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
         .await
         .unwrap();
 
@@ -228,7 +228,7 @@ async fn test_schema_generation_positional_args() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
         .await
         .unwrap();
 
@@ -328,7 +328,7 @@ async fn test_schema_generation_multiple_subcommands() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
         .await
         .unwrap();
 
@@ -424,7 +424,7 @@ async fn test_schema_generation_nested_subcommands() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
         .await
         .unwrap();
 
@@ -478,7 +478,7 @@ async fn test_disabled_tools_not_in_list() {
     let enabled_tool = json!({
         "name": "enabled_tool",
         "description": "This tool is enabled",
-        "command": "enabled",
+        "command": "echo",
         "enabled": true,
         "subcommand": [{
             "name": "default",
@@ -499,7 +499,7 @@ async fn test_disabled_tools_not_in_list() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
         .await
         .unwrap();
 
@@ -545,7 +545,7 @@ async fn test_disabled_subcommands_skipped() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
         .await
         .unwrap();
 
@@ -604,7 +604,7 @@ async fn test_default_subcommand_no_enum() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
         .await
         .unwrap();
 
@@ -656,7 +656,7 @@ async fn test_working_directory_added_for_non_cargo_tools() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
         .await
         .unwrap();
 
@@ -687,7 +687,7 @@ async fn test_hardwired_tools_always_present() {
     let tools_dir = temp_dir.path().join(".ahma/tools");
     std::fs::create_dir_all(&tools_dir).unwrap();
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
         .await
         .unwrap();
 
@@ -749,7 +749,7 @@ async fn test_required_options_in_schema() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
         .await
         .unwrap();
 

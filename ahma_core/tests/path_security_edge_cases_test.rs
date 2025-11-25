@@ -1,7 +1,7 @@
 //! Expanded path security edge case tests (See agent-plan.md Phase A)
 use ahma_core::test_utils as common;
 use ahma_core::utils::logging::init_test_logging;
-use common::test_client::new_client_in_dir;
+use common::test_client::{get_workspace_tools_dir, new_client_in_dir};
 use rmcp::model::CallToolRequestParam;
 use serde_json::json;
 use std::{fs, path::Path};
@@ -10,7 +10,8 @@ use std::{fs, path::Path};
 async fn test_path_validation_nested_parent_segments() {
     init_test_logging();
     let temp_dir = tempfile::tempdir().unwrap();
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+    let tools_dir = get_workspace_tools_dir();
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
         .await
         .unwrap();
     // Deep relative escape attempt
@@ -36,7 +37,8 @@ async fn test_path_validation_nested_parent_segments() {
 async fn test_path_validation_unicode_directory() {
     init_test_logging();
     let temp_dir = tempfile::tempdir().unwrap();
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+    let tools_dir = get_workspace_tools_dir();
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
         .await
         .unwrap();
     // Create a unicode directory inside workspace
@@ -71,7 +73,8 @@ async fn test_path_validation_symlink_escape() {
     {
         use std::os::unix::fs::symlink;
         let temp_dir = tempfile::tempdir().unwrap();
-        let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+        let tools_dir = get_workspace_tools_dir();
+        let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
             .await
             .unwrap();
         // Create symlink inside workspace pointing outside (e.g. /etc)
@@ -105,7 +108,8 @@ async fn test_path_validation_symlink_internal() {
     {
         use std::os::unix::fs::symlink;
         let temp_dir = tempfile::tempdir().unwrap();
-        let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+        let tools_dir = get_workspace_tools_dir();
+        let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
             .await
             .unwrap();
         // Create a directory and symlink pointing to it inside workspace
@@ -137,7 +141,8 @@ async fn test_path_validation_symlink_internal() {
 async fn test_path_validation_reserved_names() {
     init_test_logging();
     let temp_dir = tempfile::tempdir().unwrap();
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path())
+    let tools_dir = get_workspace_tools_dir();
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
         .await
         .unwrap();
     for wd in [".", "./", "././."] {

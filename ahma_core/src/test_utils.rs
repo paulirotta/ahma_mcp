@@ -209,11 +209,10 @@ pub mod test_client {
                         let tools_path = if Path::new(dir).is_absolute() {
                             Path::new(dir).to_path_buf()
                         } else {
-                            // If tools_dir is relative, it should be relative to the working_dir
-                            // or we should resolve it relative to workspace if that's what tests expect.
-                            // Most tests pass ".ahma/tools" which is in workspace.
-                            // If we change CWD, we must resolve it absolutely.
-                            get_workspace_path(dir)
+                            // If tools_dir is relative, resolve it relative to working_dir
+                            // This allows tests to create temp tool directories and use them
+                            // Tests wanting workspace tools should use get_workspace_path() explicitly
+                            working_dir.join(dir)
                         };
                         cmd.arg("--tools-dir").arg(tools_path);
                     }
@@ -224,6 +223,12 @@ pub mod test_client {
             ))?)
             .await?;
         Ok(client)
+    }
+
+    /// Get the absolute path to the workspace tools directory
+    #[allow(dead_code)]
+    pub fn get_workspace_tools_dir() -> std::path::PathBuf {
+        get_workspace_path(".ahma/tools")
     }
 }
 
