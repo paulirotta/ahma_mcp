@@ -43,6 +43,7 @@ type ConfiguredOAuthClient = oauth2::Client<
 const RPC_ENDPOINT_WAIT_ATTEMPTS: usize = 300;
 const RPC_ENDPOINT_WAIT_DELAY_MS: u64 = 100;
 const TOKEN_FILE_NAME: &str = "mcp_http_token.json";
+const TOKEN_PATH_ENV: &str = "AHMA_HTTP_CLIENT_TOKEN_PATH";
 pub struct HttpMcpTransport {
     client: reqwest::Client,
     sse_url: Url,
@@ -445,5 +446,110 @@ fn save_token(token: &StoredToken) -> Result<()> {
 }
 
 fn token_file_path() -> Result<PathBuf> {
+    if let Some(path) = env::var_os(TOKEN_PATH_ENV) {
+        return Ok(PathBuf::from(path));
+    }
     Ok(env::temp_dir().join(TOKEN_FILE_NAME))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Mutex as StdMutex, OnceLock};
+    use tempfile::tempdir;
+
+    fn token_env_guard() -> &'static StdMutex<()> {
+        static GUARD: OnceLock<StdMutex<()>> = OnceLock::new();
+        GUARD.get_or_init(|| StdMutex::new(()))
+    }
+
+    #[tokio::test]
+    async fn process_sse_endpoint_event_updates_rpc_url() {
+        let base = Url::parse("https://example.com/sse").unwrap();
+        let rpc_endpoint = Arc::new(Mutex::new(None));
+        let (tx, mut rx) = mpsc::channel(1);
+        let event = SseEvent {
+            event_type: Some("endpoint".to_string()),
+            data: "/mcp".to_string(),
+        };
+
+        HttpMcpTransport::process_sse_event(&base, event, &rpc_endpoint, &tx)
+            .await
+            .unwrap();
+
+        let stored = rpc_endpoint.lock().await.clone().unwrap();
+        assert_eq!(stored.as_str(), "https://example.com/mcp");
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn process_sse_event_forwards_jsonrpc_messages() {
+        let base = Url::parse("https://example.com/sse").unwrap();
+        let rpc_endpoint = Arc::new(Mutex::new(None));
+        let (tx, mut rx) = mpsc::channel(1);
+        let payload = r#"{"jsonrpc":"2.0","id":"42","result":{"message":"hi"}}"#;
+
+        HttpMcpTransport::process_sse_event(
+            &base,
+            SseEvent {
+                event_type: None,
+                data: payload.to_string(),
+            },
+            &rpc_endpoint,
+            &tx,
+        )
+        .await
+        .unwrap();
+
+        let received = rx.recv().await.unwrap();
+        if !matches!(&received, RxJsonRpcMessage::<RoleClient>::Response(_)) {
+            panic!("unexpected message: {:?}", received);
+        }
+        serde_json::to_string(&received).unwrap();
+    }
+
+    #[test]
+    fn load_token_returns_none_when_override_missing() {
+        let _guard = token_env_guard().lock().unwrap();
+        let tmp = tempdir().unwrap();
+        let token_path = tmp.path().join("custom_token.json");
+        unsafe {
+            env::set_var(TOKEN_PATH_ENV, token_path.to_str().unwrap());
+        }
+
+        let loaded = load_token().unwrap();
+        assert!(loaded.is_none());
+
+        unsafe {
+            env::remove_var(TOKEN_PATH_ENV);
+        }
+    }
+
+    #[test]
+    fn save_token_round_trips_via_override_path() {
+        let _guard = token_env_guard().lock().unwrap();
+        let tmp = tempdir().unwrap();
+        let token_path = tmp.path().join("custom_token.json");
+        unsafe {
+            env::set_var(TOKEN_PATH_ENV, token_path.to_str().unwrap());
+        }
+
+        let token = StoredToken {
+            access_token: "abc123".to_string(),
+            refresh_token: Some("ref-456".to_string()),
+            expires_in: Some(3600),
+            scopes: Some(vec!["scope1".to_string(), "scope2".to_string()]),
+        };
+
+        save_token(&token).unwrap();
+        let loaded = load_token().unwrap().expect("token to exist");
+        assert_eq!(loaded.access_token, token.access_token);
+        assert_eq!(loaded.refresh_token, token.refresh_token);
+        assert_eq!(loaded.expires_in, token.expires_in);
+        assert_eq!(loaded.scopes, token.scopes);
+
+        unsafe {
+            env::remove_var(TOKEN_PATH_ENV);
+        }
+    }
 }

@@ -1,28 +1,29 @@
 [package]
-name = "ahma_http_bridge"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
+name = "ahma_http_bridge"
 readme.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-axum = { version = "0.8.7", features = ["http2", "tokio"] }
+axum = {version = "0.8.7", features = ["http2", "tokio"]}
 bytes = "1.11"
 dashmap = "6.1.0"
 futures.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-util", "process", "sync"] }
-tokio-stream = { version = "0.1.17", features = ["sync"] }
-tokio-util = { workspace = true, features = ["io", "codec"] }
-tower-http = { version = "0.6", features = ["trace", "cors"] }
+tokio = {workspace = true, features = ["rt-multi-thread", "macros", "io-util", "process", "sync"]}
+tokio-stream = {version = "0.1.17", features = ["sync"]}
+tokio-util = {workspace = true, features = ["io", "codec"]}
+tower-http = {version = "0.6", features = ["trace", "cors"]}
+tracing-subscriber = {workspace = true, features = ["env-filter"]}
 tracing.workspace = true
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
-uuid = { version = "1.18.1", features = ["v4", "serde"] }
+uuid = {version = "1.18.1", features = ["v4", "serde"]}
 
 [dev-dependencies]
-tower = { version = "0.5.2", features = ["util"] }
+tempfile.workspace = true
+tower = {version = "0.5.2", features = ["util"]}

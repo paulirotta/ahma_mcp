@@ -282,6 +282,11 @@ When a new task is assigned:
 
 **R8.10**: Launching the binary without an explicit `--mode` or `--tool_name` is intentionally rejected, and **interactive terminals are blocked even when `--mode stdio` is provided**. The stdio server only runs when stdin is **not** a TTY (i.e., when a real MCP client spawns the process and attaches pipes). Local testing should therefore happen through the Ahama MCP server already running in your IDE. To execute a single tool outside the IDE, run `ahma_mcp --tool_name <tool> ...`.
 
+### R11: HTTP MCP Client Token Storage (Added 2025-11-25)
+
+- **R11.1**: The HTTP MCP client stores OAuth tokens in the OS temporary directory by default but **must** respect the `AHMA_HTTP_CLIENT_TOKEN_PATH` environment variable when it is set. This keeps automated tests and multi-user environments from trampling each other's credentials.
+- **R11.2**: Tests that override the token location **must** direct it to a temporary directory (e.g., via the `tempfile` crate) to ensure automatic cleanup and avoid polluting the repository.
+
 ### 4.5. Copilot CLI Verification
 
 - **R9.1**: For command-line verification outside the IDE, you can invoke `ahma_mcp` directly using the `--tool_name` and `--tool_args` parameters. This keeps validation steps reproducible and scriptable.

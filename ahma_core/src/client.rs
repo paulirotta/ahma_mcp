@@ -5,7 +5,7 @@
 use anyhow::Result;
 use rmcp::{
     ServiceExt,
-    model::CallToolRequestParam,
+    model::{CallToolRequestParam, Content},
     service::{RoleClient, RunningService},
     transport::{ConfigureCommandExt, TokioChildProcess},
 };
@@ -85,28 +85,13 @@ impl Client {
         let result = service.call_tool(params).await?;
         if let Some(content) = result.content.first() {
             if let Some(text_content) = content.as_text() {
-                // Parse the response text which is in format: "Asynchronous operation started with ID: {id}"
-                // The response may also include tool hints after the ID, so extract just the ID
                 let text = &text_content.text;
-                if let Some(id_start) = text.find("ID: ") {
-                    // Extract just the operation ID (everything after "ID: " until first whitespace or newline)
-                    let id_text = &text[id_start + 4..];
-                    let job_id = id_text
-                        .split_whitespace()
-                        .next()
-                        .ok_or_else(|| anyhow::anyhow!("Could not extract operation ID"))?
-                        .to_string();
-                    Ok(ToolCallResult {
-                        status: "started".to_string(),
-                        job_id,
-                        message: text.clone(),
-                    })
-                } else {
-                    Err(anyhow::anyhow!(
-                        "Could not parse operation ID from response: {}",
-                        text
-                    ))
-                }
+                let job_id = extract_operation_id(text)?;
+                Ok(ToolCallResult {
+                    status: "started".to_string(),
+                    job_id,
+                    message: text.clone(),
+                })
             } else {
                 Err(anyhow::anyhow!("No text content in response"))
             }
@@ -131,26 +116,8 @@ impl Client {
         };
 
         let result = service.call_tool(params).await?;
-        if result.content.is_empty() {
-            return Err(anyhow::anyhow!("No content in response"));
-        }
-
-        // Concatenate all text content items
-        let mut full_text = String::new();
-        for content in &result.content {
-            if let Some(text_content) = content.as_text() {
-                if !full_text.is_empty() {
-                    full_text.push_str("\n\n");
-                }
-                full_text.push_str(&text_content.text);
-            }
-        }
-
-        if full_text.is_empty() {
-            Err(anyhow::anyhow!("No text content in response"))
-        } else {
-            Ok(full_text)
-        }
+        let full_text = join_text_contents(&result.content)?;
+        Ok(full_text)
     }
 
     pub async fn status(&mut self, op_id: &str) -> Result<String> {
@@ -169,16 +136,47 @@ impl Client {
         };
 
         let result = service.call_tool(params).await?;
-        if let Some(content) = result.content.first() {
-            if let Some(text_content) = content.as_text() {
-                Ok(text_content.text.clone())
-            } else {
-                Err(anyhow::anyhow!("No text content in response"))
-            }
-        } else {
-            Err(anyhow::anyhow!("No text content in response"))
+        first_text_content(&result.content)
+    }
+}
+
+fn extract_operation_id(text: &str) -> Result<String> {
+    if let Some(id_start) = text.find("ID: ") {
+        let id_text = &text[id_start + 4..];
+        if let Some(job_id) = id_text.split_whitespace().next()
+            && !job_id.is_empty()
+        {
+            return Ok(job_id.to_string());
         }
     }
+
+    Err(anyhow::anyhow!(
+        "Could not parse operation ID from response: {}",
+        text
+    ))
+}
+
+fn join_text_contents(contents: &[Content]) -> Result<String> {
+    let mut combined = String::new();
+    for text_content in contents.iter().filter_map(|c| c.as_text()) {
+        if !combined.is_empty() {
+            combined.push_str("\n\n");
+        }
+        combined.push_str(&text_content.text);
+    }
+
+    if combined.is_empty() {
+        Err(anyhow::anyhow!("No text content in response"))
+    } else {
+        Ok(combined)
+    }
+}
+
+fn first_text_content(contents: &[Content]) -> Result<String> {
+    contents
+        .iter()
+        .find_map(|c| c.as_text().map(|t| t.text.clone()))
+        .ok_or_else(|| anyhow::anyhow!("No text content in response"))
 }
 
 #[derive(serde::Deserialize, Debug)]
@@ -186,4 +184,57 @@ pub struct ToolCallResult {
     pub status: String,
     pub job_id: String,
     pub message: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_operation_id_parses_identifier() {
+        let text = "Asynchronous operation started with ID: job_123 Follow-up";
+        let job_id = extract_operation_id(text).unwrap();
+        assert_eq!(job_id, "job_123");
+    }
+
+    #[test]
+    fn extract_operation_id_errors_without_marker() {
+        let err = extract_operation_id("No identifier present").unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Could not parse operation ID from response")
+        );
+    }
+
+    #[test]
+    fn join_text_contents_merges_segments() {
+        let contents = vec![
+            Content::text("first chunk".to_string()),
+            Content::text("second chunk".to_string()),
+        ];
+        let combined = join_text_contents(&contents).unwrap();
+        assert_eq!(combined, "first chunk\n\nsecond chunk");
+    }
+
+    #[test]
+    fn join_text_contents_errors_when_empty() {
+        let contents: Vec<Content> = Vec::new();
+        assert!(join_text_contents(&contents).is_err());
+    }
+
+    #[test]
+    fn first_text_content_returns_first_available_segment() {
+        let contents = vec![
+            Content::text("alpha".to_string()),
+            Content::text("beta".to_string()),
+        ];
+        let first = first_text_content(&contents).unwrap();
+        assert_eq!(first, "alpha");
+    }
+
+    #[test]
+    fn first_text_content_errors_when_absent() {
+        let contents: Vec<Content> = Vec::new();
+        assert!(first_text_content(&contents).is_err());
+    }
 }
