@@ -395,6 +395,15 @@ This section documents critical implementation details discovered through analys
 - Test directories are automatically removed when the `TempDir` value goes out of scope
 - This ensures tests can run in parallel without conflicts and leaves no artifacts in the repository
 
+**R13.6**: CLI Binary Integration Testing:
+
+- All CLI binaries (`ahma_mcp`, `ahma_validate`, `ahma_list_tools`, `generate_tool_schema`) **must** have integration tests
+- Integration tests are located in `ahma_core/tests/cli_binary_integration_test.rs`
+- Each binary should have tests for: `--help`, `--version`, and basic functionality
+- Tests invoke binaries as external processes using `std::process::Command`
+- These tests verify end-to-end CLI functionality that unit tests cannot cover
+- Note: Binary coverage is not tracked by `cargo llvm-cov` since binaries run as subprocesses
+
 ### R14: HTTP MCP Client and OAuth Authentication
 
 - **R14.1**: `ahma_mcp` **must** be able to act as an MCP client for HTTP-based MCP servers, enabling it to connect to services like the Atlassian MCP server.
