@@ -138,6 +138,33 @@
       "force_synchronous": true
     },
     {
+      "name": "update",
+      "description": "Update dependencies in Cargo.lock to their latest compatible versions within semver constraints.",
+      "options": [
+        {
+          "name": "workspace",
+          "type": "boolean",
+          "description": "Update all packages in the workspace"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "description": "Print changes without actually updating Cargo.lock"
+        },
+        {
+          "name": "package",
+          "type": "string",
+          "description": "Update only the specified package"
+        },
+        {
+          "name": "precise",
+          "type": "string",
+          "description": "Update a specific package to exactly this version"
+        }
+      ],
+      "force_synchronous": true
+    },
+    {
       "name": "check",
       "description": "Type-check the current package without producing binaries.",
       "options": [
