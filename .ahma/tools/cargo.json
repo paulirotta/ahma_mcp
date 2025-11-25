@@ -389,7 +389,7 @@
     },
     {
       "name": "llvm-cov",
-      "description": "Run llvm-cov to collect and report code coverage for the workspace.",
+      "description": "Collect and report test coverage metrics using LLVM source-based code coverage. Use this to identify untested code paths and prioritize which tests to add.",
       "options": [
         {
           "name": "workspace",
