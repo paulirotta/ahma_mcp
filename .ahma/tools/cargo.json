@@ -102,7 +102,10 @@
       "description": "Upgrade dependencies in Cargo.toml to their latest versions. Requires cargo-edit to be installed.",
       "availability_check": {
         "command": "cargo",
-        "args": ["upgrade", "--version"],
+        "args": [
+          "upgrade",
+          "--version"
+        ],
         "skip_subcommand_args": true
       },
       "install_instructions": "Install with: cargo install cargo-edit",
