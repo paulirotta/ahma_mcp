@@ -1,4 +1,9 @@
 #!/bin/bash
+# MCP Inspector Script
+#
+# Launch ahma_mcp as an interactive local web servicer using the MCP Inspector tool.
+# Use this to test and debug your MCP tool definitions.
+# Usage: ./scripts/mcp-inspector.sh
 set -euo pipefail
 
 # Resolve script directory and project root (assumes script lives in <project>/scripts/)
@@ -25,7 +30,7 @@ echo "Building Rust project with cargo build --release..."
 cargo build --release
 
 # Path to the built binary
-BIN="$PROJECT_ROOT/target/release/async_cargo_mcp"
+BIN="$PROJECT_ROOT/target/release/ahma_mcp"
 
 if [ -x "$BIN" ]; then
     echo "Build successful! Launching MCP Inspector..."

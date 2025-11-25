@@ -2,7 +2,7 @@
     "name": "bash",
     "description": "Execute shell commands asynchronously via bash. **IMPORTANT:** This tool runs asynchronously by default - it returns immediately with an operation_id and the result is delivered via notification when complete. Use this for commands that may take time (tests, builds, file operations). The system will automatically notify you when the operation completes - do NOT poll or repeatedly check status. Continue with other work while waiting for the notification.",
     "command": "bash -c",
-    "timeout_seconds": 30,
+    "timeout_seconds": 300,
     "force_synchronous": false,
     "enabled": true,
     "subcommand": [
@@ -13,7 +13,7 @@
                 {
                     "name": "command",
                     "type": "string",
-                    "description": "The shell command to execute (e.g., 'ls -la', 'sleep 5', 'echo hello')",
+                    "description": "The shell command to execute (e.g., 'ls -la | grep .sh') with full bash support (pipes, variables, etc.)",
                     "required": true
                 }
             ]
