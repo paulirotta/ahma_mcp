@@ -596,11 +596,12 @@ impl Adapter {
         working_dir: &std::path::Path,
     ) -> Result<(String, Vec<String>)> {
         let mut parts: Vec<&str> = command.split_whitespace().collect();
-        let program = parts.remove(0).to_string();
 
-        if program.is_empty() {
+        if parts.is_empty() {
             anyhow::bail!("Command must not be empty");
         }
+
+        let program = parts.remove(0).to_string();
 
         // The remaining parts from the command string become the initial args.
         // Note: The subcommand name is already included in the command string

@@ -934,3 +934,532 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ahma_core::config::{SubcommandConfig, ToolConfig, ToolHints};
+    use std::collections::{HashMap, HashSet};
+
+    // =========================================================================
+    // Helper: Create a minimal ToolConfig for testing
+    // =========================================================================
+    fn make_tool_config(name: &str, command: &str, enabled: bool) -> ToolConfig {
+        ToolConfig {
+            name: name.to_string(),
+            description: format!("{} tool", name),
+            command: command.to_string(),
+            enabled,
+            timeout_seconds: None,
+            force_synchronous: None,
+            guidance_key: None,
+            input_schema: None,
+            hints: ToolHints::default(),
+            subcommand: None,
+            sequence: None,
+            step_delay_ms: None,
+            availability_check: None,
+            install_instructions: None,
+        }
+    }
+
+    fn make_tool_config_with_subcommands(
+        name: &str,
+        command: &str,
+        enabled: bool,
+        subcommands: Vec<SubcommandConfig>,
+    ) -> ToolConfig {
+        ToolConfig {
+            name: name.to_string(),
+            description: format!("{} tool", name),
+            command: command.to_string(),
+            enabled,
+            timeout_seconds: None,
+            force_synchronous: None,
+            guidance_key: None,
+            input_schema: None,
+            hints: ToolHints::default(),
+            subcommand: Some(subcommands),
+            sequence: None,
+            step_delay_ms: None,
+            availability_check: None,
+            install_instructions: None,
+        }
+    }
+
+    fn make_subcommand(name: &str, enabled: bool) -> SubcommandConfig {
+        SubcommandConfig {
+            name: name.to_string(),
+            description: format!("{} subcommand", name),
+            subcommand: None,
+            options: None,
+            positional_args: None,
+            timeout_seconds: None,
+            force_synchronous: None,
+            enabled,
+            guidance_key: None,
+            sequence: None,
+            step_delay_ms: None,
+            availability_check: None,
+            install_instructions: None,
+        }
+    }
+
+    fn make_subcommand_with_nested(
+        name: &str,
+        enabled: bool,
+        nested: Vec<SubcommandConfig>,
+    ) -> SubcommandConfig {
+        SubcommandConfig {
+            name: name.to_string(),
+            description: format!("{} subcommand", name),
+            subcommand: Some(nested),
+            options: None,
+            positional_args: None,
+            timeout_seconds: None,
+            force_synchronous: None,
+            enabled,
+            guidance_key: None,
+            sequence: None,
+            step_delay_ms: None,
+            availability_check: None,
+            install_instructions: None,
+        }
+    }
+
+    // =========================================================================
+    // Tests for: find_matching_tool
+    // =========================================================================
+    mod find_matching_tool_tests {
+        use super::*;
+
+        #[test]
+        fn returns_exact_match_when_tool_name_matches_key() {
+            let mut configs = HashMap::new();
+            configs.insert(
+                "cargo".to_string(),
+                make_tool_config("cargo", "cargo", true),
+            );
+
+            let result = find_matching_tool(&configs, "cargo").unwrap();
+
+            assert_eq!(result.0, "cargo");
+            assert_eq!(result.1.name, "cargo");
+        }
+
+        #[test]
+        fn returns_longest_prefix_match_when_multiple_tools_match() {
+            let mut configs = HashMap::new();
+            configs.insert(
+                "cargo".to_string(),
+                make_tool_config("cargo", "cargo", true),
+            );
+            configs.insert(
+                "cargo_build".to_string(),
+                make_tool_config("cargo_build", "cargo build", true),
+            );
+
+            let result = find_matching_tool(&configs, "cargo_build_release").unwrap();
+
+            assert_eq!(result.0, "cargo_build");
+        }
+
+        #[test]
+        fn ignores_disabled_tools() {
+            let mut configs = HashMap::new();
+            configs.insert(
+                "cargo_build".to_string(),
+                make_tool_config("cargo_build", "cargo build", false),
+            );
+            configs.insert(
+                "cargo".to_string(),
+                make_tool_config("cargo", "cargo", true),
+            );
+
+            let result = find_matching_tool(&configs, "cargo_build").unwrap();
+
+            // Should match "cargo" since "cargo_build" is disabled
+            assert_eq!(result.0, "cargo");
+        }
+
+        #[test]
+        fn returns_error_when_no_tool_matches() {
+            let mut configs = HashMap::new();
+            configs.insert(
+                "cargo".to_string(),
+                make_tool_config("cargo", "cargo", true),
+            );
+
+            let result = find_matching_tool(&configs, "rustc");
+
+            assert!(result.is_err());
+            assert!(result.unwrap_err().to_string().contains("No matching tool"));
+        }
+
+        #[test]
+        fn returns_error_when_all_matching_tools_disabled() {
+            let mut configs = HashMap::new();
+            configs.insert(
+                "cargo".to_string(),
+                make_tool_config("cargo", "cargo", false),
+            );
+
+            let result = find_matching_tool(&configs, "cargo_test");
+
+            assert!(result.is_err());
+        }
+    }
+
+    // =========================================================================
+    // Tests for: find_tool_config
+    // =========================================================================
+    mod find_tool_config_tests {
+        use super::*;
+
+        #[test]
+        fn finds_tool_by_key() {
+            let mut configs = HashMap::new();
+            configs.insert(
+                "cargo".to_string(),
+                make_tool_config("cargo", "cargo", true),
+            );
+
+            let result = find_tool_config(&configs, "cargo");
+
+            assert!(result.is_some());
+            let (key, config) = result.unwrap();
+            assert_eq!(key, "cargo");
+            assert_eq!(config.name, "cargo");
+        }
+
+        #[test]
+        fn finds_tool_by_name_when_key_differs() {
+            let mut configs = HashMap::new();
+            let mut tool = make_tool_config("cargo-tool", "cargo", true);
+            tool.name = "cargo-tool".to_string();
+            configs.insert("cargo_alias".to_string(), tool);
+
+            let result = find_tool_config(&configs, "cargo-tool");
+
+            assert!(result.is_some());
+            let (key, config) = result.unwrap();
+            assert_eq!(key, "cargo_alias");
+            assert_eq!(config.name, "cargo-tool");
+        }
+
+        #[test]
+        fn returns_none_when_tool_not_found() {
+            let configs: HashMap<String, ToolConfig> = HashMap::new();
+
+            let result = find_tool_config(&configs, "nonexistent");
+
+            assert!(result.is_none());
+        }
+
+        #[test]
+        fn prefers_exact_key_match_over_name_match() {
+            let mut configs = HashMap::new();
+            let mut tool1 = make_tool_config("other_name", "cmd1", true);
+            tool1.name = "cargo".to_string();
+            configs.insert("alias".to_string(), tool1);
+
+            let mut tool2 = make_tool_config("cargo", "cmd2", true);
+            tool2.name = "different_name".to_string();
+            configs.insert("cargo".to_string(), tool2);
+
+            let result = find_tool_config(&configs, "cargo");
+
+            assert!(result.is_some());
+            let (key, _) = result.unwrap();
+            assert_eq!(key, "cargo"); // Key match should win
+        }
+    }
+
+    // =========================================================================
+    // Tests for: parse_env_list
+    // =========================================================================
+    mod parse_env_list_tests {
+        use super::*;
+
+        #[test]
+        fn returns_none_when_env_var_not_set() {
+            // Use a unique env var name unlikely to exist
+            // SAFETY: Test runs in isolation, env var manipulation is safe
+            unsafe { env::remove_var("AHMA_TEST_PARSE_ENV_LIST_UNSET") };
+
+            let result = parse_env_list("AHMA_TEST_PARSE_ENV_LIST_UNSET");
+
+            assert!(result.is_none());
+        }
+
+        #[test]
+        fn parses_single_item() {
+            // SAFETY: Test runs in isolation, env var manipulation is safe
+            unsafe { env::set_var("AHMA_TEST_SINGLE", "item1") };
+
+            let result = parse_env_list("AHMA_TEST_SINGLE");
+
+            assert!(result.is_some());
+            let set = result.unwrap();
+            assert!(set.contains("item1"));
+            assert_eq!(set.len(), 1);
+
+            unsafe { env::remove_var("AHMA_TEST_SINGLE") };
+        }
+
+        #[test]
+        fn parses_multiple_comma_separated_items() {
+            // SAFETY: Test runs in isolation, env var manipulation is safe
+            unsafe { env::set_var("AHMA_TEST_MULTI", "item1,item2,item3") };
+
+            let result = parse_env_list("AHMA_TEST_MULTI");
+
+            assert!(result.is_some());
+            let set = result.unwrap();
+            assert!(set.contains("item1"));
+            assert!(set.contains("item2"));
+            assert!(set.contains("item3"));
+            assert_eq!(set.len(), 3);
+
+            unsafe { env::remove_var("AHMA_TEST_MULTI") };
+        }
+
+        #[test]
+        fn trims_whitespace_and_lowercases() {
+            // SAFETY: Test runs in isolation, env var manipulation is safe
+            unsafe { env::set_var("AHMA_TEST_WHITESPACE", " Item1 , ITEM2 , item3 ") };
+
+            let result = parse_env_list("AHMA_TEST_WHITESPACE");
+
+            assert!(result.is_some());
+            let set = result.unwrap();
+            assert!(set.contains("item1"));
+            assert!(set.contains("item2"));
+            assert!(set.contains("item3"));
+
+            unsafe { env::remove_var("AHMA_TEST_WHITESPACE") };
+        }
+
+        #[test]
+        fn filters_out_empty_entries() {
+            // SAFETY: Test runs in isolation, env var manipulation is safe
+            unsafe { env::set_var("AHMA_TEST_EMPTY", "item1,,item2, ,item3") };
+
+            let result = parse_env_list("AHMA_TEST_EMPTY");
+
+            assert!(result.is_some());
+            let set = result.unwrap();
+            assert_eq!(set.len(), 3);
+            assert!(set.contains("item1"));
+            assert!(set.contains("item2"));
+            assert!(set.contains("item3"));
+
+            unsafe { env::remove_var("AHMA_TEST_EMPTY") };
+        }
+    }
+
+    // =========================================================================
+    // Tests for: should_skip
+    // =========================================================================
+    mod should_skip_tests {
+        use super::*;
+
+        #[test]
+        fn returns_false_when_set_is_none() {
+            let set: Option<HashSet<String>> = None;
+
+            let result = should_skip(&set, "anything");
+
+            assert!(!result);
+        }
+
+        #[test]
+        fn returns_true_when_value_in_set() {
+            let mut set = HashSet::new();
+            set.insert("skip_me".to_string());
+            let set = Some(set);
+
+            let result = should_skip(&set, "skip_me");
+
+            assert!(result);
+        }
+
+        #[test]
+        fn returns_false_when_value_not_in_set() {
+            let mut set = HashSet::new();
+            set.insert("skip_me".to_string());
+            let set = Some(set);
+
+            let result = should_skip(&set, "keep_me");
+
+            assert!(!result);
+        }
+
+        #[test]
+        fn performs_case_insensitive_check() {
+            let mut set = HashSet::new();
+            set.insert("skip_me".to_string());
+            let set = Some(set);
+
+            // should_skip lowercases the value before checking
+            assert!(should_skip(&set, "SKIP_ME"));
+            assert!(should_skip(&set, "Skip_Me"));
+        }
+
+        #[test]
+        fn returns_false_for_empty_set() {
+            let set: Option<HashSet<String>> = Some(HashSet::new());
+
+            let result = should_skip(&set, "anything");
+
+            assert!(!result);
+        }
+    }
+
+    // =========================================================================
+    // Tests for: resolve_cli_subcommand
+    // =========================================================================
+    mod resolve_cli_subcommand_tests {
+        use super::*;
+
+        #[test]
+        fn resolves_default_subcommand_when_tool_name_equals_config_key() {
+            let config = make_tool_config_with_subcommands(
+                "cargo",
+                "cargo",
+                true,
+                vec![make_subcommand("default", true)],
+            );
+
+            let result = resolve_cli_subcommand("cargo", &config, "cargo", None);
+
+            assert!(result.is_ok());
+            let (sub, parts) = result.unwrap();
+            assert_eq!(sub.name, "default");
+            assert_eq!(parts, vec!["cargo"]);
+        }
+
+        #[test]
+        fn resolves_explicit_subcommand() {
+            let config = make_tool_config_with_subcommands(
+                "cargo",
+                "cargo",
+                true,
+                vec![
+                    make_subcommand("default", true),
+                    make_subcommand("build", true),
+                ],
+            );
+
+            let result = resolve_cli_subcommand("cargo", &config, "cargo_build", None);
+
+            assert!(result.is_ok());
+            let (sub, parts) = result.unwrap();
+            assert_eq!(sub.name, "build");
+            assert_eq!(parts, vec!["cargo", "build"]);
+        }
+
+        #[test]
+        fn resolves_nested_subcommand() {
+            let config = make_tool_config_with_subcommands(
+                "git",
+                "git",
+                true,
+                vec![make_subcommand_with_nested(
+                    "remote",
+                    true,
+                    vec![make_subcommand("add", true)],
+                )],
+            );
+
+            let result = resolve_cli_subcommand("git", &config, "git_remote_add", None);
+
+            assert!(result.is_ok());
+            let (sub, parts) = result.unwrap();
+            assert_eq!(sub.name, "add");
+            assert_eq!(parts, vec!["git", "remote", "add"]);
+        }
+
+        #[test]
+        fn returns_error_when_subcommand_not_found() {
+            let config = make_tool_config_with_subcommands(
+                "cargo",
+                "cargo",
+                true,
+                vec![make_subcommand("build", true)],
+            );
+
+            let result = resolve_cli_subcommand("cargo", &config, "cargo_test", None);
+
+            assert!(result.is_err());
+            let err = result.unwrap_err().to_string();
+            assert!(err.contains("Subcommand"));
+            assert!(err.contains("not found"));
+        }
+
+        #[test]
+        fn returns_error_when_no_subcommands_defined() {
+            let config = make_tool_config("cargo", "cargo", true);
+
+            let result = resolve_cli_subcommand("cargo", &config, "cargo_build", None);
+
+            assert!(result.is_err());
+            let err = result.unwrap_err().to_string();
+            assert!(err.contains("no subcommands defined"));
+        }
+
+        #[test]
+        fn ignores_disabled_subcommands() {
+            let config = make_tool_config_with_subcommands(
+                "cargo",
+                "cargo",
+                true,
+                vec![
+                    make_subcommand("build", false), // disabled
+                    make_subcommand("test", true),
+                ],
+            );
+
+            let result = resolve_cli_subcommand("cargo", &config, "cargo_build", None);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn uses_subcommand_override_when_provided() {
+            let config = make_tool_config_with_subcommands(
+                "cargo",
+                "cargo",
+                true,
+                vec![
+                    make_subcommand("build", true),
+                    make_subcommand("test", true),
+                ],
+            );
+
+            let result = resolve_cli_subcommand("cargo", &config, "cargo", Some("test"));
+
+            assert!(result.is_ok());
+            let (sub, parts) = result.unwrap();
+            assert_eq!(sub.name, "test");
+            assert_eq!(parts, vec!["cargo", "test"]);
+        }
+
+        #[test]
+        fn handles_explicit_default_subcommand_override() {
+            let config = make_tool_config_with_subcommands(
+                "cargo",
+                "cargo",
+                true,
+                vec![make_subcommand("default", true)],
+            );
+
+            let result =
+                resolve_cli_subcommand("cargo", &config, "cargo_something", Some("default"));
+
+            assert!(result.is_ok());
+            let (sub, _) = result.unwrap();
+            assert_eq!(sub.name, "default");
+        }
+    }
+}

@@ -445,6 +445,23 @@ mod tests {
     }
 
     #[test]
+    fn test_expand_home_single_tilde() {
+        // Single tilde without slash should not expand
+        assert_eq!(expand_home("~"), "~");
+    }
+
+    #[test]
+    fn test_expand_home_tilde_in_middle() {
+        // Tilde not at start should not expand
+        assert_eq!(expand_home("/path/~/somewhere"), "/path/~/somewhere");
+    }
+
+    #[test]
+    fn test_expand_home_empty_string() {
+        assert_eq!(expand_home(""), "");
+    }
+
+    #[test]
     fn test_parse_mcp_config() {
         use std::io::Write;
         let temp_dir = tempfile::TempDir::new().unwrap();
@@ -495,6 +512,126 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_mcp_config_server_not_found() {
+        use std::io::Write;
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("mcp.json");
+
+        let config_content = r#"{
+            "servers": {
+                "ExistingServer": {
+                    "type": "stdio",
+                    "command": "/usr/bin/test"
+                }
+            }
+        }"#;
+
+        let mut file = fs::File::create(&config_path).unwrap();
+        file.write_all(config_content.as_bytes()).unwrap();
+
+        let result = parse_mcp_config(&config_path, Some("NonExistentServer"));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("not found in mcp.json")
+        );
+    }
+
+    #[test]
+    fn test_parse_mcp_config_no_servers() {
+        use std::io::Write;
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("mcp.json");
+
+        let config_content = r#"{"servers": {}}"#;
+
+        let mut file = fs::File::create(&config_path).unwrap();
+        file.write_all(config_content.as_bytes()).unwrap();
+
+        let result = parse_mcp_config(&config_path, None);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No servers defined")
+        );
+    }
+
+    #[test]
+    fn test_parse_mcp_config_no_command() {
+        use std::io::Write;
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("mcp.json");
+
+        let config_content = r#"{
+            "servers": {
+                "NoCommandServer": {
+                    "type": "stdio"
+                }
+            }
+        }"#;
+
+        let mut file = fs::File::create(&config_path).unwrap();
+        file.write_all(config_content.as_bytes()).unwrap();
+
+        let result = parse_mcp_config(&config_path, Some("NoCommandServer"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("no command"));
+    }
+
+    #[test]
+    fn test_parse_mcp_config_invalid_json() {
+        use std::io::Write;
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("mcp.json");
+
+        let mut file = fs::File::create(&config_path).unwrap();
+        file.write_all(b"not valid json").unwrap();
+
+        let result = parse_mcp_config(&config_path, None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_mcp_config_file_not_found() {
+        let config_path = PathBuf::from("/nonexistent/path/mcp.json");
+        let result = parse_mcp_config(&config_path, None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_mcp_config_with_home_expansion() {
+        use std::io::Write;
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("mcp.json");
+
+        let config_content = r#"{
+            "servers": {
+                "HomeServer": {
+                    "type": "stdio",
+                    "command": "~/bin/mcp_server",
+                    "args": ["~/config/settings.json"]
+                }
+            }
+        }"#;
+
+        let mut file = fs::File::create(&config_path).unwrap();
+        file.write_all(config_content.as_bytes()).unwrap();
+
+        let (name, command, args) = parse_mcp_config(&config_path, Some("HomeServer")).unwrap();
+
+        assert_eq!(name, "HomeServer");
+        // Command and args should have ~ expanded
+        if dirs::home_dir().is_some() {
+            assert!(!command.starts_with("~/"));
+            assert!(!args[0].starts_with("~/"));
+        }
+    }
+
+    #[test]
     fn test_extract_parameters_from_json() {
         let schema = serde_json::json!({
             "type": "object",
@@ -525,6 +662,61 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_parameters_empty_schema() {
+        let schema = serde_json::json!({});
+        let params = extract_parameters_from_json(&schema);
+        assert!(params.is_empty());
+    }
+
+    #[test]
+    fn test_extract_parameters_no_properties() {
+        let schema = serde_json::json!({
+            "type": "object"
+        });
+        let params = extract_parameters_from_json(&schema);
+        assert!(params.is_empty());
+    }
+
+    #[test]
+    fn test_extract_parameters_no_required_array() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "field1": {"type": "string"}
+            }
+        });
+        let params = extract_parameters_from_json(&schema);
+        assert_eq!(params.len(), 1);
+        assert!(!params[0].required);
+    }
+
+    #[test]
+    fn test_extract_parameters_missing_type_defaults_to_string() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "untyped_field": {}
+            }
+        });
+        let params = extract_parameters_from_json(&schema);
+        assert_eq!(params.len(), 1);
+        assert_eq!(params[0].param_type, "string");
+    }
+
+    #[test]
+    fn test_extract_parameters_no_description() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "no_desc": {"type": "boolean"}
+            }
+        });
+        let params = extract_parameters_from_json(&schema);
+        assert_eq!(params.len(), 1);
+        assert!(params[0].description.is_none());
+    }
+
+    #[test]
     fn test_tool_output_serialization() {
         let tool = ToolOutput {
             name: "test_tool".to_string(),
@@ -540,5 +732,224 @@ mod tests {
         let json = serde_json::to_string(&tool).unwrap();
         assert!(json.contains("test_tool"));
         assert!(json.contains("param1"));
+    }
+
+    #[test]
+    fn test_tool_output_serialization_no_description() {
+        let tool = ToolOutput {
+            name: "minimal_tool".to_string(),
+            description: None,
+            parameters: vec![],
+        };
+
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains("minimal_tool"));
+        assert!(json.contains("null") || json.contains("\"description\":null"));
+    }
+
+    #[test]
+    fn test_parameter_output_optional_fields() {
+        let param = ParameterOutput {
+            name: "optional_param".to_string(),
+            param_type: "number".to_string(),
+            required: false,
+            description: None,
+        };
+
+        let json = serde_json::to_string(&param).unwrap();
+        assert!(json.contains("optional_param"));
+        assert!(json.contains("number"));
+        assert!(json.contains("false"));
+    }
+
+    #[test]
+    fn test_print_text_output_with_server_info() {
+        let result = ToolListResult {
+            server_info: Some(ServerInfoOutput {
+                name: "TestMcpServer".to_string(),
+                version: Some("1.0.0".to_string()),
+            }),
+            tools: vec![ToolOutput {
+                name: "my_tool".to_string(),
+                description: Some("Does something useful".to_string()),
+                parameters: vec![
+                    ParameterOutput {
+                        name: "input".to_string(),
+                        param_type: "string".to_string(),
+                        required: true,
+                        description: Some("The input value".to_string()),
+                    },
+                    ParameterOutput {
+                        name: "count".to_string(),
+                        param_type: "integer".to_string(),
+                        required: false,
+                        description: None,
+                    },
+                ],
+            }],
+        };
+
+        // This test just ensures print_text_output doesn't panic
+        print_text_output(&result);
+    }
+
+    #[test]
+    fn test_print_text_output_no_server_info() {
+        let result = ToolListResult {
+            server_info: None,
+            tools: vec![ToolOutput {
+                name: "simple_tool".to_string(),
+                description: None,
+                parameters: vec![],
+            }],
+        };
+
+        // This test just ensures print_text_output doesn't panic
+        print_text_output(&result);
+    }
+
+    #[test]
+    fn test_print_text_output_no_tools() {
+        let result = ToolListResult {
+            server_info: Some(ServerInfoOutput {
+                name: "EmptyServer".to_string(),
+                version: None,
+            }),
+            tools: vec![],
+        };
+
+        // This test just ensures print_text_output doesn't panic
+        print_text_output(&result);
+    }
+
+    #[test]
+    fn test_print_text_output_server_without_version() {
+        let result = ToolListResult {
+            server_info: Some(ServerInfoOutput {
+                name: "NoVersionServer".to_string(),
+                version: None,
+            }),
+            tools: vec![],
+        };
+
+        print_text_output(&result);
+    }
+
+    #[test]
+    fn test_print_json_output_basic() {
+        let result = ToolListResult {
+            server_info: Some(ServerInfoOutput {
+                name: "JsonServer".to_string(),
+                version: Some("2.0.0".to_string()),
+            }),
+            tools: vec![
+                ToolOutput {
+                    name: "tool_a".to_string(),
+                    description: Some("First tool".to_string()),
+                    parameters: vec![],
+                },
+                ToolOutput {
+                    name: "tool_b".to_string(),
+                    description: None,
+                    parameters: vec![ParameterOutput {
+                        name: "arg".to_string(),
+                        param_type: "string".to_string(),
+                        required: true,
+                        description: Some("An argument".to_string()),
+                    }],
+                },
+            ],
+        };
+
+        let json_result = print_json_output(&result);
+        assert!(json_result.is_ok());
+    }
+
+    #[test]
+    fn test_print_json_output_empty() {
+        let result = ToolListResult {
+            server_info: None,
+            tools: vec![],
+        };
+
+        let json_result = print_json_output(&result);
+        assert!(json_result.is_ok());
+    }
+
+    #[test]
+    fn test_tool_list_result_serialization() {
+        let result = ToolListResult {
+            server_info: Some(ServerInfoOutput {
+                name: "TestServer".to_string(),
+                version: Some("1.0".to_string()),
+            }),
+            tools: vec![],
+        };
+
+        let json = serde_json::to_string_pretty(&result).unwrap();
+        assert!(json.contains("TestServer"));
+        assert!(json.contains("1.0"));
+    }
+
+    #[test]
+    fn test_server_info_output_serialization() {
+        let info = ServerInfoOutput {
+            name: "MyServer".to_string(),
+            version: Some("3.2.1".to_string()),
+        };
+
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("MyServer"));
+        assert!(json.contains("3.2.1"));
+    }
+
+    #[test]
+    fn test_mcp_config_deserialization() {
+        let config_str = r#"{
+            "servers": {
+                "server1": {
+                    "type": "stdio",
+                    "command": "/bin/cmd",
+                    "args": ["--arg1"],
+                    "cwd": "/workdir"
+                }
+            }
+        }"#;
+
+        let config: McpConfig = serde_json::from_str(config_str).unwrap();
+        assert!(config.servers.contains_key("server1"));
+        let server = &config.servers["server1"];
+        assert_eq!(server.server_type, "stdio");
+        assert_eq!(server.command, Some("/bin/cmd".to_string()));
+        assert_eq!(server.args, Some(vec!["--arg1".to_string()]));
+        assert_eq!(server.cwd, Some("/workdir".to_string()));
+    }
+
+    #[test]
+    fn test_server_config_minimal() {
+        let config_str = r#"{"type": "http"}"#;
+        let server: ServerConfig = serde_json::from_str(config_str).unwrap();
+        assert_eq!(server.server_type, "http");
+        assert!(server.command.is_none());
+        assert!(server.args.is_none());
+        assert!(server.cwd.is_none());
+    }
+
+    #[test]
+    fn test_server_config_serialization_roundtrip() {
+        let server = ServerConfig {
+            server_type: "stdio".to_string(),
+            command: Some("/usr/local/bin/server".to_string()),
+            args: Some(vec!["--port".to_string(), "8080".to_string()]),
+            cwd: Some("/home/user".to_string()),
+        };
+
+        let json = serde_json::to_string(&server).unwrap();
+        let deserialized: ServerConfig = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.server_type, server.server_type);
+        assert_eq!(deserialized.command, server.command);
+        assert_eq!(deserialized.args, server.args);
+        assert_eq!(deserialized.cwd, server.cwd);
     }
 }

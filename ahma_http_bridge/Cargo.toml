@@ -23,3 +23,6 @@ tower-http = { version = "0.6", features = ["trace", "cors"] }
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 uuid = { version = "1.18.1", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tower = { version = "0.5.2", features = ["util"] }
