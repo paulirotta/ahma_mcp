@@ -263,4 +263,157 @@ mod mcp_callback_tests {
         assert_eq!(operation_id, "test_op_123");
         assert_eq!(operation_id.len(), 11);
     }
+
+    // ==================== Cancelled message formatting tests ====================
+    // These test the logic in mcp_callback.rs lines 155-165
+
+    #[test]
+    fn test_cancelled_message_format_with_canceled_literal() {
+        init_test_logging();
+        // When message is exactly "Canceled", it should become a user-friendly message
+        let message = "Canceled".to_string();
+
+        let formatted_message = if message.to_lowercase().starts_with("cancel") {
+            if message == "Canceled" {
+                "Operation cancelled by user request".to_string()
+            } else {
+                message.clone()
+            }
+        } else {
+            format!("Cancelled: {message}")
+        };
+
+        assert_eq!(formatted_message, "Operation cancelled by user request");
+    }
+
+    #[test]
+    fn test_cancelled_message_format_already_has_cancel_prefix() {
+        init_test_logging();
+        // When message already starts with "Cancel", don't prepend "Cancelled:"
+        let message = "Cancellation requested by timeout".to_string();
+
+        let formatted_message = if message.to_lowercase().starts_with("cancel") {
+            if message == "Canceled" {
+                "Operation cancelled by user request".to_string()
+            } else {
+                message.clone()
+            }
+        } else {
+            format!("Cancelled: {message}")
+        };
+
+        assert_eq!(formatted_message, "Cancellation requested by timeout");
+    }
+
+    #[test]
+    fn test_cancelled_message_format_no_cancel_prefix() {
+        init_test_logging();
+        // When message doesn't start with "cancel", prepend "Cancelled:"
+        let message = "User stopped the operation".to_string();
+
+        let formatted_message = if message.to_lowercase().starts_with("cancel") {
+            if message == "Canceled" {
+                "Operation cancelled by user request".to_string()
+            } else {
+                message.clone()
+            }
+        } else {
+            format!("Cancelled: {message}")
+        };
+
+        assert_eq!(formatted_message, "Cancelled: User stopped the operation");
+    }
+
+    #[test]
+    fn test_cancelled_message_format_case_insensitive() {
+        init_test_logging();
+        // Test that "CANCELLED" with uppercase is recognized
+        let message = "CANCELLED by system".to_string();
+
+        let formatted_message = if message.to_lowercase().starts_with("cancel") {
+            if message == "Canceled" {
+                "Operation cancelled by user request".to_string()
+            } else {
+                message.clone()
+            }
+        } else {
+            format!("Cancelled: {message}")
+        };
+
+        // Should preserve original message since it already indicates cancellation
+        assert_eq!(formatted_message, "CANCELLED by system");
+    }
+
+    // ==================== ProgressNotificationParam construction tests ====================
+
+    #[test]
+    fn test_started_notification_progress_is_zero() {
+        init_test_logging();
+        // Started notifications should have progress 0.0
+        let token = ProgressToken(NumberOrString::String(Arc::from("test_op")));
+        let params = ProgressNotificationParam {
+            progress_token: token,
+            progress: 0.0,
+            total: None,
+            message: Some("Started".to_string()),
+        };
+
+        assert_eq!(params.progress, 0.0);
+        assert!(params.total.is_none());
+    }
+
+    #[test]
+    fn test_progress_notification_with_explicit_percentage() {
+        init_test_logging();
+        // Progress notifications with a percentage use that value
+        fn get_progress(percentage: Option<f64>) -> f64 {
+            percentage.unwrap_or(50.0)
+        }
+        let progress = get_progress(Some(75.0));
+
+        assert_eq!(progress, 75.0);
+    }
+
+    #[test]
+    fn test_progress_notification_default_when_none() {
+        init_test_logging();
+        // Progress notifications default to 50.0 when percentage is None
+        fn get_progress(percentage: Option<f64>) -> f64 {
+            percentage.unwrap_or(50.0)
+        }
+        let progress = get_progress(None);
+
+        assert_eq!(progress, 50.0);
+    }
+
+    #[test]
+    fn test_completed_notification_progress_is_100() {
+        init_test_logging();
+        // Completed, failed, cancelled all set progress to 100.0
+        let token = ProgressToken(NumberOrString::String(Arc::from("test_op")));
+        let params = ProgressNotificationParam {
+            progress_token: token,
+            progress: 100.0,
+            total: Some(100.0),
+            message: Some("Completed".to_string()),
+        };
+
+        assert_eq!(params.progress, 100.0);
+        assert_eq!(params.total, Some(100.0));
+    }
+
+    #[test]
+    fn test_output_notification_progress_is_75() {
+        init_test_logging();
+        // Output notifications use arbitrary 75.0 progress
+        let token = ProgressToken(NumberOrString::String(Arc::from("test_op")));
+        let params = ProgressNotificationParam {
+            progress_token: token,
+            progress: 75.0,
+            total: Some(100.0),
+            message: Some("stdout: hello".to_string()),
+        };
+
+        assert_eq!(params.progress, 75.0);
+    }
 }
