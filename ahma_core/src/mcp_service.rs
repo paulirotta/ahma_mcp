@@ -973,11 +973,17 @@ impl ServerHandler for AhmaMcpService {
             let timeout = arguments.get("timeout_seconds").and_then(|v| v.as_u64());
 
             // Determine execution mode (default is synchronous):
-            // 1. If force_synchronous is true in config, ALWAYS use sync (ignore --async CLI flag)
+            // 1. If force_synchronous is true in config (subcommand or inherited from tool), ALWAYS use sync
             // 2. If --async CLI flag was used (force_asynchronous=true), use async mode
             // 3. Check explicit execution_mode argument (for advanced use)
             // 4. Default to synchronous
-            let execution_mode = if subcommand_config.force_synchronous == Some(true) {
+            //
+            // Inheritance: subcommand.force_synchronous overrides tool.force_synchronous
+            // If subcommand doesn't specify, inherit from tool level
+            let force_sync = subcommand_config
+                .force_synchronous
+                .or(config.force_synchronous);
+            let execution_mode = if force_sync == Some(true) {
                 // Config explicitly requires synchronous: FORCE sync mode, ignoring CLI --async flag
                 crate::adapter::ExecutionMode::Synchronous
             } else if self.force_asynchronous {
@@ -1920,5 +1926,311 @@ impl AhmaMcpService {
             .fold(0.0, f64::max);
 
         DEFAULT_AWAIT_TIMEOUT.max(max_op_timeout)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{CommandOption, ItemsSpec, SubcommandConfig};
+
+    // ============= normalize_option_type tests =============
+
+    #[test]
+    fn test_normalize_option_type_bool_variants() {
+        assert_eq!(AhmaMcpService::normalize_option_type("bool"), "boolean");
+        assert_eq!(AhmaMcpService::normalize_option_type("boolean"), "boolean");
+    }
+
+    #[test]
+    fn test_normalize_option_type_int_variants() {
+        assert_eq!(AhmaMcpService::normalize_option_type("int"), "integer");
+        assert_eq!(AhmaMcpService::normalize_option_type("integer"), "integer");
+    }
+
+    #[test]
+    fn test_normalize_option_type_passthrough() {
+        assert_eq!(AhmaMcpService::normalize_option_type("array"), "array");
+        assert_eq!(AhmaMcpService::normalize_option_type("number"), "number");
+        assert_eq!(AhmaMcpService::normalize_option_type("string"), "string");
+    }
+
+    #[test]
+    fn test_normalize_option_type_unknown_defaults_to_string() {
+        assert_eq!(AhmaMcpService::normalize_option_type("unknown"), "string");
+        assert_eq!(AhmaMcpService::normalize_option_type("foo"), "string");
+        assert_eq!(AhmaMcpService::normalize_option_type(""), "string");
+    }
+
+    // ============= build_items_schema tests =============
+
+    #[test]
+    fn test_build_items_schema_without_items_spec() {
+        let option = CommandOption {
+            name: "files".to_string(),
+            option_type: "array".to_string(),
+            description: Some("List of files".to_string()),
+            required: None,
+            format: None,
+            items: None,
+            file_arg: None,
+            file_flag: None,
+            alias: None,
+        };
+
+        let schema = AhmaMcpService::build_items_schema(&option);
+        assert_eq!(schema.get("type").unwrap(), "string");
+        assert!(schema.get("format").is_none());
+    }
+
+    #[test]
+    fn test_build_items_schema_with_format_on_option() {
+        let option = CommandOption {
+            name: "files".to_string(),
+            option_type: "array".to_string(),
+            description: Some("List of files".to_string()),
+            required: None,
+            format: Some("path".to_string()),
+            items: None,
+            file_arg: None,
+            file_flag: None,
+            alias: None,
+        };
+
+        let schema = AhmaMcpService::build_items_schema(&option);
+        assert_eq!(schema.get("type").unwrap(), "string");
+        assert_eq!(schema.get("format").unwrap(), "path");
+    }
+
+    #[test]
+    fn test_build_items_schema_with_full_items_spec() {
+        let option = CommandOption {
+            name: "files".to_string(),
+            option_type: "array".to_string(),
+            description: Some("List of files".to_string()),
+            required: None,
+            format: None,
+            items: Some(ItemsSpec {
+                item_type: "string".to_string(),
+                format: Some("path".to_string()),
+                description: Some("A file path".to_string()),
+            }),
+            file_arg: None,
+            file_flag: None,
+            alias: None,
+        };
+
+        let schema = AhmaMcpService::build_items_schema(&option);
+        assert_eq!(schema.get("type").unwrap(), "string");
+        assert_eq!(schema.get("format").unwrap(), "path");
+        assert_eq!(schema.get("description").unwrap(), "A file path");
+    }
+
+    #[test]
+    fn test_build_items_schema_items_type_override() {
+        // Items spec should override default string type
+        let option = CommandOption {
+            name: "ids".to_string(),
+            option_type: "array".to_string(),
+            description: Some("List of IDs".to_string()),
+            required: None,
+            format: None,
+            items: Some(ItemsSpec {
+                item_type: "integer".to_string(),
+                format: None,
+                description: None,
+            }),
+            file_arg: None,
+            file_flag: None,
+            alias: None,
+        };
+
+        let schema = AhmaMcpService::build_items_schema(&option);
+        assert_eq!(schema.get("type").unwrap(), "integer");
+    }
+
+    // ============= collect_leaf_subcommands tests =============
+
+    fn make_subcommand(name: &str, description: &str, enabled: bool) -> SubcommandConfig {
+        SubcommandConfig {
+            name: name.to_string(),
+            description: description.to_string(),
+            subcommand: None,
+            options: None,
+            positional_args: None,
+            timeout_seconds: None,
+            force_synchronous: None,
+            enabled,
+            guidance_key: None,
+            sequence: None,
+            step_delay_ms: None,
+            availability_check: None,
+            install_instructions: None,
+        }
+    }
+
+    fn make_subcommand_with_nested(
+        name: &str,
+        description: &str,
+        enabled: bool,
+        nested: Vec<SubcommandConfig>,
+    ) -> SubcommandConfig {
+        SubcommandConfig {
+            name: name.to_string(),
+            description: description.to_string(),
+            subcommand: Some(nested),
+            options: None,
+            positional_args: None,
+            timeout_seconds: None,
+            force_synchronous: None,
+            enabled,
+            guidance_key: None,
+            sequence: None,
+            step_delay_ms: None,
+            availability_check: None,
+            install_instructions: None,
+        }
+    }
+
+    #[test]
+    fn test_collect_leaf_subcommands_single_default() {
+        let subcommands = vec![make_subcommand("default", "Default subcommand", true)];
+
+        let mut leaves = Vec::new();
+        AhmaMcpService::collect_leaf_subcommands(&subcommands, "", &mut leaves);
+
+        assert_eq!(leaves.len(), 1);
+        assert_eq!(leaves[0].0, "default");
+        assert_eq!(leaves[0].1.name, "default");
+    }
+
+    #[test]
+    fn test_collect_leaf_subcommands_multiple_at_same_level() {
+        let subcommands = vec![
+            make_subcommand("build", "Build", true),
+            make_subcommand("test", "Test", true),
+        ];
+
+        let mut leaves = Vec::new();
+        AhmaMcpService::collect_leaf_subcommands(&subcommands, "", &mut leaves);
+
+        assert_eq!(leaves.len(), 2);
+        let names: Vec<&str> = leaves.iter().map(|(path, _)| path.as_str()).collect();
+        assert!(names.contains(&"build"));
+        assert!(names.contains(&"test"));
+    }
+
+    #[test]
+    fn test_collect_leaf_subcommands_nested() {
+        let nested = vec![
+            make_subcommand("child1", "Child 1", true),
+            make_subcommand("child2", "Child 2", true),
+        ];
+
+        let subcommands = vec![make_subcommand_with_nested(
+            "parent", "Parent", true, nested,
+        )];
+
+        let mut leaves = Vec::new();
+        AhmaMcpService::collect_leaf_subcommands(&subcommands, "", &mut leaves);
+
+        assert_eq!(leaves.len(), 2);
+        let paths: Vec<&str> = leaves.iter().map(|(path, _)| path.as_str()).collect();
+        assert!(paths.contains(&"parent_child1"));
+        assert!(paths.contains(&"parent_child2"));
+    }
+
+    #[test]
+    fn test_collect_leaf_subcommands_skips_disabled() {
+        let subcommands = vec![
+            make_subcommand("enabled", "Enabled", true),
+            make_subcommand("disabled", "Disabled", false),
+        ];
+
+        let mut leaves = Vec::new();
+        AhmaMcpService::collect_leaf_subcommands(&subcommands, "", &mut leaves);
+
+        assert_eq!(leaves.len(), 1);
+        assert_eq!(leaves[0].0, "enabled");
+    }
+
+    #[test]
+    fn test_collect_leaf_subcommands_deeply_nested() {
+        let level3 = vec![make_subcommand("leaf", "Leaf", true)];
+        let level2 = vec![make_subcommand_with_nested("mid", "Mid", true, level3)];
+        let level1 = vec![make_subcommand_with_nested("top", "Top", true, level2)];
+
+        let mut leaves = Vec::new();
+        AhmaMcpService::collect_leaf_subcommands(&level1, "", &mut leaves);
+
+        assert_eq!(leaves.len(), 1);
+        assert_eq!(leaves[0].0, "top_mid_leaf");
+    }
+
+    #[test]
+    fn test_collect_leaf_subcommands_with_prefix() {
+        let subcommands = vec![make_subcommand("child", "Child", true)];
+
+        let mut leaves = Vec::new();
+        AhmaMcpService::collect_leaf_subcommands(&subcommands, "parent", &mut leaves);
+
+        assert_eq!(leaves.len(), 1);
+        assert_eq!(leaves[0].0, "parent_child");
+    }
+
+    #[test]
+    fn test_collect_leaf_subcommands_default_uses_prefix() {
+        // When subcommand name is "default", it should use just the prefix
+        let subcommands = vec![make_subcommand("default", "Default child", true)];
+
+        let mut leaves = Vec::new();
+        AhmaMcpService::collect_leaf_subcommands(&subcommands, "parent", &mut leaves);
+
+        assert_eq!(leaves.len(), 1);
+        assert_eq!(leaves[0].0, "parent");
+    }
+
+    // ==================== force_synchronous inheritance tests ====================
+
+    #[test]
+    fn test_force_synchronous_inheritance_subcommand_overrides_tool() {
+        // When subcommand has force_synchronous set, it should override tool level
+        let subcommand_sync = Some(true);
+        let tool_sync = Some(false);
+
+        // Subcommand wins
+        let effective = subcommand_sync.or(tool_sync);
+        assert_eq!(effective, Some(true));
+    }
+
+    #[test]
+    fn test_force_synchronous_inheritance_subcommand_none_inherits_tool() {
+        // When subcommand has no force_synchronous, it should inherit from tool
+        let subcommand_sync: Option<bool> = None;
+        let tool_sync = Some(true);
+
+        // Tool wins when subcommand is None
+        let effective = subcommand_sync.or(tool_sync);
+        assert_eq!(effective, Some(true));
+    }
+
+    #[test]
+    fn test_force_synchronous_inheritance_both_none() {
+        // When both are None, effective is None (default behavior)
+        let subcommand_sync: Option<bool> = None;
+        let tool_sync: Option<bool> = None;
+
+        let effective = subcommand_sync.or(tool_sync);
+        assert_eq!(effective, None);
+    }
+
+    #[test]
+    fn test_force_synchronous_subcommand_explicit_false_overrides_tool_true() {
+        // Subcommand can explicitly set false to override tool's true
+        let subcommand_sync = Some(false);
+        let tool_sync = Some(true);
+
+        let effective = subcommand_sync.or(tool_sync);
+        assert_eq!(effective, Some(false));
     }
 }
