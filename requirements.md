@@ -29,6 +29,7 @@ These are the non-negotiable principles of the project.
 - **R2.2**: This provides immediate feedback and simplifies the AI interaction model for most common development tasks.
 - **R2.3**: Synchronous operations block until completion and return their final result directly. They do not use operation IDs or send completion notifications.
 - **R2.4**: For long-running operations that should not block, tools can be marked as asynchronous using the `"force_synchronous": false` configuration (see R3.1).
+- **R2.5**: Commands that modify project configuration files (e.g., `Cargo.toml`, `package.json`) **must** use `"force_synchronous": true` to prevent race conditions and ensure the AI receives confirmation before proceeding with dependent operations. Examples include `cargo add`, `cargo upgrade`, `npm install --save`.
 
 ### R3: Selective Asynchronous Override
 
