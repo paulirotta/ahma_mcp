@@ -52,7 +52,7 @@ async fn test_basic_shell_command_execution() -> Result<()> {
     args.insert("working_directory".to_string(), json!(workdir));
 
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("bash"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
     };
 
@@ -88,7 +88,7 @@ async fn test_working_directory_handling() -> Result<()> {
     args.insert("working_directory".to_string(), json!(workdir));
 
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("bash"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
     };
 
@@ -119,7 +119,7 @@ async fn test_complex_shell_commands() -> Result<()> {
     args.insert("working_directory".to_string(), json!(workdir));
 
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("bash"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
     };
 
@@ -150,7 +150,7 @@ async fn test_invalid_command_handling() -> Result<()> {
     args.insert("working_directory".to_string(), json!(workdir));
 
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("bash"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
     };
 
@@ -177,7 +177,7 @@ async fn test_missing_command_parameter() -> Result<()> {
     let args = Map::new();
 
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("bash"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
     };
 
@@ -214,7 +214,7 @@ async fn test_invalid_working_directory() -> Result<()> {
     );
 
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("bash"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
     };
 
@@ -249,7 +249,7 @@ async fn test_environment_variables() -> Result<()> {
     args.insert("working_directory".to_string(), json!(workdir));
 
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("bash"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
     };
 
@@ -280,7 +280,7 @@ async fn test_shell_builtins() -> Result<()> {
     args.insert("working_directory".to_string(), json!(workdir));
 
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("bash"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
     };
 
@@ -311,7 +311,7 @@ async fn test_special_characters() -> Result<()> {
     args.insert("working_directory".to_string(), json!(workdir));
 
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("bash"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
     };
 
@@ -342,7 +342,7 @@ async fn test_multiple_arguments() -> Result<()> {
     args.insert("working_directory".to_string(), json!(workdir));
 
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("bash"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
     };
 
@@ -373,7 +373,7 @@ async fn test_long_running_command() -> Result<()> {
     args.insert("working_directory".to_string(), json!(workdir));
 
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("bash"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
     };
 
@@ -418,7 +418,7 @@ async fn test_working_directory_not_passed_to_command() -> Result<()> {
     args.insert("working_directory".to_string(), json!(workdir));
 
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("bash"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
     };
 
@@ -456,7 +456,7 @@ async fn test_different_working_directories() -> Result<()> {
     args1.insert("working_directory".to_string(), json!(workdir));
 
     let call_param1 = CallToolRequestParam {
-        name: Cow::Borrowed("bash"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args1),
     };
 
@@ -472,7 +472,7 @@ async fn test_different_working_directories() -> Result<()> {
     args2.insert("working_directory".to_string(), json!(subdir_str));
 
     let call_param2 = CallToolRequestParam {
-        name: Cow::Borrowed("bash"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args2),
     };
 

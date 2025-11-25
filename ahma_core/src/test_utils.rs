@@ -7,11 +7,11 @@ pub async fn setup_mcp_service_with_client() -> Result<(TempDir, Client)> {
     // Create a temporary directory for tool configs
     let temp_dir = tempfile::tempdir()?;
     let tools_dir = temp_dir.path();
-    let tool_config_path = tools_dir.join("bash.json");
+    let tool_config_path = tools_dir.join("sandboxed_shell.json");
 
     let tool_config_content = r#"
     {
-        "name": "bash",
+        "name": "sandboxed_shell",
         "description": "Execute shell commands asynchronously",
         "command": "bash -c",
         "timeout_seconds": 30,

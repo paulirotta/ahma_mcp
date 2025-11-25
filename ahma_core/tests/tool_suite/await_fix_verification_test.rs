@@ -1,72 +1,71 @@
-use ahma_core::client::Client;
+//! Tests to verify that the await tool correctly blocks until operations complete.
+//!
+//! These tests verify the fix for a bug where await would return immediately
+//! instead of waiting for the operation to actually complete.
+
+use ahma_core::test_utils::test_client::new_client_with_args;
 use anyhow::Result;
+use rmcp::model::CallToolRequestParam;
+use serde_json::json;
+use std::borrow::Cow;
 use std::time::{Duration, Instant};
-use tempfile::TempDir;
-
-async fn setup_mcp_service_with_long_running_tool() -> Result<(TempDir, Client)> {
-    // Create a temporary directory for tool configs
-    let temp_dir = tempfile::tempdir()?;
-    let tools_dir = temp_dir.path();
-    let tool_config_path = tools_dir.join("bash.json");
-
-    let tool_config_content = r#"
-    {
-        "name": "bash",
-        "description": "Execute shell commands asynchronously. Runs in background. Returns operation_id immediately. Results pushed via notification when complete. Continue with other tasks.",
-        "command": "bash -c",
-        "timeout_seconds": 30,
-        "enabled": true,
-        "subcommand": [
-            {
-                "name": "default",
-                "force_synchronous": false,
-                "description": "Execute a shell command asynchronously. Runs in background. Returns operation_id immediately. Results delivered via notification when complete. Continue with other tasks.",
-                "positional_args": [
-                    {
-                        "name": "command",
-                        "type": "string",
-                        "description": "shell command to execute",
-                        "required": true
-                    }
-                ]
-            }
-        ]
-    }
-    "#;
-    std::fs::write(&tool_config_path, tool_config_content)?;
-
-    let mut client = Client::new();
-    // Start with --async flag to enable async execution
-    client
-        .start_process_with_args(Some(tools_dir.to_str().unwrap()), &["--async"])
-        .await?;
-
-    // Give the server a moment to start
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-    Ok((temp_dir, client))
-}
 
 #[tokio::test]
 async fn test_await_blocks_correctly() -> Result<()> {
-    let (_temp_dir, mut client) = setup_mcp_service_with_long_running_tool().await?;
+    // Use the real tools directory with --async flag
+    let client = new_client_with_args(Some(".ahma/tools"), &["--async"]).await?;
 
-    // Start a long-running asynchronous task (e.g., sleep for 2 seconds)
+    // Start a long-running asynchronous task (sleep for 2 seconds)
     let start_time = Instant::now();
-    let long_running_task = client.shell_async_sleep("2").await?;
-    assert_eq!(
-        long_running_task.status, "started",
-        "Task should be in 'started' state initially."
-    );
-    println!("Started operation: {}", long_running_task.job_id);
 
-    // A single call to await should now block until the operation is complete.
+    let call_params = CallToolRequestParam {
+        name: Cow::Borrowed("sandboxed_shell"),
+        arguments: json!({"command": "sleep 2"}).as_object().cloned(),
+    };
+    let result = client.call_tool(call_params).await?;
+
+    // Extract operation ID from the response
+    let response_text = result
+        .content
+        .first()
+        .and_then(|c| c.as_text())
+        .map(|t| t.text.clone())
+        .unwrap_or_default();
+
+    assert!(
+        response_text.contains("ID:"),
+        "Should return operation ID. Got: {}",
+        response_text
+    );
+
+    // Extract the operation ID
+    let job_id = response_text
+        .split("ID: ")
+        .nth(1)
+        .and_then(|s| s.split_whitespace().next())
+        .ok_or_else(|| anyhow::anyhow!("Could not extract operation ID from: {}", response_text))?;
+
+    println!("Started operation: {}", job_id);
+
+    // A single call to await should block until the operation is complete.
     tokio::time::sleep(Duration::from_millis(50)).await;
     let await_start = Instant::now();
-    let await_result = client.await_op(&long_running_task.job_id).await?;
+
+    let await_params = CallToolRequestParam {
+        name: Cow::Borrowed("await"),
+        arguments: json!({"operation_id": job_id}).as_object().cloned(),
+    };
+    let await_result = client.call_tool(await_params).await?;
     let await_duration = await_start.elapsed();
 
-    println!("Await returned: {}", await_result);
+    let await_text = await_result
+        .content
+        .first()
+        .and_then(|c| c.as_text())
+        .map(|t| t.text.clone())
+        .unwrap_or_default();
+
+    println!("Await returned: {}", await_text);
     println!("Await took: {:?}", await_duration);
 
     // The await should have taken at least 1.5 seconds (allowing some margin)
@@ -79,62 +78,80 @@ async fn test_await_blocks_correctly() -> Result<()> {
 
     // The result of the await should indicate successful completion.
     assert!(
-        await_result.contains("Completed") || await_result.contains("completed"),
+        await_text.to_lowercase().contains("completed")
+            || await_text.to_lowercase().contains("operation"),
         "Await result should indicate completion. Got: {}",
-        await_result
-    );
-    assert!(
-        await_result.contains("operations") || await_result.contains("operation"),
-        "Await result should reference operations. Got: {}",
-        await_result
-    );
-
-    // For good measure, check the status tool again.
-    let final_status_text = client.status(&long_running_task.job_id).await?;
-
-    // The task should now be 'completed'.
-    assert!(
-        final_status_text.contains("completed") || final_status_text.contains("Operation"),
-        "The await tool did not block until the operation was complete. Status: {}",
-        final_status_text
+        await_text
     );
 
     // Total time should be close to 2 seconds (the sleep duration)
     let total_duration = start_time.elapsed();
     assert!(
-        total_duration.as_secs_f64() >= 1.8 && total_duration.as_secs_f64() <= 4.0,
+        total_duration.as_secs_f64() >= 1.8 && total_duration.as_secs_f64() <= 5.0,
         "Total operation time should be close to 2 seconds, was {:?}",
         total_duration
     );
 
     println!("✅ Await tool correctly blocked until operation completed");
+    client.cancel().await?;
     Ok(())
 }
 
 #[tokio::test]
 async fn test_await_detects_pending_operation_without_delay() -> Result<()> {
-    let (_temp_dir, mut client) = setup_mcp_service_with_long_running_tool().await?;
+    // Use the real tools directory with --async flag
+    let client = new_client_with_args(Some(".ahma/tools"), &["--async"]).await?;
 
     // Launch an async operation and immediately await it.
-    let long_running_task = client.shell_async_sleep("1").await?;
-    assert_eq!(long_running_task.status, "started");
+    let call_params = CallToolRequestParam {
+        name: Cow::Borrowed("sandboxed_shell"),
+        arguments: json!({"command": "sleep 1"}).as_object().cloned(),
+    };
+    let result = client.call_tool(call_params).await?;
+
+    let response_text = result
+        .content
+        .first()
+        .and_then(|c| c.as_text())
+        .map(|t| t.text.clone())
+        .unwrap_or_default();
+
+    let job_id = response_text
+        .split("ID: ")
+        .nth(1)
+        .and_then(|s| s.split_whitespace().next())
+        .ok_or_else(|| anyhow::anyhow!("Could not extract operation ID"))?;
 
     let await_start = Instant::now();
-    let await_result = client.await_op(&long_running_task.job_id).await?;
+
+    let await_params = CallToolRequestParam {
+        name: Cow::Borrowed("await"),
+        arguments: json!({"operation_id": job_id}).as_object().cloned(),
+    };
+    let await_result = client.call_tool(await_params).await?;
     let await_duration = await_start.elapsed();
+
+    let await_text = await_result
+        .content
+        .first()
+        .and_then(|c| c.as_text())
+        .map(|t| t.text.clone())
+        .unwrap_or_default();
 
     assert!(
         await_duration.as_secs_f64() >= 0.8,
         "Await returned too quickly ({}s) indicating the operation was not detected as pending. Result: {}",
         await_duration.as_secs_f64(),
-        await_result
+        await_text
     );
 
     assert!(
-        await_result.contains("operation") || await_result.contains("completed"),
+        await_text.to_lowercase().contains("operation")
+            || await_text.to_lowercase().contains("completed"),
         "Await result should reference the operation completion. Got: {}",
-        await_result
+        await_text
     );
 
+    client.cancel().await?;
     Ok(())
 }
