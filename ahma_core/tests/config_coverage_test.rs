@@ -737,3 +737,178 @@ fn test_command_option_unknown_field_fails() {
     let result: Result<CommandOption, _> = serde_json::from_value(json);
     assert!(result.is_err());
 }
+
+// ============================================================================
+// Async load_tool_configs Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_async_load_tool_configs_empty_directory() {
+    use ahma_core::config::load_tool_configs;
+    let temp_dir = tempdir().unwrap();
+    let configs = load_tool_configs(temp_dir.path()).await.unwrap();
+    assert!(configs.is_empty());
+}
+
+#[tokio::test]
+async fn test_async_load_tool_configs_nonexistent_directory() {
+    use ahma_core::config::load_tool_configs;
+    let nonexistent = std::path::PathBuf::from("/nonexistent/tools/dir");
+    let configs = load_tool_configs(&nonexistent).await.unwrap();
+    assert!(configs.is_empty());
+}
+
+#[tokio::test]
+async fn test_async_load_tool_configs_single_tool() {
+    use ahma_core::config::load_tool_configs;
+    let temp_dir = tempdir().unwrap();
+    let tool_json = json!({
+        "name": "async_test",
+        "description": "Async test tool",
+        "command": "echo"
+    });
+    std::fs::write(
+        temp_dir.path().join("async_test.json"),
+        serde_json::to_string_pretty(&tool_json).unwrap(),
+    )
+    .unwrap();
+
+    let configs = load_tool_configs(temp_dir.path()).await.unwrap();
+    assert_eq!(configs.len(), 1);
+    assert!(configs.contains_key("async_test"));
+}
+
+#[tokio::test]
+async fn test_async_load_tool_configs_multiple_tools() {
+    use ahma_core::config::load_tool_configs;
+    let temp_dir = tempdir().unwrap();
+
+    for i in 1..=3 {
+        let tool_json = json!({
+            "name": format!("tool_{}", i),
+            "description": format!("Tool {}", i),
+            "command": "echo"
+        });
+        std::fs::write(
+            temp_dir.path().join(format!("tool_{}.json", i)),
+            serde_json::to_string_pretty(&tool_json).unwrap(),
+        )
+        .unwrap();
+    }
+
+    let configs = load_tool_configs(temp_dir.path()).await.unwrap();
+    assert_eq!(configs.len(), 3);
+}
+
+#[tokio::test]
+async fn test_async_load_tool_configs_skips_disabled_tools() {
+    use ahma_core::config::load_tool_configs;
+    let temp_dir = tempdir().unwrap();
+    let tool_json = json!({
+        "name": "disabled_async",
+        "description": "Disabled tool",
+        "command": "disabled",
+        "enabled": false
+    });
+    std::fs::write(
+        temp_dir.path().join("disabled.json"),
+        serde_json::to_string_pretty(&tool_json).unwrap(),
+    )
+    .unwrap();
+
+    let configs = load_tool_configs(temp_dir.path()).await.unwrap();
+    assert!(configs.is_empty());
+}
+
+#[tokio::test]
+async fn test_async_load_tool_configs_skips_non_json_files() {
+    use ahma_core::config::load_tool_configs;
+    let temp_dir = tempdir().unwrap();
+
+    // Write a non-JSON file
+    std::fs::write(temp_dir.path().join("readme.txt"), "Not a tool").unwrap();
+
+    // Write a valid JSON tool
+    let tool_json = json!({
+        "name": "valid_tool",
+        "description": "Valid tool",
+        "command": "echo"
+    });
+    std::fs::write(
+        temp_dir.path().join("valid.json"),
+        serde_json::to_string_pretty(&tool_json).unwrap(),
+    )
+    .unwrap();
+
+    let configs = load_tool_configs(temp_dir.path()).await.unwrap();
+    assert_eq!(configs.len(), 1);
+    assert!(configs.contains_key("valid_tool"));
+}
+
+#[tokio::test]
+async fn test_async_load_tool_configs_handles_invalid_json() {
+    use ahma_core::config::load_tool_configs;
+    let temp_dir = tempdir().unwrap();
+
+    // Write invalid JSON
+    std::fs::write(temp_dir.path().join("invalid.json"), "not valid json {").unwrap();
+
+    // Write a valid tool
+    let tool_json = json!({
+        "name": "valid_after_invalid",
+        "description": "Valid tool",
+        "command": "echo"
+    });
+    std::fs::write(
+        temp_dir.path().join("valid.json"),
+        serde_json::to_string_pretty(&tool_json).unwrap(),
+    )
+    .unwrap();
+
+    let configs = load_tool_configs(temp_dir.path()).await.unwrap();
+    // Should load the valid one and skip the invalid
+    assert_eq!(configs.len(), 1);
+}
+
+#[tokio::test]
+async fn test_async_load_tool_configs_reserved_name_await_fails() {
+    use ahma_core::config::load_tool_configs;
+    let temp_dir = tempdir().unwrap();
+    let tool_json = json!({
+        "name": "await",
+        "description": "Conflicts with system tool",
+        "command": "echo"
+    });
+    std::fs::write(
+        temp_dir.path().join("await.json"),
+        serde_json::to_string_pretty(&tool_json).unwrap(),
+    )
+    .unwrap();
+
+    let result = load_tool_configs(temp_dir.path()).await;
+    assert!(result.is_err());
+    let err_msg = result.unwrap_err().to_string();
+    assert!(err_msg.contains("await"));
+    assert!(err_msg.contains("reserved") || err_msg.contains("conflicts"));
+}
+
+#[tokio::test]
+async fn test_async_load_tool_configs_reserved_name_status_fails() {
+    use ahma_core::config::load_tool_configs;
+    let temp_dir = tempdir().unwrap();
+    let tool_json = json!({
+        "name": "status",
+        "description": "Conflicts with system tool",
+        "command": "echo"
+    });
+    std::fs::write(
+        temp_dir.path().join("status.json"),
+        serde_json::to_string_pretty(&tool_json).unwrap(),
+    )
+    .unwrap();
+
+    let result = load_tool_configs(temp_dir.path()).await;
+    assert!(result.is_err());
+    let err_msg = result.unwrap_err().to_string();
+    assert!(err_msg.contains("status"));
+}
