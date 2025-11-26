@@ -5,7 +5,7 @@
 
 use ahma_core::config::{
     AvailabilityCheck, CommandOption, ItemsSpec, SequenceStep, SubcommandConfig, ToolConfig,
-    ToolHints, load_mcp_config, load_tool_configs,
+    ToolHints, load_mcp_config, load_tool_configs_sync,
 };
 use serde_json::json;
 use tempfile::tempdir;
@@ -469,14 +469,14 @@ fn test_items_spec_full() {
 #[test]
 fn test_load_tool_configs_empty_directory() {
     let temp_dir = tempdir().unwrap();
-    let configs = load_tool_configs(temp_dir.path()).unwrap();
+    let configs = load_tool_configs_sync(temp_dir.path()).unwrap();
     assert!(configs.is_empty());
 }
 
 #[test]
 fn test_load_tool_configs_nonexistent_directory() {
     let nonexistent = std::path::PathBuf::from("/nonexistent/path/that/does/not/exist");
-    let configs = load_tool_configs(&nonexistent).unwrap();
+    let configs = load_tool_configs_sync(&nonexistent).unwrap();
     assert!(configs.is_empty());
 }
 
@@ -495,7 +495,7 @@ fn test_load_tool_configs_single_tool() {
     )
     .unwrap();
 
-    let configs = load_tool_configs(temp_dir.path()).unwrap();
+    let configs = load_tool_configs_sync(temp_dir.path()).unwrap();
     assert_eq!(configs.len(), 1);
     assert!(configs.contains_key("echo"));
     assert_eq!(configs["echo"].command, "echo");
@@ -517,7 +517,7 @@ fn test_load_tool_configs_multiple_tools() {
     )
     .unwrap();
 
-    let configs = load_tool_configs(temp_dir.path()).unwrap();
+    let configs = load_tool_configs_sync(temp_dir.path()).unwrap();
     assert_eq!(configs.len(), 2);
     assert!(configs.contains_key("echo"));
     assert!(configs.contains_key("cat"));
@@ -533,7 +533,7 @@ fn test_load_tool_configs_skips_disabled_tools() {
     )
     .unwrap();
 
-    let configs = load_tool_configs(temp_dir.path()).unwrap();
+    let configs = load_tool_configs_sync(temp_dir.path()).unwrap();
     assert!(configs.is_empty());
 }
 
@@ -555,7 +555,7 @@ fn test_load_tool_configs_skips_non_json_files() {
     )
     .unwrap();
 
-    let configs = load_tool_configs(temp_dir.path()).unwrap();
+    let configs = load_tool_configs_sync(temp_dir.path()).unwrap();
     assert_eq!(configs.len(), 1);
     assert!(configs.contains_key("echo"));
 }
@@ -574,7 +574,7 @@ fn test_load_tool_configs_handles_invalid_json() {
     // Invalid JSON (missing quotes)
     std::fs::write(temp_dir.path().join("invalid.json"), "{name: broken}").unwrap();
 
-    let configs = load_tool_configs(temp_dir.path()).unwrap();
+    let configs = load_tool_configs_sync(temp_dir.path()).unwrap();
     // Should load valid tool, skip invalid
     assert_eq!(configs.len(), 1);
     assert!(configs.contains_key("valid"));
@@ -590,7 +590,7 @@ fn test_load_tool_configs_reserved_name_await_fails() {
     )
     .unwrap();
 
-    let result = load_tool_configs(temp_dir.path());
+    let result = load_tool_configs_sync(temp_dir.path());
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(err.contains("await"));
@@ -607,7 +607,7 @@ fn test_load_tool_configs_reserved_name_status_fails() {
     )
     .unwrap();
 
-    let result = load_tool_configs(temp_dir.path());
+    let result = load_tool_configs_sync(temp_dir.path());
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(err.contains("status"));

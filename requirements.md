@@ -352,7 +352,26 @@ This section documents critical implementation details discovered through analys
 
 **R11.3**: Before adding a new dependency, justify it in the PR description and consider alternatives.
 
-### 5.4. Error Handling Patterns
+### 5.4. Async I/O Hygiene (Added 2025-11-26)
+
+**R16.1**: Blocking I/O calls from `std::fs` and `std::io` **must not** be used within async functions. Use `tokio::fs` and `tokio::io` equivalents instead to avoid blocking the async runtime.
+
+**R16.2**: Functions performing file I/O **should** be async and use Tokio's async file operations:
+
+- Use `tokio::fs::read_to_string` instead of `std::fs::read_to_string`
+- Use `tokio::fs::write` instead of `std::fs::write`
+- Use `tokio::fs::create_dir_all` instead of `std::fs::create_dir_all`
+- Use `tokio::fs::read_dir` instead of `std::fs::read_dir`
+
+**R16.3**: `tokio::task::spawn_blocking` **should** be avoided when the underlying operation can be reasonably converted to use async I/O. Reserve `spawn_blocking` for:
+
+- Third-party libraries that only offer synchronous APIs
+- CPU-bound computation (not I/O-bound operations)
+- Operations where converting to async would require significant refactoring with minimal benefit
+
+**R16.4**: Test code is exempt from this requirement. Tests may use `std::fs` directly since test execution is not performance-critical and test code typically runs in `#[tokio::test]` contexts where brief blocking is acceptable.
+
+### 5.5. Error Handling Patterns
 
 **R12.1**: Use `anyhow::Result` for internal error propagation.
 

@@ -872,6 +872,8 @@ impl Adapter {
             .context("Failed to create temporary file for multi-line argument")?;
 
         // Perform the blocking write on Tokio's blocking thread pool.
+        // Note: spawn_blocking is appropriate here per R16.3 - the tempfile crate
+        // only offers synchronous write APIs.
         let temp_file = {
             // Move the NamedTempFile into the blocking task and return it after write.
             let content = content.to_owned();

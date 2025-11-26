@@ -31,8 +31,11 @@ mod async_notification_test {
             Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager).unwrap());
 
         // Load configs and create service (not used in this test)
-        let configs =
-            Arc::new(load_tool_configs(&std::path::PathBuf::from(".ahma/tools")).unwrap());
+        let configs = Arc::new(
+            load_tool_configs(&std::path::PathBuf::from(".ahma/tools"))
+                .await
+                .unwrap(),
+        );
         let _service = AhmaMcpService::new(
             adapter.clone(),
             operation_monitor.clone(),

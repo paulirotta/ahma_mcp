@@ -8,7 +8,9 @@ use common::get_tools_dir;
 async fn test_gh_tool_expansion_all_synchronous() {
     init_test_logging();
     let tools_dir = get_tools_dir();
-    let configs = load_tool_configs(&tools_dir).expect("Should load tools config");
+    let configs = load_tool_configs(&tools_dir)
+        .await
+        .expect("Should load tools config");
 
     // Find the gh tool
     let gh_tool = configs.get("gh").expect("Should find gh tool in config");
@@ -71,7 +73,9 @@ async fn test_gh_tool_expansion_all_synchronous() {
 async fn test_gh_cache_subcommands_schema() {
     init_test_logging();
     let tools_dir = get_tools_dir();
-    let configs = load_tool_configs(&tools_dir).expect("Should load tools config");
+    let configs = load_tool_configs(&tools_dir)
+        .await
+        .expect("Should load tools config");
     let gh_tool = configs.get("gh").expect("Should find gh tool");
 
     let subcommands = gh_tool
@@ -132,7 +136,9 @@ async fn test_gh_cache_subcommands_schema() {
 async fn test_gh_run_subcommands_schema() {
     init_test_logging();
     let tools_dir = get_tools_dir();
-    let configs = load_tool_configs(&tools_dir).expect("Should load tools config");
+    let configs = load_tool_configs(&tools_dir)
+        .await
+        .expect("Should load tools config");
     let gh_tool = configs.get("gh").expect("Should find gh tool");
 
     let subcommands = gh_tool
@@ -206,7 +212,9 @@ async fn test_gh_run_subcommands_schema() {
 async fn test_gh_workflow_subcommands_schema() {
     init_test_logging();
     let tools_dir = get_tools_dir();
-    let configs = load_tool_configs(&tools_dir).expect("Should load tools config");
+    let configs = load_tool_configs(&tools_dir)
+        .await
+        .expect("Should load tools config");
     let gh_tool = configs.get("gh").expect("Should find gh tool");
 
     let subcommands = gh_tool

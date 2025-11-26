@@ -504,11 +504,11 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
         shell_pool_manager.clone(),
     )?);
 
-    // Load tool configurations (spawn_blocking to avoid blocking async runtime)
+    // Load tool configurations (now async, no spawn_blocking needed)
     let tools_dir = cli.tools_dir.clone();
-    let raw_configs = tokio::task::spawn_blocking(move || load_tool_configs(&tools_dir))
+    let raw_configs = load_tool_configs(&tools_dir)
         .await
-        .context("Failed to spawn blocking task for tool config loading")??;
+        .context("Failed to load tool configurations")?;
     let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let availability_summary = evaluate_tool_availability(
         shell_pool_manager.clone(),
@@ -737,11 +737,10 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
     let adapter = Adapter::new(operation_monitor, shell_pool_manager.clone())?;
 
-    // Load tool configurations (spawn_blocking to avoid blocking async runtime)
-    let raw_configs =
-        tokio::task::spawn_blocking(|| load_tool_configs(&PathBuf::from(".ahma/tools")))
-            .await
-            .context("Failed to spawn blocking task for tool config loading")??;
+    // Load tool configurations (now async, no spawn_blocking needed)
+    let raw_configs = load_tool_configs(&PathBuf::from(".ahma/tools"))
+        .await
+        .context("Failed to load tool configurations")?;
     let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let availability_summary = evaluate_tool_availability(
         shell_pool_manager.clone(),
