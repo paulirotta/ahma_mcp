@@ -464,12 +464,15 @@ pub fn enforce_landlock_sandbox(sandbox_scope: &Path) -> Result<()> {
         let path_obj = Path::new(path);
         if path_obj.exists() {
             if let Ok(fd) = PathFd::new(path_obj) {
-                match ruleset.add_rule(PathBeneath::new(fd, access_read)) {
-                    Ok(rs) => ruleset = rs,
+                // add_rule consumes ruleset, so we must always reassign it
+                // On error, we get the original ruleset back via into_inner()
+                ruleset = match ruleset.add_rule(PathBeneath::new(fd, access_read)) {
+                    Ok(rs) => rs,
                     Err(e) => {
-                        tracing::debug!("Could not add Landlock rule for {}: {:?}", path, e);
+                        tracing::debug!("Could not add Landlock rule for {}: {:?}", path, e.rule_error);
+                        e.ruleset
                     }
-                }
+                };
             }
         }
     }
