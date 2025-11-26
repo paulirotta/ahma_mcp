@@ -9,7 +9,7 @@
 //! - Complex async execution error paths
 
 use ahma_core::adapter::{Adapter, AsyncExecOptions};
-use ahma_core::config::{OptionConfig, SubcommandConfig};
+use ahma_core::config::{CommandOption, SubcommandConfig};
 use ahma_core::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_core::shell_pool::{ShellPoolConfig, ShellPoolManager};
 use ahma_core::utils::logging::init_test_logging;
@@ -94,7 +94,7 @@ async fn test_prepare_command_and_args_with_aliases() {
         step_delay_ms: None,
         positional_args: None,
         options: Some(vec![
-            OptionConfig {
+            CommandOption {
                 name: "verbose".to_string(),
                 alias: Some("v".to_string()),
                 option_type: "boolean".to_string(),
@@ -106,7 +106,7 @@ async fn test_prepare_command_and_args_with_aliases() {
                 file_arg: Some(false),
                 file_flag: None,
             },
-            OptionConfig {
+            CommandOption {
                 name: "output".to_string(),
                 alias: Some("o".to_string()),
                 option_type: "string".to_string(),
@@ -164,7 +164,7 @@ async fn test_prepare_command_and_args_mixed_types() {
         subcommand: None,
         sequence: None,
         step_delay_ms: None,
-        positional_args: Some(vec![OptionConfig {
+        positional_args: Some(vec![CommandOption {
             name: "pos_str".to_string(),
             alias: None,
             option_type: "string".to_string(),
@@ -177,7 +177,7 @@ async fn test_prepare_command_and_args_mixed_types() {
             file_flag: None,
         }]),
         options: Some(vec![
-            OptionConfig {
+            CommandOption {
                 name: "bool_opt".to_string(),
                 alias: None,
                 option_type: "boolean".to_string(),
@@ -189,7 +189,7 @@ async fn test_prepare_command_and_args_mixed_types() {
                 file_arg: Some(false),
                 file_flag: None,
             },
-            OptionConfig {
+            CommandOption {
                 name: "array_opt".to_string(),
                 alias: None,
                 option_type: "array".to_string(),
@@ -201,7 +201,7 @@ async fn test_prepare_command_and_args_mixed_types() {
                 file_arg: Some(false),
                 file_flag: None,
             },
-            OptionConfig {
+            CommandOption {
                 name: "num_opt".to_string(),
                 alias: None,
                 option_type: "number".to_string(),
@@ -554,7 +554,7 @@ async fn test_prepare_command_and_args_with_null_values() {
         subcommand: None,
         sequence: None,
         step_delay_ms: None,
-        positional_args: Some(vec![OptionConfig {
+        positional_args: Some(vec![CommandOption {
             name: "pos_arg".to_string(),
             alias: None,
             option_type: "string".to_string(),
@@ -566,7 +566,7 @@ async fn test_prepare_command_and_args_with_null_values() {
             file_arg: Some(false),
             file_flag: None,
         }]),
-        options: Some(vec![OptionConfig {
+        options: Some(vec![CommandOption {
             name: "opt_arg".to_string(),
             alias: None,
             option_type: "string".to_string(),

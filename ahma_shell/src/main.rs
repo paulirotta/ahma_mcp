@@ -58,13 +58,13 @@ use rmcp::ServiceExt;
 use serde_json::{Value, from_str};
 use std::{
     collections::{HashMap, HashSet},
-    env, fs,
+    env,
     io::IsTerminal,
     path::PathBuf,
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::signal;
+use tokio::{fs, signal};
 use tracing::{info, instrument};
 
 /// Ahma MCP Server: A generic, config-driven adapter for CLI tools.
@@ -449,7 +449,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     // TODO: Implement HTTP MCP client using rmcp 0.9.0 API
     // The HttpMcpTransport is ready but needs to be integrated with rmcp's ServiceExt
     // See: https://docs.rs/rmcp/0.9.0/rmcp/trait.ServiceExt.html
-    if cli.mcp_config.exists() {
+    if fs::try_exists(&cli.mcp_config).await.unwrap_or(false) {
         // Try to load the MCP config, but ignore if it's not a valid ahma_mcp config
         // (e.g., if it's a Cursor/VSCode MCP server config with "type": "stdio")
         match ahma_core::config::load_mcp_config(&cli.mcp_config) {
@@ -477,9 +477,9 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     // --- Standard Server Mode ---
     tracing::info!("Running in standard child-process server mode.");
 
-    // Load guidance configuration
-    let guidance_config = if cli.guidance_file.exists() {
-        let guidance_content = fs::read_to_string(&cli.guidance_file)?;
+    // Load guidance configuration (using async I/O)
+    let guidance_config = if fs::try_exists(&cli.guidance_file).await.unwrap_or(false) {
+        let guidance_content = fs::read_to_string(&cli.guidance_file).await?;
         from_str::<GuidanceConfig>(&guidance_content).ok()
     } else {
         None
@@ -504,8 +504,11 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
         shell_pool_manager.clone(),
     )?);
 
-    // Load tool configurations
-    let raw_configs = load_tool_configs(&cli.tools_dir)?;
+    // Load tool configurations (spawn_blocking to avoid blocking async runtime)
+    let tools_dir = cli.tools_dir.clone();
+    let raw_configs = tokio::task::spawn_blocking(move || load_tool_configs(&tools_dir))
+        .await
+        .context("Failed to spawn blocking task for tool config loading")??;
     let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let availability_summary = evaluate_tool_availability(
         shell_pool_manager.clone(),
@@ -734,8 +737,11 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
     let adapter = Adapter::new(operation_monitor, shell_pool_manager.clone())?;
 
-    // Load tool configurations
-    let raw_configs = load_tool_configs(&PathBuf::from(".ahma/tools"))?;
+    // Load tool configurations (spawn_blocking to avoid blocking async runtime)
+    let raw_configs =
+        tokio::task::spawn_blocking(|| load_tool_configs(&PathBuf::from(".ahma/tools")))
+            .await
+            .context("Failed to spawn blocking task for tool config loading")??;
     let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let availability_summary = evaluate_tool_availability(
         shell_pool_manager.clone(),

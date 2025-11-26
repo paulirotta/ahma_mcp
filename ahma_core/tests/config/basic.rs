@@ -1,5 +1,5 @@
 use ahma_core::config::{
-    OptionConfig, SequenceStep, SubcommandConfig, ToolConfig, ToolHints, load_tool_configs,
+    CommandOption, SequenceStep, SubcommandConfig, ToolConfig, ToolHints, load_tool_configs,
 };
 use ahma_core::utils::logging::init_test_logging;
 use serde_json::json;
@@ -66,7 +66,7 @@ fn test_subcommand_config_defaults() {
 #[test]
 fn test_option_config_structure() {
     init_test_logging();
-    let option = OptionConfig {
+    let option = CommandOption {
         name: "verbose".to_string(),
         alias: Some("v".to_string()),
         option_type: "boolean".to_string(),
@@ -130,7 +130,7 @@ fn test_tool_config_serialization() {
         subcommand: Some(vec![SubcommandConfig {
             name: "build".to_string(),
             description: "Compile the current package".to_string(),
-            options: Some(vec![OptionConfig {
+            options: Some(vec![CommandOption {
                 name: "release".to_string(),
                 alias: None,
                 option_type: "boolean".to_string(),
@@ -484,9 +484,9 @@ fn test_option_config_all_fields() {
         "file_arg": true,
         "file_flag": "--input-file"
     }
-    "#;
+    }"#;
 
-    let option: OptionConfig = serde_json::from_str(json).unwrap();
+    let option: CommandOption = serde_json::from_str(json).unwrap();
     assert_eq!(option.name, "file");
     assert_eq!(option.alias, Some("f".to_string()));
     assert_eq!(option.option_type, "string");

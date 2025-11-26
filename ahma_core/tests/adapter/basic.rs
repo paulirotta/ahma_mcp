@@ -1,5 +1,5 @@
 use ahma_core::adapter::{Adapter, AsyncExecOptions, ExecutionMode};
-use ahma_core::config::{OptionConfig, SubcommandConfig};
+use ahma_core::config::{CommandOption, SubcommandConfig};
 use ahma_core::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_core::shell_pool::{ShellPoolConfig, ShellPoolManager};
 use serde_json::{Map, Value};
@@ -116,7 +116,7 @@ async fn test_execute_sync_with_subcommand_config() {
     let subcommand_config = SubcommandConfig {
         name: "echo".to_string(),
         description: "Echo command".to_string(),
-        options: Some(vec![OptionConfig {
+        options: Some(vec![CommandOption {
             name: "n".to_string(),
             alias: None,
             option_type: "boolean".to_string(),
@@ -128,7 +128,7 @@ async fn test_execute_sync_with_subcommand_config() {
             file_arg: Some(false),
             file_flag: None,
         }]),
-        positional_args: Some(vec![OptionConfig {
+        positional_args: Some(vec![CommandOption {
             name: "message".to_string(),
             alias: None,
             option_type: "string".to_string(),

@@ -3,7 +3,7 @@ mod mcp_service_tests {
     use ahma_core::utils::logging::init_test_logging;
     use ahma_core::{
         adapter::Adapter,
-        config::{OptionConfig, SubcommandConfig, ToolConfig},
+        config::{CommandOption, SubcommandConfig, ToolConfig},
         mcp_service::{AhmaMcpService, GuidanceConfig, LegacyGuidanceConfig},
         operation_monitor::OperationMonitor,
     };
@@ -127,7 +127,7 @@ mod mcp_service_tests {
                 force_synchronous: None,
                 timeout_seconds: None,
                 guidance_key: Some("sync_behavior".to_string()),
-                options: Some(vec![OptionConfig {
+                options: Some(vec![CommandOption {
                     name: "release".to_string(),
                     option_type: "boolean".to_string(),
                     description: Some("Build in release mode".to_string()),

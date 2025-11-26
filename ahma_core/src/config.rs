@@ -41,7 +41,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 /// Represents the complete configuration for a command-line tool.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -95,7 +95,7 @@ pub struct SubcommandConfig {
     pub options: Option<Vec<CommandOption>>,
     /// Optional arguments that are not flags, but positional values.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub positional_args: Option<Vec<PositionalArgsConfig>>,
+    pub positional_args: Option<Vec<CommandOption>>,
     /// Override timeout for this specific subcommand
     pub timeout_seconds: Option<u64>,
     /// Force synchronous execution even when --async flag is set (overrides CLI flag)
@@ -144,12 +144,6 @@ pub struct CommandOption {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub alias: Option<String>,
 }
-
-/// Type alias for backward compatibility with tests
-pub type OptionConfig = CommandOption;
-
-/// Type alias for positional arguments configuration (same as OptionConfig)
-pub type PositionalArgsConfig = CommandOption;
 
 /// Schema details for array items.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -254,7 +248,7 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
-pub fn load_mcp_config(config_path: &std::path::Path) -> anyhow::Result<McpConfig> {
+pub fn load_mcp_config(config_path: &Path) -> anyhow::Result<McpConfig> {
     if !config_path.exists() {
         return Ok(McpConfig {
             servers: HashMap::new(),
@@ -277,9 +271,7 @@ pub fn load_mcp_config(config_path: &std::path::Path) -> anyhow::Result<McpConfi
 ///
 /// # Returns
 /// * `Result<HashMap<String, ToolConfig>>` - Map of tool name to configuration or error
-pub fn load_tool_configs(
-    tools_dir: &std::path::Path,
-) -> anyhow::Result<HashMap<String, ToolConfig>> {
+pub fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<String, ToolConfig>> {
     use std::fs;
 
     // Hardcoded tool names that should not be overridden by user configurations
