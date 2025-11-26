@@ -360,8 +360,8 @@ impl SandboxConfig {
 /// * `Err` - If sandboxing setup fails
 pub fn build_sandboxed_command(
     command: &[String],
-    working_dir: &Path,
-    sandbox_scope: &Path,
+    #[cfg_attr(target_os = "linux", allow(unused_variables))] working_dir: &Path,
+    #[cfg_attr(target_os = "linux", allow(unused_variables))] sandbox_scope: &Path,
 ) -> Result<(String, Vec<String>)> {
     if command.is_empty() {
         return Err(anyhow!("Empty command"));
@@ -464,12 +464,12 @@ pub fn enforce_landlock_sandbox(sandbox_scope: &Path) -> Result<()> {
         let path_obj = Path::new(path);
         if path_obj.exists() {
             if let Ok(fd) = PathFd::new(path_obj) {
-                ruleset = ruleset
-                    .add_rule(PathBeneath::new(fd, access_read))
-                    .unwrap_or_else(|e| {
+                match ruleset.add_rule(PathBeneath::new(fd, access_read)) {
+                    Ok(rs) => ruleset = rs,
+                    Err(e) => {
                         tracing::debug!("Could not add Landlock rule for {}: {:?}", path, e);
-                        ruleset
-                    });
+                    }
+                }
             }
         }
     }
