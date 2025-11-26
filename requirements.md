@@ -63,12 +63,52 @@ These are the non-negotiable principles of the project.
 - **R6.9**: The root `Cargo.toml` **must** define `default-members = ["ahma_shell"]` so that `cargo run` executes the main MCP server binary by default.
 - **R6.10**: The `ahma_list_tools` binary crate **must** provide a CLI utility to dump all MCP tool information from an MCP server (stdio or HTTP mode) to the terminal, useful for tests and development verification.
 
-### R7: Security First (Added 2025-01-27)
+### R7: Security First - Kernel-Enforced Sandboxing (Updated 2025-11-26)
 
-- **R7.1**: The system **must** enforce strict path validation for all file system operations.
-- **R7.2**: Access **must** be restricted to the current working directory and its subdirectories.
-- **R7.3**: Any attempt to access paths outside the workspace (e.g., `/`, `../`) **must** be rejected immediately.
-- **R7.4**: Command arguments **must** be validated to prevent shell injection and unauthorized path access.
+The sandbox scope defines the directory boundary within which all file system operations are permitted. The AI can freely read, write, and execute within the sandbox scope but has **zero access** outside it. This is enforced at the kernel level, not by parsing command strings.
+
+#### R7.1: Sandbox Scope Definition
+
+- **R7.1.1**: The sandbox scope **must** be set securely at server/session initialization and **cannot** be changed during the session.
+- **R7.1.2**: For **stdio mode**, the sandbox scope defaults to the current working directory (`cwd`) when the stdio server process is started.
+- **R7.1.3**: For **HTTP mode**, the sandbox scope **must** be set once by the client at the start of an HTTP session (via an initialization request). It **cannot** be changed within that session.
+- **R7.1.4**: A command-line parameter (`--sandbox-scope <path>`) **must** be supported to override the sandbox scope for both stdio and HTTP modes. When provided, this parameter takes precedence over defaults.
+- **R7.1.5**: The `working_directory` parameter in tool calls is no longer used to define the sandbox scope. The LLM **cannot** pass an insecure working directory that escapes the sandbox.
+
+#### R7.2: Kernel-Level Sandbox Enforcement (Linux)
+
+- **R7.2.1**: On Linux, the system **must** use **Landlock** (kernel 5.13+) for kernel-level file system sandboxing.
+- **R7.2.2**: The [`landlock` crate](https://crates.io/crates/landlock) **should** be used for Rust integration.
+- **R7.2.3**: Landlock rules **must** restrict file system access to only the sandbox scope directory and its subdirectories.
+- **R7.2.4**: If Landlock is not available (older kernel), the server **must** refuse to start and display clear instructions for how to enable it or upgrade the kernel.
+
+#### R7.3: Kernel-Level Sandbox Enforcement (macOS)
+
+- **R7.3.1**: On macOS, the system **must** use **Bubblewrap** (bwrap) for sandboxed command execution.
+- **R7.3.2**: Bubblewrap **must** be installed as a prerequisite. If not found, the server **must** refuse to start and display: `"Error: Bubblewrap (bwrap) is required for secure sandboxing on macOS. Install with: brew install bubblewrap"`
+- **R7.3.3**: All shell commands **must** be executed via Bubblewrap with the following configuration:
+  - `--ro-bind / /` (read-only root)
+  - `--dev /dev` (devices)
+  - `--proc /proc` (processes)
+  - `--bind <sandbox_scope> <sandbox_scope>` (read-write sandbox)
+  - `--chdir <sandbox_scope>` (working directory)
+  - `--new-session` (prevent escape via setsid)
+  - `--die-with-parent` (cleanup on server exit)
+
+#### R7.4: Sandbox Prerequisite Validation
+
+- **R7.4.1**: At server startup, the system **must** validate that the required sandboxing mechanism is available.
+- **R7.4.2**: If the prerequisite is missing or unavailable, the server **must not** start. Instead, it **must**:
+  1. Display a clear error message explaining the missing prerequisite
+  2. Provide minimal instructions for how to install/enable it
+  3. Explain why the server cannot start without security (risk of AI causing system damage outside the sandbox)
+  4. Exit with a non-zero status code
+- **R7.4.3**: The system **must not** automatically install prerequisites for the user.
+
+#### R7.5: Deprecated Security Mechanisms
+
+- **R7.5.1**: Command-line string pattern matching for path validation is **deprecated** and **must** be removed. Kernel-level enforcement is the only acceptable mechanism.
+- **R7.5.2**: The previous `working_directory` parameter that allowed LLMs to specify arbitrary paths is **deprecated**. The sandbox scope is now set at initialization only.
 
 ### R8: HTTP Bridge (Added 2025-11-23, Updated 2025-11-26)
 

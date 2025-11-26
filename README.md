@@ -23,11 +23,41 @@ We adapt concepts from [Requirements Engineering](https://en.wikipedia.org/wiki/
 
 ## Security Sandbox
 
-Ahma MCP implements a strict security model to protect your system:
+Ahma MCP implements **kernel-level sandboxing** to protect your system. The sandbox scope is set once at server startup and cannot be changed during the session—the AI has full access within the sandbox but zero access outside it.
 
-1. **Path Validation**: All file paths are validated to ensure they are within the current working directory. Access to parent directories (`..`) or absolute paths outside the workspace is blocked.
-2. **Command Sanitization**: Shell commands are checked for dangerous patterns and unauthorized path access.
-3. **Sync-by-Default**: Tools run synchronously to prevent race conditions and ensure deterministic execution, unless explicitly configured otherwise.
+### Sandbox Scope
+
+The sandbox scope defines the root directory boundary for all file system operations:
+
+- **STDIO mode**: Defaults to the current working directory when the server starts
+- **HTTP mode**: Set once by the client at session initialization (cannot be changed during session)
+- **Override**: Use `--sandbox-scope <path>` command-line parameter to force a specific sandbox scope
+
+### Platform-Specific Enforcement
+
+#### Linux (Landlock)
+
+On Linux (kernel 5.13+), Ahma uses [Landlock](https://docs.kernel.org/userspace-api/landlock.html) for kernel-level file system sandboxing. No additional installation is required—Landlock is built into modern Linux kernels.
+
+**Requirements**: Linux kernel 5.13 or newer. If your kernel is older, the server will refuse to start and display upgrade instructions.
+
+#### macOS (Bubblewrap)
+
+On macOS, Ahma uses [Bubblewrap](https://github.com/containers/bubblewrap) to sandbox all command execution.
+
+**Installation**:
+
+```bash
+brew install bubblewrap
+```
+
+If Bubblewrap is not installed, the server will refuse to start and display installation instructions.
+
+### Why Kernel-Level Sandboxing?
+
+Previous approaches that parsed command-line strings for dangerous patterns are fundamentally insufficient for security. AI models can easily construct commands that bypass string-based checks. Kernel-level enforcement provides a hard security boundary that cannot be circumvented by clever command construction.
+
+**Security Model**: "AI can do whatever it likes inside the sandbox—it has no access outside the sandbox."
 
 ### Example async tool use: AI-driven workflow
 
