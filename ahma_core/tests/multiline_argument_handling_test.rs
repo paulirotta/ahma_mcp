@@ -1,4 +1,4 @@
-use ahma_core::test_utils::get_workspace_path;
+use ahma_core::test_utils::{get_workspace_path, init_test_sandbox};
 use ahma_core::utils::logging::init_test_logging;
 /// Test multi-line argument handling functionality
 ///
@@ -79,6 +79,7 @@ async fn test_simple_git_commit_without_multiline() {
 #[tokio::test]
 async fn test_multiline_argument_with_echo() {
     init_test_logging();
+    init_test_sandbox();
     let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
         Duration::from_secs(30),
     )));
@@ -156,6 +157,7 @@ async fn test_multiline_argument_with_echo() {
 #[tokio::test]
 async fn test_multiline_git_commit_with_real_tool() {
     init_test_logging();
+    init_test_sandbox();
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let repo_path = temp_dir.path();
 
@@ -312,6 +314,7 @@ async fn test_multiline_git_commit_with_real_tool() {
 #[tokio::test]
 async fn test_multiline_git_commit_message() {
     init_test_logging();
+    init_test_sandbox();
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let repo_path = temp_dir.path();
 
@@ -497,6 +500,7 @@ async fn test_multiline_git_commit_message() {
 #[tokio::test]
 async fn test_special_characters_in_arguments() {
     init_test_logging();
+    init_test_sandbox();
     let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
         Duration::from_secs(30),
     )));
