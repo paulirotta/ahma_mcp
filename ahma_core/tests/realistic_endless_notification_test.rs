@@ -25,8 +25,11 @@ mod tests {
         shell_pool_manager.clone().start_background_tasks();
         let adapter =
             Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager.clone()).unwrap());
-        let configs =
-            Arc::new(load_tool_configs(&std::path::PathBuf::from(".ahma/tools")).unwrap());
+        let configs = Arc::new(
+            load_tool_configs(&std::path::PathBuf::from(".ahma/tools"))
+                .await
+                .unwrap(),
+        );
         let _service = AhmaMcpService::new(
             adapter.clone(),
             operation_monitor.clone(),

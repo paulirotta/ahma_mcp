@@ -200,7 +200,8 @@ impl Adapter {
     ) -> Result<String, anyhow::Error> {
         // Validate working directory
         let safe_wd =
-            path_security::validate_path(std::path::Path::new(working_dir), &self.root_path)?;
+            path_security::validate_path(std::path::Path::new(working_dir), &self.root_path)
+                .await?;
         let safe_wd_str = safe_wd.to_string_lossy().to_string();
 
         let (program, args_vec) = self
@@ -209,7 +210,7 @@ impl Adapter {
 
         // Heuristic check for shell commands
         if let Some(script) = Self::shell_script_slice(&program, &args_vec) {
-            path_security::validate_command(script, &safe_wd)?;
+            path_security::validate_command(script, &safe_wd).await?;
         }
 
         let timeout = timeout_seconds
@@ -331,7 +332,8 @@ impl Adapter {
 
         // Validate working directory
         let safe_wd =
-            path_security::validate_path(std::path::Path::new(working_dir), &self.root_path)?;
+            path_security::validate_path(std::path::Path::new(working_dir), &self.root_path)
+                .await?;
         let safe_wd_str = safe_wd.to_string_lossy().to_string();
 
         // Validate command arguments
@@ -341,7 +343,7 @@ impl Adapter {
 
         // Heuristic check for shell commands
         if let Some(script) = Self::shell_script_slice(&program_with_subcommand, &args_vec) {
-            path_security::validate_command(script, &safe_wd)?;
+            path_security::validate_command(script, &safe_wd).await?;
         }
 
         let op_id = operation_id.unwrap_or_else(generate_operation_id);
@@ -805,7 +807,8 @@ impl Adapter {
         {
             let final_value = if is_path_option || is_positional_path {
                 let path = std::path::Path::new(&value_str);
-                path_security::validate_path(path, working_dir)?
+                path_security::validate_path(path, working_dir)
+                    .await?
                     .to_string_lossy()
                     .to_string()
             } else {
@@ -869,6 +872,8 @@ impl Adapter {
             .context("Failed to create temporary file for multi-line argument")?;
 
         // Perform the blocking write on Tokio's blocking thread pool.
+        // Note: spawn_blocking is appropriate here per R16.3 - the tempfile crate
+        // only offers synchronous write APIs.
         let temp_file = {
             // Move the NamedTempFile into the blocking task and return it after write.
             let content = content.to_owned();

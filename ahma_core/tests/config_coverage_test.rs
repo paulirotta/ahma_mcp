@@ -5,7 +5,7 @@
 
 use ahma_core::config::{
     AvailabilityCheck, CommandOption, ItemsSpec, SequenceStep, SubcommandConfig, ToolConfig,
-    ToolHints, load_mcp_config, load_tool_configs,
+    ToolHints, load_mcp_config, load_tool_configs_sync,
 };
 use serde_json::json;
 use tempfile::tempdir;
@@ -469,14 +469,14 @@ fn test_items_spec_full() {
 #[test]
 fn test_load_tool_configs_empty_directory() {
     let temp_dir = tempdir().unwrap();
-    let configs = load_tool_configs(temp_dir.path()).unwrap();
+    let configs = load_tool_configs_sync(temp_dir.path()).unwrap();
     assert!(configs.is_empty());
 }
 
 #[test]
 fn test_load_tool_configs_nonexistent_directory() {
     let nonexistent = std::path::PathBuf::from("/nonexistent/path/that/does/not/exist");
-    let configs = load_tool_configs(&nonexistent).unwrap();
+    let configs = load_tool_configs_sync(&nonexistent).unwrap();
     assert!(configs.is_empty());
 }
 
@@ -495,7 +495,7 @@ fn test_load_tool_configs_single_tool() {
     )
     .unwrap();
 
-    let configs = load_tool_configs(temp_dir.path()).unwrap();
+    let configs = load_tool_configs_sync(temp_dir.path()).unwrap();
     assert_eq!(configs.len(), 1);
     assert!(configs.contains_key("echo"));
     assert_eq!(configs["echo"].command, "echo");
@@ -517,7 +517,7 @@ fn test_load_tool_configs_multiple_tools() {
     )
     .unwrap();
 
-    let configs = load_tool_configs(temp_dir.path()).unwrap();
+    let configs = load_tool_configs_sync(temp_dir.path()).unwrap();
     assert_eq!(configs.len(), 2);
     assert!(configs.contains_key("echo"));
     assert!(configs.contains_key("cat"));
@@ -533,7 +533,7 @@ fn test_load_tool_configs_skips_disabled_tools() {
     )
     .unwrap();
 
-    let configs = load_tool_configs(temp_dir.path()).unwrap();
+    let configs = load_tool_configs_sync(temp_dir.path()).unwrap();
     assert!(configs.is_empty());
 }
 
@@ -555,7 +555,7 @@ fn test_load_tool_configs_skips_non_json_files() {
     )
     .unwrap();
 
-    let configs = load_tool_configs(temp_dir.path()).unwrap();
+    let configs = load_tool_configs_sync(temp_dir.path()).unwrap();
     assert_eq!(configs.len(), 1);
     assert!(configs.contains_key("echo"));
 }
@@ -574,7 +574,7 @@ fn test_load_tool_configs_handles_invalid_json() {
     // Invalid JSON (missing quotes)
     std::fs::write(temp_dir.path().join("invalid.json"), "{name: broken}").unwrap();
 
-    let configs = load_tool_configs(temp_dir.path()).unwrap();
+    let configs = load_tool_configs_sync(temp_dir.path()).unwrap();
     // Should load valid tool, skip invalid
     assert_eq!(configs.len(), 1);
     assert!(configs.contains_key("valid"));
@@ -590,7 +590,7 @@ fn test_load_tool_configs_reserved_name_await_fails() {
     )
     .unwrap();
 
-    let result = load_tool_configs(temp_dir.path());
+    let result = load_tool_configs_sync(temp_dir.path());
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(err.contains("await"));
@@ -607,7 +607,7 @@ fn test_load_tool_configs_reserved_name_status_fails() {
     )
     .unwrap();
 
-    let result = load_tool_configs(temp_dir.path());
+    let result = load_tool_configs_sync(temp_dir.path());
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(err.contains("status"));
@@ -618,28 +618,28 @@ fn test_load_tool_configs_reserved_name_status_fails() {
 // load_mcp_config Tests
 // ============================================================================
 
-#[test]
-fn test_load_mcp_config_nonexistent_file() {
+#[tokio::test]
+async fn test_load_mcp_config_nonexistent_file() {
     let temp_dir = tempdir().unwrap();
     let config_path = temp_dir.path().join("nonexistent.json");
 
-    let config = load_mcp_config(&config_path).unwrap();
+    let config = load_mcp_config(&config_path).await.unwrap();
     assert!(config.servers.is_empty());
 }
 
-#[test]
-fn test_load_mcp_config_empty_servers() {
+#[tokio::test]
+async fn test_load_mcp_config_empty_servers() {
     let temp_dir = tempdir().unwrap();
     let config_path = temp_dir.path().join("mcp.json");
 
     std::fs::write(&config_path, r#"{"servers": {}}"#).unwrap();
 
-    let config = load_mcp_config(&config_path).unwrap();
+    let config = load_mcp_config(&config_path).await.unwrap();
     assert!(config.servers.is_empty());
 }
 
-#[test]
-fn test_load_mcp_config_child_process_server() {
+#[tokio::test]
+async fn test_load_mcp_config_child_process_server() {
     let temp_dir = tempdir().unwrap();
     let config_path = temp_dir.path().join("mcp.json");
 
@@ -657,12 +657,12 @@ fn test_load_mcp_config_child_process_server() {
     )
     .unwrap();
 
-    let config = load_mcp_config(&config_path).unwrap();
+    let config = load_mcp_config(&config_path).await.unwrap();
     assert!(config.servers.contains_key("test_server"));
 }
 
-#[test]
-fn test_load_mcp_config_http_server() {
+#[tokio::test]
+async fn test_load_mcp_config_http_server() {
     let temp_dir = tempdir().unwrap();
     let config_path = temp_dir.path().join("mcp.json");
 
@@ -681,18 +681,18 @@ fn test_load_mcp_config_http_server() {
     )
     .unwrap();
 
-    let config = load_mcp_config(&config_path).unwrap();
+    let config = load_mcp_config(&config_path).await.unwrap();
     assert!(config.servers.contains_key("http_server"));
 }
 
-#[test]
-fn test_load_mcp_config_invalid_json() {
+#[tokio::test]
+async fn test_load_mcp_config_invalid_json() {
     let temp_dir = tempdir().unwrap();
     let config_path = temp_dir.path().join("mcp.json");
 
     std::fs::write(&config_path, "not valid json").unwrap();
 
-    let result = load_mcp_config(&config_path);
+    let result = load_mcp_config(&config_path).await;
     assert!(result.is_err());
 }
 

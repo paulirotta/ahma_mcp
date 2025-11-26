@@ -10,7 +10,7 @@ use common::get_workspace_path;
 async fn test_all_tool_json_files_load_correctly() -> Result<()> {
     init_test_logging();
     let tools_dir = get_workspace_path(".ahma/tools");
-    let tool_configs = load_tool_configs(&tools_dir);
+    let tool_configs = load_tool_configs(&tools_dir).await;
 
     assert!(
         tool_configs.is_ok(),

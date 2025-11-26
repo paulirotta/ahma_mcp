@@ -248,19 +248,19 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
-pub fn load_mcp_config(config_path: &Path) -> anyhow::Result<McpConfig> {
-    if !config_path.exists() {
+pub async fn load_mcp_config(config_path: &Path) -> anyhow::Result<McpConfig> {
+    if !tokio::fs::try_exists(config_path).await.unwrap_or(false) {
         return Ok(McpConfig {
             servers: HashMap::new(),
         });
     }
 
-    let contents = std::fs::read_to_string(config_path)?;
+    let contents = tokio::fs::read_to_string(config_path).await?;
     let config: McpConfig = serde_json::from_str(&contents)?;
     Ok(config)
 }
 
-/// Load all tool configurations from a directory
+/// Load all tool configurations from a directory (async version)
 ///
 /// This function scans the specified directory for JSON files and attempts to
 /// deserialize each one into a `ToolConfig`. If the directory doesn't exist or
@@ -271,7 +271,70 @@ pub fn load_mcp_config(config_path: &Path) -> anyhow::Result<McpConfig> {
 ///
 /// # Returns
 /// * `Result<HashMap<String, ToolConfig>>` - Map of tool name to configuration or error
-pub fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<String, ToolConfig>> {
+pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<String, ToolConfig>> {
+    use tokio::fs;
+
+    // Hardcoded tool names that should not be overridden by user configurations
+    const RESERVED_TOOL_NAMES: &[&str] = &["await", "status"];
+
+    // Return empty map if directory doesn't exist
+    if !fs::try_exists(tools_dir).await.unwrap_or(false) {
+        return Ok(HashMap::new());
+    }
+
+    let mut configs = HashMap::new();
+
+    // Read directory entries
+    let mut dir = fs::read_dir(tools_dir).await?;
+    while let Some(entry) = dir.next_entry().await? {
+        let path = entry.path();
+
+        // Only process .json files
+        if path.extension().and_then(|s| s.to_str()) == Some("json") {
+            match fs::read_to_string(&path).await {
+                Ok(contents) => match serde_json::from_str::<ToolConfig>(&contents) {
+                    Ok(config) => {
+                        // Guard rail: Check for conflicts with hardcoded tool names
+                        if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
+                            anyhow::bail!(
+                                "Tool name '{}' conflicts with a hardcoded system tool. Reserved tool names: {:?}. Please rename your tool in {}",
+                                config.name,
+                                RESERVED_TOOL_NAMES,
+                                path.display()
+                            );
+                        }
+
+                        // Only include enabled tools
+                        if config.enabled {
+                            configs.insert(config.name.clone(), config);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to parse {}: {}", path.display(), e);
+                    }
+                },
+                Err(e) => {
+                    tracing::warn!("Failed to read {}: {}", path.display(), e);
+                }
+            }
+        }
+    }
+
+    Ok(configs)
+}
+
+/// Synchronous version of `load_tool_configs` for test use only.
+///
+/// This function is provided for tests per requirement R16.4, which allows
+/// tests to use synchronous I/O. Production code should use the async
+/// `load_tool_configs` function instead.
+///
+/// # Arguments
+/// * `tools_dir` - Path to the directory containing tool configuration files
+///
+/// # Returns
+/// * `Result<HashMap<String, ToolConfig>>` - Map of tool name to configuration or error
+pub fn load_tool_configs_sync(tools_dir: &Path) -> anyhow::Result<HashMap<String, ToolConfig>> {
     use std::fs;
 
     // Hardcoded tool names that should not be overridden by user configurations

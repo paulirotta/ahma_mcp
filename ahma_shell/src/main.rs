@@ -452,7 +452,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     if fs::try_exists(&cli.mcp_config).await.unwrap_or(false) {
         // Try to load the MCP config, but ignore if it's not a valid ahma_mcp config
         // (e.g., if it's a Cursor/VSCode MCP server config with "type": "stdio")
-        match ahma_core::config::load_mcp_config(&cli.mcp_config) {
+        match ahma_core::config::load_mcp_config(&cli.mcp_config).await {
             Ok(mcp_config) => {
                 if let Some(server_config) = mcp_config.servers.values().next()
                     && let ahma_core::config::ServerConfig::Http(_http_config) = server_config
@@ -504,11 +504,11 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
         shell_pool_manager.clone(),
     )?);
 
-    // Load tool configurations (spawn_blocking to avoid blocking async runtime)
+    // Load tool configurations (now async, no spawn_blocking needed)
     let tools_dir = cli.tools_dir.clone();
-    let raw_configs = tokio::task::spawn_blocking(move || load_tool_configs(&tools_dir))
+    let raw_configs = load_tool_configs(&tools_dir)
         .await
-        .context("Failed to spawn blocking task for tool config loading")??;
+        .context("Failed to load tool configurations")?;
     let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let availability_summary = evaluate_tool_availability(
         shell_pool_manager.clone(),
@@ -737,11 +737,10 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
     let adapter = Adapter::new(operation_monitor, shell_pool_manager.clone())?;
 
-    // Load tool configurations (spawn_blocking to avoid blocking async runtime)
-    let raw_configs =
-        tokio::task::spawn_blocking(|| load_tool_configs(&PathBuf::from(".ahma/tools")))
-            .await
-            .context("Failed to spawn blocking task for tool config loading")??;
+    // Load tool configurations (now async, no spawn_blocking needed)
+    let raw_configs = load_tool_configs(&PathBuf::from(".ahma/tools"))
+        .await
+        .context("Failed to load tool configurations")?;
     let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let availability_summary = evaluate_tool_availability(
         shell_pool_manager.clone(),
