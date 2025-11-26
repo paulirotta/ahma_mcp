@@ -7,7 +7,7 @@
 //! ## Platform Support
 //!
 //! - **Linux**: Uses Landlock (kernel 5.13+) for kernel-level file system access control.
-//! - **macOS**: Uses Bubblewrap (bwrap) for namespace-based isolation.
+//! - **macOS**: Uses sandbox-exec with Seatbelt profiles for file system access control.
 //!
 //! ## Security Model
 //!
@@ -78,8 +78,8 @@ pub enum SandboxError {
     #[error("Landlock is not available on this system (requires Linux kernel 5.13+)")]
     LandlockNotAvailable,
 
-    #[error("Bubblewrap (bwrap) is not installed. Install with: brew install bubblewrap")]
-    BubblewrapNotInstalled,
+    #[error("macOS sandbox-exec is not available")]
+    MacOSSandboxNotAvailable,
 
     #[error("Unsupported operating system: {0}")]
     UnsupportedOs(String),
@@ -201,7 +201,7 @@ pub fn check_sandbox_prerequisites() -> Result<(), SandboxError> {
 
     #[cfg(target_os = "macos")]
     {
-        check_bubblewrap_installed()
+        check_macos_sandbox_available()
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -268,16 +268,18 @@ fn check_kernel_version_for_landlock() -> Result<(), SandboxError> {
     )))
 }
 
-/// Check if Bubblewrap is installed on macOS
+/// Check if macOS sandbox-exec is available
+/// sandbox-exec is built into macOS and should always be available
 #[cfg(target_os = "macos")]
-fn check_bubblewrap_installed() -> Result<(), SandboxError> {
+fn check_macos_sandbox_available() -> Result<(), SandboxError> {
     use std::process::Command;
 
-    let result = Command::new("which").arg("bwrap").output();
+    // sandbox-exec is built into macOS, check if it exists
+    let result = Command::new("which").arg("sandbox-exec").output();
 
     match result {
         Ok(output) if output.status.success() => Ok(()),
-        _ => Err(SandboxError::BubblewrapNotInstalled),
+        _ => Err(SandboxError::MacOSSandboxNotAvailable),
     }
 }
 
@@ -295,14 +297,14 @@ pub fn exit_with_sandbox_error(error: &SandboxError) -> ! {
             eprintln!("  2. Ensure Landlock LSM is enabled in your kernel config");
             eprintln!("  3. Check: cat /sys/kernel/security/lsm | grep landlock\n");
         }
-        SandboxError::BubblewrapNotInstalled => {
-            eprintln!("Bubblewrap provides namespace-based sandboxing on macOS.\n");
-            eprintln!("To install:");
-            eprintln!("  brew install bubblewrap\n");
+        SandboxError::MacOSSandboxNotAvailable => {
+            eprintln!("macOS sandbox-exec is not available on this system.\n");
+            eprintln!("sandbox-exec is a built-in macOS feature and should be available.");
+            eprintln!("Please ensure you are running a supported version of macOS.\n");
         }
         SandboxError::UnsupportedOs(os) => {
             eprintln!("Operating system '{}' is not currently supported.", os);
-            eprintln!("Supported platforms: Linux (with Landlock), macOS (with Bubblewrap)\n");
+            eprintln!("Supported platforms: Linux (with Landlock), macOS (with sandbox-exec)\n");
         }
         SandboxError::PrerequisiteFailed(msg) => {
             eprintln!("{}\n", msg);
@@ -376,7 +378,7 @@ pub fn build_sandboxed_command(
 
     #[cfg(target_os = "macos")]
     {
-        build_bubblewrap_command(command, working_dir, sandbox_scope)
+        build_macos_sandbox_command(command, working_dir, sandbox_scope)
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -385,38 +387,98 @@ pub fn build_sandboxed_command(
     }
 }
 
-/// Build a Bubblewrap-wrapped command for macOS
+/// Build a macOS sandbox-exec wrapped command
+/// Uses Apple's built-in sandbox-exec with a custom Seatbelt profile
 #[cfg(target_os = "macos")]
-fn build_bubblewrap_command(
+fn build_macos_sandbox_command(
     command: &[String],
     working_dir: &Path,
     sandbox_scope: &Path,
 ) -> Result<(String, Vec<String>)> {
-    let scope_str = sandbox_scope.to_string_lossy();
-    let wd_str = working_dir.to_string_lossy();
+    // Generate a Seatbelt profile that:
+    // - Denies all file operations by default
+    // - Allows read access to system directories needed for execution
+    // - Allows read/write access only to the sandbox scope
+    let profile = generate_seatbelt_profile(sandbox_scope, working_dir);
 
-    // Build bwrap arguments
-    let mut args = vec![
-        "--ro-bind".to_string(),
-        "/".to_string(),
-        "/".to_string(),
-        "--dev".to_string(),
-        "/dev".to_string(),
-        "--proc".to_string(),
-        "/proc".to_string(),
-        "--bind".to_string(),
-        scope_str.to_string(),
-        scope_str.to_string(),
-        "--chdir".to_string(),
-        wd_str.to_string(),
-        "--new-session".to_string(),
-        "--die-with-parent".to_string(),
-    ];
+    // Build sandbox-exec arguments
+    let mut args = vec!["-p".to_string(), profile];
 
     // Add the actual command
     args.extend(command.iter().cloned());
 
-    Ok(("bwrap".to_string(), args))
+    Ok(("sandbox-exec".to_string(), args))
+}
+
+/// Generate a Seatbelt (sandbox) profile for macOS
+/// This profile restricts file system access to the sandbox scope
+#[cfg(target_os = "macos")]
+fn generate_seatbelt_profile(sandbox_scope: &Path, working_dir: &Path) -> String {
+    let scope_str = sandbox_scope.to_string_lossy();
+    let wd_str = working_dir.to_string_lossy();
+
+    // Seatbelt profile using Apple's Sandbox Profile Language (SBPL)
+    format!(
+        r#"(version 1)
+(deny default)
+
+; Allow basic process operations
+(allow process-fork)
+(allow process-exec)
+(allow signal)
+(allow sysctl-read)
+
+; Allow reading system directories needed for execution
+(allow file-read*
+    (subpath "/usr")
+    (subpath "/bin")
+    (subpath "/sbin")
+    (subpath "/Library")
+    (subpath "/System")
+    (subpath "/Applications")
+    (subpath "/private/var/db")
+    (subpath "/private/etc")
+    (subpath "/dev")
+    (literal "/etc")
+    (literal "/tmp")
+    (literal "/var")
+    (literal "/private")
+)
+
+; Allow reading and executing from common tool locations
+(allow file-read* file-execute
+    (subpath "/usr/bin")
+    (subpath "/usr/local/bin")
+    (subpath "/opt/homebrew/bin")
+    (subpath "/opt/homebrew/Cellar")
+)
+
+; Allow full access to the sandbox scope (read, write, execute)
+(allow file-read* file-write* file-execute
+    (subpath "{scope}")
+)
+
+; Allow access to working directory if different from scope
+(allow file-read* file-write*
+    (subpath "{working_dir}")
+)
+
+; Allow reading temp directories
+(allow file-read* file-write*
+    (subpath "/private/tmp")
+    (subpath "/var/folders")
+)
+
+; Allow network access (needed for some tools)
+(allow network*)
+
+; Allow mach IPC (needed for system services)
+(allow mach-lookup)
+(allow ipc-posix-shm*)
+"#,
+        scope = scope_str,
+        working_dir = wd_str,
+    )
 }
 
 /// Apply Landlock sandbox restrictions to the current process.
@@ -549,19 +611,19 @@ pub fn create_sandboxed_command(
 
     #[cfg(target_os = "macos")]
     {
-        // On macOS, wrap each command with Bubblewrap
+        // On macOS, wrap each command with sandbox-exec
         let mut full_command = vec![program.to_string()];
         full_command.extend(args.iter().cloned());
 
-        let (bwrap_program, bwrap_args) =
-            build_bubblewrap_command(&full_command, working_dir, _sandbox_scope)?;
+        let (sandbox_program, sandbox_args) =
+            build_macos_sandbox_command(&full_command, working_dir, _sandbox_scope)?;
 
-        let mut cmd = tokio::process::Command::new(bwrap_program);
-        cmd.args(bwrap_args)
+        let mut cmd = tokio::process::Command::new(sandbox_program);
+        cmd.args(sandbox_args)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
-        // Note: working_dir is handled by bwrap's --chdir
+        // Note: working_dir is handled inside the sandbox profile
         Ok(cmd)
     }
 
@@ -621,14 +683,14 @@ pub fn create_sandboxed_shell_command(
 
     #[cfg(target_os = "macos")]
     {
-        // On macOS, wrap with Bubblewrap
+        // On macOS, wrap with sandbox-exec
         let full_command = vec![shell.to_string(), "-c".to_string(), script.to_string()];
 
-        let (bwrap_program, bwrap_args) =
-            build_bubblewrap_command(&full_command, working_dir, _sandbox_scope)?;
+        let (sandbox_program, sandbox_args) =
+            build_macos_sandbox_command(&full_command, working_dir, _sandbox_scope)?;
 
-        let mut cmd = tokio::process::Command::new(bwrap_program);
-        cmd.args(bwrap_args)
+        let mut cmd = tokio::process::Command::new(sandbox_program);
+        cmd.args(sandbox_args)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
@@ -682,18 +744,17 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn test_build_bubblewrap_command() {
+    fn test_build_macos_sandbox_command() {
         let temp = TempDir::new().unwrap();
         let scope = temp.path();
         let command = vec!["ls".to_string(), "-la".to_string()];
 
-        let result = build_bubblewrap_command(&command, scope, scope);
+        let result = build_macos_sandbox_command(&command, scope, scope);
         assert!(result.is_ok());
 
         let (program, args) = result.unwrap();
-        assert_eq!(program, "bwrap");
-        assert!(args.contains(&"--ro-bind".to_string()));
-        assert!(args.contains(&"--bind".to_string()));
+        assert_eq!(program, "sandbox-exec");
+        assert!(args.contains(&"-p".to_string()));
         assert!(args.contains(&"ls".to_string()));
         assert!(args.contains(&"-la".to_string()));
     }
