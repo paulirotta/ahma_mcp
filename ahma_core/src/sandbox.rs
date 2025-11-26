@@ -417,6 +417,26 @@ fn generate_seatbelt_profile(sandbox_scope: &Path, working_dir: &Path) -> String
     let scope_str = sandbox_scope.to_string_lossy();
     let wd_str = working_dir.to_string_lossy();
 
+    // Get home directory for user-specific tool paths
+    let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/Users/Shared".to_string());
+    let home_path = std::path::Path::new(&home_dir);
+
+    // Build optional user tool directory rules (only for paths that exist)
+    let mut user_tool_rules = String::new();
+    let cargo_path = home_path.join(".cargo");
+    let rustup_path = home_path.join(".rustup");
+
+    if cargo_path.exists() || rustup_path.exists() {
+        user_tool_rules.push_str("\n; Allow reading user tool directories\n(allow file-read*");
+        if cargo_path.exists() {
+            user_tool_rules.push_str(&format!("\n    (subpath \"{}\")", cargo_path.display()));
+        }
+        if rustup_path.exists() {
+            user_tool_rules.push_str(&format!("\n    (subpath \"{}\")", rustup_path.display()));
+        }
+        user_tool_rules.push_str("\n)");
+    }
+
     // Seatbelt profile using Apple's Sandbox Profile Language (SBPL)
     format!(
         r#"(version 1)
@@ -451,7 +471,7 @@ fn generate_seatbelt_profile(sandbox_scope: &Path, working_dir: &Path) -> String
     (subpath "/usr/local/bin")
     (subpath "/opt/homebrew/bin")
     (subpath "/opt/homebrew/Cellar")
-)
+){user_tool_rules}
 
 ; Allow full access to the sandbox scope (read, write; process-exec handles execution)
 (allow file-read* file-write*
@@ -478,6 +498,7 @@ fn generate_seatbelt_profile(sandbox_scope: &Path, working_dir: &Path) -> String
 "#,
         scope = scope_str,
         working_dir = wd_str,
+        user_tool_rules = user_tool_rules,
     )
 }
 
@@ -620,10 +641,10 @@ pub fn create_sandboxed_command(
 
         let mut cmd = tokio::process::Command::new(sandbox_program);
         cmd.args(sandbox_args)
+            .current_dir(working_dir)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
-        // Note: working_dir is handled inside the sandbox profile
         Ok(cmd)
     }
 
@@ -691,6 +712,7 @@ pub fn create_sandboxed_shell_command(
 
         let mut cmd = tokio::process::Command::new(sandbox_program);
         cmd.args(sandbox_args)
+            .current_dir(working_dir)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
