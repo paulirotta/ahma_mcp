@@ -618,28 +618,28 @@ fn test_load_tool_configs_reserved_name_status_fails() {
 // load_mcp_config Tests
 // ============================================================================
 
-#[test]
-fn test_load_mcp_config_nonexistent_file() {
+#[tokio::test]
+async fn test_load_mcp_config_nonexistent_file() {
     let temp_dir = tempdir().unwrap();
     let config_path = temp_dir.path().join("nonexistent.json");
 
-    let config = load_mcp_config(&config_path).unwrap();
+    let config = load_mcp_config(&config_path).await.unwrap();
     assert!(config.servers.is_empty());
 }
 
-#[test]
-fn test_load_mcp_config_empty_servers() {
+#[tokio::test]
+async fn test_load_mcp_config_empty_servers() {
     let temp_dir = tempdir().unwrap();
     let config_path = temp_dir.path().join("mcp.json");
 
     std::fs::write(&config_path, r#"{"servers": {}}"#).unwrap();
 
-    let config = load_mcp_config(&config_path).unwrap();
+    let config = load_mcp_config(&config_path).await.unwrap();
     assert!(config.servers.is_empty());
 }
 
-#[test]
-fn test_load_mcp_config_child_process_server() {
+#[tokio::test]
+async fn test_load_mcp_config_child_process_server() {
     let temp_dir = tempdir().unwrap();
     let config_path = temp_dir.path().join("mcp.json");
 
@@ -657,12 +657,12 @@ fn test_load_mcp_config_child_process_server() {
     )
     .unwrap();
 
-    let config = load_mcp_config(&config_path).unwrap();
+    let config = load_mcp_config(&config_path).await.unwrap();
     assert!(config.servers.contains_key("test_server"));
 }
 
-#[test]
-fn test_load_mcp_config_http_server() {
+#[tokio::test]
+async fn test_load_mcp_config_http_server() {
     let temp_dir = tempdir().unwrap();
     let config_path = temp_dir.path().join("mcp.json");
 
@@ -681,18 +681,18 @@ fn test_load_mcp_config_http_server() {
     )
     .unwrap();
 
-    let config = load_mcp_config(&config_path).unwrap();
+    let config = load_mcp_config(&config_path).await.unwrap();
     assert!(config.servers.contains_key("http_server"));
 }
 
-#[test]
-fn test_load_mcp_config_invalid_json() {
+#[tokio::test]
+async fn test_load_mcp_config_invalid_json() {
     let temp_dir = tempdir().unwrap();
     let config_path = temp_dir.path().join("mcp.json");
 
     std::fs::write(&config_path, "not valid json").unwrap();
 
-    let result = load_mcp_config(&config_path);
+    let result = load_mcp_config(&config_path).await;
     assert!(result.is_err());
 }
 

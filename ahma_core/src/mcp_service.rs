@@ -1798,8 +1798,8 @@ impl AhmaMcpService {
                         ".bundle-lock",
                     ];
                     for dir in &["target", "node_modules", ".cargo", "tmp", "temp"] {
-                        if let Ok(entries) = std::fs::read_dir(dir) {
-                            for entry in entries.flatten() {
+                        if let Ok(mut entries) = tokio::fs::read_dir(dir).await {
+                            while let Ok(Some(entry)) = entries.next_entry().await {
                                 if let Some(name) = entry.file_name().to_str() {
                                     for pattern in &lock_patterns {
                                         if name.contains(pattern) {
@@ -1814,7 +1814,7 @@ impl AhmaMcpService {
                             }
                         }
                     }
-                    if std::fs::metadata(".").is_ok() {
+                    if tokio::fs::metadata(".").await.is_ok() {
                         remediation_steps.push("• Check available disk space: df -h .".to_string());
                     }
                     let running_commands: std::collections::HashSet<String> = still_running

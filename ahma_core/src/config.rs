@@ -248,14 +248,14 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
-pub fn load_mcp_config(config_path: &Path) -> anyhow::Result<McpConfig> {
-    if !config_path.exists() {
+pub async fn load_mcp_config(config_path: &Path) -> anyhow::Result<McpConfig> {
+    if !tokio::fs::try_exists(config_path).await.unwrap_or(false) {
         return Ok(McpConfig {
             servers: HashMap::new(),
         });
     }
 
-    let contents = std::fs::read_to_string(config_path)?;
+    let contents = tokio::fs::read_to_string(config_path).await?;
     let config: McpConfig = serde_json::from_str(&contents)?;
     Ok(config)
 }

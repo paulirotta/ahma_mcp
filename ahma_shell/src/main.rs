@@ -452,7 +452,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     if fs::try_exists(&cli.mcp_config).await.unwrap_or(false) {
         // Try to load the MCP config, but ignore if it's not a valid ahma_mcp config
         // (e.g., if it's a Cursor/VSCode MCP server config with "type": "stdio")
-        match ahma_core::config::load_mcp_config(&cli.mcp_config) {
+        match ahma_core::config::load_mcp_config(&cli.mcp_config).await {
             Ok(mcp_config) => {
                 if let Some(server_config) = mcp_config.servers.values().next()
                     && let ahma_core::config::ServerConfig::Http(_http_config) = server_config
