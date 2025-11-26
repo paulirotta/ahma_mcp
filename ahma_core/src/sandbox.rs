@@ -445,16 +445,16 @@ fn generate_seatbelt_profile(sandbox_scope: &Path, working_dir: &Path) -> String
     (literal "/private")
 )
 
-; Allow reading and executing from common tool locations
-(allow file-read* file-execute
+; Allow reading from common tool locations (process-exec handles execution)
+(allow file-read*
     (subpath "/usr/bin")
     (subpath "/usr/local/bin")
     (subpath "/opt/homebrew/bin")
     (subpath "/opt/homebrew/Cellar")
 )
 
-; Allow full access to the sandbox scope (read, write, execute)
-(allow file-read* file-write* file-execute
+; Allow full access to the sandbox scope (read, write; process-exec handles execution)
+(allow file-read* file-write*
     (subpath "{scope}")
 )
 
