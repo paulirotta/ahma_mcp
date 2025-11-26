@@ -70,13 +70,27 @@ These are the non-negotiable principles of the project.
 - **R7.3**: Any attempt to access paths outside the workspace (e.g., `/`, `../`) **must** be rejected immediately.
 - **R7.4**: Command arguments **must** be validated to prevent shell injection and unauthorized path access.
 
-### R8: HTTP Bridge (Added 2025-11-23)
+### R8: HTTP Bridge (Added 2025-11-23, Updated 2025-11-26)
 
 - **R8.1**: The system **must** support an HTTP bridge mode (`ahma_mcp --mode http`) that exposes the MCP server over HTTP/SSE.
 - **R8.2**: The bridge **must** support Server-Sent Events (SSE) at `/sse` for server-to-client notifications and events.
 - **R8.3**: The bridge **must** support JSON-RPC requests via POST at `/mcp`.
 - **R8.4**: The bridge **must** handle concurrent requests by matching JSON-RPC IDs.
 - **R8.5**: The bridge **must** be robust against underlying process crashes, automatically restarting the `ahma_mcp` stdio process if it terminates.
+
+### R8A: Streaming Response Support (Added 2025-11-26)
+
+Per MCP protocol (rmcp 0.9.1+), clients can request either JSON or SSE streaming responses via the `Accept` header.
+
+- **R8A.1**: The server **must** inspect the `Accept` header on incoming requests to determine response format preference.
+- **R8A.2**: When `Accept: text/event-stream` is present (and `Accept: application/json` is not prioritized), the server **should** respond with SSE streaming.
+- **R8A.3**: When `Accept: application/json` is present (and prioritized over SSE), the server **should** respond with a single JSON response.
+- **R8A.4**: The POST `/mcp` endpoint **must** accept both `Accept` header configurations and respond accordingly:
+  - SSE mode: Returns `Content-Type: text/event-stream` with streaming events
+  - JSON mode: Returns `Content-Type: application/json` with single response
+- **R8A.5**: For long-running tool operations in async mode, SSE streaming **should** be used to stream progress updates and partial results back to the client.
+- **R8A.6**: The `Content-Type` response header **must** match the actual response format (`text/event-stream` or `application/json`).
+- **R8A.7**: If no `Accept` header is present, the server **should** default to JSON response format for backward compatibility.
 
 ## 3. Tool Definition (MTDF Schema)
 
@@ -492,6 +506,10 @@ See `ARCHITECTURE_UPGRADE_PLAN.md` for detailed roadmap including:
 
 ## 7. Version History
 
+- **v0.6.2** (2025-11-26):
+  - Added streaming response support (R8A) for JSON/SSE content negotiation per MCP protocol (rmcp 0.9.1)
+  - Clients can now request either JSON or SSE streaming responses via `Accept` header
+  - HTTP bridge POST `/mcp` endpoint supports both response formats
 - **v0.5.0** (2025-11-18):
   - Added requirement for HTTP MCP Client with OAuth support
   - Implemented `ahma_http_mcp_client` crate with full OAuth 2.0 + PKCE flow
@@ -511,5 +529,5 @@ See `ARCHITECTURE_UPGRADE_PLAN.md` for detailed roadmap including:
 
 ---
 
-**Last Updated**: 2025-11-18
+**Last Updated**: 2025-11-26
 **Status**: Living Document - Update with every architectural decision or significant change
