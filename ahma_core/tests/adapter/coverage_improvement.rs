@@ -19,7 +19,7 @@ use tokio::sync::Mutex;
 use ahma_core::{
     adapter::{Adapter, AsyncExecOptions},
     callback_system::{CallbackError, CallbackSender, ProgressUpdate},
-    config::{OptionConfig, SubcommandConfig},
+    config::{CommandOption, SubcommandConfig},
     operation_monitor::{MonitorConfig, OperationMonitor},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
 };
@@ -106,7 +106,7 @@ async fn test_command_preparation_error_paths() -> Result<()> {
         availability_check: None,
         install_instructions: None,
         positional_args: Some(vec![
-            OptionConfig {
+            CommandOption {
                 name: "pos1".to_string(),
                 alias: None,
                 option_type: "string".to_string(),
@@ -117,7 +117,7 @@ async fn test_command_preparation_error_paths() -> Result<()> {
                 file_arg: Some(false),
                 file_flag: None,
             },
-            OptionConfig {
+            CommandOption {
                 name: "pos_array".to_string(),
                 alias: None,
                 option_type: "array".to_string(),
@@ -130,7 +130,7 @@ async fn test_command_preparation_error_paths() -> Result<()> {
             },
         ]),
         options: Some(vec![
-            OptionConfig {
+            CommandOption {
                 name: "file-content".to_string(),
                 alias: Some("f".to_string()),
                 option_type: "string".to_string(),
@@ -141,7 +141,7 @@ async fn test_command_preparation_error_paths() -> Result<()> {
                 file_arg: Some(true),
                 file_flag: Some("--file".to_string()),
             },
-            OptionConfig {
+            CommandOption {
                 name: "array-option".to_string(),
                 alias: None,
                 option_type: "array".to_string(),
@@ -152,7 +152,7 @@ async fn test_command_preparation_error_paths() -> Result<()> {
                 file_arg: Some(false),
                 file_flag: None,
             },
-            OptionConfig {
+            CommandOption {
                 name: "bool-flag".to_string(),
                 alias: Some("b".to_string()),
                 option_type: "boolean".to_string(),
@@ -163,7 +163,7 @@ async fn test_command_preparation_error_paths() -> Result<()> {
                 file_arg: Some(false),
                 file_flag: None,
             },
-            OptionConfig {
+            CommandOption {
                 name: "number".to_string(),
                 alias: None,
                 option_type: "number".to_string(),
@@ -282,7 +282,7 @@ async fn test_file_handling_error_scenarios() -> Result<()> {
         availability_check: None,
         install_instructions: None,
         positional_args: None,
-        options: Some(vec![OptionConfig {
+        options: Some(vec![CommandOption {
             name: "content".to_string(),
             alias: None,
             option_type: "string".to_string(),
@@ -718,7 +718,7 @@ async fn test_complex_async_exec_options() -> Result<()> {
         step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
-        positional_args: Some(vec![OptionConfig {
+        positional_args: Some(vec![CommandOption {
             name: "target".to_string(),
             alias: None,
             option_type: "string".to_string(),
@@ -729,7 +729,7 @@ async fn test_complex_async_exec_options() -> Result<()> {
             file_arg: Some(false),
             file_flag: None,
         }]),
-        options: Some(vec![OptionConfig {
+        options: Some(vec![CommandOption {
             name: "verbose".to_string(),
             alias: Some("v".to_string()),
             option_type: "boolean".to_string(),

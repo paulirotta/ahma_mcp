@@ -4,7 +4,7 @@
 //! in adapter.rs including value_to_string, process_named_arg, and temp file handling.
 
 use ahma_core::adapter::{Adapter, AsyncExecOptions, ExecutionMode};
-use ahma_core::config::{CommandOption, PositionalArgsConfig, SubcommandConfig};
+use ahma_core::config::{CommandOption, SubcommandConfig};
 use ahma_core::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_core::shell_pool::{ShellPoolConfig, ShellPoolManager};
 use serde_json::{Map, Value, json};
@@ -516,7 +516,7 @@ fn create_subcommand_with_positional() -> SubcommandConfig {
         name: "test_sub".to_string(),
         description: "Test subcommand".to_string(),
         options: None,
-        positional_args: Some(vec![PositionalArgsConfig {
+        positional_args: Some(vec![CommandOption {
             name: "file".to_string(),
             option_type: "string".to_string(),
             description: Some("Input file".to_string()),

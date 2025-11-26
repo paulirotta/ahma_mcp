@@ -95,7 +95,7 @@ pub struct SubcommandConfig {
     pub options: Option<Vec<CommandOption>>,
     /// Optional arguments that are not flags, but positional values.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub positional_args: Option<Vec<PositionalArgsConfig>>,
+    pub positional_args: Option<Vec<CommandOption>>,
     /// Override timeout for this specific subcommand
     pub timeout_seconds: Option<u64>,
     /// Force synchronous execution even when --async flag is set (overrides CLI flag)
@@ -144,12 +144,6 @@ pub struct CommandOption {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub alias: Option<String>,
 }
-
-/// Type alias for backward compatibility with tests
-pub type OptionConfig = CommandOption;
-
-/// Type alias for positional arguments configuration (same as OptionConfig)
-pub type PositionalArgsConfig = CommandOption;
 
 /// Schema details for array items.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

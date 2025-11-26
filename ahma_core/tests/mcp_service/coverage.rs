@@ -1,7 +1,7 @@
 //! tests/mcp_service_coverage_test.rs
 
 use ahma_core::adapter::Adapter;
-use ahma_core::config::{OptionConfig, SubcommandConfig, ToolConfig, ToolHints};
+use ahma_core::config::{CommandOption, SubcommandConfig, ToolConfig, ToolHints};
 use ahma_core::mcp_service::{AhmaMcpService, GuidanceConfig};
 use ahma_core::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_core::schema_validation::MtdfValidator;
@@ -156,7 +156,7 @@ fn test_subcommand_config_creation() {
 #[test]
 fn test_option_config_creation() {
     init_test_logging();
-    let option = OptionConfig {
+    let option = CommandOption {
         name: "verbose".to_string(),
         alias: Some("v".to_string()),
         option_type: "bool".to_string(),
@@ -239,7 +239,7 @@ async fn test_service_with_configs() {
             enabled: true,
             force_synchronous: Some(true),
             timeout_seconds: Some(30),
-            options: Some(vec![OptionConfig {
+            options: Some(vec![CommandOption {
                 name: "verbose".to_string(),
                 alias: None,
                 option_type: "bool".to_string(),
@@ -393,7 +393,7 @@ async fn test_service_with_tool_configs() {
             name: "build".to_string(),
             description: "Build project".to_string(),
             enabled: true,
-            options: Some(vec![OptionConfig {
+            options: Some(vec![CommandOption {
                 name: "release".to_string(),
                 option_type: "bool".to_string(),
                 description: Some("Build in release mode".to_string()),

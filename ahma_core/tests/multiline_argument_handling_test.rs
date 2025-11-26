@@ -6,7 +6,7 @@ use ahma_core::utils::logging::init_test_logging;
 /// in command arguments by either using file-based argument passing or safe shell escaping.
 use ahma_core::{
     adapter::{Adapter, AsyncExecOptions},
-    config::{OptionConfig, SubcommandConfig},
+    config::{CommandOption, SubcommandConfig},
     operation_monitor::{MonitorConfig, OperationMonitor},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
 };
@@ -92,7 +92,7 @@ async fn test_multiline_argument_with_echo() {
         name: "default".to_string(),
         description: "Echo command".to_string(),
         options: None,
-        positional_args: Some(vec![OptionConfig {
+        positional_args: Some(vec![CommandOption {
             name: "text".to_string(),
             alias: None,
             option_type: "string".to_string(),
@@ -362,7 +362,7 @@ async fn test_multiline_git_commit_message() {
     let commit_config = SubcommandConfig {
         name: "commit".to_string(),
         description: "Record changes to the repository".to_string(),
-        options: Some(vec![OptionConfig {
+        options: Some(vec![CommandOption {
             name: "message".to_string(),
             alias: Some("m".to_string()),
             option_type: "string".to_string(),
@@ -510,7 +510,7 @@ async fn test_special_characters_in_arguments() {
         name: "echo".to_string(),
         description: "Display a line of text".to_string(),
         options: None,
-        positional_args: Some(vec![OptionConfig {
+        positional_args: Some(vec![CommandOption {
             name: "text".to_string(),
             alias: None,
             option_type: "string".to_string(),

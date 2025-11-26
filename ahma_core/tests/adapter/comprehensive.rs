@@ -399,7 +399,7 @@ async fn test_subcommand_configuration_handling() -> Result<()> {
         step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
-        positional_args: Some(vec![ahma_core::config::OptionConfig {
+        positional_args: Some(vec![ahma_core::config::CommandOption {
             name: "message".to_string(),
             alias: None,
             option_type: "string".to_string(),
@@ -411,7 +411,7 @@ async fn test_subcommand_configuration_handling() -> Result<()> {
             file_flag: None,
         }]),
         options: Some(vec![
-            ahma_core::config::OptionConfig {
+            ahma_core::config::CommandOption {
                 name: "verbose".to_string(),
                 alias: Some("v".to_string()),
                 option_type: "boolean".to_string(),
@@ -422,7 +422,7 @@ async fn test_subcommand_configuration_handling() -> Result<()> {
                 file_arg: None,
                 file_flag: None,
             },
-            ahma_core::config::OptionConfig {
+            ahma_core::config::CommandOption {
                 name: "count".to_string(),
                 alias: Some("n".to_string()),
                 option_type: "string".to_string(),
@@ -500,7 +500,7 @@ async fn test_file_based_argument_handling() -> Result<()> {
         availability_check: None,
         install_instructions: None,
         positional_args: None,
-        options: Some(vec![ahma_core::config::OptionConfig {
+        options: Some(vec![ahma_core::config::CommandOption {
             name: "script".to_string(),
             alias: None,
             option_type: "string".to_string(),
