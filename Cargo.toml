@@ -25,8 +25,8 @@ anyhow = "1.0.100"
 async-trait = "0.1.89"
 chrono = {version = "0.4.42", features = ["serde"]}
 directories = "6.0.0"
-futures = "0.3"
-landlock = "0.4"
+futures = "0.3.31"
+landlock = "0.4.4"
 regex = "1.12.2"
 rmcp = {version = "0.9.1", features = ["server", "client", "macros", "transport-io", "transport-child-process", "elicitation", "schemars"]}
 schemars = "1.1.0"
