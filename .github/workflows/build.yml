@@ -131,7 +131,7 @@ jobs:
       - name: Upload documentation
         uses: actions/upload-artifact@v4
         with:
-          name: documentation
+          name: documentation-${{ matrix.os }}
           path: target/doc
 
       #- name: Perform CodeQL Analysis
