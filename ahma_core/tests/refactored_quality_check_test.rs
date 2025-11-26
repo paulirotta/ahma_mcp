@@ -9,6 +9,8 @@ fn test_run_new_quality_check_sequence() {
     // schema generation and validation specific to the ahma_mcp project.
     let output = Command::new("cargo")
         .current_dir(get_workspace_dir())
+        // AHMA_TEST_MODE bypasses sandbox checks in tests
+        .env("AHMA_TEST_MODE", "1")
         .env(
             "AHMA_SKIP_SEQUENCE_SUBCOMMANDS",
             "fmt,clippy,nextest_run,build",

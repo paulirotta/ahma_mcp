@@ -40,6 +40,13 @@ fn build_binary(package: &str, binary: &str) -> PathBuf {
     workspace.join("target/debug").join(binary)
 }
 
+/// Create a command for a binary with test mode enabled (bypasses sandbox checks)
+fn test_command(binary: &PathBuf) -> Command {
+    let mut cmd = Command::new(binary);
+    cmd.env("AHMA_TEST_MODE", "1");
+    cmd
+}
+
 // ============================================================================
 // ahma_mcp Binary Tests
 // ============================================================================
@@ -51,7 +58,7 @@ mod ahma_mcp_tests {
     fn test_ahma_mcp_help() {
         let binary = build_binary("ahma_shell", "ahma_mcp");
 
-        let output = Command::new(&binary)
+        let output = test_command(&binary)
             .arg("--help")
             .output()
             .expect("Failed to execute ahma_mcp --help");
@@ -84,7 +91,7 @@ mod ahma_mcp_tests {
     fn test_ahma_mcp_version() {
         let binary = build_binary("ahma_shell", "ahma_mcp");
 
-        let output = Command::new(&binary)
+        let output = test_command(&binary)
             .arg("--version")
             .output()
             .expect("Failed to execute ahma_mcp --version");
@@ -113,7 +120,7 @@ mod ahma_mcp_tests {
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
 
-        let output = Command::new(&binary)
+        let output = test_command(&binary)
             .current_dir(&workspace)
             .args([
                 "--tools-dir",
@@ -147,7 +154,7 @@ mod ahma_mcp_tests {
         let tools_dir = workspace.join(".ahma/tools");
 
         // Check if file_tools exists (a simple tool to test with)
-        let output = Command::new(&binary)
+        let output = test_command(&binary)
             .current_dir(&workspace)
             .args(["--tools-dir", tools_dir.to_str().unwrap(), "file_tools_pwd"])
             .output()
@@ -182,7 +189,7 @@ mod ahma_mcp_tests {
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
 
-        let output = Command::new(&binary)
+        let output = test_command(&binary)
             .current_dir(&workspace)
             .args([
                 "--mode",
