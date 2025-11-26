@@ -4,7 +4,7 @@ use crate::error::{BridgeError, Result};
 use axum::{
     Json, Router,
     extract::State,
-    http::StatusCode,
+    http::{HeaderMap, StatusCode, header::ACCEPT},
     response::{IntoResponse, Response, Sse},
     routing::{get, post},
 };
@@ -19,6 +19,39 @@ use tokio::{
 };
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::{debug, error, info, warn};
+
+/// Response format preference based on Accept header
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ResponseFormat {
+    /// Return JSON response (application/json)
+    #[default]
+    Json,
+    /// Return SSE streaming response (text/event-stream)
+    Sse,
+}
+
+/// Parse the Accept header to determine response format preference
+///
+/// Per R8A.1-R8A.7:
+/// - If Accept contains only "text/event-stream", use SSE
+/// - If Accept contains only "application/json", use JSON
+/// - If Accept contains both, prefer JSON (backward compatibility)
+/// - If no Accept header, default to JSON
+fn parse_accept_header(headers: &HeaderMap) -> ResponseFormat {
+    let accept = headers
+        .get(ACCEPT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    let accepts_json = accept.contains("application/json") || accept.contains("*/*");
+    let accepts_sse = accept.contains("text/event-stream");
+
+    match (accepts_json, accepts_sse) {
+        (true, _) => ResponseFormat::Json, // JSON takes priority when both present
+        (false, true) => ResponseFormat::Sse,
+        (false, false) => ResponseFormat::Json, // Default to JSON
+    }
+}
 
 /// Configuration for the HTTP bridge
 #[derive(Debug, Clone)]
@@ -222,12 +255,81 @@ async fn handle_sse(State(state): State<Arc<BridgeState>>) -> impl IntoResponse 
     Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::default())
 }
 
-/// Handle MCP JSON-RPC requests
+/// Create a JSON response with appropriate headers
+fn json_response(value: Value) -> Response {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(
+            serde_json::to_vec(&value).unwrap_or_default(),
+        ))
+        .unwrap_or_else(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to create response",
+            )
+                .into_response()
+        })
+}
+
+/// Create an SSE response for a single JSON-RPC response
+fn sse_single_response(value: Value) -> Response {
+    let json_str = serde_json::to_string(&value).unwrap_or_default();
+    let stream = futures::stream::once(async move {
+        Ok::<_, Infallible>(axum::response::sse::Event::default().data(json_str))
+    });
+    Sse::new(stream)
+        .keep_alive(axum::response::sse::KeepAlive::default())
+        .into_response()
+}
+
+/// Create an error response in the appropriate format
+fn error_response(format: ResponseFormat, code: i32, message: &str) -> Response {
+    let error_json = serde_json::json!({
+        "jsonrpc": "2.0",
+        "error": {
+            "code": code,
+            "message": message
+        }
+    });
+
+    match format {
+        ResponseFormat::Json => Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&error_json).unwrap_or_default(),
+            ))
+            .unwrap_or_else(|_| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to create response",
+                )
+                    .into_response()
+            }),
+        ResponseFormat::Sse => {
+            let json_str = serde_json::to_string(&error_json).unwrap_or_default();
+            let stream = futures::stream::once(async move {
+                Ok::<_, Infallible>(axum::response::sse::Event::default().data(json_str))
+            });
+            Sse::new(stream).into_response()
+        }
+    }
+}
+
+/// Handle MCP JSON-RPC requests with content negotiation
+///
+/// Supports both JSON and SSE response formats based on Accept header (R8A)
 async fn handle_mcp_request(
     State(state): State<Arc<BridgeState>>,
+    headers: HeaderMap,
     Json(payload): Json<Value>,
 ) -> Response {
     debug!("Received HTTP request");
+
+    // Determine response format from Accept header (R8A.1)
+    let response_format = parse_accept_header(&headers);
+    debug!("Response format: {:?}", response_format);
 
     // If the request has an ID, we expect a response
     let id_opt = payload.get("id").map(|id| {
@@ -257,58 +359,69 @@ async fn handle_mcp_request(
         if let Some(id) = &id_opt {
             state.pending_requests.remove(id);
         }
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({
-                "jsonrpc": "2.0",
-                "error": {
-                    "code": -32603,
-                    "message": "Failed to send request to server process"
-                }
-            })),
-        )
-            .into_response();
+        return error_response(
+            response_format,
+            -32603,
+            "Failed to send request to server process",
+        );
     }
 
     // If we expect a response, wait for it
     if let Some(rx) = response_rx {
         match tokio::time::timeout(Duration::from_secs(60), rx).await {
-            Ok(Ok(response)) => Json(response).into_response(),
-            Ok(Err(_)) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "jsonrpc": "2.0",
-                    "error": {
-                        "code": -32603,
-                        "message": "Channel closed before response received"
-                    }
-                })),
-            )
-                .into_response(),
+            Ok(Ok(response)) => {
+                // Return response in the requested format (R8A.4, R8A.6)
+                match response_format {
+                    ResponseFormat::Json => json_response(response),
+                    ResponseFormat::Sse => sse_single_response(response),
+                }
+            }
+            Ok(Err(_)) => error_response(
+                response_format,
+                -32603,
+                "Channel closed before response received",
+            ),
             Err(_) => {
                 if let Some(id) = &id_opt {
                     state.pending_requests.remove(id);
                 }
-                (
-                    StatusCode::GATEWAY_TIMEOUT,
-                    Json(serde_json::json!({
-                        "jsonrpc": "2.0",
-                        "error": {
-                            "code": -32000,
-                            "message": "Request timed out"
-                        }
-                    })),
-                )
-                    .into_response()
+                // Timeout error response
+                let error_json = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "error": {
+                        "code": -32000,
+                        "message": "Request timed out"
+                    }
+                });
+                match response_format {
+                    ResponseFormat::Json => Response::builder()
+                        .status(StatusCode::GATEWAY_TIMEOUT)
+                        .header("content-type", "application/json")
+                        .body(axum::body::Body::from(
+                            serde_json::to_vec(&error_json).unwrap_or_default(),
+                        ))
+                        .unwrap_or_else(|_| {
+                            (StatusCode::GATEWAY_TIMEOUT, "Request timed out").into_response()
+                        }),
+                    ResponseFormat::Sse => {
+                        let json_str = serde_json::to_string(&error_json).unwrap_or_default();
+                        let stream = futures::stream::once(async move {
+                            Ok::<_, Infallible>(
+                                axum::response::sse::Event::default().data(json_str),
+                            )
+                        });
+                        Sse::new(stream).into_response()
+                    }
+                }
             }
         }
     } else {
         // Notification, return success immediately
-        (
-            StatusCode::OK,
-            Json(serde_json::json!({"jsonrpc": "2.0", "result": null})),
-        )
-            .into_response()
+        let success_json = serde_json::json!({"jsonrpc": "2.0", "result": null});
+        match response_format {
+            ResponseFormat::Json => json_response(success_json),
+            ResponseFormat::Sse => sse_single_response(success_json),
+        }
     }
 }
 
@@ -320,6 +433,74 @@ mod tests {
         http::{Request, StatusCode},
     };
     use tower::ServiceExt;
+
+    // ==================== parse_accept_header unit tests ====================
+
+    #[test]
+    fn test_parse_accept_header_json_only() {
+        let mut headers = HeaderMap::new();
+        headers.insert(ACCEPT, "application/json".parse().unwrap());
+        assert_eq!(parse_accept_header(&headers), ResponseFormat::Json);
+    }
+
+    #[test]
+    fn test_parse_accept_header_sse_only() {
+        let mut headers = HeaderMap::new();
+        headers.insert(ACCEPT, "text/event-stream".parse().unwrap());
+        assert_eq!(parse_accept_header(&headers), ResponseFormat::Sse);
+    }
+
+    #[test]
+    fn test_parse_accept_header_both_json_first() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            ACCEPT,
+            "application/json, text/event-stream".parse().unwrap(),
+        );
+        // JSON should take priority when both present
+        assert_eq!(parse_accept_header(&headers), ResponseFormat::Json);
+    }
+
+    #[test]
+    fn test_parse_accept_header_both_sse_first() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            ACCEPT,
+            "text/event-stream, application/json".parse().unwrap(),
+        );
+        // JSON should still take priority regardless of order
+        assert_eq!(parse_accept_header(&headers), ResponseFormat::Json);
+    }
+
+    #[test]
+    fn test_parse_accept_header_no_header() {
+        let headers = HeaderMap::new();
+        // Default to JSON when no Accept header
+        assert_eq!(parse_accept_header(&headers), ResponseFormat::Json);
+    }
+
+    #[test]
+    fn test_parse_accept_header_wildcard() {
+        let mut headers = HeaderMap::new();
+        headers.insert(ACCEPT, "*/*".parse().unwrap());
+        // Wildcard implies JSON acceptance
+        assert_eq!(parse_accept_header(&headers), ResponseFormat::Json);
+    }
+
+    #[test]
+    fn test_parse_accept_header_unknown_type() {
+        let mut headers = HeaderMap::new();
+        headers.insert(ACCEPT, "text/html".parse().unwrap());
+        // Unknown type defaults to JSON
+        assert_eq!(parse_accept_header(&headers), ResponseFormat::Json);
+    }
+
+    #[test]
+    fn test_response_format_default() {
+        assert_eq!(ResponseFormat::default(), ResponseFormat::Json);
+    }
+
+    // ==================== Original tests ====================
 
     #[test]
     fn test_default_config() {
@@ -701,5 +882,269 @@ mod tests {
 
         pending.clear();
         assert!(pending.is_empty());
+    }
+
+    // ==================== Streaming Response Tests (R8A) ====================
+
+    #[tokio::test]
+    async fn test_mcp_request_with_accept_json_returns_json() {
+        let (tx, mut rx) = mpsc::channel(100);
+        let (broadcast_tx, _) = broadcast::channel(100);
+        let pending_requests = Arc::new(DashMap::new());
+        let state = Arc::new(BridgeState {
+            sender: tx,
+            broadcast_tx,
+            pending_requests: pending_requests.clone(),
+        });
+        let app = create_app(state);
+
+        // Spawn a task to handle the request and send a response
+        let pending_clone = pending_requests.clone();
+        tokio::spawn(async move {
+            if let Some(msg) = rx.recv().await {
+                let id = msg["id"].as_str().unwrap().to_string();
+                if let Some((_, sender)) = pending_clone.remove(&id) {
+                    let _ = sender.send(serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": {"format": "json"}
+                    }));
+                }
+            }
+        });
+
+        // Request with explicit Accept: application/json header
+        let request = Request::builder()
+            .method("POST")
+            .uri("/mcp")
+            .header("content-type", "application/json")
+            .header("accept", "application/json")
+            .body(Body::from(
+                r#"{"jsonrpc":"2.0","method":"test/method","id":"json-accept-test"}"#,
+            ))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .map(|v| v.to_str().unwrap_or(""));
+        assert!(
+            content_type.unwrap_or("").contains("application/json"),
+            "Expected application/json content type"
+        );
+
+        let body = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["result"]["format"], "json");
+    }
+
+    #[tokio::test]
+    async fn test_mcp_request_with_accept_sse_returns_sse() {
+        let (tx, mut rx) = mpsc::channel(100);
+        let (broadcast_tx, _) = broadcast::channel(100);
+        let pending_requests = Arc::new(DashMap::new());
+        let state = Arc::new(BridgeState {
+            sender: tx,
+            broadcast_tx,
+            pending_requests: pending_requests.clone(),
+        });
+        let app = create_app(state);
+
+        // Spawn a task to handle the request and send a response
+        let pending_clone = pending_requests.clone();
+        tokio::spawn(async move {
+            if let Some(msg) = rx.recv().await {
+                let id = msg["id"].as_str().unwrap().to_string();
+                if let Some((_, sender)) = pending_clone.remove(&id) {
+                    let _ = sender.send(serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": {"format": "sse"}
+                    }));
+                }
+            }
+        });
+
+        // Request with Accept: text/event-stream header
+        let request = Request::builder()
+            .method("POST")
+            .uri("/mcp")
+            .header("content-type", "application/json")
+            .header("accept", "text/event-stream")
+            .body(Body::from(
+                r#"{"jsonrpc":"2.0","method":"test/method","id":"sse-accept-test"}"#,
+            ))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .map(|v| v.to_str().unwrap_or(""));
+        assert!(
+            content_type.unwrap_or("").contains("text/event-stream"),
+            "Expected text/event-stream content type, got: {:?}",
+            content_type
+        );
+    }
+
+    #[tokio::test]
+    async fn test_mcp_request_with_accept_both_prefers_json() {
+        let (tx, mut rx) = mpsc::channel(100);
+        let (broadcast_tx, _) = broadcast::channel(100);
+        let pending_requests = Arc::new(DashMap::new());
+        let state = Arc::new(BridgeState {
+            sender: tx,
+            broadcast_tx,
+            pending_requests: pending_requests.clone(),
+        });
+        let app = create_app(state);
+
+        // Spawn a task to handle the request and send a response
+        let pending_clone = pending_requests.clone();
+        tokio::spawn(async move {
+            if let Some(msg) = rx.recv().await {
+                let id = msg["id"].as_str().unwrap().to_string();
+                if let Some((_, sender)) = pending_clone.remove(&id) {
+                    let _ = sender.send(serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": {"format": "json_preferred"}
+                    }));
+                }
+            }
+        });
+
+        // Request with both Accept headers (JSON first = higher priority per HTTP spec)
+        let request = Request::builder()
+            .method("POST")
+            .uri("/mcp")
+            .header("content-type", "application/json")
+            .header("accept", "application/json, text/event-stream")
+            .body(Body::from(
+                r#"{"jsonrpc":"2.0","method":"test/method","id":"both-accept-test"}"#,
+            ))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .map(|v| v.to_str().unwrap_or(""));
+        // When both are accepted, JSON should be preferred (backward compatibility)
+        assert!(
+            content_type.unwrap_or("").contains("application/json"),
+            "Expected application/json when both are accepted"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_mcp_request_without_accept_defaults_to_json() {
+        let (tx, mut rx) = mpsc::channel(100);
+        let (broadcast_tx, _) = broadcast::channel(100);
+        let pending_requests = Arc::new(DashMap::new());
+        let state = Arc::new(BridgeState {
+            sender: tx,
+            broadcast_tx,
+            pending_requests: pending_requests.clone(),
+        });
+        let app = create_app(state);
+
+        // Spawn a task to handle the request and send a response
+        let pending_clone = pending_requests.clone();
+        tokio::spawn(async move {
+            if let Some(msg) = rx.recv().await {
+                let id = msg["id"].as_str().unwrap().to_string();
+                if let Some((_, sender)) = pending_clone.remove(&id) {
+                    let _ = sender.send(serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": {"format": "default"}
+                    }));
+                }
+            }
+        });
+
+        // Request without Accept header - should default to JSON
+        let request = Request::builder()
+            .method("POST")
+            .uri("/mcp")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                r#"{"jsonrpc":"2.0","method":"test/method","id":"no-accept-test"}"#,
+            ))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .map(|v| v.to_str().unwrap_or(""));
+        assert!(
+            content_type.unwrap_or("").contains("application/json"),
+            "Expected application/json as default when no Accept header"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_mcp_request_sse_only_accept() {
+        let (tx, mut rx) = mpsc::channel(100);
+        let (broadcast_tx, _) = broadcast::channel(100);
+        let pending_requests = Arc::new(DashMap::new());
+        let state = Arc::new(BridgeState {
+            sender: tx,
+            broadcast_tx,
+            pending_requests: pending_requests.clone(),
+        });
+        let app = create_app(state);
+
+        // Spawn a task to handle the request and send a response
+        let pending_clone = pending_requests.clone();
+        tokio::spawn(async move {
+            if let Some(msg) = rx.recv().await {
+                let id = msg["id"].as_str().unwrap().to_string();
+                if let Some((_, sender)) = pending_clone.remove(&id) {
+                    let _ = sender.send(serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": {"format": "sse_only"}
+                    }));
+                }
+            }
+        });
+
+        // Request with Accept: text/event-stream only
+        let request = Request::builder()
+            .method("POST")
+            .uri("/mcp")
+            .header("content-type", "application/json")
+            .header("accept", "text/event-stream")
+            .body(Body::from(
+                r#"{"jsonrpc":"2.0","method":"test/method","id":"sse-only-test"}"#,
+            ))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .map(|v| v.to_str().unwrap_or(""));
+        assert!(
+            content_type.unwrap_or("").contains("text/event-stream"),
+            "Expected text/event-stream when Accept is SSE only"
+        );
     }
 }
