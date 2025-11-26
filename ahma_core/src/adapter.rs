@@ -39,6 +39,7 @@
 
 use crate::operation_monitor::{Operation, OperationMonitor, OperationStatus};
 use crate::path_security;
+use crate::sandbox;
 use crate::shell_pool::ShellPoolManager;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -198,17 +199,16 @@ impl Adapter {
         timeout_seconds: Option<u64>,
         subcommand_config: Option<&crate::config::SubcommandConfig>,
     ) -> Result<String, anyhow::Error> {
-        // Validate working directory
+        // Validate working directory against sandbox scope
         let safe_wd =
             path_security::validate_path(std::path::Path::new(working_dir), &self.root_path)
                 .await?;
-        let safe_wd_str = safe_wd.to_string_lossy().to_string();
 
         let (program, args_vec) = self
             .prepare_command_and_args(command, args.as_ref(), subcommand_config, &safe_wd)
             .await?;
 
-        // Heuristic check for shell commands
+        // Heuristic check for shell commands (additional layer of defense)
         if let Some(script) = Self::shell_script_slice(&program, &args_vec) {
             path_security::validate_command(script, &safe_wd).await?;
         }
@@ -217,21 +217,13 @@ impl Adapter {
             .map(Duration::from_secs)
             .unwrap_or_else(|| self.shell_pool.config().command_timeout);
 
+        // Create sandboxed command (uses Bubblewrap on macOS, direct on Linux with Landlock)
         let mut cmd = if program == "/bin/sh" {
-            let mut shell_cmd = tokio::process::Command::new(&program);
             let full_command = args_vec.join(" ");
-            shell_cmd.arg("-c").arg(full_command);
-            shell_cmd
+            sandbox::create_sandboxed_shell_command(&program, &full_command, &safe_wd)?
         } else {
-            let mut direct_cmd = tokio::process::Command::new(&program);
-            direct_cmd.args(&args_vec);
-            direct_cmd
+            sandbox::create_sandboxed_command(&program, &args_vec, &safe_wd)?
         };
-
-        cmd.current_dir(&safe_wd_str)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped());
 
         let output_res = tokio::time::timeout(timeout, cmd.output()).await;
 
@@ -429,14 +421,43 @@ impl Adapter {
 
             let start_time = Instant::now();
 
-            // Build process command to execute directly without shell pool dependency
-            let mut proc_cmd = tokio::process::Command::new(&program_with_subcommand);
-            proc_cmd
-                .args(&args_vec)
-                .current_dir(&wd_clone)
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped());
+            // Build sandboxed process command
+            // On Linux, Landlock is already applied at process level
+            // On macOS, this wraps with Bubblewrap
+            let wd_path = std::path::PathBuf::from(&wd_clone);
+            let proc_cmd_result =
+                sandbox::create_sandboxed_command(&program_with_subcommand, &args_vec, &wd_path);
+
+            let mut proc_cmd = match proc_cmd_result {
+                Ok(cmd) => cmd,
+                Err(e) => {
+                    let error_message = format!("Failed to create sandboxed command: {}", e);
+                    tracing::error!("{}", error_message);
+                    monitor
+                        .update_status(
+                            &op_id,
+                            OperationStatus::Failed,
+                            Some(Value::String(error_message.clone())),
+                        )
+                        .await;
+                    if let Some(callback) = &callback {
+                        let failure_update = crate::callback_system::ProgressUpdate::FinalResult {
+                            operation_id: op_id.clone(),
+                            command: program_with_subcommand.clone(),
+                            description: format!(
+                                "Execute {} in {}",
+                                program_with_subcommand, wd_clone
+                            ),
+                            working_directory: wd_clone.clone(),
+                            success: false,
+                            duration_ms: 0,
+                            full_output: format!("Error: {}", error_message),
+                        };
+                        let _ = callback.send_progress(failure_update).await;
+                    }
+                    return;
+                }
+            };
 
             // Resolve timeout in milliseconds
             let timeout_ms: u64 = timeout

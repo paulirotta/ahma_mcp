@@ -50,7 +50,9 @@ fn test_list_tools_from_stdio_server() {
     let tools_dir = project_root.join(".ahma/tools");
 
     // Run ahma_list_tools with the stdio server
+    // Set AHMA_TEST_MODE to bypass sandbox checks in tests
     let output = Command::new("cargo")
+        .env("AHMA_TEST_MODE", "1")
         .args([
             "run",
             "-p",
@@ -128,7 +130,9 @@ fn test_output_format() {
     let ahma_binary = project_root.join("target/debug/ahma_mcp");
     let tools_dir = project_root.join(".ahma/tools");
 
+    // Set AHMA_TEST_MODE to bypass sandbox checks in tests
     let output = Command::new("cargo")
+        .env("AHMA_TEST_MODE", "1")
         .args([
             "run",
             "-p",

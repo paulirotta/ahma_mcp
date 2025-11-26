@@ -4,12 +4,14 @@ use ahma_core::{
     adapter::Adapter,
     operation_monitor::{MonitorConfig, OperationMonitor},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
+    test_utils::init_test_sandbox,
 };
 use std::{sync::Arc, time::Duration};
 use tempfile::TempDir;
 
 #[tokio::test]
 async fn test_async_operations_complete_and_are_tracked() {
+    init_test_sandbox();
     println!("🧪 Testing that async operations complete and are properly tracked...");
 
     // Set up the test environment
@@ -121,6 +123,7 @@ async fn test_async_operations_complete_and_are_tracked() {
 
 #[tokio::test]
 async fn test_operation_monitoring_provides_clear_results() {
+    init_test_sandbox();
     println!(
         "🧪 Testing that operation results provide clear information for AI decision-making..."
     );

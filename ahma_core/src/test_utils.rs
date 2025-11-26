@@ -1,9 +1,36 @@
 use crate::client::Client;
+use crate::sandbox;
 use anyhow::Result;
+use std::sync::Once;
 use std::time::Duration;
 use tempfile::TempDir;
 
+/// Initialize sandbox for tests. Uses "/" as the sandbox scope to allow all operations.
+/// This is safe because tests run in controlled environments.
+/// This function is idempotent - calling it multiple times is safe.
+static SANDBOX_INIT: Once = Once::new();
+
+pub fn init_test_sandbox() {
+    SANDBOX_INIT.call_once(|| {
+        // Enable test mode to bypass bwrap requirement
+        sandbox::enable_test_mode();
+
+        // Initialize with root "/" to allow all paths in tests
+        // This is safe because:
+        // 1. Tests run in controlled environments
+        // 2. Tests don't execute untrusted AI commands
+        // 3. We need flexibility to test various path scenarios
+        if let Err(e) = sandbox::initialize_sandbox_scope(std::path::Path::new("/")) {
+            // If already initialized (from another test), that's fine
+            tracing::debug!("Sandbox initialization in test: {:?}", e);
+        }
+    });
+}
+
 pub async fn setup_mcp_service_with_client() -> Result<(TempDir, Client)> {
+    // Ensure sandbox is initialized for tests
+    init_test_sandbox();
+
     // Create a temporary directory for tool configs
     let temp_dir = tempfile::tempdir()?;
     let tools_dir = temp_dir.path();
@@ -83,6 +110,9 @@ pub fn get_tools_dir() -> PathBuf {
 /// Create a test config for integration tests
 #[allow(dead_code)]
 pub fn create_test_config(_workspace_dir: &Path) -> Result<Arc<Adapter>> {
+    // Ensure sandbox is initialized for tests
+    init_test_sandbox();
+
     // Create test monitor and shell pool configurations
     let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
@@ -162,7 +192,9 @@ pub mod test_client {
         let client = ()
             .serve(TokioChildProcess::new(Command::new("cargo").configure(
                 |cmd| {
-                    cmd.current_dir(&workspace_dir)
+                    // Set AHMA_TEST_MODE to bypass sandbox checks in tests
+                    cmd.env("AHMA_TEST_MODE", "1")
+                        .current_dir(&workspace_dir)
                         .arg("run")
                         .arg("--package")
                         .arg("ahma_shell")
@@ -196,7 +228,9 @@ pub mod test_client {
         let client = ()
             .serve(TokioChildProcess::new(Command::new("cargo").configure(
                 |cmd| {
-                    cmd.current_dir(working_dir)
+                    // Set AHMA_TEST_MODE to bypass sandbox checks in tests
+                    cmd.env("AHMA_TEST_MODE", "1")
+                        .current_dir(working_dir)
                         .arg("run")
                         .arg("--manifest-path")
                         .arg(workspace_dir.join("Cargo.toml"))

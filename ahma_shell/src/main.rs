@@ -46,6 +46,7 @@ use ahma_core::{
     config::{SubcommandConfig, ToolConfig},
     mcp_service::{AhmaMcpService, GuidanceConfig},
     operation_monitor::{MonitorConfig, OperationMonitor},
+    sandbox::{self, SandboxError},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
     tool_availability::{evaluate_tool_availability, format_install_guidance},
     utils::logging::init_logging,
@@ -117,6 +118,16 @@ struct Cli {
     #[arg(long, global = true)]
     r#async: bool,
 
+    /// Override the sandbox scope (root directory for file system operations).
+    /// By default, uses the current working directory for stdio mode.
+    #[arg(long, global = true)]
+    sandbox_scope: Option<PathBuf>,
+
+    /// Skip sandbox prerequisite checks and use passthrough mode.
+    /// WARNING: This disables security sandboxing. Only use for testing.
+    #[arg(long, global = true, hide = true)]
+    skip_sandbox: bool,
+
     /// The name of the tool to execute (e.g., 'cargo_build').
     #[arg()]
     tool_name: Option<String>,
@@ -139,12 +150,55 @@ async fn main() -> Result<()> {
     let log_level = if cli.debug { "debug" } else { "info" };
 
     init_logging(log_level, true)?;
-    /*
-        tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::new(format!("ahma_mcp={}", log_level)))
-            .with_writer(std::io::stderr)
-            .init();
-    */
+
+    // Check if sandbox should be skipped (for testing)
+    // Can be set via --skip-sandbox flag or AHMA_TEST_MODE environment variable
+    let skip_sandbox = cli.skip_sandbox || std::env::var("AHMA_TEST_MODE").is_ok();
+
+    if skip_sandbox {
+        tracing::warn!("Sandbox checks skipped - running in test mode WITHOUT security sandboxing");
+        sandbox::enable_test_mode();
+    } else {
+        // Check sandbox prerequisites before anything else
+        if let Err(e) = sandbox::check_sandbox_prerequisites() {
+            sandbox::exit_with_sandbox_error(&e);
+        }
+    }
+
+    // Initialize sandbox scope
+    let sandbox_scope = if let Some(ref scope) = cli.sandbox_scope {
+        // CLI override takes precedence
+        std::fs::canonicalize(scope)
+            .with_context(|| format!("Failed to canonicalize sandbox scope: {:?}", scope))?
+    } else {
+        // Default to current working directory
+        std::env::current_dir()
+            .context("Failed to get current working directory for sandbox scope")?
+    };
+
+    // Initialize the global sandbox scope (can only be done once)
+    if let Err(e) = sandbox::initialize_sandbox_scope(&sandbox_scope) {
+        match e {
+            SandboxError::AlreadyInitialized => {
+                // This shouldn't happen in normal operation, but handle gracefully
+                tracing::warn!("Sandbox scope was already initialized");
+            }
+            _ => {
+                return Err(anyhow!("Failed to initialize sandbox scope: {}", e));
+            }
+        }
+    }
+
+    tracing::info!("Sandbox scope initialized: {:?}", sandbox_scope);
+
+    // Apply kernel-level sandbox restrictions on Linux (skip in test mode)
+    #[cfg(target_os = "linux")]
+    if !skip_sandbox {
+        if let Err(e) = sandbox::enforce_landlock_sandbox(&sandbox_scope) {
+            tracing::error!("Failed to enforce Landlock sandbox: {}", e);
+            return Err(e);
+        }
+    }
 
     // Determine mode based on CLI arguments
     let is_server_mode = cli.tool_name.is_none();

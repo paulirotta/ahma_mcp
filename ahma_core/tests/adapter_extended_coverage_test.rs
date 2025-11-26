@@ -7,12 +7,16 @@ use ahma_core::adapter::{Adapter, AsyncExecOptions, ExecutionMode};
 use ahma_core::config::{CommandOption, SubcommandConfig};
 use ahma_core::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_core::shell_pool::{ShellPoolConfig, ShellPoolManager};
+use ahma_core::test_utils::init_test_sandbox;
 use serde_json::{Map, Value, json};
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::tempdir;
 
 async fn create_test_adapter() -> Arc<Adapter> {
+    // Initialize sandbox for tests (idempotent)
+    init_test_sandbox();
+
     let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
     let monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_pool_config = ShellPoolConfig::default();
@@ -26,6 +30,9 @@ async fn create_test_adapter() -> Arc<Adapter> {
 }
 
 async fn create_adapter_with_root(root: std::path::PathBuf) -> Arc<Adapter> {
+    // Initialize sandbox for tests (idempotent)
+    init_test_sandbox();
+
     let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
     let monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_pool_config = ShellPoolConfig::default();
