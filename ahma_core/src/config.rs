@@ -41,7 +41,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 /// Represents the complete configuration for a command-line tool.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -254,7 +254,7 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
-pub fn load_mcp_config(config_path: &std::path::Path) -> anyhow::Result<McpConfig> {
+pub fn load_mcp_config(config_path: &Path) -> anyhow::Result<McpConfig> {
     if !config_path.exists() {
         return Ok(McpConfig {
             servers: HashMap::new(),
@@ -277,9 +277,7 @@ pub fn load_mcp_config(config_path: &std::path::Path) -> anyhow::Result<McpConfi
 ///
 /// # Returns
 /// * `Result<HashMap<String, ToolConfig>>` - Map of tool name to configuration or error
-pub fn load_tool_configs(
-    tools_dir: &std::path::Path,
-) -> anyhow::Result<HashMap<String, ToolConfig>> {
+pub fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<String, ToolConfig>> {
     use std::fs;
 
     // Hardcoded tool names that should not be overridden by user configurations
