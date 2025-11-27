@@ -86,6 +86,8 @@ struct BridgeState {
     broadcast_tx: broadcast::Sender<String>,
     /// Map of request IDs to response channels
     pending_requests: Arc<DashMap<String, oneshot::Sender<Value>>>,
+    /// Absolute RPC endpoint URL announced to SSE clients
+    rpc_endpoint: String,
 }
 
 /// Start the HTTP bridge server
@@ -110,6 +112,7 @@ pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
         sender: tx,
         broadcast_tx,
         pending_requests,
+        rpc_endpoint: format!("http://{}/mcp", config.bind_addr),
     });
 
     // Build the router
@@ -303,7 +306,7 @@ async fn handle_sse(State(state): State<Arc<BridgeState>>) -> impl IntoResponse 
 
     let initial_event = axum::response::sse::Event::default()
         .event("endpoint")
-        .data("/mcp");
+        .data(state.rpc_endpoint.clone());
 
     let stream = tokio_stream::StreamExt::chain(tokio_stream::once(Ok(initial_event)), stream);
 
@@ -489,6 +492,8 @@ mod tests {
     };
     use tower::ServiceExt;
 
+    const TEST_ENDPOINT_URL: &str = "http://localhost:3000/mcp";
+
     // ==================== parse_accept_header unit tests ====================
 
     #[test]
@@ -598,7 +603,7 @@ mod tests {
         assert!(debug_str.contains("ahma_mcp"));
     }
 
-    fn create_test_state() -> Arc<BridgeState> {
+    fn create_test_state_with_endpoint(endpoint: &str) -> Arc<BridgeState> {
         let (tx, _rx) = mpsc::channel(100);
         let (broadcast_tx, _) = broadcast::channel(100);
         let pending_requests = Arc::new(DashMap::new());
@@ -606,7 +611,12 @@ mod tests {
             sender: tx,
             broadcast_tx,
             pending_requests,
+            rpc_endpoint: endpoint.to_string(),
         })
+    }
+
+    fn create_test_state() -> Arc<BridgeState> {
+        create_test_state_with_endpoint(TEST_ENDPOINT_URL)
     }
 
     fn create_app(state: Arc<BridgeState>) -> Router {
@@ -649,6 +659,7 @@ mod tests {
             sender: tx,
             broadcast_tx,
             pending_requests,
+            rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
         });
         let app = create_app(state);
 
@@ -689,6 +700,7 @@ mod tests {
             sender: tx,
             broadcast_tx,
             pending_requests: pending_requests.clone(),
+            rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
         });
         let app = create_app(state);
 
@@ -740,6 +752,7 @@ mod tests {
             sender: tx,
             broadcast_tx,
             pending_requests: pending_requests.clone(),
+            rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
         });
         let app = create_app(state);
 
@@ -790,6 +803,7 @@ mod tests {
             sender: tx,
             broadcast_tx,
             pending_requests,
+            rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
         });
         let app = create_app(state);
 
@@ -827,6 +841,7 @@ mod tests {
             sender: tx,
             broadcast_tx,
             pending_requests: pending_requests.clone(),
+            rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
         });
         let app = create_app(state);
 
@@ -900,6 +915,7 @@ mod tests {
             sender: tx,
             broadcast_tx,
             pending_requests,
+            rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
         });
 
         // Subscribe before creating the app
@@ -951,6 +967,7 @@ mod tests {
             sender: tx,
             broadcast_tx,
             pending_requests: pending_requests.clone(),
+            rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
         });
         let app = create_app(state);
 
@@ -1008,6 +1025,7 @@ mod tests {
             sender: tx,
             broadcast_tx,
             pending_requests: pending_requests.clone(),
+            rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
         });
         let app = create_app(state);
 
@@ -1060,6 +1078,7 @@ mod tests {
             sender: tx,
             broadcast_tx,
             pending_requests: pending_requests.clone(),
+            rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
         });
         let app = create_app(state);
 
@@ -1112,6 +1131,7 @@ mod tests {
             sender: tx,
             broadcast_tx,
             pending_requests: pending_requests.clone(),
+            rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
         });
         let app = create_app(state);
 
@@ -1162,6 +1182,7 @@ mod tests {
             sender: tx,
             broadcast_tx,
             pending_requests: pending_requests.clone(),
+            rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
         });
         let app = create_app(state);
 

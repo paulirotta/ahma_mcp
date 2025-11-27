@@ -53,8 +53,9 @@ else
     exit 1
 fi
 
-if echo "$SSE_OUTPUT" | grep -q "data: /mcp"; then
-    echo "✅ SSE endpoint data correct (/mcp)"
+EXPECTED_ENDPOINT="data: http://localhost:3000/mcp"
+if echo "$SSE_OUTPUT" | grep -q "$EXPECTED_ENDPOINT"; then
+    echo "✅ SSE endpoint data correct ($EXPECTED_ENDPOINT)"
 else
     echo "❌ SSE endpoint data incorrect"
     exit 1
