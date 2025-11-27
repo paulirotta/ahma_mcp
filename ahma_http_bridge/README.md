@@ -87,6 +87,14 @@ Health check endpoint.
 OK
 ```
 
+### GET /sse
+
+Server-Sent Events stream for real-time notifications.
+
+- Sends an initial `endpoint` event announcing the absolute RPC URL (e.g., `http://localhost:3000/mcp`)
+- Streams JSON-RPC notifications emitted by the MCP server
+- Includes keep-alive comments to maintain the connection
+
 ## How It Works
 
 1. HTTP bridge starts and binds to the specified address

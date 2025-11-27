@@ -17,6 +17,7 @@
 //!         bind_addr: "127.0.0.1:3000".parse().unwrap(),
 //!         server_command: "ahma_mcp".to_string(),
 //!         server_args: vec!["--tools-dir".to_string(), "./tools".to_string()],
+//!         enable_colored_output: false,
 //!     };
 //!     
 //!     start_bridge(config).await?;
