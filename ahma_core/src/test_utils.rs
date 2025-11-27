@@ -12,7 +12,7 @@ static SANDBOX_INIT: Once = Once::new();
 
 pub fn init_test_sandbox() {
     SANDBOX_INIT.call_once(|| {
-        // Enable test mode to bypass bwrap requirement
+        // Enable test mode to bypass sandbox requirement
         sandbox::enable_test_mode();
 
         // Initialize with root "/" to allow all paths in tests

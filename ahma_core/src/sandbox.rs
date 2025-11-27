@@ -22,14 +22,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// Global sandbox scope - set once at initialization, immutable thereafter
 static SANDBOX_SCOPE: OnceLock<PathBuf> = OnceLock::new();
 
-/// Test mode flag - when true, bwrap is bypassed (for test environments without bwrap)
+/// Test mode flag - when true, sandbox is bypassed (for test environments)
 /// Initialized lazily to check for CARGO_PKG_NAME environment variable which indicates test context
 static TEST_MODE: AtomicBool = AtomicBool::new(false);
 
 /// One-time check for test environment
 static TEST_MODE_CHECKED: OnceLock<bool> = OnceLock::new();
 
-/// Enable test mode, which bypasses bwrap requirement on macOS.
+/// Enable test mode, which bypasses sandbox requirement.
 /// This should ONLY be used in test environments.
 ///
 /// # Safety
@@ -350,7 +350,7 @@ impl SandboxConfig {
 /// Build a sandboxed command for execution.
 ///
 /// On Linux, this returns the command as-is (Landlock protects at process level).
-/// On macOS, this wraps the command with Bubblewrap.
+/// On macOS, this wraps the command with sandbox-exec using a Seatbelt profile.
 ///
 /// # Arguments
 /// * `command` - The command parts to execute
@@ -556,7 +556,7 @@ pub fn enforce_landlock_sandbox(_sandbox_scope: &Path) -> Result<()> {
 /// Create a sandboxed tokio process Command.
 ///
 /// On Linux (with Landlock applied at startup), this returns a normal Command.
-/// On macOS, this wraps the command with Bubblewrap for per-command sandboxing.
+/// On macOS, this wraps the command with sandbox-exec for per-command sandboxing.
 ///
 /// # Arguments
 /// * `program` - The program to execute
@@ -579,7 +579,7 @@ pub fn create_sandboxed_command(
     let _sandbox_scope =
         get_sandbox_scope().ok_or_else(|| anyhow!("Sandbox scope not initialized"))?;
 
-    // In test mode, bypass bwrap for environments without it installed
+    // In test mode, bypass sandbox for test environments
     if is_test_mode() {
         let mut cmd = tokio::process::Command::new(program);
         cmd.args(args)
@@ -649,7 +649,7 @@ pub fn create_sandboxed_shell_command(
     let _sandbox_scope =
         get_sandbox_scope().ok_or_else(|| anyhow!("Sandbox scope not initialized"))?;
 
-    // In test mode, bypass bwrap for environments without it installed
+    // In test mode, bypass sandbox for test environments
     if is_test_mode() {
         let mut cmd = tokio::process::Command::new(shell);
         cmd.arg("-c")

@@ -41,17 +41,11 @@ On Linux (kernel 5.13+), Ahma uses [Landlock](https://docs.kernel.org/userspace-
 
 **Requirements**: Linux kernel 5.13 or newer. If your kernel is older, the server will refuse to start and display upgrade instructions.
 
-#### macOS (Bubblewrap)
+#### macOS (Seatbelt/sandbox-exec)
 
-On macOS, Ahma uses [Bubblewrap](https://github.com/containers/bubblewrap) to sandbox all command execution.
+On macOS, Ahma uses Apple's built-in `sandbox-exec` with [Seatbelt profiles](https://reverse.put.as/wp-content/uploads/2011/09/Apple-Sandbox-Guide-v1.0.pdf) for kernel-level file system sandboxing. No additional installation is required—`sandbox-exec` is built into macOS.
 
-**Installation**:
-
-```bash
-brew install bubblewrap
-```
-
-If Bubblewrap is not installed, the server will refuse to start and display installation instructions.
+**Requirements**: Any modern version of macOS. The server generates a Seatbelt profile (SBPL) that restricts write access to only the sandbox scope.
 
 ### Why Kernel-Level Sandboxing?
 
