@@ -84,16 +84,22 @@ The sandbox scope defines the directory boundary within which all file system op
 
 #### R7.3: Kernel-Level Sandbox Enforcement (macOS)
 
-- **R7.3.1**: On macOS, the system **must** use **Bubblewrap** (bwrap) for sandboxed command execution.
-- **R7.3.2**: Bubblewrap **must** be installed as a prerequisite. If not found, the server **must** refuse to start and display: `"Error: Bubblewrap (bwrap) is required for secure sandboxing on macOS. Install with: brew install bubblewrap"`
-- **R7.3.3**: All shell commands **must** be executed via Bubblewrap with the following configuration:
-  - `--ro-bind / /` (read-only root)
-  - `--dev /dev` (devices)
-  - `--proc /proc` (processes)
-  - `--bind <sandbox_scope> <sandbox_scope>` (read-write sandbox)
-  - `--chdir <sandbox_scope>` (working directory)
-  - `--new-session` (prevent escape via setsid)
-  - `--die-with-parent` (cleanup on server exit)
+- **R7.3.1**: On macOS, the system **must** use **sandbox-exec** with **Seatbelt profiles** (Apple's built-in sandboxing) for kernel-level file system sandboxing.
+- **R7.3.2**: `sandbox-exec` is built into macOS and does not require installation. If not available (should not happen on any modern macOS), the server **must** refuse to start.
+- **R7.3.3**: Seatbelt profiles **must** be written in Apple's Sandbox Profile Language (SBPL).
+- **R7.3.4**: **CRITICAL SBPL Syntax**: Each `(allow ...)` statement with path filters **must** have all filters on the **same line** or use separate statements. Multi-line indented subpaths cause `sandbox-exec` to abort with SIGABRT.
+  - **Valid**: `(allow file-read* (subpath "/usr") (subpath "/bin"))`
+  - **Valid**: `(allow file-read* (subpath "/usr"))\n(allow file-read* (subpath "/bin"))`
+  - **Invalid**: `(allow file-read*\n    (subpath "/usr")\n    (subpath "/bin"))`
+- **R7.3.5**: Seatbelt profiles **must** use the following security model:
+  - `(deny default)` - Deny everything by default
+  - `(allow file-read*)` - Allow reading from all locations (shells need broad read access)
+  - `(allow file-write* (subpath "<sandbox_scope>"))` - Restrict writes to sandbox scope only
+  - `(allow file-write* (subpath "/private/tmp"))` - Allow temp file writes
+  - `(allow file-write* (subpath "/private/var/folders"))` - Allow cache/temp writes
+  - `(allow process*)` - Allow process operations
+  - `(allow network*)` - Allow network access for tools like cargo
+- **R7.3.6**: **macOS Path Symlinks**: `/var` is a symlink to `/private/var` on macOS. Seatbelt profiles **must** use real paths (e.g., `/private/var/folders` not `/var/folders`).
 
 #### R7.4: Sandbox Prerequisite Validation
 

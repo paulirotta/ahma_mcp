@@ -412,6 +412,13 @@ fn build_macos_sandbox_command(
 
 /// Generate a Seatbelt (sandbox) profile for macOS
 /// This profile restricts file system access to the sandbox scope
+///
+/// IMPORTANT: Seatbelt profiles use Apple's Sandbox Profile Language (SBPL).
+/// Each `(allow ...)` statement with path filters must have the paths on the SAME LINE.
+/// Multi-line syntax with indented subpaths is NOT valid and causes sandbox-exec to abort.
+///
+/// Valid:   `(allow file-read* (subpath "/usr") (subpath "/bin"))`
+/// Invalid: `(allow file-read*\n    (subpath "/usr")\n    (subpath "/bin")\n)`
 #[cfg(target_os = "macos")]
 fn generate_seatbelt_profile(sandbox_scope: &Path, working_dir: &Path) -> String {
     let scope_str = sandbox_scope.to_string_lossy();
@@ -426,73 +433,38 @@ fn generate_seatbelt_profile(sandbox_scope: &Path, working_dir: &Path) -> String
     let cargo_path = home_path.join(".cargo");
     let rustup_path = home_path.join(".rustup");
 
-    if cargo_path.exists() || rustup_path.exists() {
-        user_tool_rules.push_str("\n; Allow reading user tool directories\n(allow file-read*");
-        if cargo_path.exists() {
-            user_tool_rules.push_str(&format!("\n    (subpath \"{}\")", cargo_path.display()));
-        }
-        if rustup_path.exists() {
-            user_tool_rules.push_str(&format!("\n    (subpath \"{}\")", rustup_path.display()));
-        }
-        user_tool_rules.push_str("\n)");
+    if cargo_path.exists() {
+        user_tool_rules.push_str(&format!(
+            "(allow file-read* (subpath \"{}\"))\n",
+            cargo_path.display()
+        ));
+    }
+    if rustup_path.exists() {
+        user_tool_rules.push_str(&format!(
+            "(allow file-read* (subpath \"{}\"))\n",
+            rustup_path.display()
+        ));
     }
 
     // Seatbelt profile using Apple's Sandbox Profile Language (SBPL)
+    // NOTE: We allow all file-read* and restrict only file-write* to the sandbox scope.
+    // This is because shells and tools need to read from many system locations,
+    // and restricting reads causes sandbox-exec to abort with SIGABRT.
+    //
+    // IMPORTANT: On macOS, /var is a symlink to /private/var. The sandbox uses real paths,
+    // so we must use /private/var/folders not /var/folders.
     format!(
         r#"(version 1)
 (deny default)
-
-; Allow basic process operations
-(allow process-fork)
-(allow process-exec)
+(allow process*)
 (allow signal)
 (allow sysctl-read)
-
-; Allow reading system directories needed for execution
-(allow file-read*
-    (subpath "/usr")
-    (subpath "/bin")
-    (subpath "/sbin")
-    (subpath "/Library")
-    (subpath "/System")
-    (subpath "/Applications")
-    (subpath "/private/var/db")
-    (subpath "/private/etc")
-    (subpath "/dev")
-    (literal "/etc")
-    (literal "/tmp")
-    (literal "/var")
-    (literal "/private")
-)
-
-; Allow reading from common tool locations (process-exec handles execution)
-(allow file-read*
-    (subpath "/usr/bin")
-    (subpath "/usr/local/bin")
-    (subpath "/opt/homebrew/bin")
-    (subpath "/opt/homebrew/Cellar")
-){user_tool_rules}
-
-; Allow full access to the sandbox scope (read, write; process-exec handles execution)
-(allow file-read* file-write*
-    (subpath "{scope}")
-)
-
-; Allow access to working directory if different from scope
-(allow file-read* file-write*
-    (subpath "{working_dir}")
-)
-
-; Allow reading temp directories
-(allow file-read* file-write*
-    (subpath "/private/tmp")
-    (subpath "/var/folders")
-)
-
-; Allow network access (needed for some tools)
+(allow file-read*)
+{user_tool_rules}(allow file-write* (subpath "{scope}"))
+(allow file-write* (subpath "{working_dir}"))
+(allow file-write* (subpath "/private/tmp"))
+(allow file-write* (subpath "/private/var/folders"))
 (allow network*)
-
-; Allow mach IPC (needed for system services)
 (allow mach-lookup)
 (allow ipc-posix-shm*)
 "#,
