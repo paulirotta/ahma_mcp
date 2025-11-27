@@ -525,6 +525,15 @@ This section documents critical implementation details discovered through analys
 - **R15.2**: The adapter layer **must** automatically append `2>&1` to any shell script executed via `sh`, `bash`, or `zsh` `-c` invocations before the command is run.
 - **R15.3**: Tests **must** cover this behavior to prevent regressions when new shell entry points are added.
 
+### R16: Logging Configuration (Added 2025-11-26)
+
+- **R16.1**: By default, the server **must** log to a daily rolling file in the user's cache directory to preserve log history without cluttering the terminal.
+- **R16.2**: The `--log-to-stderr` flag **must** be supported to redirect all logging output to stderr instead of a file. This is useful for debugging and seeing errors in real-time during development.
+- **R16.3**: When logging to stderr (via `--log-to-stderr`), ANSI color codes **must** be enabled on Mac and Linux to improve readability. Error messages should appear in red, warnings in yellow, etc.
+- **R16.4**: When logging to a file, ANSI color codes **must** be disabled to keep log files clean and readable in text editors.
+- **R16.5**: The `ahma-inspector.sh` script **must** use the `--log-to-stderr` flag by default so developers can see errors immediately in the terminal when testing with MCP Inspector.
+- **R16.6**: The logging level **must** be controlled by the `--debug` flag (sets level to "debug") or default to "info" level.
+
 ## 6. Known Limitations and Future Work
 
 ### 6.1. Current Limitations
@@ -546,6 +555,10 @@ See `ARCHITECTURE_UPGRADE_PLAN.md` for detailed roadmap including:
 
 ## 7. Version History
 
+- **v0.6.3** (2025-11-26):
+  - Added `--log-to-stderr` flag to enable terminal error output with colored ANSI output on Mac/Linux (R16)
+  - Updated `ahma-inspector.sh` script to use `--log-to-stderr` by default for better debugging experience
+  - Logging now supports both file-based (default) and stderr-based (opt-in) output modes
 - **v0.6.2** (2025-11-26):
   - Added streaming response support (R8A) for JSON/SSE content negotiation per MCP protocol (rmcp 0.9.1)
   - Clients can now request either JSON or SSE streaming responses via `Accept` header
@@ -569,5 +582,5 @@ See `ARCHITECTURE_UPGRADE_PLAN.md` for detailed roadmap including:
 
 ---
 
-**Last Updated**: 2025-11-26
+**Last Updated**: 2025-11-26 (Added R16: Logging Configuration)
 **Status**: Living Document - Update with every architectural decision or significant change

@@ -24,18 +24,23 @@ else
     echo "No existing MCP inspector processes found."
 fi
 
-# Build the project in release mode from project root
+# Build the project in debug mode from project root
 cd "$PROJECT_ROOT"
-echo "Building Rust project with cargo build --release..."
-cargo build --release
+echo "Building Rust project with cargo build..."
+cargo build
 
 # Path to the built binary
-BIN="$PROJECT_ROOT/target/release/ahma_mcp"
+BIN="$PROJECT_ROOT/target/debug/ahma_mcp"
 
 if [ -x "$BIN" ]; then
     echo "Build successful! Launching MCP Inspector..."
     echo "You can now interact directly with your MCP server tools."
-    npx @modelcontextprotocol/inspector "$BIN"
+    echo ""
+    echo "Note: Debug mode enables colored terminal output:"
+    echo "  - STDIN messages (to MCP server) in cyan"
+    echo "  - STDOUT messages (from MCP server) in green"
+    echo "  - STDERR messages in red"
+    npx @modelcontextprotocol/inspector "$BIN" --log-to-stderr
 else
     echo "Build failed or binary missing: $BIN"
     exit 1

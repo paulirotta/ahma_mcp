@@ -18,6 +18,9 @@ async fn main() -> anyhow::Result<()> {
     let cwd = std::env::current_dir()?;
     if let Some(local_binary) = detect_local_debug_binary(&cwd) {
         config.server_command = local_binary;
+        // Enable colored output in debug mode (when using local debug binary)
+        config.enable_colored_output = true;
+        tracing::info!("Debug mode detected - colored terminal output enabled");
     }
 
     tracing::info!("Starting Ahma HTTP Bridge on {}", config.bind_addr);

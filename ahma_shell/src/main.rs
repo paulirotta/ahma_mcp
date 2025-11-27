@@ -128,6 +128,11 @@ struct Cli {
     #[arg(long, global = true, hide = true)]
     skip_sandbox: bool,
 
+    /// Log to stderr instead of file (useful for debugging and seeing errors in terminal).
+    /// Enables colored output on Mac/Linux.
+    #[arg(long, global = true)]
+    log_to_stderr: bool,
+
     /// The name of the tool to execute (e.g., 'cargo_build').
     #[arg()]
     tool_name: Option<String>,
@@ -148,8 +153,9 @@ async fn main() -> Result<()> {
 
     // Initialize logging
     let log_level = if cli.debug { "debug" } else { "info" };
+    let log_to_file = !cli.log_to_stderr;
 
-    init_logging(log_level, true)?;
+    init_logging(log_level, log_to_file)?;
 
     // Check if sandbox should be skipped (for testing)
     // Can be set via --skip-sandbox flag or AHMA_TEST_MODE environment variable
@@ -482,10 +488,17 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         server_args.push("--async".to_string());
     }
 
+    // Enable colored output in debug mode
+    let enable_colored_output = cfg!(debug_assertions);
+    if enable_colored_output {
+        tracing::info!("Debug mode detected - colored terminal output enabled");
+    }
+
     let config = BridgeConfig {
         bind_addr,
         server_command,
         server_args,
+        enable_colored_output,
     };
 
     start_bridge(config).await?;

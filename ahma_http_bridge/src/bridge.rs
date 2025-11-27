@@ -10,6 +10,7 @@ use axum::{
 };
 use dashmap::DashMap;
 use futures::stream::StreamExt;
+use owo_colors::OwoColorize;
 use serde_json::Value;
 use std::{convert::Infallible, net::SocketAddr, process::Stdio, sync::Arc, time::Duration};
 use tokio::{
@@ -62,6 +63,8 @@ pub struct BridgeConfig {
     pub server_command: String,
     /// Arguments to pass to the MCP server
     pub server_args: Vec<String>,
+    /// Enable colored terminal output for STDIN/STDOUT/STDERR (debug mode only)
+    pub enable_colored_output: bool,
 }
 
 impl Default for BridgeConfig {
@@ -70,6 +73,7 @@ impl Default for BridgeConfig {
             bind_addr: "127.0.0.1:3000".parse().unwrap(),
             server_command: "ahma_mcp".to_string(),
             server_args: vec![],
+            enable_colored_output: false,
         }
     }
 }
@@ -146,11 +150,17 @@ async fn manage_process(
             config.server_args.join(" ")
         );
 
+        let stderr_mode = if config.enable_colored_output {
+            Stdio::piped()
+        } else {
+            Stdio::inherit()
+        };
+
         let mut child = match Command::new(&config.server_command)
             .args(&config.server_args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
+            .stderr(stderr_mode)
             .spawn()
         {
             Ok(c) => c,
@@ -165,12 +175,28 @@ async fn manage_process(
         let stdout = child.stdout.take().expect("Failed to get stdout");
         let mut stdout_reader = BufReader::new(stdout).lines();
 
+        // Handle stderr if colored output is enabled
+        let mut stderr_reader = if config.enable_colored_output {
+            child
+                .stderr
+                .take()
+                .map(|stderr| BufReader::new(stderr).lines())
+        } else {
+            None
+        };
+
         loop {
             tokio::select! {
                 // Handle outgoing messages (HTTP -> Stdio)
                 Some(msg) = rx.recv() => {
                     if let Ok(json_str) = serde_json::to_string(&msg) {
                         debug!("Sending to MCP server: {}", json_str);
+
+                        // Echo STDIN in cyan if colored output is enabled
+                        if config.enable_colored_output {
+                            eprintln!("{}", format!("→ STDIN: {}", json_str).cyan());
+                        }
+
                         if let Err(e) = stdin.write_all(json_str.as_bytes()).await {
                             error!("Failed to write to stdin: {}", e);
                             break;
@@ -190,6 +216,11 @@ async fn manage_process(
                 Ok(Some(line)) = stdout_reader.next_line() => {
                     if line.is_empty() { continue; }
                     debug!("Received from MCP server: {}", line);
+
+                    // Echo STDOUT in green if colored output is enabled
+                    if config.enable_colored_output {
+                        eprintln!("{}", format!("← STDOUT: {}", line).green());
+                    }
 
                     if let Ok(value) = serde_json::from_str::<Value>(&line) {
                         // Check if it's a response to a pending request
@@ -211,6 +242,30 @@ async fn manage_process(
                         let _ = broadcast_tx.send(line);
                     } else {
                         warn!("Failed to parse JSON from server: {}", line);
+                    }
+                }
+
+                // Handle stderr if colored output is enabled
+                result = async {
+                    if let Some(ref mut reader) = stderr_reader {
+                        reader.next_line().await
+                    } else {
+                        std::future::pending().await
+                    }
+                } => {
+                    match result {
+                        Ok(Some(line)) => {
+                            if !line.is_empty() {
+                                // Echo STDERR in red
+                                eprintln!("{}", format!("⚠ STDERR: {}", line).red());
+                            }
+                        }
+                        Ok(None) => {
+                            // stderr closed
+                        }
+                        Err(e) => {
+                            error!("Failed to read stderr: {}", e);
+                        }
                     }
                 }
 
@@ -516,6 +571,7 @@ mod tests {
             bind_addr: "0.0.0.0:8080".parse().unwrap(),
             server_command: "custom_server".to_string(),
             server_args: vec!["--arg1".to_string(), "value1".to_string()],
+            enable_colored_output: false,
         };
         assert_eq!(config.bind_addr.to_string(), "0.0.0.0:8080");
         assert_eq!(config.server_command, "custom_server");
