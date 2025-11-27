@@ -14,8 +14,31 @@ use serde_json::json;
 use std::{sync::Arc, time::Duration};
 use tempfile::tempdir;
 
+/// Check if we can apply a new sandbox (i.e., we're not already sandboxed)
+fn can_apply_sandbox() -> bool {
+    // Try to run sandbox-exec with a simple command
+    let result = std::process::Command::new("sandbox-exec")
+        .args(["-p", "(version 1)(allow default)", "true"])
+        .output();
+    match result {
+        Ok(output) => output.status.success(),
+        Err(_) => false,
+    }
+}
+
+/// Skip tests that require sandbox when we're already in a nested sandbox
+macro_rules! skip_if_nested_sandbox {
+    () => {
+        if !can_apply_sandbox() {
+            eprintln!("SKIPPED: Cannot apply nested sandbox (likely running inside MCP sandbox)");
+            return;
+        }
+    };
+}
+
 #[tokio::test]
 async fn test_simple_git_commit_without_multiline() {
+    skip_if_nested_sandbox!();
     init_test_logging();
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let repo_path = temp_dir.path();
@@ -156,6 +179,7 @@ async fn test_multiline_argument_with_echo() {
 
 #[tokio::test]
 async fn test_multiline_git_commit_with_real_tool() {
+    skip_if_nested_sandbox!();
     init_test_logging();
     init_test_sandbox();
     let temp_dir = tempdir().expect("Failed to create temp dir");
@@ -313,6 +337,7 @@ async fn test_multiline_git_commit_with_real_tool() {
 
 #[tokio::test]
 async fn test_multiline_git_commit_message() {
+    skip_if_nested_sandbox!();
     init_test_logging();
     init_test_sandbox();
     let temp_dir = tempdir().expect("Failed to create temp dir");

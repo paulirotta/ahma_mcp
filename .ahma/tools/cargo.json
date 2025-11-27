@@ -389,7 +389,8 @@
     },
     {
       "name": "llvm-cov",
-      "description": "Collect and report test coverage metrics using LLVM source-based code coverage. Use this to identify untested code paths and prioritize which tests to add.",
+      "description": "DISABLED: Code coverage requires instrumentation that conflicts with MCP sandboxing. Run `cargo llvm-cov` directly in your terminal instead.",
+      "enabled": false,
       "options": [
         {
           "name": "workspace",

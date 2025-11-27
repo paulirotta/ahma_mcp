@@ -5,10 +5,43 @@
 //! run with AHMA_TEST_MODE=1 which bypasses the sandbox.
 //!
 //! These tests MUST run WITHOUT test mode to catch sandbox profile errors.
+//!
+//! NOTE: These tests are automatically skipped when running inside an existing
+//! sandbox (e.g., when invoked via MCP) because macOS does not allow nested
+//! sandbox-exec calls.
 
 use std::path::Path;
 use std::process::Command;
 use tempfile::TempDir;
+
+/// Check if we can apply sandbox-exec (i.e., we're not already in a sandbox).
+/// Returns true if sandbox-exec is available and we're not nested.
+#[cfg(target_os = "macos")]
+fn can_apply_sandbox() -> bool {
+    // Try to apply a minimal sandbox profile
+    // If we're already in a sandbox, this will fail with exit code 71
+    let result = Command::new("sandbox-exec")
+        .args(["-p", "(version 1)(allow default)", "true"])
+        .output();
+
+    match result {
+        Ok(output) => output.status.success(),
+        Err(_) => false,
+    }
+}
+
+/// Macro to skip test if we're already in a sandbox
+#[cfg(target_os = "macos")]
+macro_rules! skip_if_nested_sandbox {
+    () => {
+        if !can_apply_sandbox() {
+            eprintln!(
+                "Skipping test: already running inside a sandbox (nested sandbox-exec not allowed)"
+            );
+            return;
+        }
+    };
+}
 
 /// Generate the Seatbelt profile (same logic as in sandbox.rs)
 #[cfg(target_os = "macos")]
@@ -68,6 +101,7 @@ fn generate_test_seatbelt_profile(sandbox_scope: &Path, working_dir: &Path) -> S
 #[cfg(target_os = "macos")]
 #[test]
 fn test_seatbelt_profile_executes_echo() {
+    skip_if_nested_sandbox!();
     let temp = TempDir::new().expect("Failed to create temp dir");
     let profile = generate_test_seatbelt_profile(temp.path(), temp.path());
 
@@ -98,6 +132,7 @@ fn test_seatbelt_profile_executes_echo() {
 #[cfg(target_os = "macos")]
 #[test]
 fn test_seatbelt_profile_executes_pwd() {
+    skip_if_nested_sandbox!();
     let temp = TempDir::new().expect("Failed to create temp dir");
     let profile = generate_test_seatbelt_profile(temp.path(), temp.path());
 
@@ -123,6 +158,7 @@ fn test_seatbelt_profile_executes_pwd() {
 #[cfg(target_os = "macos")]
 #[test]
 fn test_seatbelt_profile_executes_ls() {
+    skip_if_nested_sandbox!();
     let temp = TempDir::new().expect("Failed to create temp dir");
 
     // Create a test file
@@ -158,6 +194,7 @@ fn test_seatbelt_profile_executes_ls() {
 #[cfg(target_os = "macos")]
 #[test]
 fn test_seatbelt_profile_allows_writes_in_scope() {
+    skip_if_nested_sandbox!();
     let temp = TempDir::new().expect("Failed to create temp dir");
     let profile = generate_test_seatbelt_profile(temp.path(), temp.path());
 
@@ -242,6 +279,7 @@ fn test_seatbelt_profile_blocks_writes_outside_scope() {
 #[cfg(target_os = "macos")]
 #[test]
 fn test_seatbelt_profile_handles_complex_shell_commands() {
+    skip_if_nested_sandbox!();
     let temp = TempDir::new().expect("Failed to create temp dir");
     let profile = generate_test_seatbelt_profile(temp.path(), temp.path());
 
@@ -284,6 +322,7 @@ fn test_seatbelt_profile_handles_complex_shell_commands() {
 #[cfg(target_os = "macos")]
 #[test]
 fn test_seatbelt_profile_works_with_bash() {
+    skip_if_nested_sandbox!();
     let temp = TempDir::new().expect("Failed to create temp dir");
     let profile = generate_test_seatbelt_profile(temp.path(), temp.path());
 
@@ -315,6 +354,7 @@ fn test_seatbelt_profile_works_with_bash() {
 #[cfg(target_os = "macos")]
 #[test]
 fn test_seatbelt_profile_does_not_abort() {
+    skip_if_nested_sandbox!();
     let temp = TempDir::new().expect("Failed to create temp dir");
     let profile = generate_test_seatbelt_profile(temp.path(), temp.path());
 
