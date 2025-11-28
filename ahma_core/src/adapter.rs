@@ -637,9 +637,17 @@ impl Adapter {
                 .map(|args| args.iter().map(|arg| arg.name.clone()).collect())
                 .unwrap_or_default();
 
+            let mut processed_keys = HashSet::new();
+
+            // 1. Process options FIRST (flags should come before positional args in Unix)
             // Process all top-level key-value pairs as named arguments
             // Skip special keys like "args" and meta-parameters that are handled separately
             for (key, value) in args_map {
+                // Skip positional args - we'll handle them in the next step
+                if positional_arg_names.contains(key) {
+                    continue;
+                }
+
                 // Skip meta-parameters that should not become command-line arguments
                 if key == "args"
                     || key == "working_directory"
@@ -657,6 +665,25 @@ impl Adapter {
                     working_dir,
                 )
                 .await?;
+                processed_keys.insert(key.clone());
+            }
+
+            // 2. Process positional args in order defined in config (AFTER options)
+            if let Some(sc) = subcommand_config && let Some(pos_args) = &sc.positional_args {
+                for pos_arg in pos_args {
+                    if let Some(value) = args_map.get(&pos_arg.name) {
+                        self.process_named_arg(
+                            &pos_arg.name,
+                            value,
+                            &positional_arg_names,
+                            subcommand_config,
+                            &mut final_args,
+                            working_dir,
+                        )
+                        .await?;
+                        processed_keys.insert(pos_arg.name.clone());
+                    }
+                }
             }
 
             // Handle positional arguments from `{"args": [...]}`

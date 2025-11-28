@@ -13,7 +13,7 @@ axum = {version = "0.8.7", features = ["http2", "tokio"]}
 bytes = "1.11"
 dashmap = "6.1.0"
 futures.workspace = true
-owo-colors = "4.1.0"
+owo-colors = "4.2.3"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

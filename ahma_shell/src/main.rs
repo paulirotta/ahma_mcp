@@ -805,7 +805,7 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     let adapter = Adapter::new(operation_monitor, shell_pool_manager.clone())?;
 
     // Load tool configurations (now async, no spawn_blocking needed)
-    let raw_configs = load_tool_configs(&PathBuf::from(".ahma/tools"))
+    let raw_configs = load_tool_configs(&cli.tools_dir)
         .await
         .context("Failed to load tool configurations")?;
     let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
