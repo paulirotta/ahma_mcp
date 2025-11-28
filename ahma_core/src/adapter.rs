@@ -217,7 +217,7 @@ impl Adapter {
             .map(Duration::from_secs)
             .unwrap_or_else(|| self.shell_pool.config().command_timeout);
 
-        // Create sandboxed command (uses Bubblewrap on macOS, direct on Linux with Landlock)
+        // Create sandboxed command (uses sandbox-exec on macOS, direct on Linux with Landlock)
         let mut cmd = if program == "/bin/sh" {
             let full_command = args_vec.join(" ");
             sandbox::create_sandboxed_shell_command(&program, &full_command, &safe_wd)?
@@ -423,7 +423,7 @@ impl Adapter {
 
             // Build sandboxed process command
             // On Linux, Landlock is already applied at process level
-            // On macOS, this wraps with Bubblewrap
+            // On macOS, this wraps with sandbox-exec
             let wd_path = std::path::PathBuf::from(&wd_clone);
             let proc_cmd_result =
                 sandbox::create_sandboxed_command(&program_with_subcommand, &args_vec, &wd_path);
