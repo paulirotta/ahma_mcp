@@ -24,6 +24,21 @@ The Ahma HTTP Bridge provides an HTTP server that proxies JSON-RPC requests to a
 - **Current**: 73.47% (as of 2025-11-25)
 - `main.rs` is excluded from coverage goals (binary entry point)
 
+### Coverage Tools
+
+**llvm-cov is NOT available via Ahma MCP** because its instrumentation conflicts with macOS sandboxing.
+To generate coverage reports, run `cargo llvm-cov` directly in your terminal:
+
+```bash
+# Generate HTML coverage report
+cargo llvm-cov nextest --html --output-dir ./coverage
+
+# Open in browser
+open ./coverage/html/index.html
+```
+
+CI runs llvm-cov in the `job-coverage` workflow (GitHub Actions), where sandboxing is not enabled.
+
 ### Test Categories
 
 1. **Unit Tests** - Test individual functions and components in isolation
@@ -59,15 +74,19 @@ The following require integration testing with a real subprocess:
 
 ### Running Tests
 
+**Always use Ahma MCP tools for Rust development** instead of running terminal commands directly:
+
+- `mcp_ahma_cargo fmt` - Format code
+- `mcp_ahma_cargo nextest_run` - Run tests
+- `mcp_ahma_cargo clippy` - Lint code
+- `mcp_ahma_cargo build` - Build project
+- `mcp_ahma_ahma_quality_check` - Run full quality pipeline
+
+The Ahma tools provide sandboxed execution, proper async handling, and integrated error reporting.
+
 ```bash
-# Run all tests
-cargo nextest run
-
-# Run with coverage
-cargo llvm-cov --package ahma_http_bridge
-
-# Quality check (format, lint, test, build)
-cargo fmt && cargo clippy --fix --allow-dirty && cargo nextest run && cargo build
+# Only use terminal directly for operations not supported by Ahma, such as:
+cargo llvm-cov nextest --html  # Coverage (incompatible with sandboxing)
 ```
 
 ## API Reference

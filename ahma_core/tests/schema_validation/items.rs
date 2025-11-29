@@ -138,10 +138,10 @@ async fn test_array_parameters_must_have_items_property() -> anyhow::Result<()> 
         );
     } else {
         // Without cargo-audit, we may only have array parameters from other enabled subcommands
-        // (e.g., llvm-cov args). If all optional tools are unavailable, we might have 0.
+        // (e.g., nextest args). Note: llvm-cov is disabled due to sandbox incompatibility.
         assert!(
             validated_arrays >= 1,
-            "Should have validated at least 1 array parameter without cargo audit installed (e.g., args from llvm-cov or nextest)"
+            "Should have validated at least 1 array parameter without cargo audit installed (e.g., args from nextest)"
         );
         eprintln!(
             "cargo-audit not found, skipping audit-related parameter checks. Validated {} array parameters.",

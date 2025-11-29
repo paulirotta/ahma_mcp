@@ -51,26 +51,6 @@ mod tool_validation_tdd_tests {
             "cargo.json should exist for cargo subcommands"
         );
 
-        // Ensure legacy cargo_* JSON files have been merged away
-        let legacy_files = [
-            ".ahma/tools/cargo_nextest.json",
-            ".ahma/tools/cargo_clippy.json",
-            ".ahma/tools/cargo_fmt.json",
-            ".ahma/tools/cargo_bench.json",
-            ".ahma/tools/cargo_audit.json",
-            ".ahma/tools/cargo_edit.json",
-            ".ahma/tools/cargo_llvm_cov.json",
-        ]
-        .map(get_workspace_path);
-
-        for legacy in legacy_files {
-            assert!(
-                !legacy.exists(),
-                "{} should have been merged into cargo.json",
-                legacy.display()
-            );
-        }
-
         // Validate that cargo.json actually exposes nextest run subcommand
         let cargo_config =
             std::fs::read_to_string(&cargo_path).expect("Failed to read cargo.json after merge");
@@ -92,25 +72,15 @@ mod tool_validation_tdd_tests {
 
         assert!(has_nextest, "cargo.json must embed nextest run subcommand");
 
+        // llvm-cov has been removed from cargo.json because its instrumentation conflicts with
+        // MCP sandboxing. Users should run `cargo llvm-cov` directly in terminal for coverage.
+        // CI handles coverage separately in the job-coverage workflow.
         let has_llvm_cov = subcommands
             .iter()
             .any(|sub| sub["name"].as_str() == Some("llvm-cov"));
         assert!(
-            has_llvm_cov,
-            "cargo.json must expose cargo llvm-cov subcommand"
-        );
-
-        let llvm_cov = subcommands
-            .iter()
-            .find(|sub| sub["name"].as_str() == Some("llvm-cov"))
-            .expect("llvm-cov subcommand should be defined");
-        assert!(
-            llvm_cov["availability_check"].as_object().is_some(),
-            "llvm-cov must include an availability_check so missing installs are caught early"
-        );
-        assert!(
-            llvm_cov["install_instructions"].as_str().is_some(),
-            "llvm-cov must provide install instructions for startup guidance"
+            !has_llvm_cov,
+            "llvm-cov should NOT be in cargo.json (removed due to sandbox incompatibility)"
         );
     }
 

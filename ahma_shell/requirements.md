@@ -17,24 +17,28 @@
 The following pure helper functions have comprehensive unit tests:
 
 1. **`find_matching_tool`** - Finds the best matching tool configuration by prefix
+
    - Exact match when tool name matches key
    - Longest prefix match with multiple tools
    - Disabled tools are ignored
    - Error handling when no tool matches
 
 2. **`find_tool_config`** - Finds tool configuration by key or name
+
    - Find by exact key match
    - Find by name when key differs
    - Key match takes precedence over name match
    - Returns None when not found
 
 3. **`parse_env_list`** - Parses comma-separated environment variable lists
+
    - Returns None when env var not set
    - Parses single and multiple items
    - Trims whitespace and lowercases
    - Filters empty entries
 
 4. **`should_skip`** - Checks if a value should be skipped based on a set
+
    - Returns false when set is None
    - Case-insensitive matching
    - Handles empty sets
@@ -65,10 +69,16 @@ These async/complex functions are tested via integration tests:
 
 ## Development Workflow
 
+**Always use Ahma MCP tools** for Rust development instead of running terminal commands directly:
+
 1. Write tests first (TDD)
 2. Implement code to make tests pass
-3. Run quality checks: `cargo fmt && cargo clippy --fix --allow-dirty && cargo test`
-4. Generate coverage report: `cargo llvm-cov --package ahma_shell --html`
+3. Run quality checks via Ahma: `mcp_ahma_ahma_quality_check` or individual tools
+4. Generate coverage report directly in terminal (not via Ahma):
+   ```bash
+   cargo llvm-cov --package ahma_shell --html
+   ```
+   _Note: llvm-cov is disabled in Ahma because its instrumentation conflicts with sandboxing._
 
 ## Version History
 
