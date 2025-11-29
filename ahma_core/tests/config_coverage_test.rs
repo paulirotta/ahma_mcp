@@ -54,7 +54,7 @@ fn test_tool_config_full_deserialization() {
     let config: ToolConfig = serde_json::from_value(json).unwrap();
     assert_eq!(config.name, "cargo");
     assert_eq!(config.timeout_seconds, Some(300));
-    assert_eq!(config.force_synchronous, Some(true));
+    assert_eq!(config.synchronous, Some(true));
     assert_eq!(config.guidance_key, Some("cargo_hints".to_string()));
     assert_eq!(config.step_delay_ms, Some(100));
     assert!(config.subcommand.is_some());
@@ -138,7 +138,7 @@ fn test_tool_config_serialization_roundtrip() {
         subcommand: None,
         input_schema: None,
         timeout_seconds: Some(60),
-        force_synchronous: Some(false),
+        synchronous: Some(false),
         hints: ToolHints::default(),
         enabled: true,
         guidance_key: None,

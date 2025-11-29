@@ -41,7 +41,7 @@ fn test_cargo_qualitycheck_subcommand_structure() {
     );
 
     assert_eq!(
-        qualitycheck.force_synchronous,
+        qualitycheck.synchronous,
         Some(true),
         "Sequence should run synchronously"
     );

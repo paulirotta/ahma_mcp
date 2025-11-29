@@ -57,7 +57,12 @@ async fn test_path_validation_failure_absolute() {
             // In mcp_service.rs, we map Err(e) to McpError::internal_error.
             // So we should expect INTERNAL_ERROR.
             // assert_eq!(mcp_error.code, ErrorCode::INVALID_PARAMS);
-            assert!(mcp_error.message.contains("Synchronous execution failed"));
+            // Default mode is now async, so error says "Failed to start asynchronous operation"
+            assert!(
+                mcp_error
+                    .message
+                    .contains("Failed to start asynchronous operation")
+            );
             assert!(mcp_error.message.contains("outside the sandbox root"));
         }
         _ => panic!("Expected McpError, got {:?}", error),
@@ -88,7 +93,12 @@ async fn test_path_validation_failure_relative() {
     let error = result.unwrap_err();
     match error {
         ServiceError::McpError(mcp_error) => {
-            assert!(mcp_error.message.contains("Synchronous execution failed"));
+            // Default mode is now async, so error says "Failed to start asynchronous operation"
+            assert!(
+                mcp_error
+                    .message
+                    .contains("Failed to start asynchronous operation")
+            );
             assert!(mcp_error.message.contains("outside the sandbox root"));
         }
         _ => panic!("Expected McpError, got {:?}", error),

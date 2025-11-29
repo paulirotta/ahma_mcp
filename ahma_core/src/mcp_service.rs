@@ -80,7 +80,9 @@ pub struct AhmaMcpService {
     pub operation_monitor: Arc<crate::operation_monitor::OperationMonitor>,
     pub configs: Arc<HashMap<String, ToolConfig>>,
     pub guidance: Arc<Option<GuidanceConfig>>,
-    pub force_asynchronous: bool,
+    /// When true, forces all operations to run synchronously (overrides async-by-default).
+    /// This is set when the --sync CLI flag is used.
+    pub force_synchronous: bool,
     /// The peer handle for sending notifications to the client.
     /// This is populated by capturing it from the first request context.
     pub peer: Arc<RwLock<Option<Peer<RoleServer>>>>,
@@ -93,7 +95,7 @@ impl AhmaMcpService {
         operation_monitor: Arc<crate::operation_monitor::OperationMonitor>,
         configs: Arc<HashMap<String, ToolConfig>>,
         guidance: Arc<Option<GuidanceConfig>>,
-        force_asynchronous: bool,
+        force_synchronous: bool,
     ) -> Result<Self, anyhow::Error> {
         // Start the background monitor for operation timeouts
         crate::operation_monitor::OperationMonitor::start_background_monitor(
@@ -105,7 +107,7 @@ impl AhmaMcpService {
             operation_monitor,
             configs,
             guidance,
-            force_asynchronous,
+            force_synchronous,
             peer: Arc::new(RwLock::new(None)),
         })
     }
@@ -972,33 +974,35 @@ impl ServerHandler for AhmaMcpService {
 
             let timeout = arguments.get("timeout_seconds").and_then(|v| v.as_u64());
 
-            // Determine execution mode (default is synchronous):
-            // 1. If force_synchronous is true in config (subcommand or inherited from tool), ALWAYS use sync
-            // 2. If --async CLI flag was used (force_asynchronous=true), use async mode
-            // 3. Check explicit execution_mode argument (for advanced use)
-            // 4. Default to synchronous
+            // Determine execution mode (default is ASYNCHRONOUS):
+            // 1. If synchronous=true in config (subcommand or inherited from tool), ALWAYS use sync
+            // 2. If synchronous=false in config, ALWAYS use async (explicit async override)
+            // 3. If --sync CLI flag was used (force_synchronous=true), use sync mode
+            // 4. Check explicit execution_mode argument (for advanced use)
+            // 5. Default to ASYNCHRONOUS
             //
-            // Inheritance: subcommand.force_synchronous overrides tool.force_synchronous
+            // Inheritance: subcommand.synchronous overrides tool.synchronous
             // If subcommand doesn't specify, inherit from tool level
-            let force_sync = subcommand_config
-                .force_synchronous
-                .or(config.force_synchronous);
-            let execution_mode = if force_sync == Some(true) {
-                // Config explicitly requires synchronous: FORCE sync mode, ignoring CLI --async flag
+            let sync_override = subcommand_config.synchronous.or(config.synchronous);
+            let execution_mode = if sync_override == Some(true) {
+                // Config explicitly requires synchronous: FORCE sync mode
                 crate::adapter::ExecutionMode::Synchronous
-            } else if self.force_asynchronous {
-                // --async flag was used and not overridden by config: use async mode
+            } else if sync_override == Some(false) {
+                // Config explicitly requires async: FORCE async mode (ignores --sync flag)
                 crate::adapter::ExecutionMode::AsyncResultPush
+            } else if self.force_synchronous {
+                // --sync flag was used and not overridden by config: use sync mode
+                crate::adapter::ExecutionMode::Synchronous
             } else if let Some(mode_str) = arguments.get("execution_mode").and_then(|v| v.as_str())
             {
                 match mode_str {
                     "Synchronous" => crate::adapter::ExecutionMode::Synchronous,
                     "AsyncResultPush" => crate::adapter::ExecutionMode::AsyncResultPush,
-                    _ => crate::adapter::ExecutionMode::Synchronous, // Default to sync
+                    _ => crate::adapter::ExecutionMode::AsyncResultPush, // Default to async
                 }
             } else {
-                // Default to synchronous mode
-                crate::adapter::ExecutionMode::Synchronous
+                // Default to ASYNCHRONOUS mode
+                crate::adapter::ExecutionMode::AsyncResultPush
             };
 
             match execution_mode {
@@ -1127,9 +1131,9 @@ impl AhmaMcpService {
         let step_delay_ms = config.step_delay_ms.unwrap_or(SEQUENCE_STEP_DELAY_MS);
 
         // Determine if sequence should run synchronously
-        // - If force_synchronous is true, always run sync
-        // - If force_synchronous is false or None, default is async for sequence tools
-        let run_synchronously = config.force_synchronous.unwrap_or(false);
+        // - If synchronous is true, run sync
+        // - If synchronous is false or None, default is async for sequence tools
+        let run_synchronously = config.synchronous.unwrap_or(false);
 
         if run_synchronously {
             self.handle_sequence_tool_sync(config, params, context, sequence, step_delay_ms)
@@ -2059,7 +2063,7 @@ mod tests {
             options: None,
             positional_args: None,
             timeout_seconds: None,
-            force_synchronous: None,
+            synchronous: None,
             enabled,
             guidance_key: None,
             sequence: None,
@@ -2082,7 +2086,7 @@ mod tests {
             options: None,
             positional_args: None,
             timeout_seconds: None,
-            force_synchronous: None,
+            synchronous: None,
             enabled,
             guidance_key: None,
             sequence: None,

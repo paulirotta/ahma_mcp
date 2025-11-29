@@ -287,7 +287,7 @@ async fn test_status_tool_filter_combinations() -> Result<()> {
 #[tokio::test]
 async fn test_async_operation_with_real_execution() -> Result<()> {
     init_test_logging();
-    let client = new_client_with_args(Some(".ahma/tools"), &["--async"]).await?;
+    let client = new_client_with_args(Some(".ahma/tools"), &[]).await?;
 
     // Start a real async operation (shell command)
     let async_params = CallToolRequestParam {

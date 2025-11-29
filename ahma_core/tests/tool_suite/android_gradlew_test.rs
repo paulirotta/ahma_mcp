@@ -265,7 +265,7 @@ mod android_tests {
 
         for subcommand in subcommands {
             let name = subcommand["name"].as_str().unwrap();
-            // force_synchronous: true means always sync, false/None means can be async (obeys --async)
+            // synchronous: true means always sync, false/None means can be async (obeys --async)
             let is_forced_sync = subcommand
                 .get("force_synchronous")
                 .and_then(|v| v.as_bool())

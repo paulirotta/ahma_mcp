@@ -113,7 +113,7 @@ mod mcp_service_tests {
             description: "Test tool description".to_string(),
             command: "test".to_string(),
             enabled: true,
-            force_synchronous: Some(true),
+            synchronous: Some(true),
             timeout_seconds: Some(300),
             guidance_key: None,
             hints: Default::default(),
@@ -124,7 +124,7 @@ mod mcp_service_tests {
                 name: "build".to_string(),
                 description: "Build the project".to_string(),
                 enabled: true,
-                force_synchronous: None,
+                synchronous: None,
                 timeout_seconds: None,
                 guidance_key: Some("sync_behavior".to_string()),
                 options: Some(vec![CommandOption {
@@ -155,14 +155,14 @@ mod mcp_service_tests {
         assert_eq!(config.name, "test_tool");
         assert_eq!(config.command, "test");
         assert!(config.enabled);
-        assert_eq!(config.force_synchronous, Some(true));
+        assert_eq!(config.synchronous, Some(true));
 
         let subcommands = config.subcommand.as_ref().unwrap();
         assert_eq!(subcommands.len(), 1);
 
         let build_cmd = &subcommands[0];
         assert_eq!(build_cmd.name, "build");
-        assert_eq!(build_cmd.force_synchronous, None);
+        assert_eq!(build_cmd.synchronous, None);
         assert_eq!(build_cmd.guidance_key, Some("sync_behavior".to_string()));
 
         let options = build_cmd.options.as_ref().unwrap();

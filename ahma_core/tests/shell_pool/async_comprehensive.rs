@@ -23,7 +23,7 @@ use tokio::fs;
 async fn new_async_client(
     tools_dir: Option<&str>,
 ) -> Result<rmcp::service::RunningService<rmcp::service::RoleClient, ()>> {
-    new_client_with_args(tools_dir, &["--async"]).await
+    new_client_with_args(tools_dir, &[]).await
 }
 
 fn make_workdir(prefix: &str) -> Result<(TempDir, PathBuf)> {

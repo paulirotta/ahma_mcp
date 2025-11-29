@@ -464,6 +464,9 @@ fn generate_seatbelt_profile(sandbox_scope: &Path, working_dir: &Path) -> String
 (allow file-write* (subpath "{working_dir}"))
 (allow file-write* (subpath "/private/tmp"))
 (allow file-write* (subpath "/private/var/folders"))
+(allow file-write* (literal "/dev/null"))
+(allow file-write* (literal "/dev/tty"))
+(allow file-write* (literal "/dev/zero"))
 (allow network*)
 (allow mach-lookup)
 (allow ipc-posix-shm*)
@@ -700,6 +703,7 @@ pub fn create_sandboxed_shell_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "macos")]
     use tempfile::TempDir;
 
     // Note: These tests cannot test the global SANDBOX_SCOPE since it can only be set once

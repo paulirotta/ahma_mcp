@@ -57,11 +57,18 @@ pub struct ToolConfig {
     pub input_schema: Option<Value>,
     /// Default timeout for operations in seconds
     pub timeout_seconds: Option<u64>,
-    /// Force synchronous execution even when --async flag is set (overrides CLI flag)
-    /// If true: always runs synchronously, ignoring --async
-    /// If false or None: obeys the --async CLI flag (default behavior)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub force_synchronous: Option<bool>,
+    /// Override the default execution mode for this tool.
+    /// - `true`: Always run synchronously (blocking, returns result immediately)
+    /// - `false`: Always run asynchronously (non-blocking, returns operation ID)
+    /// - `null`/omitted: Use server default (async unless --sync CLI flag)
+    ///
+    /// Inheritance: Subcommand-level settings override tool-level settings.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "force_synchronous"
+    )]
+    pub synchronous: Option<bool>,
     #[serde(default)]
     pub hints: ToolHints,
     #[serde(default = "default_enabled")]
@@ -98,11 +105,18 @@ pub struct SubcommandConfig {
     pub positional_args: Option<Vec<CommandOption>>,
     /// Override timeout for this specific subcommand
     pub timeout_seconds: Option<u64>,
-    /// Force synchronous execution even when --async flag is set (overrides CLI flag)
-    /// If true: always runs synchronously, ignoring --async
-    /// If false or None: obeys the --async CLI flag (default behavior)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub force_synchronous: Option<bool>,
+    /// Override the default execution mode for this subcommand.
+    /// - `true`: Always run synchronously (blocking, returns result immediately)
+    /// - `false`: Always run asynchronously (non-blocking, returns operation ID)
+    /// - `null`/omitted: Inherit from tool level, or use server default if tool doesn't specify
+    ///
+    /// Inheritance: Subcommand-level settings override tool-level settings.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "force_synchronous"
+    )]
+    pub synchronous: Option<bool>,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
     /// Key to look up guidance in tool_guidance.json

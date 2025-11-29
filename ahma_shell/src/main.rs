@@ -114,9 +114,11 @@ struct Cli {
     #[arg(short, long, global = true)]
     debug: bool,
 
-    /// Force asynchronous mode for all operations (overrides default synchronous behavior).
+    /// Force synchronous mode for all operations (overrides default asynchronous behavior).
+    /// By default, tools run asynchronously (non-blocking). Use this flag to force all tools
+    /// to run synchronously (blocking until complete).
     #[arg(long, global = true)]
-    r#async: bool,
+    sync: bool,
 
     /// Override the sandbox scope (root directory for file system operations).
     /// By default, uses the current working directory for stdio mode.
@@ -484,8 +486,8 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         server_args.push("--debug".to_string());
     }
 
-    if cli.r#async {
-        server_args.push("--async".to_string());
+    if cli.sync {
+        server_args.push("--sync".to_string());
     }
 
     // Enable colored output in debug mode
@@ -646,13 +648,14 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     }
 
     // Create and start the MCP service
-    let force_async = cli.r#async;
+    // With async-by-default, we pass force_synchronous=true when --sync flag is used
+    let force_synchronous = cli.sync;
     let service_handler = AhmaMcpService::new(
         adapter.clone(),
         operation_monitor.clone(),
         configs,
         Arc::new(guidance_config),
-        force_async,
+        force_synchronous,
     )
     .await?;
     let service = service_handler.serve(rmcp::transport::stdio()).await?;
@@ -848,7 +851,7 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
             options: None,
             positional_args: None,
             timeout_seconds: config.timeout_seconds,
-            force_synchronous: config.force_synchronous,
+            synchronous: config.synchronous,
             enabled: true,
             guidance_key: config.guidance_key.clone(),
             sequence: config.sequence.clone(),
@@ -1023,7 +1026,7 @@ mod tests {
             command: command.to_string(),
             enabled,
             timeout_seconds: None,
-            force_synchronous: None,
+            synchronous: None,
             guidance_key: None,
             input_schema: None,
             hints: ToolHints::default(),
@@ -1047,7 +1050,7 @@ mod tests {
             command: command.to_string(),
             enabled,
             timeout_seconds: None,
-            force_synchronous: None,
+            synchronous: None,
             guidance_key: None,
             input_schema: None,
             hints: ToolHints::default(),
@@ -1067,7 +1070,7 @@ mod tests {
             options: None,
             positional_args: None,
             timeout_seconds: None,
-            force_synchronous: None,
+            synchronous: None,
             enabled,
             guidance_key: None,
             sequence: None,
@@ -1089,7 +1092,7 @@ mod tests {
             options: None,
             positional_args: None,
             timeout_seconds: None,
-            force_synchronous: None,
+            synchronous: None,
             enabled,
             guidance_key: None,
             sequence: None,

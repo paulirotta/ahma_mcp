@@ -92,7 +92,7 @@ async fn test_simple_sequence_execution() -> Result<()> {
 
     let result = client.call_tool(call_param).await?;
 
-    // With synchronous sequence execution (force_synchronous: true),
+    // With synchronous sequence execution (synchronous: true),
     // all results come in a single combined message showing all steps
     let messages: Vec<String> = result
         .content

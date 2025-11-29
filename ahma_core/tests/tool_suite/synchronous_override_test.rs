@@ -51,7 +51,7 @@ async fn test_synchronous_flag_overrides_async_tools() -> Result<()> {
     let tools_dir_str = tools_dir.to_string_lossy().to_string();
     let working_dir = temp_dir.path().to_string_lossy().to_string();
 
-    // Baseline: without --asynchronous flag, expect synchronous (direct output)
+    // Baseline: without --sync flag, expect asynchronous (default is async)
     let baseline_client =
         test_client::new_client_in_dir(Some(&tools_dir_str), &[], temp_dir.path()).await?;
     let baseline_args = build_args("echo WITHOUT_OVERRIDE", &working_dir);
@@ -69,23 +69,19 @@ async fn test_synchronous_flag_overrides_async_tools() -> Result<()> {
         .map(|t| t.text.clone())
         .unwrap_or_default();
 
+    // With async default and NO synchronous field in config, expect async output
     assert!(
-        baseline_text.contains("WITHOUT_OVERRIDE"),
-        "Expected synchronous output without override, got '{}'",
-        baseline_text
-    );
-    assert!(
-        !baseline_text.contains("Asynchronous operation started with ID"),
-        "Should not get async message by default, got '{}'",
+        baseline_text.contains("Asynchronous operation started with ID"),
+        "Tool without synchronous config should run async by default, got '{}'",
         baseline_text
     );
 
     baseline_client.cancel().await?;
 
-    // With --async flag, force async mode for all tools
+    // With --sync flag, force sync mode for all tools
     let override_client =
-        test_client::new_client_in_dir(Some(&tools_dir_str), &["--async"], temp_dir.path()).await?;
-    let override_args = build_args("echo WITH_OVERRIDE", &working_dir);
+        test_client::new_client_in_dir(Some(&tools_dir_str), &["--sync"], temp_dir.path()).await?;
+    let override_args = build_args("echo WITH_SYNC_FLAG", &working_dir);
     let override_response = override_client
         .call_tool(CallToolRequestParam {
             name: Cow::Borrowed("test_sync"),
@@ -100,14 +96,15 @@ async fn test_synchronous_flag_overrides_async_tools() -> Result<()> {
         .map(|t| t.text.clone())
         .unwrap_or_default();
 
+    // With --sync flag, should get synchronous output
     assert!(
-        override_text.contains("Asynchronous operation started with ID"),
-        "Expected async start message with --async flag, got '{}'",
+        override_text.contains("WITH_SYNC_FLAG"),
+        "Expected sync output with --sync flag, got '{}'",
         override_text
     );
     assert!(
-        !override_text.contains("WITH_OVERRIDE"),
-        "Asynchronous mode should not show direct output, got '{}'",
+        !override_text.contains("Asynchronous operation started with ID"),
+        "Synchronous mode should not show async message, got '{}'",
         override_text
     );
 
