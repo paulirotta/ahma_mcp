@@ -2,8 +2,8 @@
 
 _Create agents from your command line tools with one JSON file, then watch them complete your work faster with **true multi-threaded tool-use agentic AI workflows**._
 
-| | |
-| --- | ---: |
+|                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------: |
 | [![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml) [![Coverage Report](https://img.shields.io/badge/Coverage-Report-blue)](https://paulirotta.github.io/ahma_mcp/html/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![Rust](https://img.shields.io/badge/Rust-1.90%2B-B7410E.svg)](https://www.rust-lang.org/) | ![Ahma MCP Logo](./assets/ahma.png) |
 
 `ahma_mcp` is a toolbox for safely wrapping command line tools for AI use. This is done by creating (use AI) a ´.ahma/tools/somenewtool.json´.
@@ -94,40 +94,37 @@ This modular architecture ensures clean separation of concerns and enables futur
 
 1. **Clone and build the repository**:
 
-    ```bash
-    git clone https://github.com/paulirotta/ahma_mcp.git
-    cd ahma_mcp
-    cargo build --release
-    cargo run --release -- --help
-    ```
+   ```bash
+   git clone https://github.com/paulirotta/ahma_mcp.git
+   cd ahma_mcp
+   cargo build --release
+   cargo run --release -- --help
+   ```
 
 2. **Add the MCP definition**:
 
-    In your global `mcp.json` file add the following (e.g., Mac: `~/Library/Application Support/Code/User/mcp.json` or `~/Library/Application Support/Cursor/User/mcp.json`, or Linux: `~/.config/Code/User/mcp.json` or `~/.config/Cursor/User/mcp.json`).
+   In your global `mcp.json` file add the following (e.g., Mac: `~/Library/Application Support/Code/User/mcp.json` or `~/Library/Application Support/Cursor/User/mcp.json`, or Linux: `~/.config/Code/User/mcp.json` or `~/.config/Cursor/User/mcp.json`).
 
-    Update paths as needed. Use `--sync` flag if you want synchronous execution by default.
+   Update paths as needed. Use `--sync` flag if you want synchronous execution by default.
 
-    ```json
-    {
-        "servers": {
-                "Ahma": {
-                "type": "stdio",
-                "cwd": "~/github/ahma_mcp/",
-                "command": "~/github/ahma_mcp/target/release/ahma_mcp",
-                "args": [
-                    "--tools-dir",
-                    "~/github/ahma_mcp/.ahma/tools"
-                ]
-            }
-        }
-    }
-    ```
+   ```json
+   {
+     "servers": {
+       "Ahma": {
+         "type": "stdio",
+         "cwd": "~/github/ahma_mcp/",
+         "command": "~/github/ahma_mcp/target/release/ahma_mcp",
+         "args": ["--tools-dir", "~/github/ahma_mcp/.ahma/tools"]
+       }
+     }
+   }
+   ```
 
 3. **Run tests to verify installation**:
 
-    ```bash
-    cargo test
-    ```
+   ```bash
+   cargo test
+   ```
 
 The compiled binary will be at `target/release/ahma_mcp`.
 
@@ -177,31 +174,26 @@ To use `ahma_mcp` with GitHub Copilot in VS Code:
 
 1. **Enable MCP in VS Code Settings**:
 
-    ```json
-    "chat.mcp.enabled": true
-    ```
+   ```json
+   "chat.mcp.enabled": true
+   ```
 
 2. **Configure the MCP Server** in your global `mcp.json` file (e.g., `~/Library/Application Support/Code/User/mcp.json` on macOS).
 
-    ```jsonc
-    {
-        "servers": {
-            "ahma_mcp": {
-                "type": "stdio",
-                "cwd": "${workspaceFolder}",
-                "command": "/path/to/your/ahma_mcp/target/release/ahma_mcp", // Use absolute path
-                "args": [
-                    "--mode",
-                    "stdio",
-                    "--tools-dir",
-                    "tools"
-                ],
-            }
-        }
-    }
-    ```
+   ```jsonc
+   {
+     "servers": {
+       "ahma_mcp": {
+         "type": "stdio",
+         "cwd": "${workspaceFolder}",
+         "command": "/path/to/your/ahma_mcp/target/release/ahma_mcp", // Use absolute path
+         "args": ["--mode", "stdio", "--tools-dir", "tools"]
+       }
+     }
+   }
+   ```
 
-    **Important:** Replace `/path/to/your/ahma_mcp` with the absolute path to the cloned repository.
+   **Important:** Replace `/path/to/your/ahma_mcp` with the absolute path to the cloned repository.
 
 3. **Restart VS Code** and start a chat with GitHub Copilot. You can now ask it to use `ahma_mcp` tools (e.g., "Use ahma_mcp to show the git status").
 

@@ -700,6 +700,7 @@ pub fn create_sandboxed_shell_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "macos")]
     use tempfile::TempDir;
 
     // Note: These tests cannot test the global SANDBOX_SCOPE since it can only be set once

@@ -54,20 +54,21 @@ The execution mode (sync vs async) follows a clear inheritance hierarchy:
 ### Examples
 
 **Tool with mixed sync/async subcommands:**
+
 ```json
 {
   "name": "cargo",
-  "synchronous": false,           // Tool default: async
+  "synchronous": false, // Tool default: async
   "subcommand": [
-    { "name": "build" },          // Inherits async from tool
-    { "name": "add",
-      "synchronous": true },      // Override: sync (config changes)
-    { "name": "check" }           // Inherits async from tool
+    { "name": "build" }, // Inherits async from tool
+    { "name": "add", "synchronous": true }, // Override: sync (config changes)
+    { "name": "check" } // Inherits async from tool
   ]
 }
 ```
 
 **Force all sync with CLI flag:**
+
 ```bash
 ahma_mcp --sync --tools-dir .ahma/tools
 # All operations run synchronously regardless of config
@@ -333,7 +334,7 @@ AHMA MCP provides intelligent timeout remediation:
 
 2. **Resource Conflicts:**
 
-   ```bash
+   ````bash
    ps aux | grep cargo                     # Check competing processes
    lsof | grep $(pwd)                      # Check file locks
    ```3. **Network Issues:**
@@ -341,7 +342,7 @@ AHMA MCP provides intelligent timeout remediation:
    ```bash
    cargo build --offline                   # Use offline mode
    ping 8.8.8.8                          # Test connectivity
-   ```
+   ````
 
 ## Best Practices Summary
 

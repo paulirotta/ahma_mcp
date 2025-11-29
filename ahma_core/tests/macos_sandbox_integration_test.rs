@@ -10,6 +10,9 @@
 //! sandbox (e.g., when invoked via MCP) because macOS does not allow nested
 //! sandbox-exec calls.
 
+// This entire test file is macOS-specific - skip compilation on other platforms
+#![cfg(target_os = "macos")]
+
 use std::path::Path;
 use std::process::Command;
 use tempfile::TempDir;

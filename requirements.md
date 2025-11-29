@@ -651,7 +651,33 @@ See `ARCHITECTURE_UPGRADE_PLAN.md` for detailed roadmap including:
 - **v0.2.x**: Basic MCP server functionality
 - **v0.1.x**: Prototype
 
-### 6.3. Test Coverage for Tool JSON Configurations (Added 2025-11-29)
+### 6.3. Cross-Platform Sandbox Testing (Added 2025-06-15)
+
+Platform-specific sandbox tests are organized in separate files with file-level conditional compilation:
+
+**macOS Sandbox Tests** (`ahma_core/tests/macos_sandbox_integration_test.rs`):
+
+- Gated with `#![cfg(target_os = "macos")]` at file level
+- Tests Seatbelt profile execution through sandbox-exec
+- Verifies: echo, pwd, ls, file writes in scope, writes blocked outside scope, complex shell commands, bash support, no SIGABRT
+- Automatically skipped when running inside existing sandbox (nested sandbox-exec not allowed)
+
+**Linux Sandbox Tests** (`ahma_core/tests/linux_sandbox_integration_test.rs`):
+
+- Gated with `#![cfg(target_os = "linux")]` at file level
+- Tests Landlock kernel-level file system sandboxing
+- Verifies: echo, pwd, ls, file writes in scope, writes blocked outside scope, complex shell commands, bash support, read restrictions
+- Automatically skipped on kernels older than 5.13 or without Landlock LSM enabled
+- Uses `pre_exec` hook to apply Landlock rules before command execution
+
+**Why File-Level Gating**:
+
+- File-level `#![cfg(target_os = "...")]` ensures entire test module is excluded from compilation on other platforms
+- Avoids unused import warnings in CI (e.g., Linux CI won't compile macOS-specific imports)
+- Makes test organization clear: one file per platform's sandbox implementation
+- Ensures comprehensive cross-platform testing rather than hiding potential issues with inline cfg gates
+
+### 6.4. Test Coverage for Tool JSON Configurations (Added 2025-11-29)
 
 To ensure regressions in `.ahma/tools/*.json` configurations are caught early, comprehensive test coverage has been added:
 
