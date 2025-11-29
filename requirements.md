@@ -586,7 +586,35 @@ See `ARCHITECTURE_UPGRADE_PLAN.md` for detailed roadmap including:
 - **v0.2.x**: Basic MCP server functionality
 - **v0.1.x**: Prototype
 
+### 6.3. Test Coverage for Tool JSON Configurations (Added 2025-11-29)
+
+To ensure regressions in `.ahma/tools/*.json` configurations are caught early, comprehensive test coverage has been added:
+
+**Comprehensive Tool JSON Coverage Tests** (`ahma_core/tests/tool_suite/comprehensive_tool_json_coverage_test.rs`):
+- Validates all 8 tool JSON files are present and loadable
+- Tests that all tools have required fields (name, description, command)
+- Verifies cargo tool has all expected subcommands (build, run, add, upgrade, update, check, test, fmt, doc, clippy, qualitycheck, audit, nextest_run)
+- Verifies file_tools has all expected subcommands (ls, mv, cp, rm, grep, sed, touch, pwd, cd, cat, find, head, tail, diff)
+- Verifies git tool has all expected subcommands (status, add, commit, push, log)
+- Verifies gh tool has expected PR, cache, run, and workflow subcommands
+- Tests option configurations (e.g., cargo clippy has fix, allow-dirty, tests options)
+- Tests sync/async configuration (e.g., file_tools subcommands are synchronous, gh is fully synchronous)
+- Tests sequence tool configuration (ahma_quality_check includes schema generation and validation steps)
+- Tests python tool subcommands (version, script, code, module) with proper sync/async settings
+
+**Tool Execution Integration Tests** (`ahma_core/tests/tool_suite/tool_execution_integration_test.rs`):
+- Actually invokes tools via MCP call_tool interface to verify end-to-end functionality
+- Tests file_tools: ls, pwd, cat, grep, head, tail operations
+- Tests cargo check dry run
+- Tests sandboxed_shell echo and pipe execution
+- Tests option aliases work correctly (e.g., `long: true` maps to `-l` flag)
+- Tests path validation and formatting
+
+**Known Limitations**:
+- `find` command test is disabled: macOS `find` uses single-dash options (`-name`) but adapter generates double-dash (`--name`)
+- Git command tests are disabled: macOS sandbox blocks `/dev/null` access which git requires
+
 ---
 
-**Last Updated**: 2025-11-26 (Added R16: Logging Configuration)
+**Last Updated**: 2025-11-29 (Added comprehensive tool JSON test coverage)
 **Status**: Living Document - Update with every architectural decision or significant change

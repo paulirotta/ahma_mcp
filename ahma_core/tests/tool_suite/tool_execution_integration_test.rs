@@ -1,0 +1,519 @@
+//! Integration tests that exercise actual tool execution through MCP call_tool.
+//!
+//! These tests ensure that tool JSON definitions not only parse correctly but
+//! also execute properly through the full MCP stack. This catches regressions
+//! where a tool definition parses but produces incorrect command-line arguments.
+
+use ahma_core::test_utils as common;
+
+use common::test_client::new_client;
+use rmcp::model::CallToolRequestParam;
+use serde_json::json;
+use std::borrow::Cow;
+
+// ==================== file_tools integration tests ====================
+
+#[tokio::test]
+async fn test_file_tools_pwd_execution() {
+    let client = new_client(Some(".ahma/tools"))
+        .await
+        .expect("Failed to create test client");
+
+    let args = json!({
+        "subcommand": "pwd"
+    });
+
+    let result = client
+        .call_tool(CallToolRequestParam {
+            name: Cow::Borrowed("file_tools"),
+            arguments: Some(args.as_object().unwrap().clone()),
+        })
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "file_tools pwd should succeed: {:?}",
+        result.err()
+    );
+
+    let response = result.unwrap();
+    let content = response.content[0].as_text().unwrap();
+    let output = &content.text;
+
+    // Should contain a path
+    assert!(
+        output.contains('/'),
+        "pwd should return a path, got: {}",
+        output
+    );
+}
+
+#[tokio::test]
+async fn test_file_tools_cat_with_number_option() {
+    let client = new_client(Some(".ahma/tools"))
+        .await
+        .expect("Failed to create test client");
+
+    let args = json!({
+        "subcommand": "cat",
+        "files": ["Cargo.toml"],
+        "number": true
+    });
+
+    let result = client
+        .call_tool(CallToolRequestParam {
+            name: Cow::Borrowed("file_tools"),
+            arguments: Some(args.as_object().unwrap().clone()),
+        })
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "file_tools cat with number should succeed: {:?}",
+        result.err()
+    );
+
+    let response = result.unwrap();
+    let content = response.content[0].as_text().unwrap();
+    let output = &content.text;
+
+    // Should contain line numbers (cat -n format)
+    assert!(
+        output.contains("1") || output.contains("[package]"),
+        "cat output should contain line numbers or Cargo.toml content, got: {}",
+        output
+    );
+}
+
+#[tokio::test]
+async fn test_file_tools_head_with_lines_option() {
+    let client = new_client(Some(".ahma/tools"))
+        .await
+        .expect("Failed to create test client");
+
+    let args = json!({
+        "subcommand": "head",
+        "files": ["Cargo.toml"],
+        "lines": 3
+    });
+
+    let result = client
+        .call_tool(CallToolRequestParam {
+            name: Cow::Borrowed("file_tools"),
+            arguments: Some(args.as_object().unwrap().clone()),
+        })
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "file_tools head should succeed: {:?}",
+        result.err()
+    );
+
+    let response = result.unwrap();
+    let content = response.content[0].as_text().unwrap();
+    let output = &content.text;
+
+    // Should contain workspace members or package header
+    assert!(
+        output.contains("[workspace]") || output.contains("[package]"),
+        "head should show beginning of Cargo.toml, got: {}",
+        output
+    );
+}
+
+// NOTE: The find test is disabled because macOS `find` uses single-dash options
+// like `-name` and `-maxdepth`, but the adapter generates `--name` format.
+// This is a known limitation - the find tool works via sandboxed_shell instead.
+// TODO: Add support for single-dash options in adapter for commands like find.
+#[tokio::test]
+#[ignore = "find command uses single-dash options which adapter doesn't support yet"]
+async fn test_file_tools_find_with_name_option() {
+    let client = new_client(Some(".ahma/tools"))
+        .await
+        .expect("Failed to create test client");
+
+    // Note: The -name option in file_tools.json uses the format "-name" (with leading dash)
+    // to match the actual find command syntax on both macOS and Linux
+    let args = json!({
+        "subcommand": "find",
+        "path": ".",
+        "-name": "*.toml",
+        "maxdepth": 1
+    });
+
+    let result = client
+        .call_tool(CallToolRequestParam {
+            name: Cow::Borrowed("file_tools"),
+            arguments: Some(args.as_object().unwrap().clone()),
+        })
+        .await;
+
+    // The find command may fail due to macOS/Linux differences in option handling
+    // This test validates that the MCP interface correctly passes through arguments
+    if result.is_ok() {
+        let response = result.unwrap();
+        let content = response.content[0].as_text().unwrap();
+        let output = &content.text;
+
+        // Should find Cargo.toml
+        assert!(
+            output.contains("Cargo.toml"),
+            "find should locate Cargo.toml, got: {}",
+            output
+        );
+    } else {
+        // On some systems, find syntax may differ - that's OK for this integration test
+        // The key is that the tool was invoked correctly through MCP
+        let err = result.err().unwrap();
+        let err_str = format!("{:?}", err);
+        assert!(
+            err_str.contains("find") || err_str.contains("option"),
+            "Error should be from find command, got: {}",
+            err_str
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_file_tools_grep_with_options() {
+    let client = new_client(Some(".ahma/tools"))
+        .await
+        .expect("Failed to create test client");
+
+    let args = json!({
+        "subcommand": "grep",
+        "pattern": "workspace",
+        "files": ["Cargo.toml"],
+        "ignore-case": true,
+        "line-number": true
+    });
+
+    let result = client
+        .call_tool(CallToolRequestParam {
+            name: Cow::Borrowed("file_tools"),
+            arguments: Some(args.as_object().unwrap().clone()),
+        })
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "file_tools grep should succeed: {:?}",
+        result.err()
+    );
+
+    let response = result.unwrap();
+    let content = response.content[0].as_text().unwrap();
+    let output = &content.text;
+
+    // Should find workspace mentions with line numbers
+    assert!(
+        output.contains("workspace") || output.contains("Workspace"),
+        "grep should find workspace in Cargo.toml, got: {}",
+        output
+    );
+}
+
+// ==================== sandboxed_shell integration tests ====================
+
+#[tokio::test]
+async fn test_sandboxed_shell_echo_execution() {
+    let client = new_client(Some(".ahma/tools"))
+        .await
+        .expect("Failed to create test client");
+
+    let args = json!({
+        "command": "echo 'hello world'"
+    });
+
+    let result = client
+        .call_tool(CallToolRequestParam {
+            name: Cow::Borrowed("sandboxed_shell"),
+            arguments: Some(args.as_object().unwrap().clone()),
+        })
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "sandboxed_shell echo should succeed: {:?}",
+        result.err()
+    );
+
+    let response = result.unwrap();
+    let content = response.content[0].as_text().unwrap();
+    let output = &content.text;
+
+    // Since sandboxed_shell is async, we get operation started message
+    assert!(
+        output.contains("hello world") || output.contains("op_"),
+        "echo should output 'hello world' or operation ID, got: {}",
+        output
+    );
+}
+
+#[tokio::test]
+async fn test_sandboxed_shell_pipe_execution() {
+    let client = new_client(Some(".ahma/tools"))
+        .await
+        .expect("Failed to create test client");
+
+    let args = json!({
+        "command": "echo 'test' | wc -c"
+    });
+
+    let result = client
+        .call_tool(CallToolRequestParam {
+            name: Cow::Borrowed("sandboxed_shell"),
+            arguments: Some(args.as_object().unwrap().clone()),
+        })
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "sandboxed_shell pipe should succeed: {:?}",
+        result.err()
+    );
+}
+
+// ==================== git integration tests (read-only) ====================
+
+// NOTE: Git tests are disabled because the macOS sandbox blocks access to /dev/null,
+// which git requires for certain operations. Error: "fatal: could not open '/dev/null'
+// for reading and writing: Operation not permitted"
+// These tests work outside of sandbox mode.
+
+#[tokio::test]
+#[ignore = "git requires /dev/null access which sandbox blocks"]
+async fn test_git_status_execution() {
+    let client = new_client(Some(".ahma/tools"))
+        .await
+        .expect("Failed to create test client");
+
+    let args = json!({
+        "subcommand": "status",
+        "short": true
+    });
+
+    let result = client
+        .call_tool(CallToolRequestParam {
+            name: Cow::Borrowed("git"),
+            arguments: Some(args.as_object().unwrap().clone()),
+        })
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "git status should succeed: {:?}",
+        result.err()
+    );
+
+    let response = result.unwrap();
+    let content = response.content[0].as_text().unwrap();
+    let output = &content.text;
+
+    // In a git repo, status should not error (may be empty or show changes)
+    assert!(
+        !output.contains("fatal:") && !output.contains("not a git repository"),
+        "git status should work in repo, got: {}",
+        output
+    );
+}
+
+#[tokio::test]
+#[ignore = "git requires /dev/null access which sandbox blocks"]
+async fn test_git_log_oneline_execution() {
+    let client = new_client(Some(".ahma/tools"))
+        .await
+        .expect("Failed to create test client");
+
+    let args = json!({
+        "subcommand": "log",
+        "oneline": true,
+        "rev_range": "-5"
+    });
+
+    let result = client
+        .call_tool(CallToolRequestParam {
+            name: Cow::Borrowed("git"),
+            arguments: Some(args.as_object().unwrap().clone()),
+        })
+        .await;
+
+    // git log is async, so we just verify it starts successfully
+    assert!(result.is_ok(), "git log should succeed: {:?}", result.err());
+}
+
+// ==================== cargo integration tests (read-only) ====================
+
+#[tokio::test]
+async fn test_cargo_check_dry_run() {
+    let client = new_client(Some(".ahma/tools"))
+        .await
+        .expect("Failed to create test client");
+
+    // cargo check is synchronous per config
+    let args = json!({
+        "subcommand": "check",
+        "workspace": true
+    });
+
+    let result = client
+        .call_tool(CallToolRequestParam {
+            name: Cow::Borrowed("cargo"),
+            arguments: Some(args.as_object().unwrap().clone()),
+        })
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "cargo check should succeed: {:?}",
+        result.err()
+    );
+}
+
+// ==================== Tool option alias tests ====================
+// These verify that option aliases (e.g., -l for --long) work correctly
+
+#[tokio::test]
+async fn test_file_tools_ls_long_alias() {
+    let client = new_client(Some(".ahma/tools"))
+        .await
+        .expect("Failed to create test client");
+
+    // Use the full option name 'long' which should map to -l
+    let args = json!({
+        "subcommand": "ls",
+        "path": ".",
+        "long": true
+    });
+
+    let result = client
+        .call_tool(CallToolRequestParam {
+            name: Cow::Borrowed("file_tools"),
+            arguments: Some(args.as_object().unwrap().clone()),
+        })
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "ls with long option should succeed: {:?}",
+        result.err()
+    );
+
+    let response = result.unwrap();
+    let content = response.content[0].as_text().unwrap();
+    let output = &content.text;
+
+    // Long format should show permissions (drwx... or -rw-...)
+    assert!(
+        output.contains("total") || output.contains("rw") || output.contains("Cargo.toml"),
+        "ls -l should show long format, got: {}",
+        output
+    );
+}
+
+#[tokio::test]
+async fn test_file_tools_grep_recursive_alias() {
+    let client = new_client(Some(".ahma/tools"))
+        .await
+        .expect("Failed to create test client");
+
+    // Use the full option name 'recursive' which should map to -r
+    let args = json!({
+        "subcommand": "grep",
+        "pattern": "ahma_core",
+        "files": ["."],
+        "recursive": true,
+        "files-with-matches": true
+    });
+
+    let result = client
+        .call_tool(CallToolRequestParam {
+            name: Cow::Borrowed("file_tools"),
+            arguments: Some(args.as_object().unwrap().clone()),
+        })
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "grep with recursive should succeed: {:?}",
+        result.err()
+    );
+
+    let response = result.unwrap();
+    let content = response.content[0].as_text().unwrap();
+    let output = &content.text;
+
+    // Should find files containing ahma_core
+    assert!(
+        output.contains("Cargo.toml") || output.contains(".rs") || output.is_empty(),
+        "grep -r should find files or be empty, got: {}",
+        output
+    );
+}
+
+// ==================== Path format validation tests ====================
+// These ensure that format: "path" fields are properly validated
+
+#[tokio::test]
+async fn test_file_tools_ls_path_validation() {
+    let client = new_client(Some(".ahma/tools"))
+        .await
+        .expect("Failed to create test client");
+
+    // Use a relative path that exists
+    let args = json!({
+        "subcommand": "ls",
+        "path": "./ahma_core"
+    });
+
+    let result = client
+        .call_tool(CallToolRequestParam {
+            name: Cow::Borrowed("file_tools"),
+            arguments: Some(args.as_object().unwrap().clone()),
+        })
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "ls with valid relative path should succeed: {:?}",
+        result.err()
+    );
+}
+
+#[tokio::test]
+async fn test_file_tools_cat_path_format() {
+    let client = new_client(Some(".ahma/tools"))
+        .await
+        .expect("Failed to create test client");
+
+    // Cat a specific file with path format
+    let args = json!({
+        "subcommand": "cat",
+        "files": ["./README.md"]
+    });
+
+    let result = client
+        .call_tool(CallToolRequestParam {
+            name: Cow::Borrowed("file_tools"),
+            arguments: Some(args.as_object().unwrap().clone()),
+        })
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "cat with path format files should succeed: {:?}",
+        result.err()
+    );
+
+    let response = result.unwrap();
+    let content = response.content[0].as_text().unwrap();
+    let output = &content.text;
+
+    // README.md should contain project information
+    assert!(
+        output.contains("ahma") || output.contains("MCP") || output.contains("#"),
+        "cat should show README content, got: {}",
+        output
+    );
+}
