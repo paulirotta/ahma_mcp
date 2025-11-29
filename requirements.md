@@ -2,6 +2,54 @@
 
 This document is the single source of truth for the `ahma_mcp` project. It outlines the core requirements, architecture, and principles that an AI maintainer must follow. All new development tasks will be reflected as changes in this document.
 
+---
+
+## ⚠️ CRITICAL: ALWAYS USE AHMA MCP SERVER ⚠️
+
+**AI Maintainers: READ THIS FIRST before doing ANY development work.**
+
+**The `Ahma` MCP server is ALREADY RUNNING in your IDE (VS Code/Cursor).** You have direct access to all tools via MCP protocol. **NEVER use `run_in_terminal` or IDE terminal commands.**
+
+### Why This Matters
+
+1. **We dogfood our own project** - Using Ahma catches bugs immediately
+2. **MCP tools run faster** - No GUI permission dialogs to slow you down
+3. **Security sandboxing** - All paths are validated and constrained
+4. **Immediate feedback** - Broken tools are discovered and fixed right away
+
+### How to Use Ahma
+
+| ❌ WRONG (Never Do This)                 | ✅ CORRECT (Always Do This)                                                                                   |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `run_in_terminal("cargo build")`         | Call MCP tool `cargo` with `{"subcommand": "build"}`                                                          |
+| `run_in_terminal("cargo test")`          | Call MCP tool `cargo` with `{"subcommand": "nextest_run"}`                                                    |
+| `run_in_terminal("cargo fmt")`           | Call MCP tool `cargo` with `{"subcommand": "fmt"}`                                                            |
+| `run_in_terminal("cargo clippy --fix")`  | Call MCP tool `cargo` with `{"subcommand": "clippy", "fix": true, "allow-dirty": true}`                       |
+| `run_in_terminal("grep pattern src/")`   | Call MCP tool `file_tools` with `{"subcommand": "grep", "pattern": "...", "path": "src/", "recursive": true}` |
+| `run_in_terminal("find . -name '*.rs'")` | Call MCP tool `file_tools` with `{"subcommand": "find", "-name": "*.rs"}`                                     |
+| `run_in_terminal("git status")`          | Call MCP tool `git` with `{"subcommand": "status"}`                                                           |
+| Any `run_in_terminal(...)`               | Use the equivalent MCP tool via Ahma                                                                          |
+
+### Available Tools
+
+Ahma exposes these tools (see `.ahma/tools/*.json` for full details):
+
+- **cargo** - All cargo operations (build, test, fmt, clippy, etc.)
+- **file_tools** - File operations (ls, cp, mv, rm, grep, find, cat, etc.)
+- **git** - Git operations (status, add, commit, push, log)
+- **gh** - GitHub CLI operations (PR, workflow, cache, run)
+- **sandboxed_shell** - Run any shell command in a sandboxed environment
+
+### When Terminal Is Acceptable (RARE)
+
+Only use `run_in_terminal` if:
+
+1. The Ahma MCP server is completely broken/non-responsive, AND
+2. You immediately add a TODO to fix the Ahma issue, AND
+3. You switch back to using Ahma as soon as it's working
+
+---
+
 ## 1. Core Mission
 
 `ahma_mcp` is a universal, high-performance Model Context Protocol (MCP) server designed to dynamically adapt any command-line tool for use by AI agents. Its purpose is to provide a consistent, powerful, and non-blocking bridge between AI and the vast ecosystem of command-line utilities.
@@ -137,6 +185,24 @@ Per MCP protocol (rmcp 0.9.1+), clients can request either JSON or SSE streaming
 - **R8A.5**: For long-running tool operations in async mode, SSE streaming **should** be used to stream progress updates and partial results back to the client.
 - **R8A.6**: The `Content-Type` response header **must** match the actual response format (`text/event-stream` or `application/json`).
 - **R8A.7**: If no `Accept` header is present, the server **should** default to JSON response format for backward compatibility.
+
+### R8B: HTTP Mode Debug Output (Added 2025-11-29)
+
+When running in HTTP bridge mode (`--mode http`), terminal output echoes JSON messages for debugging purposes.
+
+- **R8B.1**: JSON output printed to stderr (STDIN/STDOUT/STDERR echo in colored mode) **must** be pretty-printed for human readability.
+- **R8B.2**: Pretty printing **must** use 2-space indentation.
+- **R8B.3**: The colored output prefixes (`→ STDIN:`, `← STDOUT:`, `⚠ STDERR:`) **must** be preserved.
+- **R8B.4**: Non-JSON output (plain text, errors) **should** be printed as-is without modification.
+
+### R8C: MCP Streamable HTTP Transport (Added 2025-11-29)
+
+Per MCP specification (2025-06-18), the Streamable HTTP transport uses a single endpoint for both POST and GET operations.
+
+- **R8C.1**: The MCP endpoint (e.g., `/sse`, `/mcp`) **must** support both HTTP POST (for sending JSON-RPC messages) and HTTP GET (for SSE streaming connections).
+- **R8C.2**: For backward compatibility with the deprecated HTTP+SSE transport (protocol version 2024-11-05), both `/mcp` and `/sse` endpoints **should** accept POST requests.
+- **R8C.3**: The `/sse` GET endpoint **must** send an initial `endpoint` event containing the URL where clients should POST JSON-RPC messages (for legacy protocol support).
+- **R8C.4**: Clients attempting to POST to `/sse` **must not** receive HTTP 405 (Method Not Allowed); they **must** receive the same handling as `/mcp` POST requests.
 
 ## 3. Tool Definition (MTDF Schema)
 
@@ -591,6 +657,7 @@ See `ARCHITECTURE_UPGRADE_PLAN.md` for detailed roadmap including:
 To ensure regressions in `.ahma/tools/*.json` configurations are caught early, comprehensive test coverage has been added:
 
 **Comprehensive Tool JSON Coverage Tests** (`ahma_core/tests/tool_suite/comprehensive_tool_json_coverage_test.rs`):
+
 - Validates all 8 tool JSON files are present and loadable
 - Tests that all tools have required fields (name, description, command)
 - Verifies cargo tool has all expected subcommands (build, run, add, upgrade, update, check, test, fmt, doc, clippy, qualitycheck, audit, nextest_run)
@@ -603,6 +670,7 @@ To ensure regressions in `.ahma/tools/*.json` configurations are caught early, c
 - Tests python tool subcommands (version, script, code, module) with proper sync/async settings
 
 **Tool Execution Integration Tests** (`ahma_core/tests/tool_suite/tool_execution_integration_test.rs`):
+
 - Actually invokes tools via MCP call_tool interface to verify end-to-end functionality
 - Tests file_tools: ls, pwd, cat, grep, head, tail operations
 - Tests cargo check dry run
@@ -611,6 +679,7 @@ To ensure regressions in `.ahma/tools/*.json` configurations are caught early, c
 - Tests path validation and formatting
 
 **Known Limitations**:
+
 - `find` command test is disabled: macOS `find` uses single-dash options (`-name`) but adapter generates double-dash (`--name`)
 - Git command tests are disabled: macOS sandbox blocks `/dev/null` access which git requires
 
