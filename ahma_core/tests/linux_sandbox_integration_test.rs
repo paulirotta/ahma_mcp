@@ -143,6 +143,52 @@ fn apply_landlock_rules(sandbox_scope: &str) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Apply strict Landlock rules to the current process.
+/// This version does NOT allow /tmp globally - only the exact sandbox scope.
+/// Used for testing that writes outside the sandbox are blocked.
+fn apply_landlock_rules_strict(sandbox_scope: &str) -> std::io::Result<()> {
+    let sandbox_path = Path::new(sandbox_scope);
+    let abi = ABI::V3;
+
+    let access_all = AccessFs::from_all(abi);
+    let access_read = AccessFs::from_read(abi);
+
+    let mut ruleset = Ruleset::default()
+        .handle_access(access_all)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?
+        .create()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+
+    // Allow full access ONLY to the exact sandbox scope
+    ruleset = ruleset
+        .add_rule(PathBeneath::new(
+            PathFd::new(sandbox_path)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?,
+            access_all,
+        ))
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+
+    // Allow read access to system directories needed for execution
+    let system_paths = ["/usr", "/bin", "/etc", "/lib", "/lib64", "/proc", "/dev"];
+
+    for path in &system_paths {
+        let path_obj = Path::new(path);
+        if path_obj.exists() {
+            if let Ok(fd) = PathFd::new(path_obj) {
+                let _ = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read));
+            }
+        }
+    }
+
+    // NOTE: Intentionally NOT allowing /tmp here - this is the strict version
+
+    ruleset
+        .restrict_self()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+
+    Ok(())
+}
+
 /// Test that Landlock can execute basic shell commands (echo)
 #[test]
 fn test_landlock_executes_echo() {
@@ -269,18 +315,33 @@ fn test_landlock_allows_writes_in_scope() {
 #[test]
 fn test_landlock_blocks_writes_outside_scope() {
     skip_if_landlock_unavailable!();
+
+    // Create sandbox scope inside a subdirectory of /tmp
+    // We use a custom apply_landlock_rules_strict that does NOT allow /tmp globally
     let temp = TempDir::new().expect("Failed to create temp dir");
+    let sandbox_subdir = temp.path().join("sandbox");
+    fs::create_dir(&sandbox_subdir).expect("Failed to create sandbox subdir");
 
-    // Create a separate directory that should be blocked
-    let blocked_dir = TempDir::new().expect("Failed to create blocked dir");
-    let blocked_file = blocked_dir.path().join("blocked.txt");
+    // The blocked path is in the parent temp dir, outside the sandbox scope
+    let blocked_file = temp.path().join("blocked.txt");
 
-    // Try to write to a location outside the sandbox scope
-    let script = format!("echo 'test' > {}", blocked_file.display());
-    let output = run_sandboxed_command(temp.path(), "/bin/sh", &script, temp.path())
-        .expect("Failed to execute sandboxed command");
+    // Use a stricter sandbox that only allows the sandbox_subdir, not all of /tmp
+    let sandbox_scope_str = sandbox_subdir.to_string_lossy().to_string();
 
-    // The command should fail because blocked_dir is outside sandbox scope
+    let output = unsafe {
+        Command::new("/bin/sh")
+            .arg("-c")
+            .arg(format!("echo 'test' > {}", blocked_file.display()))
+            .current_dir(&sandbox_subdir)
+            .pre_exec(move || {
+                apply_landlock_rules_strict(&sandbox_scope_str)?;
+                Ok(())
+            })
+            .output()
+    }
+    .expect("Failed to execute sandboxed command");
+
+    // The command should fail because blocked_file is outside sandbox scope
     // Landlock returns EACCES (Permission denied) for blocked operations
     assert!(
         !output.status.success(),
