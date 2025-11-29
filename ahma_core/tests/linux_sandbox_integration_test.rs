@@ -456,31 +456,60 @@ fn test_landlock_availability_check() {
 #[test]
 fn test_landlock_read_restrictions() {
     skip_if_landlock_unavailable!();
-    let temp = TempDir::new().expect("Failed to create temp dir");
 
-    // Create a file inside the sandbox
-    fs::write(temp.path().join("readable.txt"), "sandbox content")
+    // Create a single temp dir with subdirectories for controlled scope
+    let temp = TempDir::new().expect("Failed to create temp dir");
+    let sandbox_scope = temp.path().join("sandbox");
+    let outside_scope = temp.path().join("outside");
+    fs::create_dir(&sandbox_scope).expect("Failed to create sandbox dir");
+    fs::create_dir(&outside_scope).expect("Failed to create outside dir");
+
+    // Create a file inside the sandbox scope
+    fs::write(sandbox_scope.join("readable.txt"), "sandbox content")
         .expect("Failed to create test file");
 
-    // Create a file outside the sandbox
-    let outside_dir = TempDir::new().expect("Failed to create outside dir");
-    fs::write(outside_dir.path().join("outside.txt"), "outside content")
+    // Create a file outside the sandbox scope (but still in temp)
+    fs::write(outside_scope.join("outside.txt"), "outside content")
         .expect("Failed to create outside file");
 
-    // Reading inside sandbox should work
-    let output = run_sandboxed_command(temp.path(), "/bin/sh", "cat readable.txt", temp.path())
-        .expect("Failed to execute sandboxed command");
+    // Reading inside sandbox should work - use strict rules
+    let sandbox_scope_str = sandbox_scope.to_string_lossy().to_string();
+    let output = unsafe {
+        Command::new("/bin/sh")
+            .arg("-c")
+            .arg("cat readable.txt")
+            .current_dir(&sandbox_scope)
+            .pre_exec(move || {
+                apply_landlock_rules_strict(&sandbox_scope_str)?;
+                Ok(())
+            })
+            .output()
+    }
+    .expect("Failed to execute sandboxed command");
 
     assert!(
         output.status.success(),
-        "Should be able to read files inside sandbox"
+        "Should be able to read files inside sandbox. stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
     assert!(String::from_utf8_lossy(&output.stdout).contains("sandbox content"));
 
-    // Reading outside sandbox should fail
-    let script = format!("cat {}/outside.txt", outside_dir.path().display());
-    let output = run_sandboxed_command(temp.path(), "/bin/sh", &script, temp.path())
-        .expect("Failed to execute sandboxed command");
+    // Reading outside sandbox should fail - need fresh sandbox scope string
+    let sandbox_scope_str2 = sandbox_scope.to_string_lossy().to_string();
+    let outside_file = outside_scope.join("outside.txt");
+    let script = format!("cat {}", outside_file.display());
+    let output = unsafe {
+        Command::new("/bin/sh")
+            .arg("-c")
+            .arg(&script)
+            .current_dir(&sandbox_scope)
+            .pre_exec(move || {
+                apply_landlock_rules_strict(&sandbox_scope_str2)?;
+                Ok(())
+            })
+            .output()
+    }
+    .expect("Failed to execute sandboxed command");
 
     assert!(
         !output.status.success(),
