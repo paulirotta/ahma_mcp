@@ -116,17 +116,19 @@ pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
     });
 
     // Build the router
+    // MCP Streamable HTTP transport: single endpoint supporting both POST (requests) and GET (SSE)
+    // See: https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http
     let app = Router::new()
         .route("/health", get(health_check))
-        .route("/mcp", post(handle_mcp_request))
-        .route("/sse", get(handle_sse))
+        .route("/mcp", post(handle_mcp_request).get(handle_sse))
+        .route("/sse", post(handle_mcp_request).get(handle_sse)) // Legacy compatibility
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
     info!("HTTP bridge listening on http://{}", config.bind_addr);
-    info!("POST JSON-RPC messages to http://{}/mcp", config.bind_addr);
-    info!("SSE endpoint at http://{}/sse", config.bind_addr);
+    info!("MCP endpoint (POST/GET): http://{}/mcp", config.bind_addr);
+    info!("Legacy SSE endpoint: http://{}/sse", config.bind_addr);
 
     // Start the server
     let listener = tokio::net::TcpListener::bind(config.bind_addr)
@@ -195,9 +197,10 @@ async fn manage_process(
                     if let Ok(json_str) = serde_json::to_string(&msg) {
                         debug!("Sending to MCP server: {}", json_str);
 
-                        // Echo STDIN in cyan if colored output is enabled
+                        // Echo STDIN in cyan if colored output is enabled (pretty printed)
                         if config.enable_colored_output {
-                            eprintln!("{}", format!("→ STDIN: {}", json_str).cyan());
+                            let pretty = serde_json::to_string_pretty(&msg).unwrap_or_else(|_| json_str.clone());
+                            eprintln!("{}\n{}", "→ STDIN:".cyan(), pretty.cyan());
                         }
 
                         if let Err(e) = stdin.write_all(json_str.as_bytes()).await {
@@ -220,9 +223,14 @@ async fn manage_process(
                     if line.is_empty() { continue; }
                     debug!("Received from MCP server: {}", line);
 
-                    // Echo STDOUT in green if colored output is enabled
+                    // Echo STDOUT in green if colored output is enabled (pretty printed)
                     if config.enable_colored_output {
-                        eprintln!("{}", format!("← STDOUT: {}", line).green());
+                        if let Ok(parsed) = serde_json::from_str::<Value>(&line) {
+                            let pretty = serde_json::to_string_pretty(&parsed).unwrap_or_else(|_| line.clone());
+                            eprintln!("{}\n{}", "← STDOUT:".green(), pretty.green());
+                        } else {
+                            eprintln!("{}\n{}", "← STDOUT:".green(), line.green());
+                        }
                     }
 
                     if let Ok(value) = serde_json::from_str::<Value>(&line) {
@@ -259,8 +267,13 @@ async fn manage_process(
                     match result {
                         Ok(Some(line)) => {
                             if !line.is_empty() {
-                                // Echo STDERR in red
-                                eprintln!("{}", format!("⚠ STDERR: {}", line).red());
+                                // Echo STDERR in red (pretty print if JSON)
+                                if let Ok(parsed) = serde_json::from_str::<Value>(&line) {
+                                    let pretty = serde_json::to_string_pretty(&parsed).unwrap_or_else(|_| line.clone());
+                                    eprintln!("{}\n{}", "⚠ STDERR:".red(), pretty.red());
+                                } else {
+                                    eprintln!("{}\n{}", "⚠ STDERR:".red(), line.red());
+                                }
                             }
                         }
                         Ok(None) => {
