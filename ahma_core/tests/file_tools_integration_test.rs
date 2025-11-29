@@ -58,11 +58,7 @@ mod file_tools_tests {
 
         let output = test_command(&binary)
             .current_dir(temp_dir.path())
-            .args([
-                "--tools-dir",
-                tools_dir.to_str().unwrap(),
-                "file_tools_pwd",
-            ])
+            .args(["--tools-dir", tools_dir.to_str().unwrap(), "file_tools_pwd"])
             .output()
             .expect("Failed to execute file_tools_pwd");
 
@@ -113,7 +109,10 @@ mod file_tools_tests {
         );
 
         // Verify file exists
-        assert!(temp_dir.path().join(test_file).exists(), "File should be created");
+        assert!(
+            temp_dir.path().join(test_file).exists(),
+            "File should be created"
+        );
 
         // 2. List the file
         let output_ls = test_command(&binary)
@@ -147,13 +146,14 @@ mod file_tools_tests {
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        
+
         let source_file = "source.txt";
         let dest_file = "dest.txt";
         let moved_file = "moved.txt";
 
         // Create source file
-        fs::write(temp_dir.path().join(source_file), "content").expect("Failed to write source file");
+        fs::write(temp_dir.path().join(source_file), "content")
+            .expect("Failed to write source file");
 
         // 1. Copy file
         let output_cp = test_command(&binary)
@@ -174,7 +174,10 @@ mod file_tools_tests {
             String::from_utf8_lossy(&output_cp.stderr)
         );
 
-        assert!(temp_dir.path().join(dest_file).exists(), "Destination file should exist");
+        assert!(
+            temp_dir.path().join(dest_file).exists(),
+            "Destination file should exist"
+        );
 
         // 2. Move file
         let output_mv = test_command(&binary)
@@ -195,8 +198,14 @@ mod file_tools_tests {
             String::from_utf8_lossy(&output_mv.stderr)
         );
 
-        assert!(temp_dir.path().join(moved_file).exists(), "Moved file should exist");
-        assert!(!temp_dir.path().join(dest_file).exists(), "Old file should not exist");
+        assert!(
+            temp_dir.path().join(moved_file).exists(),
+            "Moved file should exist"
+        );
+        assert!(
+            !temp_dir.path().join(dest_file).exists(),
+            "Old file should not exist"
+        );
     }
 
     #[test]
@@ -228,7 +237,10 @@ mod file_tools_tests {
             String::from_utf8_lossy(&output_rm.stderr)
         );
 
-        assert!(!temp_dir.path().join(test_file).exists(), "File should be deleted");
+        assert!(
+            !temp_dir.path().join(test_file).exists(),
+            "File should be deleted"
+        );
     }
 
     #[test]
@@ -261,7 +273,10 @@ mod file_tools_tests {
             "file_tools_cat should succeed. stderr: {}",
             String::from_utf8_lossy(&output_cat.stderr)
         );
-        assert!(stdout_cat.contains("Hello World"), "cat output should contain content");
+        assert!(
+            stdout_cat.contains("Hello World"),
+            "cat output should contain content"
+        );
 
         // 2. Grep file
         let output_grep = test_command(&binary)
@@ -282,8 +297,14 @@ mod file_tools_tests {
             "file_tools_grep should succeed. stderr: {}",
             String::from_utf8_lossy(&output_grep.stderr)
         );
-        assert!(stdout_grep.contains("Target String"), "grep output should contain match");
-        assert!(!stdout_grep.contains("Hello World"), "grep output should not contain non-matching lines");
+        assert!(
+            stdout_grep.contains("Target String"),
+            "grep output should contain match"
+        );
+        assert!(
+            !stdout_grep.contains("Hello World"),
+            "grep output should not contain non-matching lines"
+        );
     }
 }
 
@@ -314,7 +335,10 @@ mod sandboxed_shell_tests {
             "sandboxed_shell should succeed. stderr: {}",
             String::from_utf8_lossy(&output.stderr)
         );
-        assert!(stdout.contains("Hello from shell"), "Output should contain echoed text");
+        assert!(
+            stdout.contains("Hello from shell"),
+            "Output should contain echoed text"
+        );
     }
 
     #[test]
@@ -342,8 +366,12 @@ mod sandboxed_shell_tests {
             String::from_utf8_lossy(&output.stderr)
         );
 
-        assert!(temp_dir.path().join(test_file).exists(), "File should be created by shell");
-        let content = fs::read_to_string(temp_dir.path().join(test_file)).expect("Failed to read file");
+        assert!(
+            temp_dir.path().join(test_file).exists(),
+            "File should be created by shell"
+        );
+        let content =
+            fs::read_to_string(temp_dir.path().join(test_file)).expect("Failed to read file");
         assert!(content.contains("content"), "File content should match");
     }
 }

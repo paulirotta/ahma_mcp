@@ -669,7 +669,9 @@ impl Adapter {
             }
 
             // 2. Process positional args in order defined in config (AFTER options)
-            if let Some(sc) = subcommand_config && let Some(pos_args) = &sc.positional_args {
+            if let Some(sc) = subcommand_config
+                && let Some(pos_args) = &sc.positional_args
+            {
                 for pos_arg in pos_args {
                     if let Some(value) = args_map.get(&pos_arg.name) {
                         self.process_named_arg(

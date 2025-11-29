@@ -11,9 +11,10 @@ Act as a Senior Rust QA Engineer. Your goal is to systematically increase code c
 - Read `requirements.md` to understand the current testing standards and coverage goals.
 - Ensure you are adhering to the project's existing testing patterns.
 
-### 2. Analysis (MCP Tooling)
+### 2. Analysis (Coverage Report)
 
-- Use the **Ahma MCP cargo llvm-cov tool** to analyze the current codebase.
+- **Note:** `cargo llvm-cov` is NOT available via Ahma MCP because its instrumentation conflicts with macOS sandboxing.
+- Run coverage analysis directly in your terminal: `cargo llvm-cov nextest --html --output-dir ./coverage`
 - **Goal:** Identify the top 3 critical files or modules with the lowest coverage.
 - Generate a prioritized list of missing test cases based on this data. *Focus on logic branches, not just line coverage.*
 
