@@ -223,7 +223,7 @@ impl MtdfValidator {
                 self.validate_subcommand(
                     subcommand,
                     &format!("subcommand[{}]", i),
-                    config.force_synchronous,
+                    config.synchronous,
                     errors,
                 );
             }
@@ -274,13 +274,13 @@ impl MtdfValidator {
     /// # Arguments
     /// * `subcommand` - The subcommand configuration to validate
     /// * `path` - The JSON path for error reporting
-    /// * `tool_force_synchronous` - Tool-level force_synchronous for inheritance
+    /// * `tool_synchronous` - Tool-level synchronous setting for inheritance
     /// * `errors` - Vector to collect validation errors
     fn validate_subcommand(
         &self,
         subcommand: &crate::config::SubcommandConfig,
         path: &str,
-        tool_force_synchronous: Option<bool>,
+        tool_synchronous: Option<bool>,
         errors: &mut Vec<SchemaValidationError>,
     ) {
         if subcommand.name.is_empty() {
@@ -302,12 +302,13 @@ impl MtdfValidator {
         }
 
         // Check for logical inconsistency: a synchronous command should not have async keywords.
-        // Inheritance: subcommand.force_synchronous overrides tool.force_synchronous
+        // Inheritance: subcommand.synchronous overrides tool.synchronous
         // If subcommand doesn't specify, inherit from tool level
-        // force_synchronous=true means always sync, force_synchronous=false/None means can be async (with --async flag)
-        // The default behavior is synchronous, so we only warn if async keywords are in a force_synchronous=true command
-        let effective_force_sync = subcommand.force_synchronous.or(tool_force_synchronous);
-        if effective_force_sync == Some(true) {
+        // synchronous=true means always sync, synchronous=false means always async
+        // synchronous=null/omitted means use server default (async unless --sync flag)
+        // We only warn if async keywords are in a synchronous=true command
+        let effective_sync = subcommand.synchronous.or(tool_synchronous);
+        if effective_sync == Some(true) {
             let desc_lower = subcommand.description.to_lowercase();
             let async_keywords = [
                 "operation_id",
@@ -321,20 +322,20 @@ impl MtdfValidator {
                     error_type: ValidationErrorType::LogicalInconsistency,
                     field_path: format!("{}.description", path),
                     message: "Description mentions async behavior but subcommand is forced synchronous (either directly or inherited from tool)".to_string(),
-                    suggestion: Some("Either set force_synchronous to false on this subcommand or update description to reflect synchronous behavior".to_string()),
+                    suggestion: Some("Either set synchronous to false on this subcommand or update description to reflect synchronous behavior".to_string()),
                 });
             }
         }
-        // Note: We don't validate for missing async keywords when force_synchronous=false/None
-        // because the default is synchronous execution (only async with --async flag)
+        // Note: We don't validate for missing async keywords when synchronous=false/None
+        // because the default is now ASYNCHRONOUS execution
 
-        // Validate nested subcommands - pass down effective force_synchronous for inheritance
+        // Validate nested subcommands - pass down effective synchronous setting for inheritance
         if let Some(ref nested) = subcommand.subcommand {
             for (i, nested_sub) in nested.iter().enumerate() {
                 self.validate_subcommand(
                     nested_sub,
                     &format!("{}.subcommand[{}]", path, i),
-                    effective_force_sync,
+                    effective_sync,
                     errors,
                 );
             }

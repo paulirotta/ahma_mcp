@@ -6,7 +6,7 @@
 //! **Current Behavior (FAILING):** No `force_synchronous` flag exists yet.
 //!
 //! **Expected Behavior (SHOULD PASS AFTER FIX):**
-//! - Sequence tools with `force_synchronous: true` must block until all steps complete
+//! - Sequence tools with `synchronous: true` must block until all steps complete
 //! - Results from all steps must be collected and returned
 //! - Final status must reflect success/failure of all steps
 //!
@@ -22,7 +22,7 @@
 #[test]
 fn test_placeholder_for_force_synchronous_feature() {
     // TODO: When force_synchronous is implemented, add tests here that verify:
-    // 1. Sequence tools can be marked with force_synchronous: true
+    // 1. Sequence tools can be marked with synchronous: true
     // 2. Such tools block until all steps complete
     // 3. Results from all steps are collected
     // 4. AI receives complete results in single response (no await needed)

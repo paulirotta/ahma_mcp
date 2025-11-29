@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 #[tokio::test]
 async fn test_await_blocks_correctly() -> Result<()> {
     // Use the real tools directory with --async flag
-    let client = new_client_with_args(Some(".ahma/tools"), &["--async"]).await?;
+    let client = new_client_with_args(Some(".ahma/tools"), &[]).await?;
 
     // Start a long-running asynchronous task (sleep for 2 seconds)
     let start_time = Instant::now();
@@ -100,7 +100,7 @@ async fn test_await_blocks_correctly() -> Result<()> {
 #[tokio::test]
 async fn test_await_detects_pending_operation_without_delay() -> Result<()> {
     // Use the real tools directory with --async flag
-    let client = new_client_with_args(Some(".ahma/tools"), &["--async"]).await?;
+    let client = new_client_with_args(Some(".ahma/tools"), &[]).await?;
 
     // Launch an async operation and immediately await it.
     let call_params = CallToolRequestParam {

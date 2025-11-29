@@ -17,5 +17,5 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-#TODO (cd "$PROJECT_ROOT" && cargo run --bin ahma_mcp -- --async --mode http --http-port 3000 --tools-dir "$PROJECT_ROOT/.ahma/tools" --sandbox-scope "$PROJECT_ROOT")
-(cd "$PROJECT_ROOT" && cargo run --bin ahma_mcp -- --async --mode http --http-port 3000 --tools-dir "$PROJECT_ROOT/.ahma/tools")
+#TODO (cd "$PROJECT_ROOT" && cargo run --bin ahma_mcp -- --mode http --http-port 3000 --tools-dir "$PROJECT_ROOT/.ahma/tools" --sandbox-scope "$PROJECT_ROOT")
+(cd "$PROJECT_ROOT" && cargo run --bin ahma_mcp -- --mode http --http-port 3000 --tools-dir "$PROJECT_ROOT/.ahma/tools")

@@ -390,7 +390,7 @@ async fn test_subcommand_configuration_handling() -> Result<()> {
     let subcommand_config = SubcommandConfig {
         name: "echo_test".to_string(),
         description: "Test echo command".to_string(),
-        force_synchronous: None,
+        synchronous: None,
         timeout_seconds: Some(30),
         enabled: true,
         guidance_key: None,
@@ -490,7 +490,7 @@ async fn test_file_based_argument_handling() -> Result<()> {
     let subcommand_config = SubcommandConfig {
         name: "script_test".to_string(),
         description: "Test script handling".to_string(),
-        force_synchronous: None,
+        synchronous: None,
         timeout_seconds: Some(30),
         enabled: true,
         guidance_key: None,

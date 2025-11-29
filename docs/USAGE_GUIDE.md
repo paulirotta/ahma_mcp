@@ -13,6 +13,66 @@ AHMA MCP is designed around **async-first, non-blocking workflows** that enable 
 3. **Trust graceful shutdown** - File changes won't abruptly terminate long-running operations.
 4. **Monitor, don't await** - Use the `status` tool instead of the `await` tool for better productivity.
 
+## Synchronous Setting Inheritance
+
+The execution mode (sync vs async) follows a clear inheritance hierarchy:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    EXECUTION MODE RESOLUTION                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  1. CLI Flag (highest priority)                                  │
+│     └── --sync flag forces ALL tools to run synchronously        │
+│                                                                  │
+│  2. Subcommand Config                                            │
+│     └── "synchronous": true/false in subcommand definition       │
+│         Overrides tool-level setting for this subcommand         │
+│                                                                  │
+│  3. Tool Config                                                  │
+│     └── "synchronous": true/false at tool level                  │
+│         Inherited by subcommands that don't specify their own    │
+│                                                                  │
+│  4. Default (lowest priority)                                    │
+│     └── ASYNC - operations run in background by default          │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+
+                    Resolution Flow
+                    ═══════════════
+
+   ┌──────────┐     ┌───────────────┐     ┌─────────────┐
+   │ --sync   │ ──▶ │ Subcommand    │ ──▶ │ Tool        │ ──▶ ASYNC
+   │ flag?    │ No  │ synchronous?  │ No  │ synchronous?│ No  (default)
+   └──────────┘     └───────────────┘     └─────────────┘
+        │ Yes              │ Yes                │ Yes
+        ▼                  ▼                    ▼
+      SYNC           Value from           Value from
+                     subcommand           tool config
+```
+
+### Examples
+
+**Tool with mixed sync/async subcommands:**
+```json
+{
+  "name": "cargo",
+  "synchronous": false,           // Tool default: async
+  "subcommand": [
+    { "name": "build" },          // Inherits async from tool
+    { "name": "add",
+      "synchronous": true },      // Override: sync (config changes)
+    { "name": "check" }           // Inherits async from tool
+  ]
+}
+```
+
+**Force all sync with CLI flag:**
+```bash
+ahma_mcp --sync --tools-dir .ahma/tools
+# All operations run synchronously regardless of config
+```
+
 ## Optimal Usage Workflow
 
 ### 1. Project Setup Phase

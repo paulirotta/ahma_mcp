@@ -42,7 +42,7 @@ pub async fn setup_mcp_service_with_client() -> Result<(TempDir, Client)> {
         "description": "Execute shell commands asynchronously",
         "command": "bash -c",
         "timeout_seconds": 30,
-        "force_synchronous": false,
+        "synchronous": false,
         "enabled": true,
         "subcommand": [
             {

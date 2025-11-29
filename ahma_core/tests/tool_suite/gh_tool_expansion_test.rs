@@ -40,7 +40,7 @@ async fn test_gh_tool_expansion_all_synchronous() {
 
     // Check that tool has force_synchronous = true at tool level (always synchronous)
     assert_eq!(
-        gh_tool.force_synchronous,
+        gh_tool.synchronous,
         Some(true),
         "Tool should have force_synchronous=true (always synchronous execution)"
     );
@@ -54,8 +54,8 @@ async fn test_gh_tool_expansion_all_synchronous() {
         // With inheritance, subcommands inherit force_synchronous=true, meaning always synchronous
         assert!(
             subcommand
-                .force_synchronous
-                .or(gh_tool.force_synchronous)
+                .synchronous
+                .or(gh_tool.synchronous)
                 .unwrap_or(false),
             "Subcommand {} should be forced synchronous (force_synchronous=true)",
             expected_name

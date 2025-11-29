@@ -78,7 +78,7 @@
       }
     },
     "synchronous": {
-      "description": "Default synchronous behavior for all subcommands (can be overridden per subcommand)",
+      "description": "Override the default execution mode for this tool.\n- `true`: Always run synchronously (blocking, returns result immediately)\n- `false`: Always run asynchronously (non-blocking, returns operation ID)\n- `null`/omitted: Use server default (async unless --sync CLI flag)\n\nInheritance: Subcommand-level settings override tool-level settings.",
       "type": [
         "boolean",
         "null"
@@ -351,7 +351,7 @@
           }
         },
         "synchronous": {
-          "description": "Override synchronous behavior for this subcommand",
+          "description": "Override the default execution mode for this subcommand.\n- `true`: Always run synchronously (blocking, returns result immediately)\n- `false`: Always run asynchronously (non-blocking, returns operation ID)\n- `null`/omitted: Inherit from tool level, or use server default if tool doesn't specify\n\nInheritance: Subcommand-level settings override tool-level settings.",
           "type": [
             "boolean",
             "null"

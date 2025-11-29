@@ -71,21 +71,21 @@ These are the non-negotiable principles of the project.
 - **R1.2**: All tool definitions **must** be stored in `.json` files within a `tools/` directory. The server discovers and loads these at runtime.
 - **R1.3**: The system **must not** be recompiled to add, remove, or modify a tool. The server's source code must remain generic and tool-agnostic. All tool-specific logic is defined in the JSON configuration.
 
-### R2: Sync-First Architecture (Updated 2025-01-09)
+### R2: Async-First Architecture (Updated 2025-11-29)
 
-- **R2.1**: Operations **must** execute synchronously by default. When an AI invokes a tool, the server executes the command and returns the complete result in a single response.
-- **R2.2**: This provides immediate feedback and simplifies the AI interaction model for most common development tasks.
-- **R2.3**: Synchronous operations block until completion and return their final result directly. They do not use operation IDs or send completion notifications.
-- **R2.4**: For long-running operations that should not block, tools can be marked as asynchronous using the `"force_synchronous": false` configuration (see R3.1).
-- **R2.5**: Commands that modify project configuration files (e.g., `Cargo.toml`, `package.json`) **must** use `"force_synchronous": true` to prevent race conditions and ensure the AI receives confirmation before proceeding with dependent operations. Examples include `cargo add`, `cargo upgrade`, `npm install --save`.
-- **R2.6**: **Inheritance**: `force_synchronous` can be set at the tool level or subcommand level. Subcommand-level settings override tool-level settings. If a subcommand does not specify `force_synchronous`, it inherits from the tool level. This allows setting a default for an entire tool while overriding specific subcommands as needed.
+- **R2.1**: Operations **must** execute asynchronously by default. When an AI invokes a tool, the server immediately returns an operation ID and executes the command in the background.
+- **R2.2**: This allows the AI to continue productive work while operations complete, maximizing efficiency for development workflows.
+- **R2.3**: Asynchronous operations return an `operation_id` immediately and push results via MCP progress notifications when complete.
+- **R2.4**: For operations that must complete before the AI proceeds, tools can be marked as synchronous using the `"synchronous": true` configuration (see R3.1).
+- **R2.5**: Commands that modify project configuration files (e.g., `Cargo.toml`, `package.json`) **must** use `"synchronous": true` to prevent race conditions and ensure the AI receives confirmation before proceeding with dependent operations. Examples include `cargo add`, `cargo upgrade`, `npm install --save`.
+- **R2.6**: **Inheritance**: `synchronous` can be set at the tool level or subcommand level. Subcommand-level settings override tool-level settings. If a subcommand does not specify `synchronous`, it inherits from the tool level (if set), otherwise defaults to async. This allows setting a default for an entire tool while overriding specific subcommands as needed.
 
-### R3: Selective Asynchronous Override
+### R3: Selective Synchronous Override
 
-- **R3.1**: Long-running, non-blocking operations (e.g., `cargo build`, `npm install`) **can** be marked as asynchronous in their JSON configuration (`"force_synchronous": false`).
-- **R3.2**: Asynchronous operations **must** immediately return an `operation_id` and a `started` status, then execute the command in the background.
+- **R3.1**: Operations that must complete before the AI proceeds (e.g., `cargo add`, `cargo upgrade`) **can** be marked as synchronous in their JSON configuration (`"synchronous": true`).
+- **R3.2**: Asynchronous operations (the default) **must** immediately return an `operation_id` and a `started` status, then execute the command in the background.
 - **R3.3**: Upon completion of an asynchronous operation, the system **must** automatically push the final result (success or failure) to the AI client via an MCP progress notification.
-- **R3.4**: Launching `ahma_mcp` with the `--async` flag **must** override all tool configuration defaults for that session, forcing every tool invocation to execute asynchronously.
+- **R3.4**: Launching `ahma_mcp` with the `--sync` flag **must** override all tool configuration defaults for that session, forcing every tool invocation to execute synchronously.
 - **R3.5**: Tool descriptions for async operations **must** explicitly guide the AI to continue with other tasks and not to wait, processing the result notification when it arrives.
 
 ### R4: Performance
@@ -217,11 +217,11 @@ All tools are defined in `.json` files in the `tools/` directory. This is the MC
   "command": "base_executable",
   "enabled": true,
   "timeout_seconds": 600,
-  "force_synchronous": true,
+  "synchronous": true,
   "subcommand": [
     {
       "name": "subcommand_name",
-      "description": "What this subcommand does. Include async guidance if force_synchronous: false.",
+      "description": "What this subcommand does. Include guidance for sync operations.",
       "options": [
         {
           "name": "option_name",
@@ -241,8 +241,7 @@ All tools are defined in `.json` files in the `tools/` directory. This is the MC
     },
     {
       "name": "async_subcommand",
-      "description": "This subcommand runs async. Include async guidance here.",
-      "force_synchronous": false
+      "description": "This subcommand runs async (default). Include async guidance here."
     }
   ]
 }
@@ -252,7 +251,7 @@ All tools are defined in `.json` files in the `tools/` directory. This is the MC
 
 - `command`: The base command-line executable (e.g., `git`, `cargo`).
 - `subcommand`: An array of subcommands exposed as individual MCP tools. The final tool name will be `{command}_{name}` (e.g., `git_commit`).
-- `force_synchronous`: Can be set at tool level or subcommand level. Subcommand-level overrides tool-level. Set to `true` for commands that must complete before dependent operations (e.g., `cargo add`). Set to `false` for long-running commands that can run in the background (e.g., `cargo build`).
+- `synchronous`: Can be set at tool level or subcommand level. Subcommand-level overrides tool-level. Set to `true` for commands that must complete before dependent operations (e.g., `cargo add`). Omit or set to `false` for long-running commands that run asynchronously (the default).
 - `options`: An array of command-line flags (e.g., `--release`).
 - `positional_args`: An array of positional arguments.
 - `format: "path"`: **CRITICAL**: Any option or argument that accepts a file path **must** include this for security validation.

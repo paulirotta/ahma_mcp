@@ -25,13 +25,6 @@
       "type": "boolean",
       "default": true
     },
-    "force_synchronous": {
-      "description": "Force synchronous execution even when --async flag is set (overrides CLI flag)\nIf true: always runs synchronously, ignoring --async\nIf false or None: obeys the --async CLI flag (default behavior)",
-      "type": [
-        "boolean",
-        "null"
-      ]
-    },
     "guidance_key": {
       "description": "Key to look up guidance in tool_guidance.json",
       "type": [
@@ -83,6 +76,13 @@
       "items": {
         "$ref": "#/$defs/SubcommandConfig"
       }
+    },
+    "synchronous": {
+      "description": "Override the default execution mode for this tool.\n- `true`: Always run synchronously (blocking, returns result immediately)\n- `false`: Always run asynchronously (non-blocking, returns operation ID)\n- `null`/omitted: Use server default (async unless --sync CLI flag)\n\nInheritance: Subcommand-level settings override tool-level settings.",
+      "type": [
+        "boolean",
+        "null"
+      ]
     },
     "timeout_seconds": {
       "description": "Default timeout for operations in seconds",
@@ -286,13 +286,6 @@
           "type": "boolean",
           "default": true
         },
-        "force_synchronous": {
-          "description": "Force synchronous execution even when --async flag is set (overrides CLI flag)\nIf true: always runs synchronously, ignoring --async\nIf false or None: obeys the --async CLI flag (default behavior)",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
         "guidance_key": {
           "description": "Key to look up guidance in tool_guidance.json",
           "type": [
@@ -356,6 +349,13 @@
           "items": {
             "$ref": "#/$defs/SubcommandConfig"
           }
+        },
+        "synchronous": {
+          "description": "Override the default execution mode for this subcommand.\n- `true`: Always run synchronously (blocking, returns result immediately)\n- `false`: Always run asynchronously (non-blocking, returns operation ID)\n- `null`/omitted: Inherit from tool level, or use server default if tool doesn't specify\n\nInheritance: Subcommand-level settings override tool-level settings.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "timeout_seconds": {
           "description": "Override timeout for this specific subcommand",

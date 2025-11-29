@@ -32,15 +32,15 @@ fn test_synchronous_inheritance_loading() -> Result<()> {
     let config: ToolConfig = serde_json::from_str(json_config)?;
 
     // Tool-level force_synchronous should be loaded as true (always sync)
-    assert_eq!(config.force_synchronous, Some(true));
+    assert_eq!(config.synchronous, Some(true));
 
     let subcommands = config.subcommand.as_ref().expect("Should have subcommands");
 
     // First subcommand should have None (will inherit tool-level force_synchronous=true)
-    assert_eq!(subcommands[0].force_synchronous, None);
+    assert_eq!(subcommands[0].synchronous, None);
 
     // Second subcommand should have explicit override to allow async
-    assert_eq!(subcommands[1].force_synchronous, Some(false));
+    assert_eq!(subcommands[1].synchronous, Some(false));
 
     Ok(())
 }
@@ -76,13 +76,13 @@ fn test_gh_tool_optimized_format() -> Result<()> {
     let config: ToolConfig = serde_json::from_str(&gh_json)?;
 
     // Should have tool-level asynchronous=false (synchronous) for inheritance pattern
-    assert_eq!(config.force_synchronous, Some(true));
+    assert_eq!(config.synchronous, Some(true));
 
     // Subcommands should NOT have explicit asynchronous field and inherit from tool level
     if let Some(subcommands) = &config.subcommand {
         for subcommand in subcommands {
             assert_eq!(
-                subcommand.force_synchronous, None,
+                subcommand.synchronous, None,
                 "Subcommand '{}' should inherit asynchronous behavior from tool level (should be None)",
                 subcommand.name
             );

@@ -64,7 +64,7 @@ async fn test_call_tool_basic() -> Result<()> {
 async fn test_async_notification_delivery() -> Result<()> {
     init_test_logging();
     // Use --async flag to enable async execution
-    let client = new_client_with_args(Some(".ahma/tools"), &["--async"]).await?;
+    let client = new_client_with_args(Some(".ahma/tools"), &[]).await?;
 
     // Test that an async operation completes and we can check its status
     // This is a simpler but more reliable test of async notification delivery

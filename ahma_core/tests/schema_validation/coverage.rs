@@ -859,7 +859,7 @@ fn test_validate_complete_valid_config() {
     let parsed_config = result.unwrap();
     assert_eq!(parsed_config.name, "complete_tool");
     assert_eq!(parsed_config.timeout_seconds, Some(600));
-    assert_eq!(parsed_config.force_synchronous, Some(true));
+    assert_eq!(parsed_config.synchronous, Some(true));
 }
 
 #[test]

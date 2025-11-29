@@ -9,10 +9,12 @@
 ### Core Validation
 
 1. **Tool Configuration Validation**: Validate tool JSON files against the `ToolConfig` schema from `ahma_core`
+
    - Required fields: `name`, `description`, `command`
-   - Optional fields: `subcommand`, `input_schema`, `timeout_seconds`, `force_synchronous`, `hints`, `enabled`, `guidance_key`, `sequence`, `step_delay_ms`, `availability_check`, `install_instructions`
+   - Optional fields: `subcommand`, `input_schema`, `timeout_seconds`, `synchronous`, `hints`, `enabled`, `guidance_key`, `sequence`, `step_delay_ms`, `availability_check`, `install_instructions`
 
 2. **Guidance Configuration Loading**: Load and validate guidance configuration from JSON
+
    - Required fields: `guidance_blocks`
    - Optional fields: `templates`, `legacy_guidance`
 
@@ -23,11 +25,11 @@
 
 ### CLI Interface
 
-| Argument | Default | Description |
-|----------|---------|-------------|
-| `validation_target` | `.ahma/tools` | Path to directory or comma-separated list of files |
-| `--guidance-file` | `.ahma/tool_guidance.json` | Path to guidance configuration |
-| `-d, --debug` | `false` | Enable debug logging |
+| Argument            | Default                    | Description                                        |
+| ------------------- | -------------------------- | -------------------------------------------------- |
+| `validation_target` | `.ahma/tools`              | Path to directory or comma-separated list of files |
+| `--guidance-file`   | `.ahma/tool_guidance.json` | Path to guidance configuration                     |
+| `-d, --debug`       | `false`                    | Enable debug logging                               |
 
 ### Exit Behavior
 
@@ -54,9 +56,9 @@
 
 ## Test Coverage Summary
 
-| Module | Coverage |
-|--------|----------|
-| `main.rs` | 94.30% |
+| Module    | Coverage |
+| --------- | -------- |
+| `main.rs` | 94.30%   |
 
 ### Untested Code Paths (Acceptable)
 

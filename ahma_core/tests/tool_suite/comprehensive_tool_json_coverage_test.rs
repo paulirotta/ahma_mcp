@@ -175,7 +175,7 @@ async fn test_cargo_clippy_subcommand_options() {
 
     // Verify force_synchronous is true (per R2.5 - must sync to avoid race conditions)
     assert_eq!(
-        clippy.force_synchronous,
+        clippy.synchronous,
         Some(true),
         "cargo clippy should be force_synchronous=true"
     );
@@ -194,7 +194,7 @@ async fn test_cargo_add_is_synchronous() {
 
     // Per R2.5: Commands that modify Cargo.toml must be synchronous
     assert_eq!(
-        add.force_synchronous,
+        add.synchronous,
         Some(true),
         "cargo add should be force_synchronous=true (modifies Cargo.toml)"
     );
@@ -309,7 +309,7 @@ async fn test_file_tools_ls_options() {
 
     // Verify force_synchronous for ls (should be true - quick operation)
     assert_eq!(
-        ls.force_synchronous,
+        ls.synchronous,
         Some(true),
         "file_tools ls should be force_synchronous=true"
     );
@@ -375,7 +375,7 @@ async fn test_file_tools_all_subcommands_are_synchronous() {
 
     // Tool level force_synchronous should be true
     assert_eq!(
-        file_tools.force_synchronous,
+        file_tools.synchronous,
         Some(true),
         "file_tools should have force_synchronous=true at tool level"
     );
@@ -387,10 +387,7 @@ async fn test_file_tools_all_subcommands_are_synchronous() {
         .expect("file_tools should have subcommands");
 
     for sc in subcommands {
-        let effective_sync = sc
-            .force_synchronous
-            .or(file_tools.force_synchronous)
-            .unwrap_or(false);
+        let effective_sync = sc.synchronous.or(file_tools.synchronous).unwrap_or(false);
         assert!(
             effective_sync,
             "file_tools subcommand '{}' should be effectively synchronous",
@@ -442,7 +439,7 @@ async fn test_git_status_is_synchronous() {
     let status = find_subcommand(git, "status").expect("Should find status subcommand");
 
     assert_eq!(
-        status.force_synchronous,
+        status.synchronous,
         Some(true),
         "git status should be force_synchronous=true (quick status check)"
     );
@@ -573,7 +570,7 @@ async fn test_gh_is_fully_synchronous() {
 
     // gh tool should be synchronous at tool level
     assert_eq!(
-        gh.force_synchronous,
+        gh.synchronous,
         Some(true),
         "gh tool should be force_synchronous=true at tool level"
     );
@@ -604,7 +601,7 @@ async fn test_gradlew_has_sync_and_async_subcommands() {
     for sync_name in &sync_subcommands {
         if let Some(sc) = subcommands.iter().find(|s| s.name == *sync_name) {
             assert_eq!(
-                sc.force_synchronous,
+                sc.synchronous,
                 Some(true),
                 "gradlew {} should be force_synchronous=true",
                 sync_name
@@ -615,7 +612,7 @@ async fn test_gradlew_has_sync_and_async_subcommands() {
     for async_name in &async_subcommands {
         if let Some(sc) = subcommands.iter().find(|s| s.name == *async_name) {
             assert_eq!(
-                sc.force_synchronous,
+                sc.synchronous,
                 Some(false),
                 "gradlew {} should be force_synchronous=false",
                 async_name
@@ -738,7 +735,7 @@ async fn test_ahma_quality_check_is_sequence_tool() {
 
     // Should be synchronous
     assert_eq!(
-        quality_check.force_synchronous,
+        quality_check.synchronous,
         Some(true),
         "ahma_quality_check should be force_synchronous=true"
     );
@@ -882,7 +879,7 @@ async fn test_python_module_is_async() {
 
     // module subcommand should be async (long-running potentially)
     assert_eq!(
-        module.force_synchronous,
+        module.synchronous,
         Some(false),
         "python module should be force_synchronous=false"
     );
@@ -900,17 +897,14 @@ async fn test_python_version_is_sync() {
 
     // Tool level should be synchronous
     assert_eq!(
-        python.force_synchronous,
+        python.synchronous,
         Some(true),
         "python tool should be force_synchronous=true at tool level"
     );
 
     // version subcommand should inherit or be sync
     let version = find_subcommand(python, "version").expect("Should find version subcommand");
-    let effective_sync = version
-        .force_synchronous
-        .or(python.force_synchronous)
-        .unwrap_or(false);
+    let effective_sync = version.synchronous.or(python.synchronous).unwrap_or(false);
     assert!(
         effective_sync,
         "python version should be effectively synchronous"
