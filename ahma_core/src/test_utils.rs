@@ -175,8 +175,59 @@ pub mod test_client {
         service::{RoleClient, RunningService},
         transport::{ConfigureCommandExt, TokioChildProcess},
     };
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
+    use std::sync::OnceLock;
     use tokio::process::Command;
+
+    /// Cached path to the pre-built ahma_mcp binary.
+    /// Using a pre-built binary instead of `cargo run` speeds up tests by 5-10x.
+    static BINARY_PATH: OnceLock<PathBuf> = OnceLock::new();
+
+    /// Get the path to the ahma_mcp binary.
+    ///
+    /// Priority:
+    /// 1. AHMA_TEST_BINARY env var (for CI or custom builds)
+    /// 2. target/debug/ahma_mcp (if exists)
+    /// 3. Returns empty path to signal fallback to cargo run
+    fn get_binary_path() -> PathBuf {
+        BINARY_PATH
+            .get_or_init(|| {
+                // Check env var first
+                if let Ok(path) = std::env::var("AHMA_TEST_BINARY") {
+                    let p = PathBuf::from(&path);
+                    if p.exists() {
+                        return p;
+                    }
+                    eprintln!(
+                        "Warning: AHMA_TEST_BINARY={} does not exist, falling back",
+                        path
+                    );
+                }
+
+                // Check for debug binary
+                let workspace = get_workspace_dir();
+                let debug_binary = workspace.join("target/debug/ahma_mcp");
+                if debug_binary.exists() {
+                    return debug_binary;
+                }
+
+                // Check for release binary
+                let release_binary = workspace.join("target/release/ahma_mcp");
+                if release_binary.exists() {
+                    return release_binary;
+                }
+
+                // No pre-built binary found - return empty path to signal fallback
+                PathBuf::new()
+            })
+            .clone()
+    }
+
+    /// Returns true if we should use the pre-built binary (fast path)
+    fn use_prebuilt_binary() -> bool {
+        let path = get_binary_path();
+        !path.as_os_str().is_empty() && path.exists()
+    }
 
     #[allow(dead_code)]
     pub async fn new_client(tools_dir: Option<&str>) -> Result<RunningService<RoleClient, ()>> {
@@ -189,10 +240,34 @@ pub mod test_client {
         extra_args: &[&str],
     ) -> Result<RunningService<RoleClient, ()>> {
         let workspace_dir = get_workspace_dir();
-        let client = ()
-            .serve(TokioChildProcess::new(Command::new("cargo").configure(
+
+        let client = if use_prebuilt_binary() {
+            // Fast path: use pre-built binary directly
+            let binary_path = get_binary_path();
+            ().serve(TokioChildProcess::new(
+                Command::new(&binary_path).configure(|cmd| {
+                    cmd.env("AHMA_TEST_MODE", "1").current_dir(&workspace_dir);
+                    if let Some(dir) = tools_dir {
+                        let tools_path = if Path::new(dir).is_absolute() {
+                            Path::new(dir).to_path_buf()
+                        } else {
+                            get_workspace_path(dir)
+                        };
+                        cmd.arg("--tools-dir").arg(tools_path);
+                    }
+                    for arg in extra_args {
+                        cmd.arg(arg);
+                    }
+                }),
+            )?)
+            .await?
+        } else {
+            // Slow fallback: use cargo run (for when binary isn't built)
+            eprintln!(
+                "Warning: Using slow 'cargo run' path. Run 'cargo build' first for faster tests."
+            );
+            ().serve(TokioChildProcess::new(Command::new("cargo").configure(
                 |cmd| {
-                    // Set AHMA_TEST_MODE to bypass sandbox checks in tests
                     cmd.env("AHMA_TEST_MODE", "1")
                         .current_dir(&workspace_dir)
                         .arg("run")
@@ -214,7 +289,9 @@ pub mod test_client {
                     }
                 },
             ))?)
-            .await?;
+            .await?
+        };
+
         Ok(client)
     }
 
@@ -225,10 +302,34 @@ pub mod test_client {
         working_dir: &Path,
     ) -> Result<RunningService<RoleClient, ()>> {
         let workspace_dir = get_workspace_dir();
-        let client = ()
-            .serve(TokioChildProcess::new(Command::new("cargo").configure(
+
+        let client = if use_prebuilt_binary() {
+            // Fast path: use pre-built binary directly
+            let binary_path = get_binary_path();
+            ().serve(TokioChildProcess::new(
+                Command::new(&binary_path).configure(|cmd| {
+                    cmd.env("AHMA_TEST_MODE", "1").current_dir(working_dir);
+                    if let Some(dir) = tools_dir {
+                        let tools_path = if Path::new(dir).is_absolute() {
+                            Path::new(dir).to_path_buf()
+                        } else {
+                            working_dir.join(dir)
+                        };
+                        cmd.arg("--tools-dir").arg(tools_path);
+                    }
+                    for arg in extra_args {
+                        cmd.arg(arg);
+                    }
+                }),
+            )?)
+            .await?
+        } else {
+            // Slow fallback: use cargo run
+            eprintln!(
+                "Warning: Using slow 'cargo run' path. Run 'cargo build' first for faster tests."
+            );
+            ().serve(TokioChildProcess::new(Command::new("cargo").configure(
                 |cmd| {
-                    // Set AHMA_TEST_MODE to bypass sandbox checks in tests
                     cmd.env("AHMA_TEST_MODE", "1")
                         .current_dir(working_dir)
                         .arg("run")
@@ -243,9 +344,6 @@ pub mod test_client {
                         let tools_path = if Path::new(dir).is_absolute() {
                             Path::new(dir).to_path_buf()
                         } else {
-                            // If tools_dir is relative, resolve it relative to working_dir
-                            // This allows tests to create temp tool directories and use them
-                            // Tests wanting workspace tools should use get_workspace_path() explicitly
                             working_dir.join(dir)
                         };
                         cmd.arg("--tools-dir").arg(tools_path);
@@ -255,7 +353,9 @@ pub mod test_client {
                     }
                 },
             ))?)
-            .await?;
+            .await?
+        };
+
         Ok(client)
     }
 
