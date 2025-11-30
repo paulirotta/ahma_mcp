@@ -80,7 +80,10 @@ async fn test_gradlew_sync_commands_interactive() -> Result<()> {
     Ok(())
 }
 
-/// Test gradlew with various working directory scenarios
+/// Test gradlew with a valid working directory
+/// Note: This test only runs ONE Gradle command to keep CI time reasonable (~30s).
+/// Error cases (non-existent dir, missing param) are tested in test_gradlew_error_handling
+/// which doesn't actually invoke Gradle.
 #[cfg_attr(
     not(target_os = "macos"),
     ignore = "Runs in the macOS Android CI job where Gradle tooling is available"
@@ -90,12 +93,13 @@ async fn test_gradlew_working_directory_handling() -> Result<()> {
     let client = new_client(Some(".ahma/tools")).await?;
     let project_path = get_android_test_project_path();
 
-    // Test 1: Valid project directory
+    // Test: Valid project directory with a quick command
+    // Using "help" instead of "tasks" as it's slightly faster
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("gradlew"),
         arguments: Some(
             json!({
-                "subcommand": "tasks",
+                "subcommand": "help",
                 "working_directory": project_path
             })
             .as_object()
@@ -112,71 +116,9 @@ async fn test_gradlew_working_directory_handling() -> Result<()> {
         }
         Err(e) => {
             println!(
-                "Note: gradlew tasks failed (possibly no Android SDK): {}",
+                "Note: gradlew help failed (possibly no Android SDK): {}",
                 e
             );
-        }
-    }
-
-    // Test 2: Non-existent directory should fail gracefully
-    let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("gradlew"),
-        arguments: Some(
-            json!({
-                "subcommand": "tasks",
-                "working_directory": "/nonexistent/directory/path"
-            })
-            .as_object()
-            .unwrap()
-            .clone(),
-        ),
-    };
-
-    let result = client.call_tool(call_param).await;
-    match result {
-        Ok(_tool_result) => {
-            // Should get some kind of error response
-            if let Some(content) = _tool_result.content.first()
-                && let Some(text_content) = content.as_text()
-            {
-                // Should contain error message about directory not existing
-                println!(
-                    "✓ Non-existent directory handled: {}",
-                    text_content.text.chars().take(100).collect::<String>()
-                );
-            }
-        }
-        Err(_) => {
-            println!("✓ Non-existent directory properly rejected");
-        }
-    }
-
-    // Test 3: Missing working_directory parameter
-    let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("gradlew"),
-        arguments: Some(
-            json!({
-                "subcommand": "tasks"
-                // No working_directory
-            })
-            .as_object()
-            .unwrap()
-            .clone(),
-        ),
-    };
-
-    let result = client.call_tool(call_param).await;
-    match result {
-        Ok(tool_result) => {
-            println!("✓ Missing working_directory handled gracefully");
-            if let Some(content) = tool_result.content.first()
-                && let Some(text_content) = content.as_text()
-            {
-                assert!(!text_content.text.is_empty());
-            }
-        }
-        Err(e) => {
-            println!("✓ Missing working_directory properly rejected: {}", e);
         }
     }
 
