@@ -115,10 +115,7 @@ async fn test_gradlew_working_directory_handling() -> Result<()> {
             println!("✓ Valid project directory works");
         }
         Err(e) => {
-            println!(
-                "Note: gradlew help failed (possibly no Android SDK): {}",
-                e
-            );
+            println!("Note: gradlew help failed (possibly no Android SDK): {}", e);
         }
     }
 

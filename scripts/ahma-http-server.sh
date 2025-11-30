@@ -24,4 +24,4 @@ echo
 echo
 echo "Starting ahma_mcp HTTP server with tools dir '$TOOLS_DIR'..."
 echo "-----------------------------------------------"
-(cd "$PROJECT_ROOT" && cargo run --release --bin ahma_mcp -- --mode http --http-port 3000 --tools-dir "$TOOLS_DIR" )
+(cd "$PROJECT_ROOT" && cargo run --bin ahma_mcp -- --mode http --http-port 3000 --tools-dir "$TOOLS_DIR" )

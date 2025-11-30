@@ -490,11 +490,13 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         server_args.push("--sync".to_string());
     }
 
-    // Enable colored output in debug mode
-    let enable_colored_output = cfg!(debug_assertions);
-    if enable_colored_output {
-        tracing::info!("Debug mode detected - colored terminal output enabled");
-    }
+    // Enable colored output for HTTP mode (shows STDIN/STDOUT/STDERR debug info)
+    // Per R8B, this is always enabled for HTTP mode to aid debugging
+    let enable_colored_output = true;
+    tracing::info!(
+        "HTTP bridge mode - colored terminal output enabled (v{})",
+        env!("CARGO_PKG_VERSION")
+    );
 
     let config = BridgeConfig {
         bind_addr,
