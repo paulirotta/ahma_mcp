@@ -419,10 +419,11 @@ async fn test_file_tools_grep_recursive_alias() {
         .expect("Failed to create test client");
 
     // Use the full option name 'recursive' which should map to -r
+    // NOTE: Search only ahma_core/src to avoid timeout scanning entire repo
     let args = json!({
         "subcommand": "grep",
-        "pattern": "ahma_core",
-        "files": ["."],
+        "pattern": "adapter",
+        "files": ["ahma_core/src"],
         "recursive": true,
         "files-with-matches": true
     });

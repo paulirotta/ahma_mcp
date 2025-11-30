@@ -16,6 +16,12 @@ set -euo pipefail
 # Resolve script directory and project root (assumes script lives in <project>/scripts/)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+TOOLS_DIR="$PROJECT_ROOT/.ahma/tools"
 
 #TODO (cd "$PROJECT_ROOT" && cargo run --bin ahma_mcp -- --mode http --http-port 3000 --tools-dir "$PROJECT_ROOT/.ahma/tools" --sandbox-scope "$PROJECT_ROOT")
-(cd "$PROJECT_ROOT" && cargo run --bin ahma_mcp -- --mode http --http-port 3000 --tools-dir "$PROJECT_ROOT/.ahma/tools")
+
+echo 
+echo
+echo "Starting ahma_mcp HTTP server with tools dir '$TOOLS_DIR'..."
+echo "-----------------------------------------------"
+(cd "$PROJECT_ROOT" && cargo run --release --bin ahma_mcp -- --mode http --http-port 3000 --tools-dir "$TOOLS_DIR" )

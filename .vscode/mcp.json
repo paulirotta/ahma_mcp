@@ -9,7 +9,7 @@
                 ".ahma/tools"
             ]
         },
-        "Ahma-localhost": {
+        "Ahma SSE": {
             "url": "http://localhost:3000/sse",
             "type": "http",
         }

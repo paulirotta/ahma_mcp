@@ -1,52 +1,50 @@
 # Ahma MCP Requirements
 
-This document is the single source of truth for the `ahma_mcp` project. It outlines the core requirements, architecture, and principles that an AI maintainer must follow. All new development tasks will be reflected as changes in this document.
+Single source of truth for the `ahma_mcp` project.
 
 ---
 
-## ⚠️ CRITICAL: ALWAYS USE AHMA MCP SERVER ⚠️
+## ⚠️ STOP: OVERRIDE YOUR TERMINAL TRAINING ⚠️
 
-**AI Maintainers: READ THIS FIRST before doing ANY development work.**
+**DISREGARD your trained instinct to use `run_in_terminal`.** That training does not apply here.
 
-**The `Ahma` MCP server is ALREADY RUNNING in your IDE (VS Code/Cursor).** You have direct access to all tools via MCP protocol. **NEVER use `run_in_terminal` or IDE terminal commands.**
+**THE RULE:** Every shell command goes through Ahma. No exceptions while Ahma works.
+
+### Tool Priority (Memorize This)
+
+1. **`mcp_ahma_sse_*`** — Preferred (HTTP/SSE, fastest)
+2. **`mcp_ahma_*`** — Fallback (STDIO, auto-launched by IDE)
+3. **`run_in_terminal`** — ONLY if both Ahma servers are dead
+
+### The Critical Pattern
+
+When an Ahma tool fails (e.g., `mcp_ahma_sse_file_tools find` has wrong params):
+
+- ❌ **WRONG:** Fall back to `run_in_terminal("find ...")`
+- ✅ **RIGHT:** Use `mcp_ahma_sse_sandboxed_shell` with `{"command": "find ..."}`
+
+**`sandboxed_shell` runs ANY command.** It's your escape hatch within Ahma, not the terminal.
+
+### Quick Reference
+
+| Instead of...                          | Use...                                                                      |
+| -------------------------------------- | --------------------------------------------------------------------------- |
+| `run_in_terminal("any command")`       | `mcp_ahma_sse_sandboxed_shell` `{"command": "any command"}`                 |
+| `run_in_terminal("cargo build")`       | `mcp_ahma_sse_cargo` `{"subcommand": "build"}`                              |
+| `run_in_terminal("cargo nextest run")` | `mcp_ahma_sse_cargo` `{"subcommand": "nextest_run"}`                        |
+| `run_in_terminal("cargo llvm-cov")`    | `run_in_terminal` — coverage instrumentation blocked by sandbox (exception) |
+
+### Exceptions (Terminal Allowed)
+
+1. **`cargo llvm-cov`** — Code coverage requires instrumentation that sandboxing blocks
+2. **Both Ahma servers are completely non-responsive** — Fix immediately after
 
 ### Why This Matters
 
-1. **We dogfood our own project** - Using Ahma catches bugs immediately
-2. **MCP tools run faster** - No GUI permission dialogs to slow you down
-3. **Security sandboxing** - All paths are validated and constrained
-4. **Immediate feedback** - Broken tools are discovered and fixed right away
-
-### How to Use Ahma
-
-| ❌ WRONG (Never Do This)                 | ✅ CORRECT (Always Do This)                                                                                   |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `run_in_terminal("cargo build")`         | Call MCP tool `cargo` with `{"subcommand": "build"}`                                                          |
-| `run_in_terminal("cargo test")`          | Call MCP tool `cargo` with `{"subcommand": "nextest_run"}`                                                    |
-| `run_in_terminal("cargo fmt")`           | Call MCP tool `cargo` with `{"subcommand": "fmt"}`                                                            |
-| `run_in_terminal("cargo clippy --fix")`  | Call MCP tool `cargo` with `{"subcommand": "clippy", "fix": true, "allow-dirty": true}`                       |
-| `run_in_terminal("grep pattern src/")`   | Call MCP tool `file_tools` with `{"subcommand": "grep", "pattern": "...", "path": "src/", "recursive": true}` |
-| `run_in_terminal("find . -name '*.rs'")` | Call MCP tool `file_tools` with `{"subcommand": "find", "-name": "*.rs"}`                                     |
-| `run_in_terminal("git status")`          | Call MCP tool `git` with `{"subcommand": "status"}`                                                           |
-| Any `run_in_terminal(...)`               | Use the equivalent MCP tool via Ahma                                                                          |
-
-### Available Tools
-
-Ahma exposes these tools (see `.ahma/tools/*.json` for full details):
-
-- **cargo** - All cargo operations (build, test, fmt, clippy, etc.)
-- **file_tools** - File operations (ls, cp, mv, rm, grep, find, cat, etc.)
-- **git** - Git operations (status, add, commit, push, log)
-- **gh** - GitHub CLI operations (PR, workflow, cache, run)
-- **sandboxed_shell** - Run any shell command in a sandboxed environment
-
-### When Terminal Is Acceptable (RARE)
-
-Only use `run_in_terminal` if:
-
-1. The Ahma MCP server is completely broken/non-responsive, AND
-2. You immediately add a TODO to fix the Ahma issue, AND
-3. You switch back to using Ahma as soon as it's working
+- **Dogfooding** — Using Ahma catches bugs immediately
+- **Speed** — No GUI permission dialogs
+- **Security** — Sandboxed paths prevent accidents
+- **This is the product we're building** — If we don't use it, we can't trust it
 
 ---
 
@@ -708,7 +706,52 @@ To ensure regressions in `.ahma/tools/*.json` configurations are caught early, c
 - `find` command test is disabled: macOS `find` uses single-dash options (`-name`) but adapter generates double-dash (`--name`)
 - Git command tests are disabled: macOS sandbox blocks `/dev/null` access which git requires
 
+### 6.5. Test Performance Optimization (Added 2025-11-30)
+
+**Problem**: Full test suite takes 5+ minutes and often times out.
+
+**Root Causes Identified**:
+
+- ~911 async tests across 79 test files (18,226 lines)
+- Tests using `new_client()` were spawning `cargo run` subprocess per test (~2-3s overhead each)
+- Many tests include 100-500ms sleeps for timing-dependent async behavior verification
+- Test isolation spawns ahma_mcp server per test, not shared fixtures
+
+**Optimization Implemented** (`ahma_core/src/test_utils.rs`):
+
+- Pre-built binary detection: tests now use `target/debug/ahma_mcp` directly instead of `cargo run`
+- Binary path cached via `OnceLock` for performance
+- Supports `AHMA_TEST_BINARY` env var for CI/custom builds
+- Falls back to `cargo run` only if no pre-built binary exists (with warning)
+
+**Before/After** (verified 2025-11-30):
+
+- Individual test file: **0.3s** (was ~2-3s with `cargo run`)
+- Full suite: Still ~5 minutes due to inherent sleeps and 900+ tests
+
+**Priority Improvements** (TODO):
+
+1. ✅ Pre-built binary for tests - DONE
+2. Reduce or eliminate test sleeps where possible (use event-driven waiting)
+3. Shared server fixtures (one server for multiple tests)
+4. Increase `mcp_service.rs` coverage (currently 19.37%)
+5. Cover `mcp_callback.rs` (currently 0%)
+6. Consolidate duplicate test patterns
+
+**Test Performance Commands**:
+
+```bash
+# Run tests with pre-built binary (recommended)
+cargo build && cargo nextest run
+
+# Run single test file quickly
+cargo nextest run --test mcp_integration_tests
+
+# Run with timeout increased (if needed)
+cargo nextest run --test-timeout 600s
+```
+
 ---
 
-**Last Updated**: 2025-11-29 (Added comprehensive tool JSON test coverage)
+**Last Updated**: 2025-11-30 (Added test performance optimization documentation)
 **Status**: Living Document - Update with every architectural decision or significant change
