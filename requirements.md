@@ -116,10 +116,16 @@ The sandbox scope defines the directory boundary within which all file system op
 #### R7.1: Sandbox Scope Definition
 
 - **R7.1.1**: The sandbox scope **must** be set securely at server/session initialization and **cannot** be changed during the session.
-- **R7.1.2**: For **stdio mode**, the sandbox scope defaults to the current working directory (`cwd`) when the stdio server process is started.
-- **R7.1.3**: For **HTTP mode**, the sandbox scope **must** be set once by the client at the start of an HTTP session (via an initialization request). It **cannot** be changed within that session.
+- **R7.1.2**: For **stdio mode**, the sandbox scope defaults to the current working directory (`cwd`) when the stdio server process is started. This works correctly because the IDE (VS Code/Cursor) sets `cwd` in `mcp.json` to `${workspaceFolder}`.
+- **R7.1.3**: For **HTTP mode**, the sandbox scope **must** be set once at the start of the HTTP session. The following mechanisms are supported (in order of precedence):
+  1. `--sandbox-scope <path>` command-line parameter
+  2. `AHMA_SANDBOX_SCOPE` environment variable
+  3. The current working directory when the HTTP server starts
 - **R7.1.4**: A command-line parameter (`--sandbox-scope <path>`) **must** be supported to override the sandbox scope for both stdio and HTTP modes. When provided, this parameter takes precedence over defaults.
 - **R7.1.5**: The `working_directory` parameter in tool calls is no longer used to define the sandbox scope. The LLM **cannot** pass an insecure working directory that escapes the sandbox.
+- **R7.1.6**: The `AHMA_SANDBOX_SCOPE` environment variable **must** be supported as an alternative to the `--sandbox-scope` CLI parameter. This enables configuration via shell profiles or systemd units without modifying command lines.
+- **R7.1.7**: **HTTP mode single-sandbox limitation**: In HTTP bridge mode, one `ahma_mcp` subprocess handles all connections. All clients share the same sandbox scope set at server startup. For per-project isolation, run separate HTTP server instances with different sandbox scopes. Future versions may support per-session sandbox isolation (see `docs/session-isolation.md`).
+- **R7.1.8**: HTTP mode is intended for **local development only**. The sandbox scope is trusted from the first connection and cannot be changed. Do not expose the HTTP server to untrusted networks.
 
 #### R7.2: Kernel-Level Sandbox Enforcement (Linux)
 

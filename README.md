@@ -29,9 +29,12 @@ Ahma MCP implements **kernel-level sandboxing** to protect your system. The sand
 
 The sandbox scope defines the root directory boundary for all file system operations:
 
-- **STDIO mode**: Defaults to the current working directory when the server starts
-- **HTTP mode**: Set once by the client at session initialization (cannot be changed during session)
-- **Override**: Use `--sandbox-scope <path>` command-line parameter to force a specific sandbox scope
+- **STDIO mode**: Defaults to the current working directory when the server starts. The IDE sets `cwd` in `mcp.json` to `${workspaceFolder}`, so this "just works".
+- **HTTP mode**: Set once when the HTTP server starts (cannot be changed during session). Configure via:
+  1. `--sandbox-scope <path>` command-line parameter (highest priority)
+  2. `AHMA_SANDBOX_SCOPE` environment variable
+  3. Current working directory when server starts (default)
+- **Single sandbox per server**: In HTTP mode, all clients share the same sandbox. For multiple projects, run separate server instances.
 
 ### Platform-Specific Enforcement
 
@@ -146,11 +149,24 @@ HTTP server that proxies requests to the stdio MCP server:
 
 ```bash
 # Start HTTP bridge on default port (3000)
+# Sandbox scope defaults to current working directory
+cd /path/to/your/project
+ahma_mcp --mode http
+
+# Explicit sandbox scope (recommended for scripts)
+ahma_mcp --mode http --sandbox-scope /path/to/your/project
+
+# Or via environment variable
+export AHMA_SANDBOX_SCOPE=/path/to/your/project
 ahma_mcp --mode http
 
 # Custom port
 ahma_mcp --mode http --http-port 8080 --http-host 127.0.0.1
 ```
+
+**Important**: The sandbox scope is set once when the HTTP server starts and applies to all connections. For per-project isolation, run separate server instances.
+
+**Security Note**: HTTP mode is for local development only. Do not expose to untrusted networks.
 
 Then send JSON-RPC requests to `http://localhost:3000/mcp`:
 
