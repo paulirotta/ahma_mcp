@@ -184,7 +184,7 @@ Per MCP protocol (rmcp 0.9.1+), clients can request either JSON or SSE streaming
 - **R8A.6**: The `Content-Type` response header **must** match the actual response format (`text/event-stream` or `application/json`).
 - **R8A.7**: If no `Accept` header is present, the server **should** default to JSON response format for backward compatibility.
 
-### R8B: HTTP Mode Debug Output (Added 2025-11-29)
+### R8B: HTTP Mode Debug Output (Added 2025-11-29, Updated 2025-11-30)
 
 When running in HTTP bridge mode (`--mode http`), terminal output echoes JSON messages for debugging purposes.
 
@@ -192,6 +192,7 @@ When running in HTTP bridge mode (`--mode http`), terminal output echoes JSON me
 - **R8B.2**: Pretty printing **must** use 2-space indentation.
 - **R8B.3**: The colored output prefixes (`→ STDIN:`, `← STDOUT:`, `⚠ STDERR:`) **must** be preserved.
 - **R8B.4**: Non-JSON output (plain text, errors) **should** be printed as-is without modification.
+- **R8B.5**: Colored debug output **must** be enabled for both development and release builds in HTTP mode. This ensures version and debug information is visible regardless of build type.
 
 ### R8C: MCP Streamable HTTP Transport (Added 2025-11-29)
 
