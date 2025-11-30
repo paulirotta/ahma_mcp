@@ -174,10 +174,20 @@ async fn main() -> Result<()> {
     }
 
     // Initialize sandbox scope
+    // Priority: 1. CLI --sandbox-scope, 2. AHMA_SANDBOX_SCOPE env var, 3. current working directory
     let sandbox_scope = if let Some(ref scope) = cli.sandbox_scope {
         // CLI override takes precedence
         std::fs::canonicalize(scope)
             .with_context(|| format!("Failed to canonicalize sandbox scope: {:?}", scope))?
+    } else if let Ok(env_scope) = std::env::var("AHMA_SANDBOX_SCOPE") {
+        // Environment variable is second priority
+        let env_path = PathBuf::from(&env_scope);
+        std::fs::canonicalize(&env_path).with_context(|| {
+            format!(
+                "Failed to canonicalize AHMA_SANDBOX_SCOPE environment variable: {:?}",
+                env_scope
+            )
+        })?
     } else {
         // Default to current working directory
         std::env::current_dir()
@@ -471,6 +481,16 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         .to_string_lossy()
         .to_string();
 
+    // Get the sandbox scope that was initialized in main()
+    // This ensures the subprocess uses the same sandbox as the parent
+    let sandbox_scope = sandbox::get_sandbox_scope()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| {
+            std::env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| ".".to_string())
+        });
+
     let mut server_args = vec![
         "--mode".to_string(),
         "stdio".to_string(),
@@ -480,6 +500,8 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         cli.guidance_file.to_string_lossy().to_string(),
         "--timeout".to_string(),
         cli.timeout.to_string(),
+        "--sandbox-scope".to_string(),
+        sandbox_scope.clone(),
     ];
 
     if cli.debug {
@@ -497,6 +519,7 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         "HTTP bridge mode - colored terminal output enabled (v{})",
         env!("CARGO_PKG_VERSION")
     );
+    tracing::info!("HTTP subprocess sandbox scope: {}", sandbox_scope);
 
     let config = BridgeConfig {
         bind_addr,

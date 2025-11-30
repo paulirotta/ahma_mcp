@@ -1,27 +1,47 @@
 #!/bin/bash
-# MCP Inspector Script
+# Ahma HTTP Server Script
 #
-# Launch ahma_mcp as an interactive local web servicer using the MCP Inspector tool.
-# Use this to test and debug your MCP tool definitions.
-# Usage: ./scripts/mcp-inspector.sh
+# Launch ahma_mcp as an HTTP/SSE server for MCP clients.
+#
+# Usage:
+#   ./scripts/ahma-http-server.sh                    # Use current directory as sandbox
+#   ./scripts/ahma-http-server.sh /path/to/project   # Use specified directory as sandbox
+#   AHMA_SANDBOX_SCOPE=/path/to/project ./scripts/ahma-http-server.sh  # Via env var
+#
+# The sandbox scope determines which directory the AI can access.
+# For security, the sandbox is set once at startup and cannot be changed.
 set -euo pipefail
-
-#TODO Pass in the sandbox scope directory as a command line argument based on the current working directory when calling this script
-# Example:
-# cd /Users/phoughton/github/ahma_mcp/ahma_shell
-# ../scripts/ahma_mcp_http_server.sh
-# This will pass in the sandbox scope directory as /Users/phoughton/github/ahma_mcp/ahma_shell
-# This will then be used to create the sandbox scope directory and enforce the sandbox rules so command line tools like cargo_build will work as expected and no command line tools will be able to access the file system outside of the sandbox scope directory
 
 # Resolve script directory and project root (assumes script lives in <project>/scripts/)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TOOLS_DIR="$PROJECT_ROOT/.ahma/tools"
 
-#TODO (cd "$PROJECT_ROOT" && cargo run --bin ahma_mcp -- --mode http --http-port 3000 --tools-dir "$PROJECT_ROOT/.ahma/tools" --sandbox-scope "$PROJECT_ROOT")
+# Determine sandbox scope (priority: $1 arg > AHMA_SANDBOX_SCOPE env > $PWD)
+if [[ -n "${1:-}" ]]; then
+    SANDBOX_SCOPE="$(cd "$1" && pwd)"
+    echo "Sandbox scope from argument: $SANDBOX_SCOPE"
+elif [[ -n "${AHMA_SANDBOX_SCOPE:-}" ]]; then
+    SANDBOX_SCOPE="$(cd "$AHMA_SANDBOX_SCOPE" && pwd)"
+    echo "Sandbox scope from AHMA_SANDBOX_SCOPE: $SANDBOX_SCOPE"
+else
+    SANDBOX_SCOPE="$(pwd)"
+    echo "Sandbox scope from current directory: $SANDBOX_SCOPE"
+fi
 
-echo 
 echo
-echo "Starting ahma_mcp HTTP server with tools dir '$TOOLS_DIR'..."
+echo "Starting ahma_mcp HTTP server..."
+echo "  Tools dir:     $TOOLS_DIR"
+echo "  Sandbox scope: $SANDBOX_SCOPE"
+echo "  Port:          3000"
 echo "-----------------------------------------------"
-(cd "$PROJECT_ROOT" && cargo run --bin ahma_mcp -- --mode http --http-port 3000 --tools-dir "$TOOLS_DIR" )
+echo "⚠️  Security: HTTP mode is for local development only."
+echo "    Do not expose to untrusted networks."
+echo "-----------------------------------------------"
+
+(cd "$PROJECT_ROOT" && cargo run --bin ahma_mcp -- \
+    --mode http \
+    --http-port 3000 \
+    --tools-dir "$TOOLS_DIR" \
+    --sandbox-scope "$SANDBOX_SCOPE" \
+)

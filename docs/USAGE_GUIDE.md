@@ -499,4 +499,79 @@ cargo audit &
 - Enable graceful shutdown for seamless file change handling
 - Monitor operations through GitHub Copilot interface
 
+## HTTP Mode Configuration
+
+### Sandbox Scope in HTTP Mode
+
+When running AHMA MCP in HTTP mode, the sandbox scope determines which directory the AI can access. The sandbox is set **once at startup** and cannot be changed during the session.
+
+#### Configuration Priority
+
+1. **Command-line argument** (highest priority): `--sandbox-scope /path/to/project`
+2. **Environment variable**: `AHMA_SANDBOX_SCOPE=/path/to/project`
+3. **Current working directory** (default): Where you run the server from
+
+#### Starting the HTTP Server
+
+**Using the script (recommended):**
+
+```bash
+# From your project directory - sandbox is set to current directory
+cd /path/to/your/project
+/path/to/ahma_mcp/scripts/ahma-http-server.sh
+
+# Or specify the project directory explicitly
+/path/to/ahma_mcp/scripts/ahma-http-server.sh /path/to/your/project
+
+# Or via environment variable
+export AHMA_SANDBOX_SCOPE=/path/to/your/project
+/path/to/ahma_mcp/scripts/ahma-http-server.sh
+```
+
+**Using the binary directly:**
+
+```bash
+# Explicit sandbox scope (recommended for scripts)
+ahma_mcp --mode http --sandbox-scope /path/to/your/project
+
+# Via environment variable
+export AHMA_SANDBOX_SCOPE=/path/to/your/project
+ahma_mcp --mode http
+
+# From project directory (uses $PWD as sandbox)
+cd /path/to/your/project
+ahma_mcp --mode http
+```
+
+#### Multi-Project Development
+
+For working on multiple projects simultaneously, run separate HTTP server instances:
+
+```bash
+# Terminal 1: Project A on port 3001
+ahma_mcp --mode http --http-port 3001 --sandbox-scope /path/to/project-a
+
+# Terminal 2: Project B on port 3002
+ahma_mcp --mode http --http-port 3002 --sandbox-scope /path/to/project-b
+```
+
+Then configure your MCP client to connect to the appropriate port for each project.
+
+#### Security Considerations
+
+- **Local development only**: HTTP mode is designed for local development. Do not expose the HTTP server to untrusted networks.
+- **Immutable sandbox**: Once set, the sandbox scope cannot be changed during the session. This prevents the AI from escaping the sandbox.
+- **Single sandbox per server**: All clients connecting to one HTTP server share the same sandbox scope.
+
+### STDIO Mode vs HTTP Mode
+
+| Feature               | STDIO Mode                           | HTTP Mode                     |
+| --------------------- | ------------------------------------ | ----------------------------- |
+| Sandbox scope         | Set by IDE via `cwd` in mcp.json     | Set at server startup         |
+| Per-project isolation | Automatic (IDE spawns per workspace) | Manual (run separate servers) |
+| Configuration         | `mcp.json` in IDE                    | CLI args or env vars          |
+| Use case              | Standard IDE integration             | Debugging, advanced setups    |
+
+For most users, **STDIO mode is recommended** because the IDE automatically handles sandbox configuration via the `cwd` setting in `mcp.json`.
+
 This development workflow maximizes productivity by leveraging AHMA MCP's async-first architecture, graceful shutdown capabilities, and intelligent operation management. The key is to embrace concurrent operations while maintaining awareness through status monitoring rather than blocking waits.

@@ -9,6 +9,7 @@ In the current implementation, HTTP bridge mode spawns a **single** `ahma_mcp` s
 ### Why This Is a Limitation
 
 When multiple developers or projects want to use the same HTTP server:
+
 - All clients are constrained to the same sandbox directory
 - No project isolation between concurrent users
 - Cannot dynamically switch projects without restarting the server
@@ -34,16 +35,19 @@ ahma_mcp --mode http --http-port 3002
 Spawn a separate `ahma_mcp` subprocess per session, each with its own sandbox scope.
 
 **Pros:**
+
 - Complete isolation between sessions
 - Crash in one session doesn't affect others
 - Sandbox scope set at subprocess spawn time (immutable per session)
 
 **Cons:**
+
 - Higher memory usage (one process per session)
 - Subprocess spawn overhead on new sessions
 - More complex session management
 
 **Implementation Sketch:**
+
 ```rust
 struct SessionManager {
     sessions: HashMap<SessionId, ChildProcess>,
@@ -70,33 +74,35 @@ Use the MCP protocol's `initialize` method to pass workspace roots from the clie
 
 **MCP Spec Reference:**
 The MCP `initialize` request can include a `roots` array specifying workspace directories:
+
 ```json
 {
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "initialize",
-    "params": {
-        "protocolVersion": "2024-11-05",
-        "capabilities": {},
-        "clientInfo": {"name": "example", "version": "1.0"},
-        "roots": [
-            {"uri": "file:///path/to/project", "name": "My Project"}
-        ]
-    }
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2024-11-05",
+    "capabilities": {},
+    "clientInfo": { "name": "example", "version": "1.0" },
+    "roots": [{ "uri": "file:///path/to/project", "name": "My Project" }]
+  }
 }
 ```
 
 **Implementation:**
+
 - First `initialize` request sets the sandbox scope for that session
 - Subsequent requests use the established scope
 - Requires session tracking via HTTP cookies or headers
 
 **Pros:**
+
 - Standard MCP protocol mechanism
 - Client controls workspace root
 - Simpler than subprocess pool
 
 **Cons:**
+
 - Must track sessions (stateful)
 - Security: must trust client's declared roots (only safe for local dev)
 
@@ -105,23 +111,26 @@ The MCP `initialize` request can include a `roots` array specifying workspace di
 Accept a custom HTTP header (e.g., `X-Sandbox-Scope`) on requests.
 
 **Implementation:**
+
 ```rust
 async fn handle_request(headers: HeaderMap, body: Json<Value>) {
     let sandbox_scope = headers
         .get("X-Sandbox-Scope")
         .map(|h| PathBuf::from(h.to_str().unwrap()))
         .unwrap_or_else(|| default_sandbox_scope());
-    
+
     // Route to appropriate subprocess or validate path
 }
 ```
 
 **Pros:**
+
 - Simple to implement
 - Stateless
 - Easy for clients to use
 
 **Cons:**
+
 - **Security risk**: Client can change sandbox on every request
 - Violates "set once, immutable" security model
 - NOT recommended for anything beyond local dev
@@ -131,9 +140,11 @@ async fn handle_request(headers: HeaderMap, body: Json<Value>) {
 ### Why Per-Request Sandbox Changes Are Dangerous
 
 The current security model states:
+
 > "The sandbox scope is set once at server/session initialization and cannot be changed during the session."
 
 This is intentional. If an AI can change its sandbox scope during a session, it could:
+
 1. Start constrained to `/home/user/project`
 2. Convince the system to switch to `/`
 3. Access any file on the system
@@ -141,6 +152,7 @@ This is intentional. If an AI can change its sandbox scope during a session, it 
 ### Recommended Approach
 
 If implementing session isolation, the recommended approach is **Option 1 (Session-Based Subprocess Pool)** because:
+
 - Each subprocess has its sandbox scope set at spawn time via `--sandbox-scope`
 - The sandbox is enforced by Landlock/Seatbelt at the kernel level
 - Once the subprocess starts, its sandbox cannot be changed
@@ -149,6 +161,7 @@ If implementing session isolation, the recommended approach is **Option 1 (Sessi
 ### Trust Model for HTTP Mode
 
 HTTP mode is designed for **local development only**:
+
 - The server runs on localhost
 - Clients are trusted (VS Code, Cursor, CLI tools)
 - Network exposure is not supported
@@ -158,6 +171,7 @@ If multi-user or network deployment is needed in the future, additional authenti
 ## Implementation Priority
 
 This feature is **low priority** because:
+
 1. STDIO mode handles the common case (IDE spawns server per workspace)
 2. Running multiple HTTP instances is a viable workaround
 3. HTTP mode is primarily for debugging and advanced use cases
