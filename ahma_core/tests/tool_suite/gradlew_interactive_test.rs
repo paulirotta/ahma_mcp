@@ -13,13 +13,11 @@ fn get_android_test_project_path() -> String {
 }
 
 /// Test gradlew synchronous commands (quick operations)
+/// Note: These tests are slow (~10s each) because Gradle has high startup time.
+/// Consider running with `cargo nextest run --test gradlew_interactive_test` separately.
 #[tokio::test]
+#[ignore = "Slow test: Gradle startup takes ~10s per command. Run separately with --run-ignored"]
 async fn test_gradlew_sync_commands_interactive() -> Result<()> {
-    // Skip in CI environments due to timeout issues
-    if std::env::var("CI").is_ok() || std::env::var("GITHUB_ACTIONS").is_ok() {
-        println!("Skipping gradlew test in CI environment");
-        return Ok(());
-    }
     let client = new_client(Some(".ahma/tools")).await?;
     let project_path = get_android_test_project_path();
 
@@ -187,13 +185,10 @@ async fn test_gradlew_working_directory_handling() -> Result<()> {
 }
 
 /// Test gradlew subcommand parameter validation
+/// Note: Slow test due to Gradle startup time.
 #[tokio::test]
+#[ignore = "Slow test: Gradle startup takes ~10s per command. Run separately with --run-ignored"]
 async fn test_gradlew_subcommand_validation() -> Result<()> {
-    // Skip in CI environments due to timeout issues
-    if std::env::var("CI").is_ok() || std::env::var("GITHUB_ACTIONS").is_ok() {
-        println!("Skipping gradlew test in CI environment");
-        return Ok(());
-    }
     let client = new_client(Some(".ahma/tools")).await?;
     let project_path = get_android_test_project_path();
 
@@ -286,13 +281,10 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
 }
 
 /// Test gradlew commands with optional parameters
+/// Note: Slow test due to Gradle startup time.
 #[tokio::test]
+#[ignore = "Slow test: Gradle startup takes ~10s per command. Run separately with --run-ignored"]
 async fn test_gradlew_optional_parameters() -> Result<()> {
-    // Skip in CI environments due to timeout issues
-    if std::env::var("CI").is_ok() || std::env::var("GITHUB_ACTIONS").is_ok() {
-        println!("Skipping gradlew test in CI environment");
-        return Ok(());
-    }
     let client = new_client(Some(".ahma/tools")).await?;
     let project_path = get_android_test_project_path();
 

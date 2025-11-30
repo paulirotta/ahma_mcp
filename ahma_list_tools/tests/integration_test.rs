@@ -6,13 +6,33 @@
 use std::path::PathBuf;
 use std::process::Command;
 
+/// Get the path to the pre-built ahma_list_tools binary
+fn get_ahma_list_tools_binary() -> PathBuf {
+    let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    project_root.join("target/debug/ahma_list_tools")
+}
+
 /// Test that the binary compiles and shows help
 #[test]
 fn test_help_output() {
-    let output = Command::new("cargo")
-        .args(["run", "-p", "ahma_list_tools", "--", "--help"])
-        .output()
-        .expect("Failed to execute command");
+    let binary = get_ahma_list_tools_binary();
+
+    // Use pre-built binary if available, otherwise fall back to cargo run
+    let output = if binary.exists() {
+        Command::new(&binary)
+            .args(["--help"])
+            .output()
+            .expect("Failed to execute command")
+    } else {
+        eprintln!("Warning: Pre-built binary not found, falling back to cargo run");
+        Command::new("cargo")
+            .args(["run", "-p", "ahma_list_tools", "--", "--help"])
+            .output()
+            .expect("Failed to execute command")
+    };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -29,35 +49,32 @@ fn test_help_output() {
 /// Test that we can list tools from a stdio MCP server
 #[test]
 fn test_list_tools_from_stdio_server() {
-    // First build ahma_mcp
-    let build_output = Command::new("cargo")
-        .args(["build", "-p", "ahma_shell"])
-        .output()
-        .expect("Failed to build ahma_shell");
-
-    assert!(
-        build_output.status.success(),
-        "Failed to build ahma_shell: {}",
-        String::from_utf8_lossy(&build_output.stderr)
-    );
-
-    // Get the path to the built binary
     let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
         .to_path_buf();
     let ahma_binary = project_root.join("target/debug/ahma_mcp");
+    let list_tools_binary = get_ahma_list_tools_binary();
     let tools_dir = project_root.join(".ahma/tools");
 
-    // Run ahma_list_tools with the stdio server
+    // Check if pre-built binaries exist
+    if !ahma_binary.exists() || !list_tools_binary.exists() {
+        eprintln!(
+            "Warning: Pre-built binaries not found. Run 'cargo build' first for faster tests."
+        );
+        // Fall back to cargo build + run
+        let build_output = Command::new("cargo")
+            .args(["build", "-p", "ahma_shell", "-p", "ahma_list_tools"])
+            .output()
+            .expect("Failed to build");
+        assert!(build_output.status.success(), "Failed to build");
+    }
+
+    // Run ahma_list_tools with the stdio server using pre-built binaries
     // Set AHMA_TEST_MODE to bypass sandbox checks in tests
-    let output = Command::new("cargo")
+    let output = Command::new(&list_tools_binary)
         .env("AHMA_TEST_MODE", "1")
         .args([
-            "run",
-            "-p",
-            "ahma_list_tools",
-            "--",
             "--",
             ahma_binary.to_str().unwrap(),
             "--tools-dir",
@@ -115,29 +132,30 @@ fn test_parse_mcp_json() {
 /// Test output format contains expected sections
 #[test]
 fn test_output_format() {
-    // Build ahma_mcp first
-    let build_output = Command::new("cargo")
-        .args(["build", "-p", "ahma_shell"])
-        .output()
-        .expect("Failed to build ahma_shell");
-
-    assert!(build_output.status.success(), "Failed to build ahma_shell");
-
     let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
         .to_path_buf();
     let ahma_binary = project_root.join("target/debug/ahma_mcp");
+    let list_tools_binary = get_ahma_list_tools_binary();
     let tools_dir = project_root.join(".ahma/tools");
 
+    // Check if pre-built binaries exist
+    if !ahma_binary.exists() || !list_tools_binary.exists() {
+        eprintln!(
+            "Warning: Pre-built binaries not found. Run 'cargo build' first for faster tests."
+        );
+        let build_output = Command::new("cargo")
+            .args(["build", "-p", "ahma_shell", "-p", "ahma_list_tools"])
+            .output()
+            .expect("Failed to build");
+        assert!(build_output.status.success(), "Failed to build");
+    }
+
     // Set AHMA_TEST_MODE to bypass sandbox checks in tests
-    let output = Command::new("cargo")
+    let output = Command::new(&list_tools_binary)
         .env("AHMA_TEST_MODE", "1")
         .args([
-            "run",
-            "-p",
-            "ahma_list_tools",
-            "--",
             "--",
             ahma_binary.to_str().unwrap(),
             "--tools-dir",
