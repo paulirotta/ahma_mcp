@@ -731,7 +731,6 @@ To ensure regressions in `.ahma/tools/*.json` configurations are caught early, c
 
 **Known Limitations**:
 
-- `find` command test is disabled: macOS `find` uses single-dash options (`-name`) but adapter generates double-dash (`--name`)
 - Git command tests are disabled: macOS sandbox blocks `/dev/null` access which git requires
 
 ### 6.5. Test Performance Optimization (Added 2025-11-30)

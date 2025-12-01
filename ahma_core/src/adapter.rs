@@ -199,6 +199,13 @@ impl Adapter {
         timeout_seconds: Option<u64>,
         subcommand_config: Option<&crate::config::SubcommandConfig>,
     ) -> Result<String, anyhow::Error> {
+        tracing::error!(
+            "execute_sync_in_dir START: command='{}', working_dir='{}', args={:?}",
+            command,
+            working_dir,
+            args
+        );
+
         // Validate working directory against sandbox scope
         let safe_wd =
             path_security::validate_path(std::path::Path::new(working_dir), &self.root_path)
@@ -207,6 +214,12 @@ impl Adapter {
         let (program, args_vec) = self
             .prepare_command_and_args(command, args.as_ref(), subcommand_config, &safe_wd)
             .await?;
+
+        tracing::info!(
+            "Prepared command: program='{}', args={:?}",
+            program,
+            args_vec
+        );
 
         // Heuristic check for shell commands (additional layer of defense)
         if let Some(script) = Self::shell_script_slice(&program, &args_vec) {
@@ -639,11 +652,37 @@ impl Adapter {
 
             let mut processed_keys = HashSet::new();
 
-            // 1. Process options FIRST (flags should come before positional args in Unix)
+            // Check if positional args should come first (e.g., for `find` command)
+            let positional_args_first = subcommand_config
+                .and_then(|sc| sc.positional_args_first)
+                .unwrap_or(false);
+
+            // Process positional args FIRST if configured (e.g., find command where path precedes expressions)
+            if positional_args_first
+                && let Some(sc) = subcommand_config
+                    && let Some(pos_args) = &sc.positional_args
+                {
+                    for pos_arg in pos_args {
+                        if let Some(value) = args_map.get(&pos_arg.name) {
+                            self.process_named_arg(
+                                &pos_arg.name,
+                                value,
+                                &positional_arg_names,
+                                subcommand_config,
+                                &mut final_args,
+                                working_dir,
+                            )
+                            .await?;
+                            processed_keys.insert(pos_arg.name.clone());
+                        }
+                    }
+                }
+
+            // Process options (flags)
             // Process all top-level key-value pairs as named arguments
             // Skip special keys like "args" and meta-parameters that are handled separately
             for (key, value) in args_map {
-                // Skip positional args - we'll handle them in the next step
+                // Skip positional args - handled separately based on ordering
                 if positional_arg_names.contains(key) {
                     continue;
                 }
@@ -668,25 +707,26 @@ impl Adapter {
                 processed_keys.insert(key.clone());
             }
 
-            // 2. Process positional args in order defined in config (AFTER options)
-            if let Some(sc) = subcommand_config
-                && let Some(pos_args) = &sc.positional_args
-            {
-                for pos_arg in pos_args {
-                    if let Some(value) = args_map.get(&pos_arg.name) {
-                        self.process_named_arg(
-                            &pos_arg.name,
-                            value,
-                            &positional_arg_names,
-                            subcommand_config,
-                            &mut final_args,
-                            working_dir,
-                        )
-                        .await?;
-                        processed_keys.insert(pos_arg.name.clone());
+            // Process positional args AFTER options (default behavior)
+            if !positional_args_first
+                && let Some(sc) = subcommand_config
+                    && let Some(pos_args) = &sc.positional_args
+                {
+                    for pos_arg in pos_args {
+                        if let Some(value) = args_map.get(&pos_arg.name) {
+                            self.process_named_arg(
+                                &pos_arg.name,
+                                value,
+                                &positional_arg_names,
+                                subcommand_config,
+                                &mut final_args,
+                                working_dir,
+                            )
+                            .await?;
+                            processed_keys.insert(pos_arg.name.clone());
+                        }
                     }
                 }
-            }
 
             // Handle positional arguments from `{"args": [...]}`
             if let Some(inner_args) = args_map.get("args")
@@ -786,7 +826,7 @@ impl Adapter {
                     } else {
                         // This case should ideally not be hit if config is valid.
                         // The presence of `file_arg: true` implies `file_flag` should exist.
-                        final_args.push(format!("--{}", key));
+                        final_args.push(Self::format_option_flag(key));
                     }
                     final_args.push(temp_file_path);
                 }
@@ -825,7 +865,7 @@ impl Adapter {
                             .and_then(|opt| opt.alias.as_ref())
                     })
                     .map(|alias| format!("-{}", alias))
-                    .unwrap_or_else(|| format!("--{}", key));
+                    .unwrap_or_else(|| Self::format_option_flag(key));
                 final_args.push(flag);
             }
             return Ok(());
@@ -868,7 +908,7 @@ impl Adapter {
             if positional_arg_names.contains(key) {
                 final_args.push(final_value);
             } else {
-                final_args.push(format!("--{}", key));
+                final_args.push(Self::format_option_flag(key));
                 final_args.push(final_value);
             }
         }
@@ -914,6 +954,18 @@ impl Adapter {
             || value.contains('`')
             || value.contains('$')
             || value.len() > 8192 // Also handle very long arguments via file
+    }
+
+    /// Formats an option name as a command-line flag.
+    ///
+    /// If the option name already starts with a dash (e.g., "-name" for `find`),
+    /// it's used as-is. Otherwise, it's prefixed with "--" for standard long options.
+    fn format_option_flag(key: &str) -> String {
+        if key.starts_with('-') {
+            key.to_string()
+        } else {
+            format!("--{}", key)
+        }
     }
 
     /// Creates a temporary file with the given content and returns the file path
@@ -1015,5 +1067,158 @@ mod tests {
 
         assert_eq!(program, "git");
         assert_eq!(args_vec, vec!["--version".to_string()]);
+    }
+
+    #[test]
+    fn format_option_flag_standard_option() {
+        // Standard options get -- prefix
+        assert_eq!(Adapter::format_option_flag("verbose"), "--verbose");
+        assert_eq!(Adapter::format_option_flag("force"), "--force");
+        assert_eq!(
+            Adapter::format_option_flag("working_directory"),
+            "--working_directory"
+        );
+    }
+
+    #[test]
+    fn format_option_flag_dash_prefixed_option() {
+        // Options already starting with - are used as-is
+        assert_eq!(Adapter::format_option_flag("-name"), "-name");
+        assert_eq!(Adapter::format_option_flag("-type"), "-type");
+        assert_eq!(Adapter::format_option_flag("-mtime"), "-mtime");
+        // Double-dash options are also preserved
+        assert_eq!(Adapter::format_option_flag("--version"), "--version");
+    }
+
+    #[test]
+    fn format_option_flag_empty_string() {
+        // Empty string should get -- prefix (edge case)
+        assert_eq!(Adapter::format_option_flag(""), "--");
+    }
+
+    #[tokio::test]
+    async fn find_command_args_with_dash_prefix() {
+        use crate::config::{CommandOption, SubcommandConfig};
+
+        let adapter = test_adapter();
+
+        // Create a subcommand config that matches the find subcommand in file_tools.json
+        let subcommand_config = SubcommandConfig {
+            name: "find".to_string(),
+            description: "Search for files".to_string(),
+            enabled: true,
+            positional_args_first: Some(true), // find requires path before options
+            positional_args: Some(vec![CommandOption {
+                name: "path".to_string(),
+                description: None,
+                required: Some(false),
+                option_type: "string".to_string(),
+                format: Some("path".to_string()),
+                items: None,
+                file_arg: None,
+                file_flag: None,
+                alias: None,
+            }]),
+            options: Some(vec![
+                CommandOption {
+                    name: "-name".to_string(),
+                    option_type: "string".to_string(),
+                    description: Some("Search pattern".to_string()),
+                    required: None,
+                    format: None,
+                    items: None,
+                    file_arg: None,
+                    file_flag: None,
+                    alias: None,
+                },
+                CommandOption {
+                    name: "-maxdepth".to_string(),
+                    option_type: "integer".to_string(),
+                    description: Some("Max depth".to_string()),
+                    required: None,
+                    format: None,
+                    items: None,
+                    file_arg: None,
+                    file_flag: None,
+                    alias: None,
+                },
+            ]),
+            subcommand: None,
+            timeout_seconds: None,
+            synchronous: None,
+            guidance_key: None,
+            sequence: None,
+            step_delay_ms: None,
+            availability_check: None,
+            install_instructions: None,
+        };
+
+        let mut args_map = Map::new();
+        args_map.insert("path".to_string(), json!("."));
+        args_map.insert("-name".to_string(), json!("*.toml"));
+        args_map.insert("-maxdepth".to_string(), json!(1));
+
+        let (program, args_vec) = adapter
+            .prepare_command_and_args(
+                "find",
+                Some(&args_map),
+                Some(&subcommand_config),
+                Path::new("."),
+            )
+            .await
+            .expect("command");
+
+        assert_eq!(program, "find");
+        // With positional_args_first: true, path should come BEFORE options
+        // This is required by both BSD and GNU find
+        assert!(
+            args_vec.contains(&"-name".to_string()),
+            "Should contain -name, got: {:?}",
+            args_vec
+        );
+        assert!(
+            args_vec.contains(&"-maxdepth".to_string()),
+            "Should contain -maxdepth, got: {:?}",
+            args_vec
+        );
+        assert!(
+            args_vec.contains(&"*.toml".to_string()),
+            "Should contain pattern value, got: {:?}",
+            args_vec
+        );
+        assert!(
+            args_vec.contains(&"1".to_string()),
+            "Should contain depth value, got: {:?}",
+            args_vec
+        );
+        // With positional_args_first: true, the path should be the first argument
+        // (path is expanded to absolute path due to format: "path")
+        let first_arg = args_vec.first().expect("Should have at least one argument");
+        assert!(
+            first_arg.starts_with('/') || first_arg == ".",
+            "First argument should be a path, got: {:?}",
+            args_vec
+        );
+        // Verify path comes before options
+        let name_idx = args_vec.iter().position(|s| s == "-name").unwrap();
+        let maxdepth_idx = args_vec.iter().position(|s| s == "-maxdepth").unwrap();
+        assert!(
+            0 < name_idx && 0 < maxdepth_idx,
+            "Path (index 0) should come before options (-name at {}, -maxdepth at {}): {:?}",
+            name_idx,
+            maxdepth_idx,
+            args_vec
+        );
+        // Should NOT contain --maxdepth or ---name
+        assert!(
+            !args_vec.iter().any(|s| s == "--maxdepth"),
+            "Should NOT contain --maxdepth, got: {:?}",
+            args_vec
+        );
+        assert!(
+            !args_vec.iter().any(|s| s == "---name"),
+            "Should NOT contain ---name, got: {:?}",
+            args_vec
+        );
     }
 }

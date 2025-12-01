@@ -122,24 +122,23 @@ async fn test_file_tools_head_with_lines_option() {
     );
 }
 
-// NOTE: The find test is disabled because macOS `find` uses single-dash options
-// like `-name` and `-maxdepth`, but the adapter generates `--name` format.
-// This is a known limitation - the find tool works via sandboxed_shell instead.
-// TODO: Add support for single-dash options in adapter for commands like find.
+// Test for find command with -name option.
+// This validates that option names starting with dash (like -name, -type, -mtime)
+// are passed correctly to the command without adding an extra dash prefix.
 #[tokio::test]
-#[ignore = "find command uses single-dash options which adapter doesn't support yet"]
 async fn test_file_tools_find_with_name_option() {
     let client = new_client(Some(".ahma/tools"))
         .await
         .expect("Failed to create test client");
 
-    // Note: The -name option in file_tools.json uses the format "-name" (with leading dash)
-    // to match the actual find command syntax on both macOS and Linux
+    // Note: The find options in file_tools.json use single-dash prefix format (e.g., "-name",
+    // "-maxdepth", "-type") to match the actual BSD/macOS find command syntax.
+    // The adapter's format_option_flag() helper correctly preserves the leading dash.
     let args = json!({
         "subcommand": "find",
         "path": ".",
         "-name": "*.toml",
-        "maxdepth": 1
+        "-maxdepth": 1
     });
 
     let result = client
@@ -149,30 +148,22 @@ async fn test_file_tools_find_with_name_option() {
         })
         .await;
 
-    // The find command may fail due to macOS/Linux differences in option handling
-    // This test validates that the MCP interface correctly passes through arguments
-    if result.is_ok() {
-        let response = result.unwrap();
-        let content = response.content[0].as_text().unwrap();
-        let output = &content.text;
+    assert!(
+        result.is_ok(),
+        "find with -name should succeed: {:?}",
+        result.err()
+    );
 
-        // Should find Cargo.toml
-        assert!(
-            output.contains("Cargo.toml"),
-            "find should locate Cargo.toml, got: {}",
-            output
-        );
-    } else {
-        // On some systems, find syntax may differ - that's OK for this integration test
-        // The key is that the tool was invoked correctly through MCP
-        let err = result.err().unwrap();
-        let err_str = format!("{:?}", err);
-        assert!(
-            err_str.contains("find") || err_str.contains("option"),
-            "Error should be from find command, got: {}",
-            err_str
-        );
-    }
+    let response = result.unwrap();
+    let content = response.content[0].as_text().unwrap();
+    let output = &content.text;
+
+    // Should find Cargo.toml in the current directory
+    assert!(
+        output.contains("Cargo.toml"),
+        "find should locate Cargo.toml, got: {}",
+        output
+    );
 }
 
 #[tokio::test]

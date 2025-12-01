@@ -116,6 +116,7 @@ async fn test_multiline_argument_with_echo() {
         name: "default".to_string(),
         description: "Echo command".to_string(),
         options: None,
+        positional_args_first: None,
         positional_args: Some(vec![CommandOption {
             name: "text".to_string(),
             alias: None,
@@ -401,6 +402,7 @@ async fn test_multiline_git_commit_message() {
             file_arg: Some(true),
             file_flag: Some("-F".to_string()),
         }]),
+        positional_args_first: None,
         positional_args: None,
         synchronous: Some(true), // Changed to async for proper operation tracking
         timeout_seconds: None,
@@ -539,6 +541,7 @@ async fn test_special_characters_in_arguments() {
         name: "echo".to_string(),
         description: "Display a line of text".to_string(),
         options: None,
+        positional_args_first: None,
         positional_args: Some(vec![CommandOption {
             name: "text".to_string(),
             alias: None,

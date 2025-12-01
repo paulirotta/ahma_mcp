@@ -19,6 +19,7 @@ fn build_subcommand(
         description: format!("{} subcommand", name),
         options: None,
         positional_args: None,
+        positional_args_first: None,
         synchronous: None,
         timeout_seconds: None,
         enabled: true,

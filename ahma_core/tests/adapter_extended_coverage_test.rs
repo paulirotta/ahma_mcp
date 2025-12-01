@@ -523,6 +523,7 @@ fn create_subcommand_with_positional() -> SubcommandConfig {
         name: "test_sub".to_string(),
         description: "Test subcommand".to_string(),
         options: None,
+        positional_args_first: None,
         positional_args: Some(vec![CommandOption {
             name: "file".to_string(),
             option_type: "string".to_string(),
@@ -593,6 +594,7 @@ async fn test_path_option_validation() {
             file_arg: None,
             file_flag: None,
         }]),
+        positional_args_first: None,
         positional_args: None,
         synchronous: None,
         timeout_seconds: None,
@@ -657,6 +659,7 @@ async fn test_option_with_alias_uses_short_flag() {
             file_arg: None,
             file_flag: None,
         }]),
+        positional_args_first: None,
         positional_args: None,
         synchronous: None,
         timeout_seconds: None,

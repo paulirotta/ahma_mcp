@@ -139,7 +139,7 @@ mod mcp_service_tests {
                     file_arg: None,
                     file_flag: None,
                 }]),
-                positional_args: None,
+                positional_args_first: None, positional_args: None,
                 subcommand: None,
 
                 sequence: None,

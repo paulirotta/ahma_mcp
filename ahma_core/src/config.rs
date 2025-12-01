@@ -103,6 +103,11 @@ pub struct SubcommandConfig {
     /// Optional arguments that are not flags, but positional values.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub positional_args: Option<Vec<CommandOption>>,
+    /// When true, positional args are placed BEFORE options in the command line.
+    /// Required for commands like `find` where path must precede expressions.
+    /// Default: false (options come first, then positional args)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub positional_args_first: Option<bool>,
     /// Override timeout for this specific subcommand
     pub timeout_seconds: Option<u64>,
     /// Override the default execution mode for this subcommand.
