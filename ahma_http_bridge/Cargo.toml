@@ -14,7 +14,7 @@ bytes = "1.11"
 dashmap = "6.1.0"
 futures.workspace = true
 owo-colors = "4.2.3"
-serde.workspace = true
+serde = {workspace = true, features = ["derive"]}
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = {workspace = true, features = ["rt-multi-thread", "macros", "io-util", "process", "sync"]}
