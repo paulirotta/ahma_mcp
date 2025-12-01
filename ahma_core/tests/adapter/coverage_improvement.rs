@@ -105,7 +105,7 @@ async fn test_command_preparation_error_paths() -> Result<()> {
         step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
-        positional_args: Some(vec![
+        positional_args_first: None, positional_args: Some(vec![
             CommandOption {
                 name: "pos1".to_string(),
                 alias: None,
@@ -281,7 +281,7 @@ async fn test_file_handling_error_scenarios() -> Result<()> {
         step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
-        positional_args: None,
+        positional_args_first: None, positional_args: None,
         options: Some(vec![CommandOption {
             name: "content".to_string(),
             alias: None,
@@ -718,7 +718,7 @@ async fn test_complex_async_exec_options() -> Result<()> {
         step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
-        positional_args: Some(vec![CommandOption {
+        positional_args_first: None, positional_args: Some(vec![CommandOption {
             name: "target".to_string(),
             alias: None,
             option_type: "string".to_string(),

@@ -322,6 +322,13 @@
             "$ref": "#/$defs/CommandOption"
           }
         },
+        "positional_args_first": {
+          "description": "When true, positional args are placed BEFORE options in the command line.\nRequired for commands like `find` where path must precede expressions.\nDefault: false (options come first, then positional args)",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "sequence": {
           "description": "Optional sequence of tools to execute in order (for composite tools)",
           "type": [

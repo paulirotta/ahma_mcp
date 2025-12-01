@@ -50,7 +50,7 @@ async fn test_prepare_command_and_args_edge_cases() {
         subcommand: None,
         sequence: None,
         step_delay_ms: None,
-        positional_args: None,
+        positional_args_first: None, positional_args: None,
         options: None,
         availability_check: None,
         install_instructions: None,
@@ -92,7 +92,7 @@ async fn test_prepare_command_and_args_with_aliases() {
         subcommand: None,
         sequence: None,
         step_delay_ms: None,
-        positional_args: None,
+        positional_args_first: None, positional_args: None,
         options: Some(vec![
             CommandOption {
                 name: "verbose".to_string(),
@@ -164,7 +164,7 @@ async fn test_prepare_command_and_args_mixed_types() {
         subcommand: None,
         sequence: None,
         step_delay_ms: None,
-        positional_args: Some(vec![CommandOption {
+        positional_args_first: None, positional_args: Some(vec![CommandOption {
             name: "pos_str".to_string(),
             alias: None,
             option_type: "string".to_string(),
@@ -554,7 +554,7 @@ async fn test_prepare_command_and_args_with_null_values() {
         subcommand: None,
         sequence: None,
         step_delay_ms: None,
-        positional_args: Some(vec![CommandOption {
+        positional_args_first: None, positional_args: Some(vec![CommandOption {
             name: "pos_arg".to_string(),
             alias: None,
             option_type: "string".to_string(),
