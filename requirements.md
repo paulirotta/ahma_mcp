@@ -209,6 +209,26 @@ Per MCP specification (2025-06-18), the Streamable HTTP transport uses a single 
 - **R8C.3**: The `/sse` GET endpoint **must** send an initial `endpoint` event containing the URL where clients should POST JSON-RPC messages (for legacy protocol support).
 - **R8C.4**: Clients attempting to POST to `/sse` **must not** receive HTTP 405 (Method Not Allowed); they **must** receive the same handling as `/mcp` POST requests.
 
+### R8D: Session Isolation for HTTP Mode (Added 2025-12-01)
+
+Per MCP specification (2025-03-26), the Streamable HTTP transport supports session management via `Mcp-Session-Id` header. Session isolation allows multiple IDE instances to share a single HTTP server with per-session sandbox scopes.
+
+- **R8D.1**: The `--session-isolation` CLI flag **must** enable multi-session mode in HTTP bridge.
+- **R8D.2**: Without `--session-isolation`, HTTP bridge **must** maintain current single-subprocess behavior for backward compatibility.
+- **R8D.3**: In session isolation mode, the server **must** spawn a separate `ahma_mcp` subprocess per MCP session.
+- **R8D.4**: The server **must** generate a unique `Mcp-Session-Id` (UUID) on `initialize` request and return it in the HTTP response header.
+- **R8D.5**: Clients **must** include the `Mcp-Session-Id` header on all requests after `initialize` (per MCP spec).
+- **R8D.6**: Requests without `Mcp-Session-Id` (other than `initialize`) **must** return HTTP 400 Bad Request.
+- **R8D.7**: Sandbox scope for each session **must** be determined from the first `roots/list` response (first root's URI).
+- **R8D.8**: Once set, sandbox scope for a session **must not** be changeable (security invariant).
+- **R8D.9**: If client provides no roots, session **should** use the HTTP server's working directory as default sandbox scope.
+- **R8D.10**: HTTP DELETE to the MCP endpoint with `Mcp-Session-Id` **should** terminate the session and stop its subprocess.
+- **R8D.11**: Session isolation is designed for local development only; no authentication is provided.
+- **R8D.12**: If a client sends `notifications/roots/list_changed` after sandbox scope is locked, the server **must** terminate the session immediately with an error logged.
+- **R8D.13**: Session termination on roots change **must** return HTTP 403 Forbidden for subsequent requests with that session ID.
+
+See [docs/session-isolation.md](docs/session-isolation.md) for detailed architecture and implementation guide.
+
 ## 3. Tool Definition (MTDF Schema)
 
 All tools are defined in `.json` files in the `tools/` directory. This is the MCP Tool Definition Format (MTDF).

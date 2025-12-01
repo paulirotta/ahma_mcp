@@ -1,6 +1,7 @@
 //! HTTP-to-stdio bridge implementation
 
 use crate::error::{BridgeError, Result};
+use crate::session::{SessionManager, SessionManagerConfig};
 use axum::{
     Json, Router,
     extract::State,
@@ -12,7 +13,9 @@ use dashmap::DashMap;
 use futures::stream::StreamExt;
 use owo_colors::OwoColorize;
 use serde_json::Value;
-use std::{convert::Infallible, net::SocketAddr, process::Stdio, sync::Arc, time::Duration};
+use std::{
+    convert::Infallible, net::SocketAddr, path::PathBuf, process::Stdio, sync::Arc, time::Duration,
+};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::Command,
@@ -65,6 +68,11 @@ pub struct BridgeConfig {
     pub server_args: Vec<String>,
     /// Enable colored terminal output for STDIN/STDOUT/STDERR (debug mode only)
     pub enable_colored_output: bool,
+    /// Enable session isolation mode (R8D)
+    /// When enabled, each client gets a separate subprocess with its own sandbox scope
+    pub session_isolation: bool,
+    /// Default sandbox scope if client provides no roots (only used in session isolation mode)
+    pub default_sandbox_scope: PathBuf,
 }
 
 impl Default for BridgeConfig {
@@ -74,46 +82,82 @@ impl Default for BridgeConfig {
             server_command: "ahma_mcp".to_string(),
             server_args: vec![],
             enable_colored_output: false,
+            session_isolation: false,
+            default_sandbox_scope: PathBuf::from("."),
         }
     }
 }
 
 /// Shared state for the bridge
 struct BridgeState {
-    /// Channel to send messages to the MCP process manager
-    sender: mpsc::Sender<Value>,
-    /// Broadcast channel for SSE events (notifications)
+    /// Channel to send messages to the MCP process manager (single-process mode only)
+    sender: Option<mpsc::Sender<Value>>,
+    /// Broadcast channel for SSE events (notifications) - single-process mode
     broadcast_tx: broadcast::Sender<String>,
-    /// Map of request IDs to response channels
+    /// Map of request IDs to response channels (single-process mode)
     pending_requests: Arc<DashMap<String, oneshot::Sender<Value>>>,
     /// Absolute RPC endpoint URL announced to SSE clients
     rpc_endpoint: String,
+    /// Session manager (session isolation mode only)
+    session_manager: Option<Arc<SessionManager>>,
+    /// Whether session isolation mode is enabled
+    session_isolation: bool,
 }
+
+/// MCP Session-Id header name (per MCP spec 2025-03-26)
+const MCP_SESSION_ID_HEADER: &str = "mcp-session-id";
 
 /// Start the HTTP bridge server
 pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
     info!("Starting HTTP bridge on {}", config.bind_addr);
 
-    // Channels
-    let (tx, rx) = mpsc::channel(100);
     let (broadcast_tx, _) = broadcast::channel(100);
     let pending_requests = Arc::new(DashMap::new());
+    let rpc_endpoint = format!("http://{}/mcp", config.bind_addr);
 
-    // Start the process manager
-    let manager_broadcast = broadcast_tx.clone();
-    let manager_pending = pending_requests.clone();
-    let manager_config = config.clone();
+    let state = if config.session_isolation {
+        // Session isolation mode: use SessionManager
+        info!("Session isolation mode enabled");
 
-    tokio::spawn(async move {
-        manage_process(manager_config, rx, manager_broadcast, manager_pending).await;
-    });
+        let session_config = SessionManagerConfig {
+            server_command: config.server_command.clone(),
+            server_args: config.server_args.clone(),
+            default_scope: config.default_sandbox_scope.clone(),
+            enable_colored_output: config.enable_colored_output,
+        };
 
-    let state = Arc::new(BridgeState {
-        sender: tx,
-        broadcast_tx,
-        pending_requests,
-        rpc_endpoint: format!("http://{}/mcp", config.bind_addr),
-    });
+        let session_manager = Arc::new(SessionManager::new(session_config));
+
+        Arc::new(BridgeState {
+            sender: None,
+            broadcast_tx,
+            pending_requests,
+            rpc_endpoint,
+            session_manager: Some(session_manager),
+            session_isolation: true,
+        })
+    } else {
+        // Single-process mode: use existing implementation
+        let (tx, rx) = mpsc::channel(100);
+
+        // Start the process manager
+        let manager_broadcast = broadcast_tx.clone();
+        let manager_pending = pending_requests.clone();
+        let manager_config = config.clone();
+
+        tokio::spawn(async move {
+            manage_process(manager_config, rx, manager_broadcast, manager_pending).await;
+        });
+
+        Arc::new(BridgeState {
+            sender: Some(tx),
+            broadcast_tx,
+            pending_requests,
+            rpc_endpoint,
+            session_manager: None,
+            session_isolation: false,
+        })
+    };
 
     // Build the router
     // MCP Streamable HTTP transport: single endpoint supporting both POST (requests) and GET (SSE)
@@ -391,6 +435,7 @@ fn error_response(format: ResponseFormat, code: i32, message: &str) -> Response 
 /// Handle MCP JSON-RPC requests with content negotiation
 ///
 /// Supports both JSON and SSE response formats based on Accept header (R8A)
+/// In session isolation mode, routes requests to the correct session subprocess
 async fn handle_mcp_request(
     State(state): State<Arc<BridgeState>>,
     headers: HeaderMap,
@@ -401,6 +446,23 @@ async fn handle_mcp_request(
     // Determine response format from Accept header (R8A.1)
     let response_format = parse_accept_header(&headers);
     debug!("Response format: {:?}", response_format);
+
+    // Session isolation mode routing
+    if state.session_isolation {
+        return handle_session_isolated_request(state, headers, payload, response_format).await;
+    }
+
+    // Single-process mode (original implementation)
+    let sender = match &state.sender {
+        Some(s) => s,
+        None => {
+            return error_response(
+                response_format,
+                -32603,
+                "Internal error: no sender in single-process mode",
+            );
+        }
+    };
 
     // If the request has an ID, we expect a response
     let id_opt = payload.get("id").map(|id| {
@@ -425,7 +487,7 @@ async fn handle_mcp_request(
     }
 
     // Send to process
-    if let Err(e) = state.sender.send(payload).await {
+    if let Err(e) = sender.send(payload).await {
         error!("Failed to send request to server process: {}", e);
         if let Some(id) = &id_opt {
             state.pending_requests.remove(id);
@@ -493,6 +555,205 @@ async fn handle_mcp_request(
             ResponseFormat::Json => json_response(success_json),
             ResponseFormat::Sse => sse_single_response(success_json),
         }
+    }
+}
+
+/// Handle requests in session isolation mode
+///
+/// Per R8D:
+/// - If no Mcp-Session-Id header and method is "initialize", create new session
+/// - If Mcp-Session-Id header exists, route to that session
+/// - Handle roots/list responses to lock sandbox scope
+/// - Reject roots change after sandbox lock (terminate session)
+async fn handle_session_isolated_request(
+    state: Arc<BridgeState>,
+    headers: HeaderMap,
+    payload: Value,
+    response_format: ResponseFormat,
+) -> Response {
+    use crate::session::McpRoot;
+
+    let session_manager = match &state.session_manager {
+        Some(sm) => sm,
+        None => {
+            return error_response(
+                response_format,
+                -32603,
+                "Internal error: no session manager in session isolation mode",
+            );
+        }
+    };
+
+    // Get session ID from header
+    let session_id = headers
+        .get(MCP_SESSION_ID_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+
+    let method = payload.get("method").and_then(|m| m.as_str());
+
+    // Handle session creation on initialize request (R8D.2)
+    if method == Some("initialize") && session_id.is_none() {
+        info!("Creating new session for initialize request");
+
+        match session_manager.create_session().await {
+            Ok(new_session_id) => {
+                info!(session_id = %new_session_id, "Session created, forwarding initialize request");
+
+                // Forward the initialize request to the new session
+                match session_manager
+                    .send_request(&new_session_id, &payload)
+                    .await
+                {
+                    Ok(response) => {
+                        // Return response with Mcp-Session-Id header (R8D.3)
+                        let mut http_response = match response_format {
+                            ResponseFormat::Json => json_response(response),
+                            ResponseFormat::Sse => sse_single_response(response),
+                        };
+
+                        http_response.headers_mut().insert(
+                            MCP_SESSION_ID_HEADER,
+                            new_session_id
+                                .parse()
+                                .unwrap_or_else(|_| "invalid".parse().unwrap()),
+                        );
+
+                        http_response
+                    }
+                    Err(e) => {
+                        error!(session_id = %new_session_id, "Failed to send initialize request: {}", e);
+                        // Clean up failed session
+                        let _ = session_manager
+                            .terminate_session(
+                                &new_session_id,
+                                crate::session::SessionTerminationReason::ProcessCrashed,
+                            )
+                            .await;
+                        error_response(
+                            response_format,
+                            -32603,
+                            &format!("Failed to initialize session: {}", e),
+                        )
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to create session: {}", e);
+                error_response(
+                    response_format,
+                    -32603,
+                    &format!("Failed to create session: {}", e),
+                )
+            }
+        }
+    } else if let Some(session_id) = session_id {
+        // Route to existing session (R8D.4)
+        if !session_manager.session_exists(&session_id) {
+            // Session not found or terminated (R8D.13)
+            warn!(session_id = %session_id, "Request for non-existent or terminated session");
+            return Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    serde_json::to_vec(&serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "error": {
+                            "code": -32600,
+                            "message": "Session not found or terminated"
+                        }
+                    }))
+                    .unwrap_or_default(),
+                ))
+                .unwrap_or_else(|_| {
+                    (StatusCode::FORBIDDEN, "Session not found or terminated").into_response()
+                });
+        }
+
+        // Check for roots/list_changed notification (R8D.12)
+        if method == Some("notifications/roots/list_changed")
+            && let Err(e) = session_manager.handle_roots_changed(&session_id).await
+        {
+            error!(session_id = %session_id, "Roots change rejected: {}", e);
+            return Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    serde_json::to_vec(&serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "error": {
+                            "code": -32600,
+                            "message": "Session terminated: roots change not allowed"
+                        }
+                    }))
+                    .unwrap_or_default(),
+                ))
+                .unwrap_or_else(|_| (StatusCode::FORBIDDEN, "Session terminated").into_response());
+        }
+
+        // Forward request to session
+        match session_manager.send_request(&session_id, &payload).await {
+            Ok(response) => {
+                // Check if this is a roots/list response - lock sandbox (R8D.7-R8D.8)
+                if method == Some("roots/list")
+                    && let Some(result) = response.get("result")
+                    && let Some(roots) = result.get("roots").and_then(|r| r.as_array())
+                {
+                    let mcp_roots: Vec<McpRoot> = roots
+                        .iter()
+                        .filter_map(|r| serde_json::from_value(r.clone()).ok())
+                        .collect();
+
+                    if let Err(e) = session_manager.lock_sandbox(&session_id, &mcp_roots).await {
+                        warn!(session_id = %session_id, "Failed to lock sandbox: {}", e);
+                        // Don't fail the request, just log the warning
+                    }
+                }
+
+                // Add session ID to response header
+                let mut http_response = match response_format {
+                    ResponseFormat::Json => json_response(response),
+                    ResponseFormat::Sse => sse_single_response(response),
+                };
+
+                http_response.headers_mut().insert(
+                    MCP_SESSION_ID_HEADER,
+                    session_id
+                        .parse()
+                        .unwrap_or_else(|_| "invalid".parse().unwrap()),
+                );
+
+                http_response
+            }
+            Err(e) => {
+                error!(session_id = %session_id, "Failed to send request: {}", e);
+                error_response(
+                    response_format,
+                    -32603,
+                    &format!("Failed to send request: {}", e),
+                )
+            }
+        }
+    } else {
+        // No session ID and not an initialize request (R8D.5)
+        warn!(
+            "Request without session ID for non-initialize method: {:?}",
+            method
+        );
+        Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "error": {
+                        "code": -32600,
+                        "message": "Missing Mcp-Session-Id header. Send initialize request first."
+                    }
+                }))
+                .unwrap_or_default(),
+            ))
+            .unwrap_or_else(|_| (StatusCode::BAD_REQUEST, "Missing session ID").into_response())
     }
 }
 
@@ -590,6 +851,8 @@ mod tests {
             server_command: "custom_server".to_string(),
             server_args: vec!["--arg1".to_string(), "value1".to_string()],
             enable_colored_output: false,
+            session_isolation: false,
+            default_sandbox_scope: PathBuf::from("/tmp"),
         };
         assert_eq!(config.bind_addr.to_string(), "0.0.0.0:8080");
         assert_eq!(config.server_command, "custom_server");
@@ -621,10 +884,12 @@ mod tests {
         let (broadcast_tx, _) = broadcast::channel(100);
         let pending_requests = Arc::new(DashMap::new());
         Arc::new(BridgeState {
-            sender: tx,
+            sender: Some(tx),
             broadcast_tx,
             pending_requests,
             rpc_endpoint: endpoint.to_string(),
+            session_manager: None,
+            session_isolation: false,
         })
     }
 
@@ -669,10 +934,12 @@ mod tests {
         let (broadcast_tx, _) = broadcast::channel(100);
         let pending_requests = Arc::new(DashMap::new());
         let state = Arc::new(BridgeState {
-            sender: tx,
+            sender: Some(tx),
             broadcast_tx,
             pending_requests,
             rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
+            session_manager: None,
+            session_isolation: false,
         });
         let app = create_app(state);
 
@@ -710,10 +977,12 @@ mod tests {
         let (broadcast_tx, _) = broadcast::channel(100);
         let pending_requests = Arc::new(DashMap::new());
         let state = Arc::new(BridgeState {
-            sender: tx,
+            sender: Some(tx),
             broadcast_tx,
             pending_requests: pending_requests.clone(),
             rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
+            session_manager: None,
+            session_isolation: false,
         });
         let app = create_app(state);
 
@@ -762,10 +1031,12 @@ mod tests {
         let (broadcast_tx, _) = broadcast::channel(100);
         let pending_requests = Arc::new(DashMap::new());
         let state = Arc::new(BridgeState {
-            sender: tx,
+            sender: Some(tx),
             broadcast_tx,
             pending_requests: pending_requests.clone(),
             rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
+            session_manager: None,
+            session_isolation: false,
         });
         let app = create_app(state);
 
@@ -813,10 +1084,12 @@ mod tests {
         let (broadcast_tx, _) = broadcast::channel(100);
         let pending_requests = Arc::new(DashMap::new());
         let state = Arc::new(BridgeState {
-            sender: tx,
+            sender: Some(tx),
             broadcast_tx,
             pending_requests,
             rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
+            session_manager: None,
+            session_isolation: false,
         });
         let app = create_app(state);
 
@@ -851,10 +1124,12 @@ mod tests {
         let (broadcast_tx, _) = broadcast::channel(100);
         let pending_requests = Arc::new(DashMap::new());
         let state = Arc::new(BridgeState {
-            sender: tx,
+            sender: Some(tx),
             broadcast_tx,
             pending_requests: pending_requests.clone(),
             rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
+            session_manager: None,
+            session_isolation: false,
         });
         let app = create_app(state);
 
@@ -925,10 +1200,12 @@ mod tests {
         let broadcast_tx_clone = broadcast_tx.clone();
 
         let state = Arc::new(BridgeState {
-            sender: tx,
+            sender: Some(tx),
             broadcast_tx,
             pending_requests,
             rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
+            session_manager: None,
+            session_isolation: false,
         });
 
         // Subscribe before creating the app
@@ -977,10 +1254,12 @@ mod tests {
         let (broadcast_tx, _) = broadcast::channel(100);
         let pending_requests = Arc::new(DashMap::new());
         let state = Arc::new(BridgeState {
-            sender: tx,
+            sender: Some(tx),
             broadcast_tx,
             pending_requests: pending_requests.clone(),
             rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
+            session_manager: None,
+            session_isolation: false,
         });
         let app = create_app(state);
 
@@ -1035,10 +1314,12 @@ mod tests {
         let (broadcast_tx, _) = broadcast::channel(100);
         let pending_requests = Arc::new(DashMap::new());
         let state = Arc::new(BridgeState {
-            sender: tx,
+            sender: Some(tx),
             broadcast_tx,
             pending_requests: pending_requests.clone(),
             rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
+            session_manager: None,
+            session_isolation: false,
         });
         let app = create_app(state);
 
@@ -1088,10 +1369,12 @@ mod tests {
         let (broadcast_tx, _) = broadcast::channel(100);
         let pending_requests = Arc::new(DashMap::new());
         let state = Arc::new(BridgeState {
-            sender: tx,
+            sender: Some(tx),
             broadcast_tx,
             pending_requests: pending_requests.clone(),
             rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
+            session_manager: None,
+            session_isolation: false,
         });
         let app = create_app(state);
 
@@ -1141,10 +1424,12 @@ mod tests {
         let (broadcast_tx, _) = broadcast::channel(100);
         let pending_requests = Arc::new(DashMap::new());
         let state = Arc::new(BridgeState {
-            sender: tx,
+            sender: Some(tx),
             broadcast_tx,
             pending_requests: pending_requests.clone(),
             rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
+            session_manager: None,
+            session_isolation: false,
         });
         let app = create_app(state);
 
@@ -1192,10 +1477,12 @@ mod tests {
         let (broadcast_tx, _) = broadcast::channel(100);
         let pending_requests = Arc::new(DashMap::new());
         let state = Arc::new(BridgeState {
-            sender: tx,
+            sender: Some(tx),
             broadcast_tx,
             pending_requests: pending_requests.clone(),
             rpc_endpoint: TEST_ENDPOINT_URL.to_string(),
+            session_manager: None,
+            session_isolation: false,
         });
         let app = create_app(state);
 
