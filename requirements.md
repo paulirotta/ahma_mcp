@@ -226,6 +226,7 @@ Per MCP specification (2025-03-26), the Streamable HTTP transport supports sessi
 - **R8D.11**: Session isolation is designed for local development only; no authentication is provided.
 - **R8D.12**: If a client sends `notifications/roots/list_changed` after sandbox scope is locked, the server **must** terminate the session immediately with an error logged.
 - **R8D.13**: Session termination on roots change **must** return HTTP 403 Forbidden for subsequent requests with that session ID.
+- **R8D.14**: When sandbox scope is locked via `roots/list` response, the subprocess **must** be restarted with `--sandbox-scope <path>` argument to enforce the client's workspace root (implemented 2025-12-01).
 
 See [docs/session-isolation.md](docs/session-isolation.md) for detailed architecture and implementation guide.
 

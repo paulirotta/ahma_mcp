@@ -53,8 +53,8 @@ pub enum SessionTerminationReason {
 pub struct Session {
     /// Unique session identifier
     pub id: String,
-    /// Channel to send messages to the subprocess
-    sender: mpsc::Sender<String>,
+    /// Channel to send messages to the subprocess (wrapped in Mutex for restart support)
+    sender: Mutex<mpsc::Sender<String>>,
     /// Map of pending request IDs to response channels
     pending_requests: Arc<DashMap<String, oneshot::Sender<Value>>>,
     /// Broadcast channel for SSE events from this session
@@ -164,7 +164,7 @@ impl SessionManager {
 
         let session = Arc::new(Session {
             id: session_id.clone(),
-            sender: tx,
+            sender: Mutex::new(tx),
             pending_requests: pending_requests.clone(),
             broadcast_tx: broadcast_tx.clone(),
             sandbox_scope: Mutex::new(None),
@@ -204,9 +204,15 @@ impl SessionManager {
         }
 
         let json_str = serde_json::to_string(message)?;
-        session.sender.send(json_str).await.map_err(|e| {
-            BridgeError::Communication(format!("Failed to send to subprocess: {}", e))
-        })?;
+        session
+            .sender
+            .lock()
+            .await
+            .send(json_str)
+            .await
+            .map_err(|e| {
+                BridgeError::Communication(format!("Failed to send to subprocess: {}", e))
+            })?;
 
         Ok(())
     }
@@ -248,12 +254,18 @@ impl SessionManager {
 
         // Send the request
         let json_str = serde_json::to_string(request)?;
-        session.sender.send(json_str).await.map_err(|e| {
-            if let Some(id) = &id_opt {
-                session.pending_requests.remove(id);
-            }
-            BridgeError::Communication(format!("Failed to send to subprocess: {}", e))
-        })?;
+        session
+            .sender
+            .lock()
+            .await
+            .send(json_str)
+            .await
+            .map_err(|e| {
+                if let Some(id) = &id_opt {
+                    session.pending_requests.remove(id);
+                }
+                BridgeError::Communication(format!("Failed to send to subprocess: {}", e))
+            })?;
 
         // Wait for response if this is a request (has ID)
         if let Some(rx) = response_rx {
@@ -277,7 +289,9 @@ impl SessionManager {
 
     /// Lock sandbox scope for a session (called when processing roots/list response)
     ///
-    /// Per R8D.7-R8D.8, sandbox scope is determined from first root and cannot be changed
+    /// Per R8D.7-R8D.8, sandbox scope is determined from first root and cannot be changed.
+    /// This method restarts the subprocess with the correct `--sandbox-scope` argument
+    /// to ensure file operations are validated against the client's workspace.
     pub async fn lock_sandbox(&self, session_id: &str, roots: &[McpRoot]) -> Result<()> {
         let session = self.sessions.get(session_id).ok_or_else(|| {
             BridgeError::Communication(format!("Session not found: {}", session_id))
@@ -302,8 +316,98 @@ impl SessionManager {
             "Locking sandbox scope for session"
         );
 
-        *session.sandbox_scope.lock().await = Some(scope);
+        // Store the sandbox scope
+        *session.sandbox_scope.lock().await = Some(scope.clone());
         session.sandbox_locked.store(true, Ordering::SeqCst);
+
+        // Restart subprocess with the correct sandbox scope
+        // This is necessary because the subprocess was started without knowing the client's workspace
+        drop(session); // Release the lock before restart
+        self.restart_session_with_sandbox(session_id, &scope)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Restart a session's subprocess with a specific sandbox scope.
+    ///
+    /// This terminates the existing subprocess and starts a new one with
+    /// `--sandbox-scope <path>` added to the arguments.
+    async fn restart_session_with_sandbox(
+        &self,
+        session_id: &str,
+        sandbox_scope: &std::path::Path,
+    ) -> Result<()> {
+        let session = self.sessions.get(session_id).ok_or_else(|| {
+            BridgeError::Communication(format!("Session not found: {}", session_id))
+        })?;
+
+        info!(
+            session_id = %session_id,
+            sandbox_scope = %sandbox_scope.display(),
+            "Restarting subprocess with sandbox scope"
+        );
+
+        // Kill the existing subprocess
+        if let Some(mut child) = session.child_handle.lock().await.take() {
+            let _ = child.kill().await;
+            info!(session_id = %session_id, "Killed existing subprocess");
+        }
+
+        // Build new args with --sandbox-scope
+        let mut new_args = self.config.server_args.clone();
+        new_args.push("--sandbox-scope".to_string());
+        new_args.push(sandbox_scope.display().to_string());
+
+        // Spawn new subprocess with sandbox scope
+        let stderr_mode = if self.config.enable_colored_output {
+            Stdio::piped()
+        } else {
+            Stdio::inherit()
+        };
+
+        let mut child = Command::new(&self.config.server_command)
+            .args(&new_args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(stderr_mode)
+            .spawn()
+            .map_err(|e| {
+                BridgeError::ServerProcess(format!(
+                    "Failed to restart subprocess with sandbox: {}",
+                    e
+                ))
+            })?;
+
+        let stdin = child.stdin.take().expect("Failed to get stdin");
+        let stdout = child.stdout.take().expect("Failed to get stdout");
+        let stderr = if self.config.enable_colored_output {
+            child.stderr.take()
+        } else {
+            None
+        };
+
+        // Store the new child handle
+        *session.child_handle.lock().await = Some(child);
+
+        // Create new channels for the restarted subprocess
+        let (tx, rx) = mpsc::channel::<String>(100);
+
+        // Update the session's sender with the new channel
+        *session.sender.lock().await = tx;
+
+        // Spawn the I/O handler task for the new subprocess
+        let session_clone = session.clone();
+        let colored_output = self.config.enable_colored_output;
+        tokio::spawn(async move {
+            Self::handle_session_io(session_clone, rx, stdin, stdout, stderr, colored_output).await;
+        });
+
+        info!(
+            session_id = %session_id,
+            sandbox_scope = %sandbox_scope.display(),
+            "Subprocess restarted successfully with sandbox scope"
+        );
 
         Ok(())
     }
