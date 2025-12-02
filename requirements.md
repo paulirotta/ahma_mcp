@@ -778,7 +778,58 @@ cargo nextest run --test mcp_integration_tests
 cargo nextest run --test-timeout 600s
 ```
 
+### 6.6. SSE Integration Tests for All Tools (Added 2025-12-01)
+
+To verify all tool configurations work correctly via the HTTP SSE bridge and stress-test concurrent operation:
+
+**SSE Tool Integration Tests** (`ahma_http_bridge/tests/sse_tool_integration_test.rs`):
+
+- Connects to running SSE server via HTTP POST to `/mcp` endpoint
+- Tests all tools defined in `.ahma/tools/*.json`:
+  - file_tools: pwd, ls, cat, head, tail, grep, find, touch, rm, cp, mv, sed, diff
+  - sandboxed_shell: echo, pipes, variable substitution
+  - python: version, code execution
+  - cargo: check (read-only)
+  - git: status, log
+  - gh: workflow_list
+- Concurrent stress tests:
+  - 10 concurrent tool calls with mixed operations
+  - 50 high-volume concurrent echo requests
+  - Measures requests/second and success rate (target: 90%+)
+- Error handling tests:
+  - Invalid tool returns proper error
+  - Missing required arguments handled gracefully
+
+**Running SSE Integration Tests**:
+
+```bash
+# Start HTTP bridge server
+./scripts/ahma-http-server.sh &
+
+# Run tests against running server
+export AHMA_TEST_SSE_URL=http://localhost:3000
+cargo nextest run --test sse_tool_integration_test
+
+# Or let tests skip if server not available
+cargo nextest run --test sse_tool_integration_test
+```
+
+### 6.7. Session Stress Tests (Added 2025-12-01)
+
+To improve coverage of `ahma_http_bridge/src/session.rs` (was 46.84%):
+
+**Session Stress Tests** (`ahma_http_bridge/tests/session_stress_test.rs`):
+
+- Concurrent session creation: 50 simultaneous session creations
+- Creation/termination races: 20 iterations of create+terminate under race conditions
+- Concurrent sandbox lock attempts: Race two lock attempts on same session
+- Many independent sandbox scopes: 20 sessions with unique scopes
+- All termination reasons: ClientRequested, RootsChangeRejected, Timeout, ProcessCrashed
+- Rapid lifecycle: 100 create-lock-terminate cycles
+- URI parsing edge cases: Standard paths, encoded spaces, root path
+- Edge cases: Non-existent sessions, duplicate termination, empty roots
+
 ---
 
-**Last Updated**: 2025-11-30 (Added test performance optimization documentation)
+**Last Updated**: 2025-12-01 (Added SSE integration tests and session stress tests)
 **Status**: Living Document - Update with every architectural decision or significant change

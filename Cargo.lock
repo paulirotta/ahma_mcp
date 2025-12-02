@@ -37,6 +37,7 @@ dependencies = [
  "dashmap",
  "futures",
  "owo-colors",
+ "reqwest",
  "serde",
  "serde_json",
  "tempfile",
