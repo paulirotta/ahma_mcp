@@ -23,7 +23,9 @@ async fn create_test_service() -> (AhmaMcpService, TempDir) {
 
     // Load tool configs from .ahma/tools directory or use empty map
     let tool_configs = if Path::new(".ahma/tools").exists() {
-        load_tool_configs(Path::new(".ahma/tools")).unwrap_or_default()
+        load_tool_configs(Path::new(".ahma/tools"))
+            .await
+            .unwrap_or_default()
     } else {
         HashMap::new()
     };
@@ -95,7 +97,9 @@ async fn test_service_creation_with_existing_tool_configs() {
 
     // Load actual tool configs if they exist
     let tool_configs = if Path::new(".ahma/tools").exists() {
-        load_tool_configs(Path::new(".ahma/tools")).unwrap_or_default()
+        load_tool_configs(Path::new(".ahma/tools"))
+            .await
+            .unwrap_or_default()
     } else {
         HashMap::new()
     };
