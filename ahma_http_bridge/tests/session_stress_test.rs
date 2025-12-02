@@ -226,8 +226,8 @@ async fn test_many_independent_sandbox_scopes() {
 
         assert_eq!(
             scope, expected,
-            "Session {} should have scope {:?}",
-            session_id, expected
+            "Session should have scope {:?}",
+            expected
         );
     }
 
