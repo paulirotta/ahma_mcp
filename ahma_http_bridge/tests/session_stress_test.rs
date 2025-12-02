@@ -224,11 +224,7 @@ async fn test_many_independent_sandbox_scopes() {
         let scope = session.get_sandbox_scope().await.unwrap();
         let expected = PathBuf::from(format!("/workspace/project_{}", i));
 
-        assert_eq!(
-            scope, expected,
-            "Session should have scope {:?}",
-            expected
-        );
+        assert_eq!(scope, expected, "Session should have scope {:?}", expected);
     }
 
     // Concurrent verification - read all scopes at once

@@ -829,7 +829,27 @@ To improve coverage of `ahma_http_bridge/src/session.rs` (was 46.84%):
 - URI parsing edge cases: Standard paths, encoded spaces, root path
 - Edge cases: Non-existent sessions, duplicate termination, empty roots
 
+### 6.8. MCP Service call_tool Handler Tests (Added 2025-12-02)
+
+To improve coverage of `ahma_core/src/mcp_service.rs` (was 36.71%):
+
+**call_tool_handlers.rs** (`ahma_core/tests/mcp_service/call_tool_handlers.rs`):
+
+- **Status tool tests**: Tool name filter, operation_id filter, combined filters, empty filter
+- **Await tool tests**: Specific operation_id, tool filters, no pending operations, multiple filters
+- **Cancel tool tests**: Missing operation_id error, non-existent operation, with reason, invalid type error
+- **Tool resolution tests**: Non-existent tool, disabled tool, invalid subcommand, disabled subcommand
+- **Execution mode tests**: Synchronous mode, async mode (default), explicit execution_mode argument
+- **Subcommand tests**: Nested subcommand execution, working directory parameter
+- **Parameter tests**: Default working directory, timeout parameter
+
+**Bug Fixes Applied**:
+
+- Fixed `OptionConfig` → `CommandOption` in coverage.rs
+- Fixed missing `.await` on `load_tool_configs()` calls in basic_coverage.rs, coverage_expansion.rs, integration.rs
+- Added mcp_service_tests.rs entry point for mcp_service/ test directory
+
 ---
 
-**Last Updated**: 2025-12-01 (Added SSE integration tests and session stress tests)
+**Last Updated**: 2025-12-02 (Added mcp_service call_tool handler tests)
 **Status**: Living Document - Update with every architectural decision or significant change

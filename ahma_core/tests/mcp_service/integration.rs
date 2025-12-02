@@ -22,7 +22,9 @@ async fn create_test_service() -> AhmaMcpService {
 
     // Load tool configs from .ahma/tools directory
     let tool_configs = if Path::new(".ahma/tools").exists() {
-        load_tool_configs(Path::new(".ahma/tools")).unwrap_or_default()
+        load_tool_configs(Path::new(".ahma/tools"))
+            .await
+            .unwrap_or_default()
     } else {
         HashMap::new()
     };
