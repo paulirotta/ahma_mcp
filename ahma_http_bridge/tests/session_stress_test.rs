@@ -87,8 +87,7 @@ async fn test_concurrent_session_creation() {
     for session_id in &session_ids {
         assert!(
             session_manager.session_exists(session_id),
-            "Session {} should exist",
-            session_id
+            "Created session should exist"
         );
     }
 
