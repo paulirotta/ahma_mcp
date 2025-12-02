@@ -660,23 +660,23 @@ impl Adapter {
             // Process positional args FIRST if configured (e.g., find command where path precedes expressions)
             if positional_args_first
                 && let Some(sc) = subcommand_config
-                    && let Some(pos_args) = &sc.positional_args
-                {
-                    for pos_arg in pos_args {
-                        if let Some(value) = args_map.get(&pos_arg.name) {
-                            self.process_named_arg(
-                                &pos_arg.name,
-                                value,
-                                &positional_arg_names,
-                                subcommand_config,
-                                &mut final_args,
-                                working_dir,
-                            )
-                            .await?;
-                            processed_keys.insert(pos_arg.name.clone());
-                        }
+                && let Some(pos_args) = &sc.positional_args
+            {
+                for pos_arg in pos_args {
+                    if let Some(value) = args_map.get(&pos_arg.name) {
+                        self.process_named_arg(
+                            &pos_arg.name,
+                            value,
+                            &positional_arg_names,
+                            subcommand_config,
+                            &mut final_args,
+                            working_dir,
+                        )
+                        .await?;
+                        processed_keys.insert(pos_arg.name.clone());
                     }
                 }
+            }
 
             // Process options (flags)
             // Process all top-level key-value pairs as named arguments
@@ -710,23 +710,23 @@ impl Adapter {
             // Process positional args AFTER options (default behavior)
             if !positional_args_first
                 && let Some(sc) = subcommand_config
-                    && let Some(pos_args) = &sc.positional_args
-                {
-                    for pos_arg in pos_args {
-                        if let Some(value) = args_map.get(&pos_arg.name) {
-                            self.process_named_arg(
-                                &pos_arg.name,
-                                value,
-                                &positional_arg_names,
-                                subcommand_config,
-                                &mut final_args,
-                                working_dir,
-                            )
-                            .await?;
-                            processed_keys.insert(pos_arg.name.clone());
-                        }
+                && let Some(pos_args) = &sc.positional_args
+            {
+                for pos_arg in pos_args {
+                    if let Some(value) = args_map.get(&pos_arg.name) {
+                        self.process_named_arg(
+                            &pos_arg.name,
+                            value,
+                            &positional_arg_names,
+                            subcommand_config,
+                            &mut final_args,
+                            working_dir,
+                        )
+                        .await?;
+                        processed_keys.insert(pos_arg.name.clone());
                     }
                 }
+            }
 
             // Handle positional arguments from `{"args": [...]}`
             if let Some(inner_args) = args_map.get("args")
