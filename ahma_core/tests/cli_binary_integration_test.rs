@@ -493,20 +493,21 @@ mod generate_tool_schema_tests {
 }
 
 // ============================================================================
-// ahma_list_tools Binary Tests
+// ahma_mcp --list-tools Mode Tests
 // ============================================================================
 
-mod ahma_list_tools_tests {
+mod ahma_list_tools_mode_tests {
     use super::*;
 
     #[test]
-    fn test_ahma_list_tools_help() {
-        let binary = build_binary("ahma_list_tools", "ahma_list_tools");
+    fn test_ahma_mcp_list_tools_help() {
+        // The --list-tools help is shown as part of main --help
+        let binary = build_binary("ahma_shell", "ahma_mcp");
 
-        let output = Command::new(&binary)
+        let output = test_command(&binary)
             .arg("--help")
             .output()
-            .expect("Failed to execute ahma_list_tools --help");
+            .expect("Failed to execute ahma_mcp --help");
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -514,73 +515,62 @@ mod ahma_list_tools_tests {
 
         assert!(
             output.status.success(),
-            "ahma_list_tools --help should succeed. Output: {}",
+            "ahma_mcp --help should succeed. Output: {}",
             combined
         );
 
+        // Help should mention --list-tools flag
         assert!(
-            combined.contains("MCP") || combined.contains("tool"),
-            "Help should mention MCP or tools. Got: {}",
+            combined.contains("--list-tools") || combined.contains("list-tools"),
+            "Help should mention --list-tools flag. Got: {}",
             combined
         );
     }
 
     #[test]
-    fn test_ahma_list_tools_version() {
-        let binary = build_binary("ahma_list_tools", "ahma_list_tools");
+    fn test_ahma_mcp_list_tools_no_connection_method() {
+        let binary = build_binary("ahma_shell", "ahma_mcp");
 
-        let output = Command::new(&binary)
-            .arg("--version")
+        // Running --list-tools without any connection method should fail gracefully
+        let output = test_command(&binary)
+            .arg("--list-tools")
             .output()
-            .expect("Failed to execute ahma_list_tools --version");
-
-        assert!(
-            output.status.success(),
-            "ahma_list_tools --version should succeed"
-        );
-    }
-
-    #[test]
-    fn test_ahma_list_tools_no_connection_method() {
-        let binary = build_binary("ahma_list_tools", "ahma_list_tools");
-
-        // Running without any connection method should fail gracefully
-        let output = Command::new(&binary)
-            .output()
-            .expect("Failed to execute ahma_list_tools");
+            .expect("Failed to execute ahma_mcp --list-tools");
 
         // Should fail with meaningful error
         assert!(
             !output.status.success(),
-            "ahma_list_tools should fail without connection method"
+            "ahma_mcp --list-tools should fail without connection method"
         );
 
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stderr.contains("connection") || stderr.contains("method") || stderr.contains("--"),
+            stderr.contains("Must specify") || stderr.contains("server") || stderr.contains("--"),
             "Error should mention connection method. Got: {}",
             stderr
         );
     }
 
     #[test]
-    fn test_ahma_list_tools_with_stdio_server() {
-        // This test connects to the ahma_mcp binary via stdio
-        let ahma_binary = build_binary("ahma_shell", "ahma_mcp");
-        let list_binary = build_binary("ahma_list_tools", "ahma_list_tools");
+    fn test_ahma_mcp_list_tools_with_stdio_server() {
+        // This test connects to another ahma_mcp binary via stdio
+        let binary = build_binary("ahma_shell", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
 
-        let output = Command::new(&list_binary)
+        let output = test_command(&binary)
             .current_dir(&workspace)
             .args([
-                "--",
-                ahma_binary.to_str().unwrap(),
-                "--tools-dir",
-                tools_dir.to_str().unwrap(),
+                "--list-tools",
+                "--server",
+                &format!(
+                    "{} --tools-dir {}",
+                    binary.to_str().unwrap(),
+                    tools_dir.to_str().unwrap()
+                ),
             ])
             .output()
-            .expect("Failed to execute ahma_list_tools with stdio server");
+            .expect("Failed to execute ahma_mcp --list-tools with stdio server");
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -595,7 +585,45 @@ mod ahma_list_tools_tests {
         } else {
             // Acceptable if it fails due to connection issues
             let combined = format!("{}{}", stdout, stderr);
-            println!("ahma_list_tools failed (may be acceptable): {}", combined);
+            println!(
+                "ahma_mcp --list-tools failed (may be acceptable): {}",
+                combined
+            );
+        }
+    }
+
+    #[test]
+    fn test_ahma_mcp_list_tools_json_format() {
+        let binary = build_binary("ahma_shell", "ahma_mcp");
+        let workspace = workspace_dir();
+        let tools_dir = workspace.join(".ahma/tools");
+
+        let output = test_command(&binary)
+            .current_dir(&workspace)
+            .args([
+                "--list-tools",
+                "--format",
+                "json",
+                "--server",
+                &format!(
+                    "{} --tools-dir {}",
+                    binary.to_str().unwrap(),
+                    tools_dir.to_str().unwrap()
+                ),
+            ])
+            .output()
+            .expect("Failed to execute ahma_mcp --list-tools --format json");
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        // If successful, output should be JSON (starts with { or [)
+        if output.status.success() && !stdout.is_empty() {
+            let trimmed = stdout.trim();
+            assert!(
+                trimmed.starts_with('{') || trimmed.starts_with('['),
+                "JSON output should start with {{ or [. Got: {}",
+                &trimmed[..trimmed.len().min(100)]
+            );
         }
     }
 }
