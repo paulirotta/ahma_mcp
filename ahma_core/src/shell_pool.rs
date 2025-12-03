@@ -80,11 +80,11 @@ impl Default for ShellPoolConfig {
             enabled: true,
             shells_per_directory: 2,
             max_total_shells: 20,
-            shell_idle_timeout: Duration::from_mins(1),
-            pool_cleanup_interval: Duration::from_mins(1),
+            shell_idle_timeout: Duration::from_secs(60),
+            pool_cleanup_interval: Duration::from_secs(60),
             shell_spawn_timeout: Duration::from_secs(5),
-            command_timeout: Duration::from_mins(5),
-            health_check_interval: Duration::from_mins(1),
+            command_timeout: Duration::from_secs(300),
+            health_check_interval: Duration::from_secs(60),
         }
     }
 }
