@@ -1,27 +1,26 @@
-//! # Ahma List Tools
+//! # List Tools Module
 //!
-//! A CLI utility to dump all MCP tool information from an MCP server to the terminal.
+//! Provides functionality to list all MCP tools from an MCP server.
 //! This is useful for tests, development, and verifying MCP server tool configurations.
 //!
 //! ## Usage
 //!
 //! Connect via command-line arguments:
 //! ```bash
-//! ahma_list_tools -- /path/to/ahma_mcp --tools-dir ./tools
+//! ahma_mcp --list-tools -- /path/to/ahma_mcp --tools-dir ./tools
 //! ```
 //!
 //! Connect via mcp.json:
 //! ```bash
-//! ahma_list_tools --mcp-config /path/to/mcp.json --server Ahma
+//! ahma_mcp --list-tools --mcp-config /path/to/mcp.json --server Ahma
 //! ```
 //!
 //! Connect to HTTP server:
 //! ```bash
-//! ahma_list_tools --http http://localhost:3000
+//! ahma_mcp --list-tools --http http://localhost:3000
 //! ```
 
 use anyhow::{Context, Result, anyhow};
-use clap::Parser;
 use rmcp::{
     ServiceExt,
     model::Tool,
@@ -32,42 +31,9 @@ use std::{collections::HashMap, fs, path::PathBuf};
 use tokio::process::Command;
 use tracing::info;
 
-/// CLI tool to list all tools from an MCP server
-#[derive(Parser, Debug)]
-#[command(
-    author,
-    version,
-    about = "Dump all MCP tool information to the terminal",
-    long_about = "Connect to an MCP server (stdio or HTTP) and output all tool definitions in a human-readable format. Useful for testing, development, and verification of MCP server configurations."
-)]
-struct Cli {
-    /// Path to mcp.json configuration file
-    #[arg(long)]
-    mcp_config: Option<PathBuf>,
-
-    /// Name of the server in mcp.json to connect to (defaults to first server)
-    #[arg(long)]
-    server: Option<String>,
-
-    /// HTTP URL of the MCP server (for HTTP mode)
-    #[arg(long)]
-    http: Option<String>,
-
-    /// Output format: text (default) or json
-    #[arg(long, default_value = "text")]
-    format: OutputFormat,
-
-    /// Enable debug logging
-    #[arg(short, long)]
-    debug: bool,
-
-    /// Command and arguments for stdio MCP server (after --)
-    #[arg(last = true)]
-    command_args: Vec<String>,
-}
-
+/// Output format for tool listing
 #[derive(Debug, Clone, clap::ValueEnum, Default)]
-enum OutputFormat {
+pub enum OutputFormat {
     #[default]
     Text,
     Json,
@@ -75,79 +41,49 @@ enum OutputFormat {
 
 /// MCP server configuration from mcp.json
 #[derive(Debug, Deserialize, Serialize)]
-struct McpConfig {
-    servers: HashMap<String, ServerConfig>,
+pub struct McpConfig {
+    pub servers: HashMap<String, ServerConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-struct ServerConfig {
+pub struct ServerConfig {
     #[serde(rename = "type")]
-    server_type: String,
-    command: Option<String>,
-    args: Option<Vec<String>>,
-    cwd: Option<String>,
+    pub server_type: String,
+    pub command: Option<String>,
+    pub args: Option<Vec<String>>,
+    pub cwd: Option<String>,
 }
 
 /// Tool listing result for JSON output
 #[derive(Debug, Serialize)]
-struct ToolListResult {
-    server_info: Option<ServerInfoOutput>,
-    tools: Vec<ToolOutput>,
+pub struct ToolListResult {
+    pub server_info: Option<ServerInfoOutput>,
+    pub tools: Vec<ToolOutput>,
 }
 
 #[derive(Debug, Serialize)]
-struct ServerInfoOutput {
-    name: String,
-    version: Option<String>,
+pub struct ServerInfoOutput {
+    pub name: String,
+    pub version: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
-struct ToolOutput {
-    name: String,
-    description: Option<String>,
-    parameters: Vec<ParameterOutput>,
+pub struct ToolOutput {
+    pub name: String,
+    pub description: Option<String>,
+    pub parameters: Vec<ParameterOutput>,
 }
 
 #[derive(Debug, Serialize)]
-struct ParameterOutput {
-    name: String,
-    param_type: String,
-    required: bool,
-    description: Option<String>,
-}
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    let cli = Cli::parse();
-
-    // Initialize logging
-    let log_level = if cli.debug { "debug" } else { "warn" };
-    ahma_core::utils::logging::init_logging(log_level, false)?;
-
-    // Determine connection mode
-    let result = if let Some(http_url) = &cli.http {
-        list_tools_http(http_url).await?
-    } else if let Some(mcp_config_path) = &cli.mcp_config {
-        list_tools_from_config(mcp_config_path, cli.server.as_deref()).await?
-    } else if !cli.command_args.is_empty() {
-        list_tools_stdio(&cli.command_args).await?
-    } else {
-        return Err(anyhow!(
-            "No connection method specified. Use --mcp-config, --http, or provide command after --"
-        ));
-    };
-
-    // Output result
-    match cli.format {
-        OutputFormat::Text => print_text_output(&result),
-        OutputFormat::Json => print_json_output(&result)?,
-    }
-
-    Ok(())
+pub struct ParameterOutput {
+    pub name: String,
+    pub param_type: String,
+    pub required: bool,
+    pub description: Option<String>,
 }
 
 /// Parse mcp.json and get server configuration
-fn parse_mcp_config(
+pub fn parse_mcp_config(
     path: &PathBuf,
     server_name: Option<&str>,
 ) -> Result<(String, String, Vec<String>)> {
@@ -185,7 +121,7 @@ fn parse_mcp_config(
 }
 
 /// Expand ~ to home directory
-fn expand_home(path: &str) -> String {
+pub fn expand_home(path: &str) -> String {
     if path.starts_with("~/")
         && let Some(home) = dirs::home_dir()
     {
@@ -195,7 +131,7 @@ fn expand_home(path: &str) -> String {
 }
 
 /// List tools from mcp.json configuration
-async fn list_tools_from_config(
+pub async fn list_tools_from_config(
     config_path: &PathBuf,
     server_name: Option<&str>,
 ) -> Result<ToolListResult> {
@@ -212,7 +148,7 @@ async fn list_tools_from_config(
 }
 
 /// List tools from stdio MCP server
-async fn list_tools_stdio(command_args: &[String]) -> Result<ToolListResult> {
+pub async fn list_tools_stdio(command_args: &[String]) -> Result<ToolListResult> {
     if command_args.is_empty() {
         return Err(anyhow!("No command specified for stdio connection"));
     }
@@ -228,9 +164,13 @@ async fn list_tools_stdio(command_args: &[String]) -> Result<ToolListResult> {
         for arg in &args_clone {
             cmd.arg(arg);
         }
-    }))?;
+    }))
+    .with_context(|| format!("Failed to start MCP server process: {} {:?}", command, args))?;
 
-    let client = ().serve(transport).await?;
+    let client = ()
+        .serve(transport)
+        .await
+        .with_context(|| "Failed to connect to MCP server via stdio")?;
 
     // Get server info from peer_info
     let server_info_output = client.peer_info().map(|info| ServerInfoOutput {
@@ -254,7 +194,7 @@ async fn list_tools_stdio(command_args: &[String]) -> Result<ToolListResult> {
 }
 
 /// List tools from HTTP MCP server
-async fn list_tools_http(url: &str) -> Result<ToolListResult> {
+pub async fn list_tools_http(url: &str) -> Result<ToolListResult> {
     // For now, use a simple HTTP client approach
     let client = reqwest::Client::new();
 
@@ -303,7 +243,7 @@ async fn list_tools_http(url: &str) -> Result<ToolListResult> {
     })
 }
 
-fn extract_parameters_from_json(schema: &serde_json::Value) -> Vec<ParameterOutput> {
+pub fn extract_parameters_from_json(schema: &serde_json::Value) -> Vec<ParameterOutput> {
     let mut params = Vec::new();
 
     if let Some(properties) = schema["properties"].as_object() {
@@ -377,7 +317,7 @@ fn convert_tool_to_output(tool: Tool) -> ToolOutput {
     }
 }
 
-fn print_text_output(result: &ToolListResult) {
+pub fn print_text_output(result: &ToolListResult) {
     println!("MCP Server Tools");
     println!("================");
     println!();
@@ -420,7 +360,7 @@ fn print_text_output(result: &ToolListResult) {
     }
 }
 
-fn print_json_output(result: &ToolListResult) -> Result<()> {
+pub fn print_json_output(result: &ToolListResult) -> Result<()> {
     let json = serde_json::to_string_pretty(result)?;
     println!("{}", json);
     Ok(())

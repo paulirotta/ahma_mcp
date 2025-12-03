@@ -68,13 +68,15 @@ use std::{
 use tokio::{fs, signal};
 use tracing::{info, instrument};
 
+mod list_tools;
+
 /// Ahma MCP Server: A generic, config-driven adapter for CLI tools.
 #[derive(Parser, Debug)]
 #[command(
     author,
     version,
     about,
-    long_about = "ahma_mcp runs in three modes:
+    long_about = "ahma_mcp runs in four modes:
 
 1. STDIO Mode (default): MCP server over stdio for direct integration.
    Example: ahma_mcp --mode stdio
@@ -83,9 +85,29 @@ use tracing::{info, instrument};
    Example: ahma_mcp --mode http --http-port 3000
 
 3. CLI Mode: Execute a single command and print result to stdout.
-   Example: ahma_mcp cargo_build --working-directory . -- --release"
+   Example: ahma_mcp cargo_build --working-directory . -- --release
+
+4. List Tools Mode: List all tools from an MCP server.
+   Example: ahma_mcp --list-tools -- /path/to/server
+   Example: ahma_mcp --list-tools --http http://localhost:3000"
 )]
 struct Cli {
+    /// List all tools from an MCP server and exit
+    #[arg(long)]
+    list_tools: bool,
+
+    /// Name of the server in mcp.json to connect to (for --list-tools mode)
+    #[arg(long)]
+    server: Option<String>,
+
+    /// HTTP URL of the MCP server to list tools from (for --list-tools mode)
+    #[arg(long)]
+    http: Option<String>,
+
+    /// Output format for --list-tools: text (default) or json
+    #[arg(long, default_value = "text")]
+    format: list_tools::OutputFormat,
+
     /// Server mode: 'stdio' (default) or 'http'
     #[arg(long, default_value = "stdio", value_parser = ["stdio", "http"])]
     mode: String,
@@ -164,6 +186,13 @@ async fn main() -> Result<()> {
     let log_to_file = !cli.log_to_stderr;
 
     init_logging(log_level, log_to_file)?;
+
+    // Handle --list-tools mode early (before sandbox initialization)
+    // This mode doesn't execute tools locally, so it doesn't need sandbox
+    if cli.list_tools {
+        tracing::info!("Running in list-tools mode");
+        return run_list_tools_mode(&cli).await;
+    }
 
     // Check if sandbox should be skipped (for testing)
     // Can be set via --skip-sandbox flag or AHMA_TEST_MODE environment variable
@@ -470,6 +499,43 @@ fn should_skip(set: &Option<HashSet<String>>, value: &str) -> bool {
     set.as_ref()
         .map(|items| items.contains(&value.to_ascii_lowercase()))
         .unwrap_or(false)
+}
+
+/// Run in list-tools mode: connect to an MCP server and list all available tools
+async fn run_list_tools_mode(cli: &Cli) -> Result<()> {
+    // Determine connection mode
+    let result = if let Some(http_url) = &cli.http {
+        list_tools::list_tools_http(http_url).await?
+    } else if cli.tool_name.is_some() || !cli.tool_args.is_empty() {
+        // Build command args from tool_name (first positional) and tool_args (after --)
+        let mut command_args: Vec<String> = Vec::new();
+        if let Some(ref cmd) = cli.tool_name {
+            command_args.push(cmd.clone());
+        }
+        command_args.extend(cli.tool_args.clone());
+
+        if command_args.is_empty() {
+            return Err(anyhow!(
+                "No command specified for --list-tools. Provide command after --"
+            ));
+        }
+
+        list_tools::list_tools_stdio(&command_args).await?
+    } else if cli.mcp_config.exists() {
+        list_tools::list_tools_from_config(&cli.mcp_config, cli.server.as_deref()).await?
+    } else {
+        return Err(anyhow!(
+            "No connection method specified for --list-tools. Use --http, --mcp-config with --server, or provide command after --"
+        ));
+    };
+
+    // Output result
+    match cli.format {
+        list_tools::OutputFormat::Text => list_tools::print_text_output(&result),
+        list_tools::OutputFormat::Json => list_tools::print_json_output(&result)?,
+    }
+
+    Ok(())
 }
 
 async fn run_http_bridge_mode(cli: Cli) -> Result<()> {

@@ -76,23 +76,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ahma_list_tools"
-version = "0.4.0"
-dependencies = [
- "ahma_core",
- "anyhow",
- "clap",
- "dirs",
- "reqwest",
- "rmcp",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "ahma_shell"
 version = "0.4.0"
 dependencies = [
@@ -102,7 +85,10 @@ dependencies = [
  "anyhow",
  "clap",
  "directories",
+ "dirs",
+ "reqwest",
  "rmcp",
+ "serde",
  "serde_json",
  "tempfile",
  "tokio",
