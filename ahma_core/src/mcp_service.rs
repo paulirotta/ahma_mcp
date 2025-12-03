@@ -45,6 +45,18 @@ use std::time::Duration;
 use tokio::time::Instant;
 use tracing;
 
+/// Distinguishes between top-level sequence tools and subcommand sequences.
+/// Used by the unified sequence execution logic to handle differences in
+/// tool/config lookup and message formatting.
+#[derive(Clone)]
+enum SequenceKind<'a> {
+    /// Top-level sequence: each step specifies a different tool (e.g., `ahma_quality_check`)
+    TopLevel,
+    /// Subcommand sequence: all steps use the same base tool config (e.g., `cargo qualitycheck`)
+    #[allow(dead_code)] // base_config reserved for future use
+    Subcommand { base_config: &'a ToolConfig },
+}
+
 use crate::{
     adapter::Adapter,
     callback_system::CallbackSender,
@@ -55,6 +67,9 @@ use crate::{
 };
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+
+/// Meta-parameters that control execution environment but should not be passed as CLI args
+const META_PARAMS: &[&str] = &["working_directory", "execution_mode", "timeout_seconds"];
 
 /// Represents the structure of the guidance JSON file.
 #[derive(serde::Deserialize, Debug, Clone)]
@@ -1155,10 +1170,11 @@ impl AhmaMcpService {
     ) -> Result<CallToolResult, McpError> {
         let mut final_result = CallToolResult::success(vec![]);
         let mut all_outputs = Vec::new();
+        let kind = SequenceKind::TopLevel;
 
         for (index, step) in sequence.iter().enumerate() {
-            if Self::should_skip_sequence_tool_step(&step.tool) {
-                let message = Self::format_sequence_step_skipped_message(step);
+            if Self::should_skip_step(&kind, step) {
+                let message = Self::format_step_skipped_message(&kind, step);
                 final_result.content.push(Content::text(message));
                 continue;
             }
@@ -1174,8 +1190,7 @@ impl AhmaMcpService {
             // Merge arguments, excluding meta-parameters
             let mut merged_args = Map::new();
             for (key, value) in parent_args.iter() {
-                if key != "working_directory" && key != "execution_mode" && key != "timeout_seconds"
-                {
+                if !META_PARAMS.contains(&key.as_str()) {
                     merged_args.insert(key.clone(), value.clone());
                 }
             }
@@ -1291,10 +1306,11 @@ impl AhmaMcpService {
         step_delay_ms: u64,
     ) -> Result<CallToolResult, McpError> {
         let mut final_result = CallToolResult::success(vec![]);
+        let kind = SequenceKind::TopLevel;
 
         for (index, step) in sequence.iter().enumerate() {
-            if Self::should_skip_sequence_tool_step(&step.tool) {
-                let message = Self::format_sequence_step_skipped_message(step);
+            if Self::should_skip_step(&kind, step) {
+                let message = Self::format_step_skipped_message(&kind, step);
                 final_result.content.push(Content::text(message));
                 continue;
             }
@@ -1312,9 +1328,7 @@ impl AhmaMcpService {
             // Merge arguments, excluding meta-parameters from parent
             let mut merged_args = Map::new();
             for (key, value) in parent_args.iter() {
-                // Skip meta-parameters that are handled separately
-                if key != "working_directory" && key != "execution_mode" && key != "timeout_seconds"
-                {
+                if !META_PARAMS.contains(&key.as_str()) {
                     merged_args.insert(key.clone(), value.clone());
                 }
             }
@@ -1375,7 +1389,7 @@ impl AhmaMcpService {
 
             match step_result {
                 Ok(id) => {
-                    let message = Self::format_sequence_step_message(step, &id);
+                    let message = Self::format_step_started_message(&kind, step, &id);
                     final_result.content.push(Content::text(message));
                 }
                 Err(e) => {
@@ -1410,10 +1424,13 @@ impl AhmaMcpService {
             .or(config.step_delay_ms)
             .unwrap_or(SEQUENCE_STEP_DELAY_MS);
         let mut final_result = CallToolResult::success(vec![]);
+        let kind = SequenceKind::Subcommand {
+            base_config: config,
+        };
 
         for (index, step) in sequence.iter().enumerate() {
-            if Self::should_skip_sequence_subcommand_step(&step.subcommand) {
-                let message = Self::format_subcommand_sequence_step_skipped_message(step);
+            if Self::should_skip_step(&kind, step) {
+                let message = Self::format_step_skipped_message(&kind, step);
                 final_result.content.push(Content::text(message));
                 continue;
             }
@@ -1455,7 +1472,7 @@ impl AhmaMcpService {
 
             match step_result {
                 Ok(id) => {
-                    let message = Self::format_subcommand_sequence_step_message(step, &id);
+                    let message = Self::format_step_started_message(&kind, step, &id);
                     final_result.content.push(Content::text(message));
                 }
                 Err(e) => {
@@ -1476,66 +1493,64 @@ impl AhmaMcpService {
         Ok(final_result)
     }
 
-    fn format_sequence_step_message(step: &SequenceStep, operation_id: &str) -> String {
-        let hint = crate::tool_hints::preview(operation_id, &step.tool);
+    /// Formats a message for a sequence step that was started.
+    /// Unified handler for both top-level and subcommand sequences.
+    fn format_step_started_message(
+        kind: &SequenceKind,
+        step: &SequenceStep,
+        operation_id: &str,
+    ) -> String {
+        let (step_name, prefix) = match kind {
+            SequenceKind::TopLevel => (&step.tool, "Sequence step"),
+            SequenceKind::Subcommand { .. } => (&step.subcommand, "Subcommand sequence step"),
+        };
+        let hint = crate::tool_hints::preview(operation_id, step_name);
         match step.description.as_deref() {
-            Some(description) if !description.is_empty() => format!(
-                "Sequence step '{}' ({}) started with operation ID: {}{}",
-                step.tool, description, operation_id, hint
-            ),
+            Some(desc) if !desc.is_empty() => {
+                format!(
+                    "{} '{}' ({}) started with operation ID: {}{}",
+                    prefix, step_name, desc, operation_id, hint
+                )
+            }
             _ => format!(
-                "Sequence step '{}' started with operation ID: {}{}",
-                step.tool, operation_id, hint
+                "{} '{}' started with operation ID: {}{}",
+                prefix, step_name, operation_id, hint
             ),
         }
     }
 
-    fn format_subcommand_sequence_step_message(step: &SequenceStep, operation_id: &str) -> String {
-        let hint = crate::tool_hints::preview(operation_id, &step.subcommand);
+    /// Formats a message for a sequence step that was skipped.
+    /// Unified handler for both top-level and subcommand sequences.
+    fn format_step_skipped_message(kind: &SequenceKind, step: &SequenceStep) -> String {
+        let (step_name, prefix) = match kind {
+            SequenceKind::TopLevel => (&step.tool, "Sequence step"),
+            SequenceKind::Subcommand { .. } => (&step.subcommand, "Subcommand sequence step"),
+        };
         match step.description.as_deref() {
-            Some(description) if !description.is_empty() => format!(
-                "Subcommand sequence step '{}' ({}) started with ID: {}{}",
-                step.subcommand, description, operation_id, hint
-            ),
+            Some(desc) if !desc.is_empty() => {
+                format!(
+                    "{} '{}' ({}) skipped due to environment override.",
+                    prefix, step_name, desc
+                )
+            }
             _ => format!(
-                "Subcommand sequence step '{}' started with ID: {}{}",
-                step.subcommand, operation_id, hint
+                "{} '{}' skipped due to environment override.",
+                prefix, step_name
             ),
         }
     }
 
-    fn format_sequence_step_skipped_message(step: &SequenceStep) -> String {
-        match step.description.as_deref() {
-            Some(description) if !description.is_empty() => format!(
-                "Sequence step '{}' ({}) skipped due to environment override.",
-                step.tool, description
-            ),
-            _ => format!(
-                "Sequence step '{}' skipped due to environment override.",
-                step.tool
-            ),
+    /// Checks if a sequence step should be skipped based on environment variables.
+    /// Uses AHMA_SKIP_SEQUENCE_TOOLS for top-level, AHMA_SKIP_SEQUENCE_SUBCOMMANDS for subcommand.
+    fn should_skip_step(kind: &SequenceKind, step: &SequenceStep) -> bool {
+        match kind {
+            SequenceKind::TopLevel => {
+                Self::env_list_contains("AHMA_SKIP_SEQUENCE_TOOLS", &step.tool)
+            }
+            SequenceKind::Subcommand { .. } => {
+                Self::env_list_contains("AHMA_SKIP_SEQUENCE_SUBCOMMANDS", &step.subcommand)
+            }
         }
-    }
-
-    fn format_subcommand_sequence_step_skipped_message(step: &SequenceStep) -> String {
-        match step.description.as_deref() {
-            Some(description) if !description.is_empty() => format!(
-                "Subcommand sequence step '{}' ({}) skipped due to environment override.",
-                step.subcommand, description
-            ),
-            _ => format!(
-                "Subcommand sequence step '{}' skipped due to environment override.",
-                step.subcommand
-            ),
-        }
-    }
-
-    fn should_skip_sequence_tool_step(tool: &str) -> bool {
-        Self::env_list_contains("AHMA_SKIP_SEQUENCE_TOOLS", tool)
-    }
-
-    fn should_skip_sequence_subcommand_step(subcommand: &str) -> bool {
-        Self::env_list_contains("AHMA_SKIP_SEQUENCE_SUBCOMMANDS", subcommand)
     }
 
     fn env_list_contains(env_key: &str, value: &str) -> bool {
@@ -2422,7 +2437,7 @@ mod tests {
         }
     }
 
-    // ============= format_sequence_step_message tests =============
+    // ============= Unified sequence step formatting tests =============
 
     fn make_test_sequence_step(
         tool: &str,
@@ -2438,9 +2453,10 @@ mod tests {
     }
 
     #[test]
-    fn test_format_sequence_step_message_with_description() {
+    fn test_format_step_started_message_toplevel_with_description() {
         let step = make_test_sequence_step("cargo", "build", Some("Build the project"));
-        let message = AhmaMcpService::format_sequence_step_message(&step, "op_test_001");
+        let kind = SequenceKind::TopLevel;
+        let message = AhmaMcpService::format_step_started_message(&kind, &step, "op_test_001");
 
         assert!(message.contains("cargo"));
         assert!(message.contains("Build the project"));
@@ -2449,9 +2465,10 @@ mod tests {
     }
 
     #[test]
-    fn test_format_sequence_step_message_without_description() {
+    fn test_format_step_started_message_toplevel_without_description() {
         let step = make_test_sequence_step("cargo", "build", None);
-        let message = AhmaMcpService::format_sequence_step_message(&step, "op_test_002");
+        let kind = SequenceKind::TopLevel;
+        let message = AhmaMcpService::format_step_started_message(&kind, &step, "op_test_002");
 
         assert!(message.contains("cargo"));
         assert!(message.contains("op_test_002"));
@@ -2460,21 +2477,44 @@ mod tests {
     }
 
     #[test]
-    fn test_format_sequence_step_message_empty_description() {
+    fn test_format_step_started_message_toplevel_empty_description() {
         let step = make_test_sequence_step("cargo", "build", Some(""));
-        let message = AhmaMcpService::format_sequence_step_message(&step, "op_test_003");
+        let kind = SequenceKind::TopLevel;
+        let message = AhmaMcpService::format_step_started_message(&kind, &step, "op_test_003");
 
         assert!(message.contains("cargo"));
         assert!(message.contains("op_test_003"));
     }
 
-    // ============= format_subcommand_sequence_step_message tests =============
+    // ============= Subcommand sequence step message tests =============
+
+    fn make_dummy_tool_config() -> crate::config::ToolConfig {
+        crate::config::ToolConfig {
+            name: "test_tool".to_string(),
+            description: "Test tool".to_string(),
+            command: "test".to_string(),
+            subcommand: None,
+            input_schema: None,
+            timeout_seconds: None,
+            synchronous: None,
+            hints: Default::default(),
+            enabled: true,
+            guidance_key: None,
+            sequence: None,
+            step_delay_ms: None,
+            availability_check: None,
+            install_instructions: None,
+        }
+    }
 
     #[test]
-    fn test_format_subcommand_sequence_step_message_with_description() {
+    fn test_format_step_started_message_subcommand_with_description() {
         let step = make_test_sequence_step("cargo", "clippy", Some("Run linter"));
-        let message =
-            AhmaMcpService::format_subcommand_sequence_step_message(&step, "op_sub_test_001");
+        let dummy_config = make_dummy_tool_config();
+        let kind = SequenceKind::Subcommand {
+            base_config: &dummy_config,
+        };
+        let message = AhmaMcpService::format_step_started_message(&kind, &step, "op_sub_test_001");
 
         assert!(message.contains("clippy"));
         assert!(message.contains("Run linter"));
@@ -2483,21 +2523,25 @@ mod tests {
     }
 
     #[test]
-    fn test_format_subcommand_sequence_step_message_without_description() {
+    fn test_format_step_started_message_subcommand_without_description() {
         let step = make_test_sequence_step("cargo", "fmt", None);
-        let message =
-            AhmaMcpService::format_subcommand_sequence_step_message(&step, "op_sub_test_002");
+        let dummy_config = make_dummy_tool_config();
+        let kind = SequenceKind::Subcommand {
+            base_config: &dummy_config,
+        };
+        let message = AhmaMcpService::format_step_started_message(&kind, &step, "op_sub_test_002");
 
         assert!(message.contains("fmt"));
         assert!(message.contains("op_sub_test_002"));
     }
 
-    // ============= format_sequence_step_skipped_message tests =============
+    // ============= Skipped message tests =============
 
     #[test]
-    fn test_format_sequence_step_skipped_message_with_description() {
+    fn test_format_step_skipped_message_toplevel_with_description() {
         let step = make_test_sequence_step("cargo", "audit", Some("Security audit"));
-        let message = AhmaMcpService::format_sequence_step_skipped_message(&step);
+        let kind = SequenceKind::TopLevel;
+        let message = AhmaMcpService::format_step_skipped_message(&kind, &step);
 
         assert!(message.contains("cargo"));
         assert!(message.contains("Security audit"));
@@ -2506,9 +2550,10 @@ mod tests {
     }
 
     #[test]
-    fn test_format_sequence_step_skipped_message_without_description() {
+    fn test_format_step_skipped_message_toplevel_without_description() {
         let step = make_test_sequence_step("cargo", "audit", None);
-        let message = AhmaMcpService::format_sequence_step_skipped_message(&step);
+        let kind = SequenceKind::TopLevel;
+        let message = AhmaMcpService::format_step_skipped_message(&kind, &step);
 
         assert!(message.contains("cargo"));
         assert!(message.contains("skipped"));
@@ -2516,12 +2561,14 @@ mod tests {
         assert!(!message.contains("()"));
     }
 
-    // ============= format_subcommand_sequence_step_skipped_message tests =============
-
     #[test]
-    fn test_format_subcommand_sequence_step_skipped_message_with_description() {
+    fn test_format_step_skipped_message_subcommand_with_description() {
         let step = make_test_sequence_step("cargo", "nextest_run", Some("Run tests"));
-        let message = AhmaMcpService::format_subcommand_sequence_step_skipped_message(&step);
+        let dummy_config = make_dummy_tool_config();
+        let kind = SequenceKind::Subcommand {
+            base_config: &dummy_config,
+        };
+        let message = AhmaMcpService::format_step_skipped_message(&kind, &step);
 
         assert!(message.contains("nextest_run"));
         assert!(message.contains("Run tests"));
@@ -2530,65 +2577,85 @@ mod tests {
     }
 
     #[test]
-    fn test_format_subcommand_sequence_step_skipped_message_without_description() {
+    fn test_format_step_skipped_message_subcommand_without_description() {
         let step = make_test_sequence_step("cargo", "test", None);
-        let message = AhmaMcpService::format_subcommand_sequence_step_skipped_message(&step);
+        let dummy_config = make_dummy_tool_config();
+        let kind = SequenceKind::Subcommand {
+            base_config: &dummy_config,
+        };
+        let message = AhmaMcpService::format_step_skipped_message(&kind, &step);
 
         assert!(message.contains("test"));
         assert!(message.contains("skipped"));
     }
 
-    // ============= should_skip_sequence_* tests =============
+    // ============= should_skip_step tests =============
     // Using the actual env var names since these test the real skip functions
     // Note: set_var/remove_var are unsafe in Rust 2024 edition
 
     #[test]
-    fn test_should_skip_sequence_tool_step_when_listed() {
+    fn test_should_skip_step_toplevel_when_listed() {
         // SAFETY: Test modifies env var that should_skip functions read
         unsafe {
             std::env::set_var("AHMA_SKIP_SEQUENCE_TOOLS", "cargo,git");
         }
-        assert!(AhmaMcpService::should_skip_sequence_tool_step("cargo"));
-        assert!(AhmaMcpService::should_skip_sequence_tool_step("git"));
-        assert!(!AhmaMcpService::should_skip_sequence_tool_step("npm"));
+        let kind = SequenceKind::TopLevel;
+        let step_cargo = make_test_sequence_step("cargo", "build", None);
+        let step_git = make_test_sequence_step("git", "status", None);
+        let step_npm = make_test_sequence_step("npm", "install", None);
+
+        assert!(AhmaMcpService::should_skip_step(&kind, &step_cargo));
+        assert!(AhmaMcpService::should_skip_step(&kind, &step_git));
+        assert!(!AhmaMcpService::should_skip_step(&kind, &step_npm));
         unsafe {
             std::env::remove_var("AHMA_SKIP_SEQUENCE_TOOLS");
         }
     }
 
     #[test]
-    fn test_should_skip_sequence_tool_step_when_not_set() {
+    fn test_should_skip_step_toplevel_when_not_set() {
         // SAFETY: Test modifies env var that should_skip functions read
         unsafe {
             std::env::remove_var("AHMA_SKIP_SEQUENCE_TOOLS");
         }
-        assert!(!AhmaMcpService::should_skip_sequence_tool_step("cargo"));
+        let kind = SequenceKind::TopLevel;
+        let step = make_test_sequence_step("cargo", "build", None);
+        assert!(!AhmaMcpService::should_skip_step(&kind, &step));
     }
 
     #[test]
-    fn test_should_skip_sequence_subcommand_step_when_listed() {
+    fn test_should_skip_step_subcommand_when_listed() {
         // SAFETY: Test modifies env var that should_skip functions read
         unsafe {
             std::env::set_var("AHMA_SKIP_SEQUENCE_SUBCOMMANDS", "build,test");
         }
-        assert!(AhmaMcpService::should_skip_sequence_subcommand_step(
-            "build"
-        ));
-        assert!(AhmaMcpService::should_skip_sequence_subcommand_step("test"));
-        assert!(!AhmaMcpService::should_skip_sequence_subcommand_step("run"));
+        let dummy_config = make_dummy_tool_config();
+        let kind = SequenceKind::Subcommand {
+            base_config: &dummy_config,
+        };
+        let step_build = make_test_sequence_step("cargo", "build", None);
+        let step_test = make_test_sequence_step("cargo", "test", None);
+        let step_run = make_test_sequence_step("cargo", "run", None);
+
+        assert!(AhmaMcpService::should_skip_step(&kind, &step_build));
+        assert!(AhmaMcpService::should_skip_step(&kind, &step_test));
+        assert!(!AhmaMcpService::should_skip_step(&kind, &step_run));
         unsafe {
             std::env::remove_var("AHMA_SKIP_SEQUENCE_SUBCOMMANDS");
         }
     }
 
     #[test]
-    fn test_should_skip_sequence_subcommand_step_when_not_set() {
+    fn test_should_skip_step_subcommand_when_not_set() {
         // SAFETY: Test modifies env var that should_skip functions read
         unsafe {
             std::env::remove_var("AHMA_SKIP_SEQUENCE_SUBCOMMANDS");
         }
-        assert!(!AhmaMcpService::should_skip_sequence_subcommand_step(
-            "build"
-        ));
+        let dummy_config = make_dummy_tool_config();
+        let kind = SequenceKind::Subcommand {
+            base_config: &dummy_config,
+        };
+        let step = make_test_sequence_step("cargo", "build", None);
+        assert!(!AhmaMcpService::should_skip_step(&kind, &step));
     }
 }

@@ -171,13 +171,13 @@ async fn test_concurrent_sandbox_lock_attempts() {
 
     let (result1, result2) = tokio::join!(handle1, handle2);
 
-    // Exactly one should succeed (first wins)
+    // At least one should succeed - could be both if first completes before second starts
     let success1 = result1.unwrap().is_ok();
     let success2 = result2.unwrap().is_ok();
 
     assert!(
-        (success1 && !success2) || (!success1 && success2) || (success1 && success2),
-        "At most one lock attempt should succeed (or both if first completes before second starts)"
+        success1 || success2,
+        "At least one lock attempt should succeed"
     );
 
     // Session should still exist and have a locked sandbox

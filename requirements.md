@@ -168,67 +168,50 @@ The sandbox scope defines the directory boundary within which all file system op
 - **R7.5.1**: Command-line string pattern matching for path validation is **deprecated** and **must** be removed. Kernel-level enforcement is the only acceptable mechanism.
 - **R7.5.2**: The previous `working_directory` parameter that allowed LLMs to specify arbitrary paths is **deprecated**. The sandbox scope is now set at initialization only.
 
-### R8: HTTP Bridge (Added 2025-11-23, Updated 2025-11-26)
+### R8: HTTP Bridge
 
-- **R8.1**: The system **must** support an HTTP bridge mode (`ahma_mcp --mode http`) that exposes the MCP server over HTTP/SSE.
-- **R8.2**: The bridge **must** support Server-Sent Events (SSE) at `/sse` for server-to-client notifications and events.
-- **R8.3**: The bridge **must** support JSON-RPC requests via POST at `/mcp`.
-- **R8.4**: The bridge **must** handle concurrent requests by matching JSON-RPC IDs.
-- **R8.5**: The bridge **must** be robust against underlying process crashes, automatically restarting the `ahma_mcp` stdio process if it terminates.
+The HTTP bridge exposes the MCP server over HTTP/SSE, enabling web clients and multi-session scenarios.
 
-### R8A: Streaming Response Support (Added 2025-11-26)
+#### R8.1: Core HTTP Bridge
 
-Per MCP protocol (rmcp 0.9.1+), clients can request either JSON or SSE streaming responses via the `Accept` header.
+- **R8.1.1**: The system **must** support HTTP bridge mode via `ahma_mcp --mode http`.
+- **R8.1.2**: The bridge **must** support Server-Sent Events (SSE) at `/sse` for server-to-client notifications.
+- **R8.1.3**: The bridge **must** support JSON-RPC requests via POST at `/mcp`.
+- **R8.1.4**: The bridge **must** handle concurrent requests by matching JSON-RPC IDs.
+- **R8.1.5**: The bridge **must** auto-restart the stdio subprocess if it crashes.
 
-- **R8A.1**: The server **must** inspect the `Accept` header on incoming requests to determine response format preference.
-- **R8A.2**: When `Accept: text/event-stream` is present (and `Accept: application/json` is not prioritized), the server **should** respond with SSE streaming.
-- **R8A.3**: When `Accept: application/json` is present (and prioritized over SSE), the server **should** respond with a single JSON response.
-- **R8A.4**: The POST `/mcp` endpoint **must** accept both `Accept` header configurations and respond accordingly:
-  - SSE mode: Returns `Content-Type: text/event-stream` with streaming events
-  - JSON mode: Returns `Content-Type: application/json` with single response
-- **R8A.5**: For long-running tool operations in async mode, SSE streaming **should** be used to stream progress updates and partial results back to the client.
-- **R8A.6**: The `Content-Type` response header **must** match the actual response format (`text/event-stream` or `application/json`).
-- **R8A.7**: If no `Accept` header is present, the server **should** default to JSON response format for backward compatibility.
+#### R8.2: Content Negotiation
 
-### R8B: HTTP Mode Debug Output (Added 2025-11-29, Updated 2025-11-30)
+Per MCP protocol (rmcp 0.9.1+), clients select response format via `Accept` header:
 
-When running in HTTP bridge mode (`--mode http`), terminal output echoes JSON messages for debugging purposes.
+- **R8.2.1**: `Accept: text/event-stream` → SSE streaming response.
+- **R8.2.2**: `Accept: application/json` → Single JSON response.
+- **R8.2.3**: No `Accept` header → Default to JSON for backward compatibility.
+- **R8.2.4**: `Content-Type` response header **must** match actual format.
+- **R8.2.5**: Per MCP Streamable HTTP Transport (2025-06-18), `/sse` and `/mcp` **must** both accept POST requests.
 
-- **R8B.1**: JSON output printed to stderr (STDIN/STDOUT/STDERR echo in colored mode) **must** be pretty-printed for human readability.
-- **R8B.2**: Pretty printing **must** use 2-space indentation.
-- **R8B.3**: The colored output prefixes (`→ STDIN:`, `← STDOUT:`, `⚠ STDERR:`) **must** be preserved.
-- **R8B.4**: Non-JSON output (plain text, errors) **should** be printed as-is without modification.
-- **R8B.5**: Colored debug output **must** be enabled for both development and release builds in HTTP mode. This ensures version and debug information is visible regardless of build type.
+#### R8.3: Debug Output
 
-### R8C: MCP Streamable HTTP Transport (Added 2025-11-29)
+In HTTP mode, terminal output echoes JSON for debugging:
 
-Per MCP specification (2025-06-18), the Streamable HTTP transport uses a single endpoint for both POST and GET operations.
+- **R8.3.1**: JSON output **must** be pretty-printed with 2-space indentation.
+- **R8.3.2**: Colored prefixes (`→ STDIN:`, `← STDOUT:`, `⚠ STDERR:`) **must** be preserved.
+- **R8.3.3**: Non-JSON output printed as-is without modification.
 
-- **R8C.1**: The MCP endpoint (e.g., `/sse`, `/mcp`) **must** support both HTTP POST (for sending JSON-RPC messages) and HTTP GET (for SSE streaming connections).
-- **R8C.2**: For backward compatibility with the deprecated HTTP+SSE transport (protocol version 2024-11-05), both `/mcp` and `/sse` endpoints **should** accept POST requests.
-- **R8C.3**: The `/sse` GET endpoint **must** send an initial `endpoint` event containing the URL where clients should POST JSON-RPC messages (for legacy protocol support).
-- **R8C.4**: Clients attempting to POST to `/sse` **must not** receive HTTP 405 (Method Not Allowed); they **must** receive the same handling as `/mcp` POST requests.
+#### R8.4: Session Isolation (Optional)
 
-### R8D: Session Isolation for HTTP Mode (Added 2025-12-01)
+Per MCP specification (2025-03-26), `Mcp-Session-Id` header enables per-session sandbox isolation:
 
-Per MCP specification (2025-03-26), the Streamable HTTP transport supports session management via `Mcp-Session-Id` header. Session isolation allows multiple IDE instances to share a single HTTP server with per-session sandbox scopes.
+- **R8.4.1**: `--session-isolation` flag enables multi-session mode; without it, single-subprocess behavior is maintained.
+- **R8.4.2**: In session isolation mode, each session gets a separate subprocess with its own sandbox scope.
+- **R8.4.3**: Session ID (UUID) generated on `initialize` and returned via `Mcp-Session-Id` header.
+- **R8.4.4**: Sandbox scope determined from first `roots/list` response (first root's URI).
+- **R8.4.5**: Once set, sandbox scope **cannot** be changed (security invariant).
+- **R8.4.6**: `notifications/roots/list_changed` after sandbox lock → session terminated, HTTP 403 Forbidden.
+- **R8.4.7**: HTTP DELETE with `Mcp-Session-Id` terminates session and subprocess.
+- **R8.4.8**: Session isolation is for local development only; no authentication provided.
 
-- **R8D.1**: The `--session-isolation` CLI flag **must** enable multi-session mode in HTTP bridge.
-- **R8D.2**: Without `--session-isolation`, HTTP bridge **must** maintain current single-subprocess behavior for backward compatibility.
-- **R8D.3**: In session isolation mode, the server **must** spawn a separate `ahma_mcp` subprocess per MCP session.
-- **R8D.4**: The server **must** generate a unique `Mcp-Session-Id` (UUID) on `initialize` request and return it in the HTTP response header.
-- **R8D.5**: Clients **must** include the `Mcp-Session-Id` header on all requests after `initialize` (per MCP spec).
-- **R8D.6**: Requests without `Mcp-Session-Id` (other than `initialize`) **must** return HTTP 400 Bad Request.
-- **R8D.7**: Sandbox scope for each session **must** be determined from the first `roots/list` response (first root's URI).
-- **R8D.8**: Once set, sandbox scope for a session **must not** be changeable (security invariant).
-- **R8D.9**: If client provides no roots, session **should** use the HTTP server's working directory as default sandbox scope.
-- **R8D.10**: HTTP DELETE to the MCP endpoint with `Mcp-Session-Id` **should** terminate the session and stop its subprocess.
-- **R8D.11**: Session isolation is designed for local development only; no authentication is provided.
-- **R8D.12**: If a client sends `notifications/roots/list_changed` after sandbox scope is locked, the server **must** terminate the session immediately with an error logged.
-- **R8D.13**: Session termination on roots change **must** return HTTP 403 Forbidden for subsequent requests with that session ID.
-- **R8D.14**: When sandbox scope is locked via `roots/list` response, the subprocess **must** be restarted with `--sandbox-scope <path>` argument to enforce the client's workspace root (implemented 2025-12-01).
-
-See [docs/session-isolation.md](docs/session-isolation.md) for detailed architecture and implementation guide.
+See [docs/session-isolation.md](docs/session-isolation.md) for detailed architecture.
 
 ## 3. Tool Definition (MTDF Schema)
 
@@ -284,167 +267,62 @@ All tools are defined in `.json` files in the `tools/` directory. This is the MC
 
 ### 3.3. Sequence Tools
 
-Sequence tools allow for chaining multiple commands into a single, synchronous workflow.
+Sequence tools chain multiple commands into a single workflow. See `cargo qualitycheck` subcommand in `.ahma/tools/cargo.json` for a subcommand-level example, or `.ahma/tools/ahma_quality_check.json` for a top-level sequence tool.
+
+- Sequences are defined with `"command": "sequence"` and a `sequence` array.
+- A configurable `step_delay_ms` prevents resource conflicts (e.g., `Cargo.lock` contention).
+
+### 3.4. Tool Availability and Installation Hints
+
+Tools can declare prerequisites and installation instructions:
+
+- **`availability_check`**: Command to verify tool is installed (e.g., `which cargo-nextest`).
+- **`install_instructions`**: Message shown when availability check fails.
 
 ## 4. Development Workflow
 
-To ensure code quality, stability, and adherence to these requirements, all AI maintainers **must** follow this workflow.
+### 4.1. Core Principle: Use Ahama MCP
 
-### 4.1. Pre-Commit Quality Check
+**Always use Ahama** (the MCP server already running in your IDE) instead of terminal commands:
 
-Before committing any changes, developers **must** run the comprehensive quality check. **IMPORTANT**: Ahama is already running as an MCP server in your IDE - use it directly via MCP tools, not via terminal commands.
+| Instead of...                    | Use Ahama MCP tool...                                    |
+| -------------------------------- | -------------------------------------------------------- |
+| `run_in_terminal("cargo build")` | `cargo` with `{"subcommand": "build"}`                   |
+| `run_in_terminal("any command")` | `sandboxed_shell` with `{"command": "any command"}`      |
 
-**How to run quality checks via Ahama MCP:**
+**Why**: We dogfood our own project. Using Ahama catches bugs immediately, runs faster (no GUI prompts), and enforces sandbox security.
 
-The Ahama MCP server (defined in your IDE's `mcp.json`) is already running and provides access to all cargo tools. Talk to the server to see what tools are available, then use these MCP tools directly. For example, use the `sandboxed_shell` tool to run any command in a shell with sandboxing that prevents access outside of the current working directory.
+### 4.2. Quality Checks
 
-**For the ahma_mcp project:** Use the `ahma_quality_check` tool, which includes schema generation and tool validation specific to this project.
+Before committing:
+1. `cargo fmt` — format code
+2. `cargo nextest run` — run tests  
+3. `cargo clippy --fix --allow-dirty` — fix lint warnings
+4. `cargo doc --no-deps` — verify docs build
 
-**For generic Rust projects:** Use the `cargo_qualitycheck` tool (a subcommand within cargo.json), which provides standard Rust quality checks (format, lint, test, build) without project-specific steps.
+For `ahma_mcp` project: use `ahma_quality_check` tool (includes schema generation).
 
-Only if all these steps pass should the code be considered ready for commit. This process prevents regressions and ensures that the project remains in a consistently healthy state.
+### 4.3. Server Restart
 
-- **Requirement R7.1**: The system **must** support sequence tools to execute a series of predefined steps in order.
-- **Requirement R7.2**: A sequence is defined by setting `"command": "sequence"` and providing a `sequence` array.
-- **Requirement R7.3**: A configurable delay (`step_delay_ms`) **must** be supported between steps to prevent resource conflicts (e.g., `Cargo.lock` contention).
+After code changes:
+1. Build with `cargo build --release` via Ahama
+2. The IDE's `mcp.json` watcher auto-restarts the server
+3. If needed: Cmd+Shift+P → "Developer: Reload Window"
 
-#### Example Sequence Tool
+### 4.4. CLI Testing
 
-See the `qualitycheck` subcommand in `.ahma/tools/cargo.json` for a subcommand-level sequence example, or `.ahma/tools/ahma_quality_check.json` for a top-level sequence tool example.
+For scripted or non-IDE testing:
+```bash
+ahma_mcp --tool_name cargo --tool_args '{"subcommand": "build"}'
+```
 
-## 4. Development & Testing Workflow
+**Note**: The binary rejects launch without `--mode` or `--tool_name`. Interactive terminals are blocked; stdio mode only works when spawned by an MCP client.
 
-### 4.2. Server Restart and Testing
+### 4.5. Terminal Fallback (Rare)
 
-**R8.1**: Always use **Ahama** - the MCP server already running in your IDE (VS Code/Cursor) as defined in `mcp.json`. The server is backed by the `ahma_mcp` binary and provides all tools via the MCP protocol.
-
-**R8.2**: To restart the server after code changes:
-
-- Use Ahama's `cargo` tool with `build` subcommand and `release: true` option via MCP
-- Reload the IDE window (Cmd+Shift+P → "Developer: Reload Window") to restart the MCP server
-- Alternatively, kill the running `ahma_mcp` process and the IDE will restart it automatically
-- The server reads tool configurations from `.ahma/tools/` on each startup
-
-**R8.3**: Interactive Testing Process (Ahama runtime):
-
-1. Make code or configuration changes
-2. Use Ahama's `cargo build` MCP tool (with `release: true`) to trigger server restart
-3. Test the modified tool immediately through the MCP interface
-4. If a tool does not work correctly, fix it immediately and restart
-5. Verify the fix works before proceeding
-6. If a tool does not work correctly, fix it immediately and restart
-7. Verify the fix works before proceeding
-
-**R8.4**: Follow strict TDD principles:
-
-- Write unit/integration tests for new functionality
-- Use interactive testing to diagnose and verify fixes
-- Never leave broken tools—fix and test immediately
-
-### 4.3. AI Maintainer Workflow
-
-When a new task is assigned:
-
-1. The changes required will be described in an update to this `requirements.md` file.
-2. Your primary task is to implement the changes described herein.
-3. If the task involves adding or changing tool behavior, you **must** achieve this by editing the JSON files in the `.ahma/tools/` directory.
-4. You **must not** modify the Rust source code to add tool-specific logic.
-5. Follow the existing development principles: write tests for new functionality and ensure all code is formatted and free of linter warnings.
-6. After any code changes affecting tool execution, restart the server using Ahama's `cargo build` MCP tool (with `release: true`) and test interactively.
-7. **Before stopping work**, you **must** use Ahama's `cargo_qualitycheck` sequence tool (or run individual quality checks via Ahama's `cargo` MCP tools) and verify that all checks pass. This provides a comprehensive pre-flight check. Do not mark work as complete until this quality check succeeds.
-
-### 4.4. CRITICAL: Always Use Ahama MCP Server (Already Running in Your IDE)
-
-**R8.5**: AI maintainers working in Cursor/VS Code **MUST** use the **Ahama** MCP server for ALL development operations. Ahama is **already running** in your IDE as configured in `mcp.json`. **DO NOT** use terminal commands via `run_in_terminal` tool.
-
-**Why**: We dogfood our own project to rapidly identify and fix issues during development. This ensures the project works correctly in real-world usage and catches bugs immediately.
-
-### 4.4.1 CRITICAL: Use `sandboxed_shell` MCP Tool Instead of Terminal
-
-**R8.5.1**: **NEVER** use `run_in_terminal` or similar IDE terminal tools. **ALWAYS** use the `sandboxed_shell` MCP tool instead.
-
-**Why this matters for LLM efficiency**:
-
-- Using `run_in_terminal` triggers GUI "Allow" permission dialogs that slow down development
-- Each terminal command requires user approval, breaking your workflow
-- The `sandboxed_shell` MCP tool runs immediately without GUI interruptions
-- You will complete tasks **much faster** using MCP tools
-
-**Security benefits of `sandboxed_shell`**:
-
-- All file paths are validated and constrained to the current working directory
-- Prevents accidental access to files outside the project (e.g., `/`, `~/`, `../`)
-- Commands are executed in a controlled sandbox environment
-- Path traversal attacks are blocked automatically
-
-**Examples**:
-
-- ❌ WRONG: `run_in_terminal("sed -i '' 's/old/new/g' file.rs")`
-- ✅ CORRECT: Call MCP tool `sandboxed_shell` with `{"command": "sed -i '' 's/old/new/g' file.rs"}`
-- ❌ WRONG: `run_in_terminal("grep -r 'pattern' src/")`
-- ✅ CORRECT: Call MCP tool `sandboxed_shell` with `{"command": "grep -r 'pattern' src/"}`
-- ❌ WRONG: `run_in_terminal("find . -name '*.rs' -exec wc -l {} +")`
-- ✅ CORRECT: Call MCP tool `sandboxed_shell` with `{"command": "find . -name '*.rs' -exec wc -l {} +"}`
-
-**R8.5.2**: The `sandboxed_shell` tool supports all standard shell features: pipes, redirects, variables, command substitution, etc. There is no functionality loss compared to terminal access.
-
-**How Ahama works in your IDE**:
-
-- The `ahma_mcp` binary is already running as an MCP server named "Ahama" (configured in your IDE's `mcp.json`)
-- AI assistants in Cursor/VS Code have direct access to MCP tools exposed by Ahama
-- Use these MCP tools directly via the MCP protocol (they appear as available tools)
-- Tool naming convention: `{command}_{subcommand}` (e.g., `cargo_build`, `cargo_nextest_run`, `cargo_clippy`)
-- Or use the tool name with subcommand parameter: `cargo` with `{"subcommand": "build", "release": true}`
-
-**Examples of correct usage**:
-
-- ❌ WRONG: `run_terminal_cmd("cargo nextest run")`
-- ✅ CORRECT: Call MCP tool `cargo` with `{"subcommand": "nextest", "nextest_subcommand": "run"}` via Ahama
-- ❌ WRONG: `run_terminal_cmd("cargo build --release")`
-- ✅ CORRECT: Call MCP tool `cargo` with `{"subcommand": "build", "release": true}` via Ahama
-- ❌ WRONG: `run_terminal_cmd("cargo clippy --fix")`
-- ✅ CORRECT: Call MCP tool `cargo` with `{"subcommand": "clippy", "fix": true, "allow-dirty": true}` via Ahama
-- ❌ WRONG: `run_terminal_cmd("cargo fmt")`
-- ✅ CORRECT: Call MCP tool `cargo` with `{"subcommand": "fmt"}` via Ahama
-
-**R8.6**: If an MCP tool is missing, broken, or doesn't work as expected, that is a **bug in ahma_mcp** that must be fixed. Document the issue and only work around it if absolutely necessary for urgent fixes.
-
-**R8.7**: **Terminal Fallback for Broken Ahama State** (RARE - should almost never happen):
-
-- If the Ahama MCP server is completely non-responsive or returning errors for all tools, you **MAY** temporarily use `run_terminal_cmd` as a fallback
-- When using terminal fallback, you **MUST** do all of the following:
-
-  1. Add a TODO task to fix the ahma_mcp errors that caused the fallback
-  2. After making any code changes, use terminal to run `cargo build --release`
-  3. The mcp.json watch configuration will detect the binary change and restart the server
-  4. After restart, **immediately** switch back to using Ahama MCP tools and verify they respond
-  5. If MCP tools still don't work, investigate and fix the root cause before proceeding
-
-- This fallback is **temporary and rare** - the goal is always to have Ahama working so we can dogfood it
-
-**R8.8**: **Restarting Ahama** (after code changes):
-
-- Use Ahama's `cargo` MCP tool with `{"subcommand": "build", "release": true}`
-- The mcp.json configuration watches the binary and automatically restarts the server
-- Verify restart by calling a simple MCP tool like `status` or `cargo` with `{"subcommand": "check"}` via Ahama
-- If server doesn't restart automatically, reload the IDE window (Cmd+Shift+P → "Developer: Reload Window")
-
-**R8.9**: For CLI testing outside the IDE (e.g., in shell scripts), use: `ahma_mcp --tool_name <tool> --tool_args <args>` to invoke tools directly.
-
-**R8.10**: Launching the binary without an explicit `--mode` or `--tool_name` is intentionally rejected, and **interactive terminals are blocked even when `--mode stdio` is provided**. The stdio server only runs when stdin is **not** a TTY (i.e., when a real MCP client spawns the process and attaches pipes). Local testing should therefore happen through the Ahama MCP server already running in your IDE. To execute a single tool outside the IDE, run `ahma_mcp --tool_name <tool> ...`.
-
-### R11: HTTP MCP Client Token Storage (Added 2025-11-25)
-
-- **R11.1**: The HTTP MCP client stores OAuth tokens in the OS temporary directory by default but **must** respect the `AHMA_HTTP_CLIENT_TOKEN_PATH` environment variable when it is set. This keeps automated tests and multi-user environments from trampling each other's credentials.
-- **R11.2**: Tests that override the token location **must** direct it to a temporary directory (e.g., via the `tempfile` crate) to ensure automatic cleanup and avoid polluting the repository.
-
-### 4.5. Copilot CLI Verification
-
-- **R9.1**: For command-line verification outside the IDE, you can invoke `ahma_mcp` directly using the `--tool_name` and `--tool_args` parameters. This keeps validation steps reproducible and scriptable.
-- **R9.2**: Always pass the MCP tool identifier to `--tool_name`, and supply the exact arguments that would normally be provided through the MCP interface via `--tool_args`.
-- **R9.3**: Use the double-dash (`--`) separator within `--tool_args` to forward raw positional arguments exactly as the target CLI expects when necessary.
-- **Example – rebuild after code changes**: `ahma_mcp --tool_name cargo --tool_args '{"subcommand": "build", "release": true}'`
-- **Example – run quality checks**: `ahma_mcp --tool_name cargo_qualitycheck`
+Only use terminal directly when:
+1. **Coverage**: `cargo llvm-cov` — instrumentation incompatible with sandboxing
+2. **Ahama completely broken** — fix immediately after recovery
 
 ## 5. Implementation Constraints and Architecture Decisions
 
@@ -631,6 +509,23 @@ This section documents critical implementation details discovered through analys
 - **R16.5**: The `ahma-inspector.sh` script **must** use the `--log-to-stderr` flag by default so developers can see errors immediately in the terminal when testing with MCP Inspector.
 - **R16.6**: The logging level **must** be controlled by the `--debug` flag (sets level to "debug") or default to "info" level.
 
+### R17: MCP Callback Notifications (Added 2025-12-03)
+
+Async operations push completion notifications to AI clients via MCP protocol callbacks:
+
+- **R17.1**: When an async operation completes, the server **must** send an MCP progress notification containing the operation result.
+- **R17.2**: The callback **must** include: operation ID, success/error status, and output content.
+- **R17.3**: The callback system is implemented in `mcp_callback.rs` and integrates with `operation_monitor.rs`.
+- **R17.4**: Callbacks use the MCP `notifications/progress` method per protocol specification.
+
+### R18: List-Tools Mode (Added 2025-12-03)
+
+For debugging and tool inspection, a list-tools mode is available:
+
+- **R18.1**: `ahma_mcp --mode list-tools` **must** output all available tools as JSON to stdout.
+- **R18.2**: The output **must** include tool name, description, and parameters for each tool.
+- **R18.3**: The `ahma_list_tools` binary provides the same functionality as a standalone utility.
+
 ## 6. Known Limitations and Future Work
 
 ### 6.1. Current Limitations
@@ -652,232 +547,31 @@ See `ARCHITECTURE_UPGRADE_PLAN.md` for detailed roadmap including:
 
 ## 7. Version History
 
+- **v0.7.0** (2025-12-03):
+  - Consolidated R8 HTTP sections (R8, R8A-R8D → unified R8 with subsections)
+  - Unified sequence tool handlers (`SequenceKind` enum, common helper functions)
+  - Trimmed Section 4 Development Workflow
+  - Added R3.4.1: Tool availability checks and install instructions
+  - Added R17: MCP callback notifications for async operations
+  - Added R18: List-tools mode for tool inspection
 - **v0.6.3** (2025-11-26):
-  - Added `--log-to-stderr` flag to enable terminal error output with colored ANSI output on Mac/Linux (R16)
-  - Updated `ahma-inspector.sh` script to use `--log-to-stderr` by default for better debugging experience
-  - Logging now supports both file-based (default) and stderr-based (opt-in) output modes
+  - Added `--log-to-stderr` flag for colored terminal output (R16)
+  - Updated `ahma-inspector.sh` to use `--log-to-stderr` by default
 - **v0.6.2** (2025-11-26):
-  - Added streaming response support (R8A) for JSON/SSE content negotiation per MCP protocol (rmcp 0.9.1)
-  - Clients can now request either JSON or SSE streaming responses via `Accept` header
-  - HTTP bridge POST `/mcp` endpoint supports both response formats
-- **v0.5.0** (2025-11-18):
-  - Added requirement for HTTP MCP Client with OAuth support
-  - Implemented `ahma_http_mcp_client` crate with full OAuth 2.0 + PKCE flow
-  - Implemented `HttpMcpTransport` using rmcp 0.9.0 `Transport` trait
-  - Updated to rmcp 0.9.0 (breaking changes: added `meta` field to `Tool` struct)
-  - Updated to oauth2 5.0.0 (breaking changes: new client builder API)
-  - Added `mcp.json` configuration support for HTTP-based MCP servers
-  - HTTP MCP client integration pending rmcp 0.9.0 client API examples
-- **v0.4.0** (2025-11-16):
-  - Fixed sequence tool architecture (top-level vs subcommand-level)
-  - Fixed meta-parameter handling in command construction
-  - Updated tests to reflect correct sequence structure
-  - Added comprehensive architecture documentation
-- **v0.3.x**: Initial async/sync hybrid implementation
-- **v0.2.x**: Basic MCP server functionality
-- **v0.1.x**: Prototype
+  - Added streaming response support for JSON/SSE content negotiation (R8.2)
 
-### 6.3. Cross-Platform Sandbox Testing (Added 2025-06-15)
+### 6.3. Test Coverage Notes
 
-Platform-specific sandbox tests are organized in separate files with file-level conditional compilation:
+Test coverage is tracked in the following areas:
+- Cross-platform sandbox tests (macOS: Seatbelt, Linux: Landlock)
+- Tool JSON configuration tests (`ahma_core/tests/tool_suite/`)
+- SSE integration tests (`ahma_http_bridge/tests/sse_tool_integration_test.rs`)
+- Session stress tests (`ahma_http_bridge/tests/session_stress_test.rs`)
+- MCP service handler tests (`ahma_core/tests/mcp_service/`)
 
-**macOS Sandbox Tests** (`ahma_core/tests/macos_sandbox_integration_test.rs`):
-
-- Gated with `#![cfg(target_os = "macos")]` at file level
-- Tests Seatbelt profile execution through sandbox-exec
-- Verifies: echo, pwd, ls, file writes in scope, writes blocked outside scope, complex shell commands, bash support, no SIGABRT
-- Automatically skipped when running inside existing sandbox (nested sandbox-exec not allowed)
-
-**Linux Sandbox Tests** (`ahma_core/tests/linux_sandbox_integration_test.rs`):
-
-- Gated with `#![cfg(target_os = "linux")]` at file level
-- Tests Landlock kernel-level file system sandboxing
-- Verifies: echo, pwd, ls, file writes in scope, writes blocked outside scope, complex shell commands, bash support, read restrictions
-- Automatically skipped on kernels older than 5.13 or without Landlock LSM enabled
-- Uses `pre_exec` hook to apply Landlock rules before command execution
-
-**Why File-Level Gating**:
-
-- File-level `#![cfg(target_os = "...")]` ensures entire test module is excluded from compilation on other platforms
-- Avoids unused import warnings in CI (e.g., Linux CI won't compile macOS-specific imports)
-- Makes test organization clear: one file per platform's sandbox implementation
-- Ensures comprehensive cross-platform testing rather than hiding potential issues with inline cfg gates
-
-### 6.4. Test Coverage for Tool JSON Configurations (Added 2025-11-29)
-
-To ensure regressions in `.ahma/tools/*.json` configurations are caught early, comprehensive test coverage has been added:
-
-**Comprehensive Tool JSON Coverage Tests** (`ahma_core/tests/tool_suite/comprehensive_tool_json_coverage_test.rs`):
-
-- Validates all 8 tool JSON files are present and loadable
-- Tests that all tools have required fields (name, description, command)
-- Verifies cargo tool has all expected subcommands (build, run, add, upgrade, update, check, test, fmt, doc, clippy, qualitycheck, audit, nextest_run)
-- Verifies file_tools has all expected subcommands (ls, mv, cp, rm, grep, sed, touch, pwd, cd, cat, find, head, tail, diff)
-- Verifies git tool has all expected subcommands (status, add, commit, push, log)
-- Verifies gh tool has expected PR, cache, run, and workflow subcommands
-- Tests option configurations (e.g., cargo clippy has fix, allow-dirty, tests options)
-- Tests sync/async configuration (e.g., file_tools subcommands are synchronous, gh is fully synchronous)
-- Tests sequence tool configuration (ahma_quality_check includes schema generation and validation steps)
-- Tests python tool subcommands (version, script, code, module) with proper sync/async settings
-
-**Tool Execution Integration Tests** (`ahma_core/tests/tool_suite/tool_execution_integration_test.rs`):
-
-- Actually invokes tools via MCP call_tool interface to verify end-to-end functionality
-- Tests file_tools: ls, pwd, cat, grep, head, tail operations
-- Tests cargo check dry run
-- Tests sandboxed_shell echo and pipe execution
-- Tests option aliases work correctly (e.g., `long: true` maps to `-l` flag)
-- Tests path validation and formatting
-
-**Known Limitations**:
-
-- Git command tests are disabled: macOS sandbox blocks `/dev/null` access which git requires
-
-### 6.5. Test Performance Optimization (Added 2025-11-30)
-
-**Problem**: Full test suite takes 5+ minutes and often times out.
-
-**Root Causes Identified**:
-
-- ~911 async tests across 79 test files (18,226 lines)
-- Tests using `new_client()` were spawning `cargo run` subprocess per test (~2-3s overhead each)
-- Many tests include 100-500ms sleeps for timing-dependent async behavior verification
-- Test isolation spawns ahma_mcp server per test, not shared fixtures
-
-**Optimization Implemented** (`ahma_core/src/test_utils.rs`):
-
-- Pre-built binary detection: tests now use `target/debug/ahma_mcp` directly instead of `cargo run`
-- Binary path cached via `OnceLock` for performance
-- Supports `AHMA_TEST_BINARY` env var for CI/custom builds
-- Falls back to `cargo run` only if no pre-built binary exists (with warning)
-
-**Before/After** (verified 2025-11-30):
-
-- Individual test file: **0.3s** (was ~2-3s with `cargo run`)
-- Full suite: Still ~5 minutes due to inherent sleeps and 900+ tests
-
-**Priority Improvements** (TODO):
-
-1. ✅ Pre-built binary for tests - DONE
-2. Reduce or eliminate test sleeps where possible (use event-driven waiting)
-3. Shared server fixtures (one server for multiple tests)
-4. Increase `mcp_service.rs` coverage (currently 19.37%)
-5. Cover `mcp_callback.rs` (currently 0%)
-6. Consolidate duplicate test patterns
-
-**Test Performance Commands**:
-
-```bash
-# Run tests with pre-built binary (recommended)
-cargo build && cargo nextest run
-
-# Run single test file quickly
-cargo nextest run --test mcp_integration_tests
-
-# Run with timeout increased (if needed)
-cargo nextest run --test-timeout 600s
-```
-
-### 6.6. SSE Integration Tests for All Tools (Added 2025-12-01)
-
-To verify all tool configurations work correctly via the HTTP SSE bridge and stress-test concurrent operation:
-
-**SSE Tool Integration Tests** (`ahma_http_bridge/tests/sse_tool_integration_test.rs`):
-
-- Connects to running SSE server via HTTP POST to `/mcp` endpoint
-- Tests all tools defined in `.ahma/tools/*.json`:
-  - file_tools: pwd, ls, cat, head, tail, grep, find, touch, rm, cp, mv, sed, diff
-  - sandboxed_shell: echo, pipes, variable substitution
-  - python: version, code execution
-  - cargo: check (read-only)
-  - git: status, log
-  - gh: workflow_list
-- Concurrent stress tests:
-  - 10 concurrent tool calls with mixed operations
-  - 50 high-volume concurrent echo requests
-  - Measures requests/second and success rate (target: 90%+)
-- Error handling tests:
-  - Invalid tool returns proper error
-  - Missing required arguments handled gracefully
-
-**Running SSE Integration Tests**:
-
-```bash
-# Start HTTP bridge server
-./scripts/ahma-http-server.sh &
-
-# Run tests against running server
-export AHMA_TEST_SSE_URL=http://localhost:3000
-cargo nextest run --test sse_tool_integration_test
-
-# Or let tests skip if server not available
-cargo nextest run --test sse_tool_integration_test
-```
-
-### 6.7. Session Stress Tests (Added 2025-12-01)
-
-To improve coverage of `ahma_http_bridge/src/session.rs` (was 46.84%):
-
-**Session Stress Tests** (`ahma_http_bridge/tests/session_stress_test.rs`):
-
-- Concurrent session creation: 50 simultaneous session creations
-- Creation/termination races: 20 iterations of create+terminate under race conditions
-- Concurrent sandbox lock attempts: Race two lock attempts on same session
-- Many independent sandbox scopes: 20 sessions with unique scopes
-- All termination reasons: ClientRequested, RootsChangeRejected, Timeout, ProcessCrashed
-- Rapid lifecycle: 100 create-lock-terminate cycles
-- URI parsing edge cases: Standard paths, encoded spaces, root path
-- Edge cases: Non-existent sessions, duplicate termination, empty roots
-
-### 6.8. MCP Service call_tool Handler Tests (Added 2025-12-02)
-
-To improve coverage of `ahma_core/src/mcp_service.rs` (was 36.71%):
-
-**call_tool_handlers.rs** (`ahma_core/tests/mcp_service/call_tool_handlers.rs`):
-
-- **Status tool tests**: Tool name filter, operation_id filter, combined filters, empty filter
-- **Await tool tests**: Specific operation_id, tool filters, no pending operations, multiple filters
-- **Cancel tool tests**: Missing operation_id error, non-existent operation, with reason, invalid type error
-- **Tool resolution tests**: Non-existent tool, disabled tool, invalid subcommand, disabled subcommand
-- **Execution mode tests**: Synchronous mode, async mode (default), explicit execution_mode argument
-- **Subcommand tests**: Nested subcommand execution, working directory parameter
-- **Parameter tests**: Default working directory, timeout parameter
-
-**Bug Fixes Applied**:
-
-- Fixed `OptionConfig` → `CommandOption` in coverage.rs
-- Fixed missing `.await` on `load_tool_configs()` calls in basic_coverage.rs, coverage_expansion.rs, integration.rs
-- Added mcp_service_tests.rs entry point for mcp_service/ test directory
-
-### 6.9. MCP Service Helper Function Tests (Added 2025-12-02)
-
-Added 24 unit tests for previously untested pure helper functions in `mcp_service.rs`:
-
-**env_list_contains tests** (11 tests):
-- Single match, multiple items (first/middle/last match), no match
-- Case insensitivity (upper/lower), with spaces, empty env, missing env, empty entries filtering
-
-**format_sequence_step_message tests** (3 tests):
-- With description, without description, empty description
-
-**format_subcommand_sequence_step_message tests** (2 tests):
-- With description, without description
-
-**format_sequence_step_skipped_message tests** (2 tests):
-- With description, without description
-
-**format_subcommand_sequence_step_skipped_message tests** (2 tests):
-- With description, without description
-
-**should_skip_sequence_tool_step tests** (2 tests):
-- When env var is set and matches, when env var is not set
-
-**should_skip_sequence_subcommand_step tests** (2 tests):
-- When env var is set and matches, when env var is not set
-
-**Test Isolation**: All env var tests use unique prefixes (e.g., `AHMA_TEST_ENVLIST_001`) and wrap `set_var`/`remove_var` in `unsafe` blocks per Rust 2024 edition requirements.
+For detailed test documentation, see the test files directly.
 
 ---
 
-**Last Updated**: 2025-12-02 (Added mcp_service helper function tests)
+**Last Updated**: 2025-12-03 (Consolidated R8 sections, unified sequence handlers, trimmed workflow)
 **Status**: Living Document - Update with every architectural decision or significant change
