@@ -2239,4 +2239,356 @@ mod tests {
         let effective = subcommand_sync.or(tool_sync);
         assert_eq!(effective, Some(false));
     }
+
+    // ============= env_list_contains tests =============
+    // Using unique env var prefixes to avoid parallel test interference
+    // Note: set_var/remove_var are unsafe in Rust 2024 edition
+
+    #[test]
+    fn test_env_list_contains_single_match() {
+        // SAFETY: Test uses unique env var name to avoid parallel interference
+        unsafe {
+            std::env::set_var("AHMA_TEST_ENVLIST_001", "cargo");
+        }
+        assert!(AhmaMcpService::env_list_contains(
+            "AHMA_TEST_ENVLIST_001",
+            "cargo"
+        ));
+        unsafe {
+            std::env::remove_var("AHMA_TEST_ENVLIST_001");
+        }
+    }
+
+    #[test]
+    fn test_env_list_contains_multiple_items_first_match() {
+        // SAFETY: Test uses unique env var name to avoid parallel interference
+        unsafe {
+            std::env::set_var("AHMA_TEST_ENVLIST_002", "cargo,git,npm");
+        }
+        assert!(AhmaMcpService::env_list_contains(
+            "AHMA_TEST_ENVLIST_002",
+            "cargo"
+        ));
+        unsafe {
+            std::env::remove_var("AHMA_TEST_ENVLIST_002");
+        }
+    }
+
+    #[test]
+    fn test_env_list_contains_multiple_items_middle_match() {
+        // SAFETY: Test uses unique env var name to avoid parallel interference
+        unsafe {
+            std::env::set_var("AHMA_TEST_ENVLIST_003", "cargo,git,npm");
+        }
+        assert!(AhmaMcpService::env_list_contains(
+            "AHMA_TEST_ENVLIST_003",
+            "git"
+        ));
+        unsafe {
+            std::env::remove_var("AHMA_TEST_ENVLIST_003");
+        }
+    }
+
+    #[test]
+    fn test_env_list_contains_multiple_items_last_match() {
+        // SAFETY: Test uses unique env var name to avoid parallel interference
+        unsafe {
+            std::env::set_var("AHMA_TEST_ENVLIST_004", "cargo,git,npm");
+        }
+        assert!(AhmaMcpService::env_list_contains(
+            "AHMA_TEST_ENVLIST_004",
+            "npm"
+        ));
+        unsafe {
+            std::env::remove_var("AHMA_TEST_ENVLIST_004");
+        }
+    }
+
+    #[test]
+    fn test_env_list_contains_no_match() {
+        // SAFETY: Test uses unique env var name to avoid parallel interference
+        unsafe {
+            std::env::set_var("AHMA_TEST_ENVLIST_005", "cargo,git,npm");
+        }
+        assert!(!AhmaMcpService::env_list_contains(
+            "AHMA_TEST_ENVLIST_005",
+            "python"
+        ));
+        unsafe {
+            std::env::remove_var("AHMA_TEST_ENVLIST_005");
+        }
+    }
+
+    #[test]
+    fn test_env_list_contains_case_insensitive_lower() {
+        // SAFETY: Test uses unique env var name to avoid parallel interference
+        unsafe {
+            std::env::set_var("AHMA_TEST_ENVLIST_006", "Cargo,GIT,NPM");
+        }
+        assert!(AhmaMcpService::env_list_contains(
+            "AHMA_TEST_ENVLIST_006",
+            "cargo"
+        ));
+        unsafe {
+            std::env::remove_var("AHMA_TEST_ENVLIST_006");
+        }
+    }
+
+    #[test]
+    fn test_env_list_contains_case_insensitive_upper() {
+        // SAFETY: Test uses unique env var name to avoid parallel interference
+        unsafe {
+            std::env::set_var("AHMA_TEST_ENVLIST_007", "cargo,git,npm");
+        }
+        assert!(AhmaMcpService::env_list_contains(
+            "AHMA_TEST_ENVLIST_007",
+            "CARGO"
+        ));
+        unsafe {
+            std::env::remove_var("AHMA_TEST_ENVLIST_007");
+        }
+    }
+
+    #[test]
+    fn test_env_list_contains_with_spaces() {
+        // SAFETY: Test uses unique env var name to avoid parallel interference
+        unsafe {
+            std::env::set_var("AHMA_TEST_ENVLIST_008", "cargo , git , npm");
+        }
+        assert!(AhmaMcpService::env_list_contains(
+            "AHMA_TEST_ENVLIST_008",
+            "cargo"
+        ));
+        assert!(AhmaMcpService::env_list_contains(
+            "AHMA_TEST_ENVLIST_008",
+            "git"
+        ));
+        assert!(AhmaMcpService::env_list_contains(
+            "AHMA_TEST_ENVLIST_008",
+            "npm"
+        ));
+        unsafe {
+            std::env::remove_var("AHMA_TEST_ENVLIST_008");
+        }
+    }
+
+    #[test]
+    fn test_env_list_contains_empty_env() {
+        // SAFETY: Test uses unique env var name to avoid parallel interference
+        unsafe {
+            std::env::set_var("AHMA_TEST_ENVLIST_009", "");
+        }
+        assert!(!AhmaMcpService::env_list_contains(
+            "AHMA_TEST_ENVLIST_009",
+            "cargo"
+        ));
+        unsafe {
+            std::env::remove_var("AHMA_TEST_ENVLIST_009");
+        }
+    }
+
+    #[test]
+    fn test_env_list_contains_missing_env() {
+        // SAFETY: Test uses unique env var name to avoid parallel interference
+        unsafe {
+            std::env::remove_var("AHMA_TEST_ENVLIST_MISSING_010");
+        }
+        assert!(!AhmaMcpService::env_list_contains(
+            "AHMA_TEST_ENVLIST_MISSING_010",
+            "cargo"
+        ));
+    }
+
+    #[test]
+    fn test_env_list_contains_filters_empty_entries() {
+        // SAFETY: Test uses unique env var name to avoid parallel interference
+        unsafe {
+            std::env::set_var("AHMA_TEST_ENVLIST_011", "cargo,,git,,npm");
+        }
+        assert!(AhmaMcpService::env_list_contains(
+            "AHMA_TEST_ENVLIST_011",
+            "cargo"
+        ));
+        assert!(AhmaMcpService::env_list_contains(
+            "AHMA_TEST_ENVLIST_011",
+            "git"
+        ));
+        assert!(!AhmaMcpService::env_list_contains(
+            "AHMA_TEST_ENVLIST_011",
+            ""
+        ));
+        unsafe {
+            std::env::remove_var("AHMA_TEST_ENVLIST_011");
+        }
+    }
+
+    // ============= format_sequence_step_message tests =============
+
+    fn make_test_sequence_step(
+        tool: &str,
+        subcommand: &str,
+        description: Option<&str>,
+    ) -> crate::config::SequenceStep {
+        crate::config::SequenceStep {
+            tool: tool.to_string(),
+            subcommand: subcommand.to_string(),
+            description: description.map(|s| s.to_string()),
+            args: Default::default(),
+        }
+    }
+
+    #[test]
+    fn test_format_sequence_step_message_with_description() {
+        let step = make_test_sequence_step("cargo", "build", Some("Build the project"));
+        let message = AhmaMcpService::format_sequence_step_message(&step, "op_test_001");
+
+        assert!(message.contains("cargo"));
+        assert!(message.contains("Build the project"));
+        assert!(message.contains("op_test_001"));
+        assert!(message.contains("Sequence step"));
+    }
+
+    #[test]
+    fn test_format_sequence_step_message_without_description() {
+        let step = make_test_sequence_step("cargo", "build", None);
+        let message = AhmaMcpService::format_sequence_step_message(&step, "op_test_002");
+
+        assert!(message.contains("cargo"));
+        assert!(message.contains("op_test_002"));
+        // Should not have empty parentheses
+        assert!(!message.contains("()"));
+    }
+
+    #[test]
+    fn test_format_sequence_step_message_empty_description() {
+        let step = make_test_sequence_step("cargo", "build", Some(""));
+        let message = AhmaMcpService::format_sequence_step_message(&step, "op_test_003");
+
+        assert!(message.contains("cargo"));
+        assert!(message.contains("op_test_003"));
+    }
+
+    // ============= format_subcommand_sequence_step_message tests =============
+
+    #[test]
+    fn test_format_subcommand_sequence_step_message_with_description() {
+        let step = make_test_sequence_step("cargo", "clippy", Some("Run linter"));
+        let message =
+            AhmaMcpService::format_subcommand_sequence_step_message(&step, "op_sub_test_001");
+
+        assert!(message.contains("clippy"));
+        assert!(message.contains("Run linter"));
+        assert!(message.contains("op_sub_test_001"));
+        assert!(message.contains("Subcommand sequence step"));
+    }
+
+    #[test]
+    fn test_format_subcommand_sequence_step_message_without_description() {
+        let step = make_test_sequence_step("cargo", "fmt", None);
+        let message =
+            AhmaMcpService::format_subcommand_sequence_step_message(&step, "op_sub_test_002");
+
+        assert!(message.contains("fmt"));
+        assert!(message.contains("op_sub_test_002"));
+    }
+
+    // ============= format_sequence_step_skipped_message tests =============
+
+    #[test]
+    fn test_format_sequence_step_skipped_message_with_description() {
+        let step = make_test_sequence_step("cargo", "audit", Some("Security audit"));
+        let message = AhmaMcpService::format_sequence_step_skipped_message(&step);
+
+        assert!(message.contains("cargo"));
+        assert!(message.contains("Security audit"));
+        assert!(message.contains("skipped"));
+        assert!(message.contains("environment override"));
+    }
+
+    #[test]
+    fn test_format_sequence_step_skipped_message_without_description() {
+        let step = make_test_sequence_step("cargo", "audit", None);
+        let message = AhmaMcpService::format_sequence_step_skipped_message(&step);
+
+        assert!(message.contains("cargo"));
+        assert!(message.contains("skipped"));
+        // Should not have empty parentheses
+        assert!(!message.contains("()"));
+    }
+
+    // ============= format_subcommand_sequence_step_skipped_message tests =============
+
+    #[test]
+    fn test_format_subcommand_sequence_step_skipped_message_with_description() {
+        let step = make_test_sequence_step("cargo", "nextest_run", Some("Run tests"));
+        let message = AhmaMcpService::format_subcommand_sequence_step_skipped_message(&step);
+
+        assert!(message.contains("nextest_run"));
+        assert!(message.contains("Run tests"));
+        assert!(message.contains("skipped"));
+        assert!(message.contains("Subcommand sequence step"));
+    }
+
+    #[test]
+    fn test_format_subcommand_sequence_step_skipped_message_without_description() {
+        let step = make_test_sequence_step("cargo", "test", None);
+        let message = AhmaMcpService::format_subcommand_sequence_step_skipped_message(&step);
+
+        assert!(message.contains("test"));
+        assert!(message.contains("skipped"));
+    }
+
+    // ============= should_skip_sequence_* tests =============
+    // Using the actual env var names since these test the real skip functions
+    // Note: set_var/remove_var are unsafe in Rust 2024 edition
+
+    #[test]
+    fn test_should_skip_sequence_tool_step_when_listed() {
+        // SAFETY: Test modifies env var that should_skip functions read
+        unsafe {
+            std::env::set_var("AHMA_SKIP_SEQUENCE_TOOLS", "cargo,git");
+        }
+        assert!(AhmaMcpService::should_skip_sequence_tool_step("cargo"));
+        assert!(AhmaMcpService::should_skip_sequence_tool_step("git"));
+        assert!(!AhmaMcpService::should_skip_sequence_tool_step("npm"));
+        unsafe {
+            std::env::remove_var("AHMA_SKIP_SEQUENCE_TOOLS");
+        }
+    }
+
+    #[test]
+    fn test_should_skip_sequence_tool_step_when_not_set() {
+        // SAFETY: Test modifies env var that should_skip functions read
+        unsafe {
+            std::env::remove_var("AHMA_SKIP_SEQUENCE_TOOLS");
+        }
+        assert!(!AhmaMcpService::should_skip_sequence_tool_step("cargo"));
+    }
+
+    #[test]
+    fn test_should_skip_sequence_subcommand_step_when_listed() {
+        // SAFETY: Test modifies env var that should_skip functions read
+        unsafe {
+            std::env::set_var("AHMA_SKIP_SEQUENCE_SUBCOMMANDS", "build,test");
+        }
+        assert!(AhmaMcpService::should_skip_sequence_subcommand_step(
+            "build"
+        ));
+        assert!(AhmaMcpService::should_skip_sequence_subcommand_step("test"));
+        assert!(!AhmaMcpService::should_skip_sequence_subcommand_step("run"));
+        unsafe {
+            std::env::remove_var("AHMA_SKIP_SEQUENCE_SUBCOMMANDS");
+        }
+    }
+
+    #[test]
+    fn test_should_skip_sequence_subcommand_step_when_not_set() {
+        // SAFETY: Test modifies env var that should_skip functions read
+        unsafe {
+            std::env::remove_var("AHMA_SKIP_SEQUENCE_SUBCOMMANDS");
+        }
+        assert!(!AhmaMcpService::should_skip_sequence_subcommand_step(
+            "build"
+        ));
+    }
 }

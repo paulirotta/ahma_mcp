@@ -849,7 +849,35 @@ To improve coverage of `ahma_core/src/mcp_service.rs` (was 36.71%):
 - Fixed missing `.await` on `load_tool_configs()` calls in basic_coverage.rs, coverage_expansion.rs, integration.rs
 - Added mcp_service_tests.rs entry point for mcp_service/ test directory
 
+### 6.9. MCP Service Helper Function Tests (Added 2025-12-02)
+
+Added 24 unit tests for previously untested pure helper functions in `mcp_service.rs`:
+
+**env_list_contains tests** (11 tests):
+- Single match, multiple items (first/middle/last match), no match
+- Case insensitivity (upper/lower), with spaces, empty env, missing env, empty entries filtering
+
+**format_sequence_step_message tests** (3 tests):
+- With description, without description, empty description
+
+**format_subcommand_sequence_step_message tests** (2 tests):
+- With description, without description
+
+**format_sequence_step_skipped_message tests** (2 tests):
+- With description, without description
+
+**format_subcommand_sequence_step_skipped_message tests** (2 tests):
+- With description, without description
+
+**should_skip_sequence_tool_step tests** (2 tests):
+- When env var is set and matches, when env var is not set
+
+**should_skip_sequence_subcommand_step tests** (2 tests):
+- When env var is set and matches, when env var is not set
+
+**Test Isolation**: All env var tests use unique prefixes (e.g., `AHMA_TEST_ENVLIST_001`) and wrap `set_var`/`remove_var` in `unsafe` blocks per Rust 2024 edition requirements.
+
 ---
 
-**Last Updated**: 2025-12-02 (Added mcp_service call_tool handler tests)
+**Last Updated**: 2025-12-02 (Added mcp_service helper function tests)
 **Status**: Living Document - Update with every architectural decision or significant change
