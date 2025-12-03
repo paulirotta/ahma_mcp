@@ -15,6 +15,34 @@ The Ahma HTTP Bridge provides an HTTP server that proxies JSON-RPC requests to a
    - `POST /mcp` - JSON-RPC request/response endpoint
    - `GET /sse` - Server-Sent Events for real-time notifications
 4. **Process Manager** - Manages MCP server subprocess lifecycle
+5. **SessionManager** - Per-session subprocess isolation (optional)
+
+## Session Isolation
+
+When running with `--session-isolation` flag, the HTTP bridge supports per-session sandbox isolation:
+
+### How It Works
+
+1. **Client sends `initialize`** → Server generates session ID (UUID), spawns subprocess
+2. **Server returns `Mcp-Session-Id` header** → Client includes on all subsequent requests
+3. **Subprocess sends `roots/list` request** → Bridge locks sandbox scope from first root's URI
+4. **Sandbox scope immutable** → Cannot change after first lock (security invariant)
+
+### Key Behaviors
+
+- Without `--session-isolation`: Single subprocess for all clients (default)
+- With `--session-isolation`: Separate subprocess per MCP session
+- Sandbox scope determined from first `roots/list` response
+- `notifications/roots/list_changed` after lock → Session terminated (HTTP 403)
+- HTTP DELETE with session ID → Clean session termination
+
+### Security Model
+
+- **Local development only** - No authentication
+- **First-root wins** - Sandbox scope set once from first workspace root
+- **Immutable after lock** - Prevents sandbox escape via workspace changes
+
+See [docs/session-isolation.md](../docs/session-isolation.md) for detailed architecture.
 
 ## Testing Standards
 
