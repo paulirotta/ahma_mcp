@@ -87,9 +87,8 @@ Here's an example of Claude Sonnet 4.5's workflow. Notice both the tool and the 
 `ahma_mcp` is organized as a Cargo workspace with several crates:
 
 - **`ahma_core`**: Library crate containing all core functionality (tool execution, configuration, async orchestration, MCP service)
-- **`ahma_shell`**: Binary crate providing the CLI interface and server startup logic
+- **`ahma_shell`**: Binary crate providing the CLI interface and server startup logic (includes `--list-tools` functionality)
 - **`ahma_validate`**: Binary crate for validating tool configuration files against the MTDF schema
-- **`ahma_list_tools`**: Binary crate to dump all MCP tool information from an MCP server (stdio or HTTP) to the terminal for testing and development
 
 This modular architecture ensures clean separation of concerns and enables future extensions (e.g., web interface, authentication).
 
@@ -182,6 +181,24 @@ Execute a single tool command:
 
 ```bash
 ahma_mcp cargo_build --working-directory . -- --release
+```
+
+### 4. List Tools Mode
+
+List all available tools from an MCP server for testing and development:
+
+```bash
+# List tools from a stdio MCP server (command after --)
+ahma_mcp --list-tools -- /path/to/ahma_mcp --tools-dir ./tools
+
+# List tools from an HTTP MCP server
+ahma_mcp --list-tools --http http://localhost:3000
+
+# List tools from mcp.json configuration
+ahma_mcp --list-tools --mcp-config /path/to/mcp.json --server Ahma
+
+# Output as JSON instead of text
+ahma_mcp --list-tools --format json -- /path/to/ahma_mcp --tools-dir ./tools
 ```
 
 ## VS Code MCP Integration
