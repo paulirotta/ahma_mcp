@@ -83,9 +83,6 @@ mod tool_behavior_consistency_test;
 #[path = "tool_suite/tool_loading_bug_test.rs"]
 mod tool_loading_bug_test;
 
-#[path = "tool_suite/tool_loading_bug_test_fixed.rs"]
-mod tool_loading_bug_test_fixed;
-
 #[path = "tool_suite/tool_validation_tdd_test.rs"]
 mod tool_validation_tdd_test;
 

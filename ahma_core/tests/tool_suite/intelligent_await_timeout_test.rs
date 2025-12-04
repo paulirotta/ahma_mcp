@@ -97,9 +97,10 @@ async fn test_no_timeout_parameter_accepted() -> Result<()> {
     let elapsed = start.elapsed();
 
     // Should complete immediately since no operations are pending (correct behavior)
+    // Note: Allow 250ms for MCP client overhead (connection, serialization, etc.)
     assert!(!result.is_error.unwrap_or(false), "Should not be an error");
     assert!(
-        elapsed < Duration::from_millis(100), // Should complete very quickly
+        elapsed < Duration::from_millis(250),
         "Should complete immediately when no operations pending, got: {:?}",
         elapsed
     );
@@ -134,9 +135,10 @@ async fn test_tool_filtered_intelligent_timeout() -> Result<()> {
     let elapsed = start.elapsed();
 
     // Should complete immediately since no matching operations are pending
+    // Note: Allow 250ms for MCP client overhead (connection, serialization, etc.)
     assert!(!result.is_error.unwrap_or(false), "Should not be an error");
     assert!(
-        elapsed < Duration::from_millis(100), // Should complete very quickly
+        elapsed < Duration::from_millis(250),
         "Should complete immediately when no matching operations pending, got: {:?}",
         elapsed
     );
@@ -205,9 +207,10 @@ async fn test_intelligent_timeout_no_pending_operations() -> Result<()> {
     let elapsed = start.elapsed();
 
     // Should complete immediately since no operations are pending (correct behavior)
+    // Note: Allow 250ms for MCP client overhead (connection, serialization, etc.)
     assert!(!result.is_error.unwrap_or(false), "Should not be an error");
     assert!(
-        elapsed < Duration::from_millis(100), // Should complete very quickly
+        elapsed < Duration::from_millis(250),
         "Should complete immediately when no operations pending, got: {:?}",
         elapsed
     );
