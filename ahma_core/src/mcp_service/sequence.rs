@@ -1,0 +1,691 @@
+//! Sequence execution for MCP tools.
+//!
+//! Contains handlers for executing sequence tools that invoke multiple
+//! other tools in order, both synchronously and asynchronously.
+
+use rmcp::model::{CallToolRequestParam, CallToolResult, Content, ErrorData as McpError};
+use rmcp::service::{RequestContext, RoleServer};
+use serde_json::{Map, Value};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
+
+use crate::adapter::Adapter;
+use crate::callback_system::CallbackSender;
+use crate::config::{SequenceStep, SubcommandConfig, ToolConfig};
+use crate::constants::SEQUENCE_STEP_DELAY_MS;
+use crate::mcp_callback::McpCallbackSender;
+use crate::operation_monitor::OperationMonitor;
+
+use super::subcommand::find_subcommand_config_from_args;
+use super::types::{META_PARAMS, SequenceKind};
+
+static SEQUENCE_ID: AtomicU64 = AtomicU64::new(1);
+
+/// Handles execution of sequence tools - tools that invoke multiple other tools in order.
+pub async fn handle_sequence_tool(
+    adapter: &Adapter,
+    _operation_monitor: &OperationMonitor,
+    configs: &std::collections::HashMap<String, ToolConfig>,
+    config: &ToolConfig,
+    params: CallToolRequestParam,
+    context: RequestContext<RoleServer>,
+) -> Result<CallToolResult, McpError> {
+    let sequence = config.sequence.as_ref().unwrap(); // Safe due to prior check
+    let step_delay_ms = config.step_delay_ms.unwrap_or(SEQUENCE_STEP_DELAY_MS);
+
+    // Determine if sequence should run synchronously
+    // - If synchronous is true, run sync
+    // - If synchronous is false or None, default is async for sequence tools
+    let run_synchronously = config.synchronous.unwrap_or(false);
+
+    if run_synchronously {
+        handle_sequence_tool_sync(adapter, configs, config, params, sequence, step_delay_ms).await
+    } else {
+        handle_sequence_tool_async(adapter, configs, params, context, sequence, step_delay_ms).await
+    }
+}
+
+/// Handles synchronous sequence execution - blocks until all steps complete
+async fn handle_sequence_tool_sync(
+    adapter: &Adapter,
+    configs: &std::collections::HashMap<String, ToolConfig>,
+    config: &ToolConfig,
+    params: CallToolRequestParam,
+    sequence: &[SequenceStep],
+    step_delay_ms: u64,
+) -> Result<CallToolResult, McpError> {
+    let mut final_result = CallToolResult::success(vec![]);
+    let mut all_outputs = Vec::new();
+    let kind = SequenceKind::TopLevel;
+
+    for (index, step) in sequence.iter().enumerate() {
+        if should_skip_step(&kind, step) {
+            let message = format_step_skipped_message(&kind, step);
+            final_result.content.push(Content::text(message));
+            continue;
+        }
+
+        // Extract working directory from parent args
+        let parent_args = params.arguments.clone().unwrap_or_default();
+        let working_directory = parent_args
+            .get("working_directory")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| ".".to_string());
+
+        // Merge arguments, excluding meta-parameters
+        let mut merged_args = Map::new();
+        for (key, value) in parent_args.iter() {
+            if !META_PARAMS.contains(&key.as_str()) {
+                merged_args.insert(key.clone(), value.clone());
+            }
+        }
+        merged_args.extend(step.args.clone());
+
+        let step_tool_config = match configs.get(&step.tool) {
+            Some(cfg) => cfg,
+            None => {
+                let error_message = format!(
+                    "Tool '{}' referenced in sequence step is not configured.",
+                    step.tool
+                );
+                return Err(McpError::internal_error(error_message, None));
+            }
+        };
+
+        let (subcommand_config, command_parts) =
+            match find_subcommand_config_from_args(step_tool_config, Some(step.subcommand.clone()))
+            {
+                Some(result) => result,
+                None => {
+                    let error_message = format!(
+                        "Subcommand '{}' for tool '{}' not found in sequence step.",
+                        step.subcommand, step.tool
+                    );
+                    return Err(McpError::internal_error(error_message, None));
+                }
+            };
+
+        // Execute synchronously and wait for result
+        let step_result = adapter
+            .execute_sync_in_dir(
+                &command_parts.join(" "),
+                Some(merged_args),
+                &working_directory,
+                config.timeout_seconds,
+                Some(subcommand_config),
+            )
+            .await;
+
+        match step_result {
+            Ok(output) => {
+                let message = format!(
+                    "✓ Step {} completed: {} {}\n{}",
+                    index + 1,
+                    step.tool,
+                    step.subcommand,
+                    if output.is_empty() {
+                        "(no output)"
+                    } else {
+                        &output
+                    }
+                );
+                all_outputs.push(message.clone());
+                tracing::info!(
+                    "Sequence step {} succeeded: {} {}",
+                    index + 1,
+                    step.tool,
+                    step.subcommand
+                );
+            }
+            Err(e) => {
+                let error_message = format!(
+                    "✗ Step {} FAILED: {} {}\nError: {}",
+                    index + 1,
+                    step.tool,
+                    step.subcommand,
+                    e
+                );
+                all_outputs.push(error_message.clone());
+                tracing::error!(
+                    "Sequence step {} failed: {} {}: {}",
+                    index + 1,
+                    step.tool,
+                    step.subcommand,
+                    e
+                );
+
+                // Return failure immediately - don't continue with remaining steps
+                final_result.content.push(Content::text(format!(
+                    "Sequence failed at step {}:\n\n{}",
+                    index + 1,
+                    all_outputs.join("\n\n")
+                )));
+                final_result.is_error = Some(true);
+                return Ok(final_result);
+            }
+        }
+
+        // Add delay between steps
+        if step_delay_ms > 0 && index + 1 < sequence.len() {
+            tokio::time::sleep(Duration::from_millis(step_delay_ms)).await;
+        }
+    }
+
+    // All steps succeeded
+    final_result.content.push(Content::text(format!(
+        "All {} sequence steps completed successfully:\n\n{}",
+        sequence.len(),
+        all_outputs.join("\n\n")
+    )));
+    Ok(final_result)
+}
+
+/// Handles asynchronous sequence execution - starts all steps and returns immediately
+async fn handle_sequence_tool_async(
+    adapter: &Adapter,
+    configs: &std::collections::HashMap<String, ToolConfig>,
+    params: CallToolRequestParam,
+    context: RequestContext<RoleServer>,
+    sequence: &[SequenceStep],
+    step_delay_ms: u64,
+) -> Result<CallToolResult, McpError> {
+    let mut final_result = CallToolResult::success(vec![]);
+    let kind = SequenceKind::TopLevel;
+
+    for (index, step) in sequence.iter().enumerate() {
+        if should_skip_step(&kind, step) {
+            let message = format_step_skipped_message(&kind, step);
+            final_result.content.push(Content::text(message));
+            continue;
+        }
+        let mut step_params = params.clone();
+        step_params.name = step.tool.clone().into();
+
+        // Extract meta-parameters that should not be passed to tools
+        let parent_args = params.arguments.clone().unwrap_or_default();
+        let working_directory = parent_args
+            .get("working_directory")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| ".".to_string());
+
+        // Merge arguments, excluding meta-parameters from parent
+        let mut merged_args = Map::new();
+        for (key, value) in parent_args.iter() {
+            if !META_PARAMS.contains(&key.as_str()) {
+                merged_args.insert(key.clone(), value.clone());
+            }
+        }
+        // Add working_directory back for the step to use
+        merged_args.insert(
+            "working_directory".to_string(),
+            Value::String(working_directory),
+        );
+        // Extend with step-specific args (which can override)
+        merged_args.extend(step.args.clone());
+        step_params.arguments = Some(merged_args);
+
+        let step_tool_config = match configs.get(&step.tool) {
+            Some(cfg) => cfg,
+            None => {
+                let error_message = format!(
+                    "Tool '{}' referenced in sequence step is not configured.",
+                    step.tool
+                );
+                return Err(McpError::internal_error(error_message, None));
+            }
+        };
+
+        let (subcommand_config, command_parts) =
+            match find_subcommand_config_from_args(step_tool_config, Some(step.subcommand.clone()))
+            {
+                Some(result) => result,
+                None => {
+                    let error_message = format!(
+                        "Subcommand '{}' for tool '{}' not found in sequence step.",
+                        step.subcommand, step.tool
+                    );
+                    return Err(McpError::internal_error(error_message, None));
+                }
+            };
+
+        let operation_id = format!("op_{}", SEQUENCE_ID.fetch_add(1, Ordering::SeqCst));
+        let callback: Box<dyn CallbackSender> = Box::new(McpCallbackSender::new(
+            context.peer.clone(),
+            operation_id.clone(),
+        ));
+
+        let step_result = adapter
+            .execute_async_in_dir_with_options(
+                &step.tool,
+                &command_parts.join(" "),
+                ".", // Assuming current directory for now
+                crate::adapter::AsyncExecOptions {
+                    operation_id: Some(operation_id),
+                    args: step_params.arguments,
+                    timeout: None, // Add timeout logic if needed
+                    callback: Some(callback),
+                    subcommand_config: Some(subcommand_config),
+                },
+            )
+            .await;
+
+        match step_result {
+            Ok(id) => {
+                let message = format_step_started_message(&kind, step, &id);
+                final_result.content.push(Content::text(message));
+            }
+            Err(e) => {
+                let error_message = format!(
+                    "Sequence step '{}' failed to start: {}. Halting sequence.",
+                    step.tool, e
+                );
+                tracing::error!("{}", error_message);
+                return Err(McpError::internal_error(error_message, None));
+            }
+        }
+
+        if step_delay_ms > 0 && index + 1 < sequence.len() {
+            tokio::time::sleep(Duration::from_millis(step_delay_ms)).await;
+        }
+    }
+
+    Ok(final_result)
+}
+
+/// Handles execution of subcommand sequences - subcommands that invoke multiple cargo commands in order.
+pub async fn handle_subcommand_sequence(
+    adapter: &Adapter,
+    config: &ToolConfig,
+    subcommand_config: &SubcommandConfig,
+    params: CallToolRequestParam,
+    context: RequestContext<RoleServer>,
+) -> Result<CallToolResult, McpError> {
+    let sequence: &Vec<SequenceStep> = subcommand_config.sequence.as_ref().unwrap(); // Safe due to prior check
+    let step_delay_ms = subcommand_config
+        .step_delay_ms
+        .or(config.step_delay_ms)
+        .unwrap_or(SEQUENCE_STEP_DELAY_MS);
+    let mut final_result = CallToolResult::success(vec![]);
+    let kind = SequenceKind::Subcommand {
+        base_config: config,
+    };
+
+    for (index, step) in sequence.iter().enumerate() {
+        if should_skip_step(&kind, step) {
+            let message = format_step_skipped_message(&kind, step);
+            final_result.content.push(Content::text(message));
+            continue;
+        }
+        let (step_config, command_parts) =
+            match find_subcommand_config_from_args(config, Some(step.subcommand.clone())) {
+                Some(result) => result,
+                None => {
+                    let error_message = format!(
+                        "Subcommand sequence step '{}' not found in tool config. Halting sequence.",
+                        step.subcommand
+                    );
+                    tracing::error!("{}", error_message);
+                    return Err(McpError::internal_error(error_message, None));
+                }
+            };
+
+        let operation_id = format!("op_{}", SEQUENCE_ID.fetch_add(1, Ordering::SeqCst));
+        let callback: Box<dyn CallbackSender> = Box::new(McpCallbackSender::new(
+            context.peer.clone(),
+            operation_id.clone(),
+        ));
+
+        let step_result = adapter
+            .execute_async_in_dir_with_options(
+                &config.name,
+                &command_parts.join(" "),
+                ".",
+                crate::adapter::AsyncExecOptions {
+                    operation_id: Some(operation_id),
+                    args: params.arguments.clone(),
+                    timeout: None,
+                    callback: Some(callback),
+                    subcommand_config: Some(step_config),
+                },
+            )
+            .await;
+
+        match step_result {
+            Ok(id) => {
+                let message = format_step_started_message(&kind, step, &id);
+                final_result.content.push(Content::text(message));
+            }
+            Err(e) => {
+                let error_message = format!(
+                    "Subcommand sequence step '{}' failed to start: {}. Halting sequence.",
+                    step.subcommand, e
+                );
+                tracing::error!("{}", error_message);
+                return Err(McpError::internal_error(error_message, None));
+            }
+        }
+
+        if step_delay_ms > 0 && index + 1 < sequence.len() {
+            tokio::time::sleep(Duration::from_millis(step_delay_ms)).await;
+        }
+    }
+
+    Ok(final_result)
+}
+
+/// Formats a message for a sequence step that was started.
+/// Unified handler for both top-level and subcommand sequences.
+pub fn format_step_started_message(
+    kind: &SequenceKind,
+    step: &SequenceStep,
+    operation_id: &str,
+) -> String {
+    let (step_name, prefix) = match kind {
+        SequenceKind::TopLevel => (&step.tool, "Sequence step"),
+        SequenceKind::Subcommand { .. } => (&step.subcommand, "Subcommand sequence step"),
+    };
+    let hint = crate::tool_hints::preview(operation_id, step_name);
+    match step.description.as_deref() {
+        Some(desc) if !desc.is_empty() => {
+            format!(
+                "{} '{}' ({}) started with operation ID: {}{}",
+                prefix, step_name, desc, operation_id, hint
+            )
+        }
+        _ => format!(
+            "{} '{}' started with operation ID: {}{}",
+            prefix, step_name, operation_id, hint
+        ),
+    }
+}
+
+/// Formats a message for a sequence step that was skipped.
+/// Unified handler for both top-level and subcommand sequences.
+pub fn format_step_skipped_message(kind: &SequenceKind, step: &SequenceStep) -> String {
+    let (step_name, prefix) = match kind {
+        SequenceKind::TopLevel => (&step.tool, "Sequence step"),
+        SequenceKind::Subcommand { .. } => (&step.subcommand, "Subcommand sequence step"),
+    };
+    match step.description.as_deref() {
+        Some(desc) if !desc.is_empty() => {
+            format!(
+                "{} '{}' ({}) skipped due to environment override.",
+                prefix, step_name, desc
+            )
+        }
+        _ => format!(
+            "{} '{}' skipped due to environment override.",
+            prefix, step_name
+        ),
+    }
+}
+
+/// Checks if a sequence step should be skipped based on environment variables.
+/// Uses AHMA_SKIP_SEQUENCE_TOOLS for top-level, AHMA_SKIP_SEQUENCE_SUBCOMMANDS for subcommand.
+pub fn should_skip_step(kind: &SequenceKind, step: &SequenceStep) -> bool {
+    match kind {
+        SequenceKind::TopLevel => env_list_contains("AHMA_SKIP_SEQUENCE_TOOLS", &step.tool),
+        SequenceKind::Subcommand { .. } => {
+            env_list_contains("AHMA_SKIP_SEQUENCE_SUBCOMMANDS", &step.subcommand)
+        }
+    }
+}
+
+/// Checks if an environment variable contains a value in a comma-separated list.
+pub fn env_list_contains(env_key: &str, value: &str) -> bool {
+    match std::env::var(env_key) {
+        Ok(list) => list
+            .split(',')
+            .map(|entry| entry.trim())
+            .filter(|entry| !entry.is_empty())
+            .any(|entry| entry.eq_ignore_ascii_case(value)),
+        Err(_) => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_test_sequence_step(
+        tool: &str,
+        subcommand: &str,
+        description: Option<&str>,
+    ) -> SequenceStep {
+        SequenceStep {
+            tool: tool.to_string(),
+            subcommand: subcommand.to_string(),
+            description: description.map(|s| s.to_string()),
+            args: Default::default(),
+        }
+    }
+
+    fn make_dummy_tool_config() -> ToolConfig {
+        ToolConfig {
+            name: "test_tool".to_string(),
+            description: "Test tool".to_string(),
+            command: "test".to_string(),
+            subcommand: None,
+            input_schema: None,
+            timeout_seconds: None,
+            synchronous: None,
+            hints: Default::default(),
+            enabled: true,
+            guidance_key: None,
+            sequence: None,
+            step_delay_ms: None,
+            availability_check: None,
+            install_instructions: None,
+        }
+    }
+
+    // ============= env_list_contains tests =============
+
+    #[test]
+    fn test_env_list_contains_single_match() {
+        unsafe {
+            std::env::set_var("AHMA_TEST_SEQ_001", "cargo");
+        }
+        assert!(env_list_contains("AHMA_TEST_SEQ_001", "cargo"));
+        unsafe {
+            std::env::remove_var("AHMA_TEST_SEQ_001");
+        }
+    }
+
+    #[test]
+    fn test_env_list_contains_multiple_items() {
+        unsafe {
+            std::env::set_var("AHMA_TEST_SEQ_002", "cargo,git,npm");
+        }
+        assert!(env_list_contains("AHMA_TEST_SEQ_002", "cargo"));
+        assert!(env_list_contains("AHMA_TEST_SEQ_002", "git"));
+        assert!(env_list_contains("AHMA_TEST_SEQ_002", "npm"));
+        assert!(!env_list_contains("AHMA_TEST_SEQ_002", "python"));
+        unsafe {
+            std::env::remove_var("AHMA_TEST_SEQ_002");
+        }
+    }
+
+    #[test]
+    fn test_env_list_contains_case_insensitive() {
+        unsafe {
+            std::env::set_var("AHMA_TEST_SEQ_003", "Cargo,GIT");
+        }
+        assert!(env_list_contains("AHMA_TEST_SEQ_003", "cargo"));
+        assert!(env_list_contains("AHMA_TEST_SEQ_003", "CARGO"));
+        assert!(env_list_contains("AHMA_TEST_SEQ_003", "git"));
+        unsafe {
+            std::env::remove_var("AHMA_TEST_SEQ_003");
+        }
+    }
+
+    #[test]
+    fn test_env_list_contains_with_spaces() {
+        unsafe {
+            std::env::set_var("AHMA_TEST_SEQ_004", "cargo , git , npm");
+        }
+        assert!(env_list_contains("AHMA_TEST_SEQ_004", "cargo"));
+        assert!(env_list_contains("AHMA_TEST_SEQ_004", "git"));
+        assert!(env_list_contains("AHMA_TEST_SEQ_004", "npm"));
+        unsafe {
+            std::env::remove_var("AHMA_TEST_SEQ_004");
+        }
+    }
+
+    #[test]
+    fn test_env_list_contains_empty_and_missing() {
+        unsafe {
+            std::env::set_var("AHMA_TEST_SEQ_005", "");
+        }
+        assert!(!env_list_contains("AHMA_TEST_SEQ_005", "cargo"));
+        unsafe {
+            std::env::remove_var("AHMA_TEST_SEQ_005");
+        }
+
+        unsafe {
+            std::env::remove_var("AHMA_TEST_SEQ_MISSING");
+        }
+        assert!(!env_list_contains("AHMA_TEST_SEQ_MISSING", "cargo"));
+    }
+
+    #[test]
+    fn test_env_list_contains_filters_empty_entries() {
+        unsafe {
+            std::env::set_var("AHMA_TEST_SEQ_006", "cargo,,git,,npm");
+        }
+        assert!(env_list_contains("AHMA_TEST_SEQ_006", "cargo"));
+        assert!(env_list_contains("AHMA_TEST_SEQ_006", "git"));
+        assert!(!env_list_contains("AHMA_TEST_SEQ_006", ""));
+        unsafe {
+            std::env::remove_var("AHMA_TEST_SEQ_006");
+        }
+    }
+
+    // ============= format_step_started_message tests =============
+
+    #[test]
+    fn test_format_step_started_message_toplevel_with_description() {
+        let step = make_test_sequence_step("cargo", "build", Some("Build the project"));
+        let kind = SequenceKind::TopLevel;
+        let message = format_step_started_message(&kind, &step, "op_test_001");
+
+        assert!(message.contains("cargo"));
+        assert!(message.contains("Build the project"));
+        assert!(message.contains("op_test_001"));
+        assert!(message.contains("Sequence step"));
+    }
+
+    #[test]
+    fn test_format_step_started_message_toplevel_without_description() {
+        let step = make_test_sequence_step("cargo", "build", None);
+        let kind = SequenceKind::TopLevel;
+        let message = format_step_started_message(&kind, &step, "op_test_002");
+
+        assert!(message.contains("cargo"));
+        assert!(message.contains("op_test_002"));
+        assert!(!message.contains("()"));
+    }
+
+    #[test]
+    fn test_format_step_started_message_subcommand_with_description() {
+        let step = make_test_sequence_step("cargo", "clippy", Some("Run linter"));
+        let dummy_config = make_dummy_tool_config();
+        let kind = SequenceKind::Subcommand {
+            base_config: &dummy_config,
+        };
+        let message = format_step_started_message(&kind, &step, "op_sub_test_001");
+
+        assert!(message.contains("clippy"));
+        assert!(message.contains("Run linter"));
+        assert!(message.contains("op_sub_test_001"));
+        assert!(message.contains("Subcommand sequence step"));
+    }
+
+    // ============= format_step_skipped_message tests =============
+
+    #[test]
+    fn test_format_step_skipped_message_toplevel_with_description() {
+        let step = make_test_sequence_step("cargo", "audit", Some("Security audit"));
+        let kind = SequenceKind::TopLevel;
+        let message = format_step_skipped_message(&kind, &step);
+
+        assert!(message.contains("cargo"));
+        assert!(message.contains("Security audit"));
+        assert!(message.contains("skipped"));
+    }
+
+    #[test]
+    fn test_format_step_skipped_message_toplevel_without_description() {
+        let step = make_test_sequence_step("cargo", "audit", None);
+        let kind = SequenceKind::TopLevel;
+        let message = format_step_skipped_message(&kind, &step);
+
+        assert!(message.contains("cargo"));
+        assert!(message.contains("skipped"));
+        assert!(!message.contains("()"));
+    }
+
+    #[test]
+    fn test_format_step_skipped_message_subcommand() {
+        let step = make_test_sequence_step("cargo", "nextest_run", Some("Run tests"));
+        let dummy_config = make_dummy_tool_config();
+        let kind = SequenceKind::Subcommand {
+            base_config: &dummy_config,
+        };
+        let message = format_step_skipped_message(&kind, &step);
+
+        assert!(message.contains("nextest_run"));
+        assert!(message.contains("Run tests"));
+        assert!(message.contains("skipped"));
+        assert!(message.contains("Subcommand sequence step"));
+    }
+
+    // ============= should_skip_step tests =============
+
+    #[test]
+    fn test_should_skip_step_toplevel() {
+        unsafe {
+            std::env::set_var("AHMA_SKIP_SEQUENCE_TOOLS", "cargo,git");
+        }
+        let kind = SequenceKind::TopLevel;
+        let step_cargo = make_test_sequence_step("cargo", "build", None);
+        let step_npm = make_test_sequence_step("npm", "install", None);
+
+        assert!(should_skip_step(&kind, &step_cargo));
+        assert!(!should_skip_step(&kind, &step_npm));
+        unsafe {
+            std::env::remove_var("AHMA_SKIP_SEQUENCE_TOOLS");
+        }
+    }
+
+    #[test]
+    fn test_should_skip_step_subcommand() {
+        unsafe {
+            std::env::set_var("AHMA_SKIP_SEQUENCE_SUBCOMMANDS", "build,test");
+        }
+        let dummy_config = make_dummy_tool_config();
+        let kind = SequenceKind::Subcommand {
+            base_config: &dummy_config,
+        };
+        let step_build = make_test_sequence_step("cargo", "build", None);
+        let step_run = make_test_sequence_step("cargo", "run", None);
+
+        assert!(should_skip_step(&kind, &step_build));
+        assert!(!should_skip_step(&kind, &step_run));
+        unsafe {
+            std::env::remove_var("AHMA_SKIP_SEQUENCE_SUBCOMMANDS");
+        }
+    }
+
+    #[test]
+    fn test_should_skip_step_when_not_set() {
+        unsafe {
+            std::env::remove_var("AHMA_SKIP_SEQUENCE_TOOLS");
+        }
+        let kind = SequenceKind::TopLevel;
+        let step = make_test_sequence_step("cargo", "build", None);
+        assert!(!should_skip_step(&kind, &step));
+    }
+}
