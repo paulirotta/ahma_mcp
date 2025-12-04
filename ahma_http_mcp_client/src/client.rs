@@ -552,4 +552,206 @@ mod tests {
             env::remove_var(TOKEN_PATH_ENV);
         }
     }
+
+    // === Additional client tests ===
+
+    #[tokio::test]
+    async fn process_sse_event_ignores_empty_data() {
+        let base = Url::parse("https://example.com/sse").unwrap();
+        let rpc_endpoint = Arc::new(Mutex::new(None));
+        let (tx, mut rx) = mpsc::channel(1);
+
+        HttpMcpTransport::process_sse_event(
+            &base,
+            SseEvent {
+                event_type: None,
+                data: "   ".to_string(), // Empty/whitespace only
+            },
+            &rpc_endpoint,
+            &tx,
+        )
+        .await
+        .unwrap();
+
+        // Nothing should be sent
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn process_sse_event_endpoint_with_whitespace() {
+        let base = Url::parse("https://example.com/sse").unwrap();
+        let rpc_endpoint = Arc::new(Mutex::new(None));
+        let (tx, _rx) = mpsc::channel(1);
+
+        HttpMcpTransport::process_sse_event(
+            &base,
+            SseEvent {
+                event_type: Some("endpoint".to_string()),
+                data: "  /mcp  \n".to_string(), // Whitespace trimmed
+            },
+            &rpc_endpoint,
+            &tx,
+        )
+        .await
+        .unwrap();
+
+        let stored = rpc_endpoint.lock().await.clone().unwrap();
+        assert_eq!(stored.as_str(), "https://example.com/mcp");
+    }
+
+    #[tokio::test]
+    async fn process_sse_event_invalid_json_fails() {
+        let base = Url::parse("https://example.com/sse").unwrap();
+        let rpc_endpoint = Arc::new(Mutex::new(None));
+        let (tx, _rx) = mpsc::channel(1);
+
+        let result = HttpMcpTransport::process_sse_event(
+            &base,
+            SseEvent {
+                event_type: None,
+                data: "not valid json".to_string(),
+            },
+            &rpc_endpoint,
+            &tx,
+        )
+        .await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn process_sse_endpoint_only_updates_when_different() {
+        let base = Url::parse("https://example.com/sse").unwrap();
+        let rpc_endpoint = Arc::new(Mutex::new(Some(
+            Url::parse("https://example.com/mcp").unwrap(),
+        )));
+        let (tx, _rx) = mpsc::channel(1);
+
+        // Same endpoint - should not log update
+        HttpMcpTransport::process_sse_event(
+            &base,
+            SseEvent {
+                event_type: Some("endpoint".to_string()),
+                data: "/mcp".to_string(),
+            },
+            &rpc_endpoint,
+            &tx,
+        )
+        .await
+        .unwrap();
+
+        // Endpoint should still be the same
+        let stored = rpc_endpoint.lock().await.clone().unwrap();
+        assert_eq!(stored.as_str(), "https://example.com/mcp");
+    }
+
+    #[tokio::test]
+    async fn wait_for_rpc_endpoint_returns_immediately_when_set() {
+        let rpc_endpoint = Arc::new(Mutex::new(Some(
+            Url::parse("https://example.com/mcp").unwrap(),
+        )));
+
+        let result = HttpMcpTransport::wait_for_rpc_endpoint(rpc_endpoint).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().as_str(), "https://example.com/mcp");
+    }
+
+    #[test]
+    fn token_file_path_uses_env_override() {
+        let _guard = token_env_guard().lock().unwrap();
+        let custom_path = "/custom/path/token.json";
+        unsafe {
+            env::set_var(TOKEN_PATH_ENV, custom_path);
+        }
+
+        let path = token_file_path().unwrap();
+        assert_eq!(path.to_str().unwrap(), custom_path);
+
+        unsafe {
+            env::remove_var(TOKEN_PATH_ENV);
+        }
+    }
+
+    #[test]
+    fn token_file_path_uses_temp_dir_default() {
+        let _guard = token_env_guard().lock().unwrap();
+        unsafe {
+            env::remove_var(TOKEN_PATH_ENV);
+        }
+
+        let path = token_file_path().unwrap();
+        assert!(path.ends_with(TOKEN_FILE_NAME));
+        assert!(path.starts_with(env::temp_dir()));
+    }
+
+    #[test]
+    fn save_token_creates_parent_directories() {
+        let _guard = token_env_guard().lock().unwrap();
+        let tmp = tempdir().unwrap();
+        let token_path = tmp.path().join("nested/deep/token.json");
+        unsafe {
+            env::set_var(TOKEN_PATH_ENV, token_path.to_str().unwrap());
+        }
+
+        let token = StoredToken {
+            access_token: "test".to_string(),
+            refresh_token: None,
+            expires_in: None,
+            scopes: None,
+        };
+
+        save_token(&token).unwrap();
+        assert!(token_path.exists());
+
+        unsafe {
+            env::remove_var(TOKEN_PATH_ENV);
+        }
+    }
+
+    #[test]
+    fn stored_token_minimal_fields() {
+        let token = StoredToken {
+            access_token: "test_token".to_string(),
+            refresh_token: None,
+            expires_in: None,
+            scopes: None,
+        };
+
+        let json = serde_json::to_string(&token).unwrap();
+        assert!(json.contains("test_token"));
+
+        let parsed: StoredToken = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.access_token, "test_token");
+        assert!(parsed.refresh_token.is_none());
+    }
+
+    #[test]
+    fn stored_token_debug_display() {
+        let token = StoredToken {
+            access_token: "secret".to_string(),
+            refresh_token: Some("refresh".to_string()),
+            expires_in: Some(3600),
+            scopes: Some(vec!["scope1".to_string()]),
+        };
+
+        let debug = format!("{:?}", token);
+        assert!(debug.contains("StoredToken"));
+        assert!(debug.contains("secret")); // Note: in real impl might want to redact
+    }
+
+    #[test]
+    fn stored_token_clone() {
+        let token = StoredToken {
+            access_token: "abc".to_string(),
+            refresh_token: Some("ref".to_string()),
+            expires_in: Some(1800),
+            scopes: Some(vec!["s1".to_string(), "s2".to_string()]),
+        };
+
+        let cloned = token.clone();
+        assert_eq!(cloned.access_token, token.access_token);
+        assert_eq!(cloned.refresh_token, token.refresh_token);
+        assert_eq!(cloned.expires_in, token.expires_in);
+        assert_eq!(cloned.scopes, token.scopes);
+    }
 }

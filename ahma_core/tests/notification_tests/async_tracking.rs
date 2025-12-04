@@ -225,8 +225,7 @@ async fn test_operation_completion_tracking() {
         health_check_interval: Duration::from_secs(60),
     };
     let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
-    let adapter =
-        Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager).unwrap());
+    let adapter = Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager).unwrap());
 
     // Load configs and create service (not used in this test)
     let configs = Arc::new(
@@ -267,5 +266,8 @@ async fn test_operation_completion_tracking() {
     assert!(completed_op.is_some(), "Operation did not complete in time");
 
     let completed_ops = operation_monitor.get_completed_operations().await;
-    assert!(!completed_ops.is_empty(), "Should have completed operations");
+    assert!(
+        !completed_ops.is_empty(),
+        "Should have completed operations"
+    );
 }

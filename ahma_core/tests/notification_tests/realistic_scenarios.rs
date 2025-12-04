@@ -95,8 +95,7 @@ async fn test_multiple_operations_notification_behavior() {
     let shell_pool_config = ShellPoolConfig::default();
     let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
     shell_pool_manager.clone().start_background_tasks();
-    let adapter =
-        Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager).unwrap());
+    let adapter = Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager).unwrap());
 
     // Start multiple operations
     let op_ids = vec![
