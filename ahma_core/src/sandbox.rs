@@ -90,7 +90,9 @@ pub enum SandboxError {
     #[error("Sandbox prerequisite check failed: {0}")]
     PrerequisiteFailed(String),
 
-    #[error("Nested sandbox detected - running inside another sandbox (e.g., Cursor, VS Code, Docker)")]
+    #[error(
+        "Nested sandbox detected - running inside another sandbox (e.g., Cursor, VS Code, Docker)"
+    )]
     NestedSandboxDetected,
 }
 
@@ -320,10 +322,7 @@ pub fn test_sandbox_exec_available() -> Result<(), SandboxError> {
                 Err(SandboxError::NestedSandboxDetected)
             } else {
                 // Some other error - treat as nested sandbox to be safe
-                tracing::debug!(
-                    "sandbox-exec test failed with unexpected error: {}",
-                    stderr
-                );
+                tracing::debug!("sandbox-exec test failed with unexpected error: {}", stderr);
                 Err(SandboxError::NestedSandboxDetected)
             }
         }
