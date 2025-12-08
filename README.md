@@ -56,6 +56,43 @@ Previous approaches that parsed command-line strings for dangerous patterns are 
 
 **Security Model**: "AI can do whatever it likes inside the sandbox—it has no access outside the sandbox."
 
+### Nested Sandbox Environments (Cursor, VS Code, Docker)
+
+When running inside another sandboxed environment (like Cursor IDE, VS Code, or Docker), Ahma automatically detects that it cannot apply its own sandbox and gracefully degrades. This is because:
+
+- **Cursor/VS Code**: These IDEs sandbox MCP servers, preventing nested `sandbox-exec` calls on macOS
+- **Docker**: Containers may restrict the system calls needed for sandboxing
+
+**Auto-detection**: Ahma tests if `sandbox-exec` can be applied at startup. If it detects a nested sandbox, it logs a warning and continues without Ahma's sandbox—the outer sandbox still provides security.
+
+**Manual override**: You can also explicitly disable Ahma's sandbox:
+
+```bash
+# Via command-line flag
+ahma_mcp --no-sandbox
+
+# Via environment variable (useful for mcp.json configuration)
+export AHMA_NO_SANDBOX=1
+ahma_mcp
+```
+
+In `mcp.json` for Cursor/VS Code:
+
+```json
+{
+  "servers": {
+    "Ahma": {
+      "type": "stdio",
+      "cwd": "${workspaceFolder}",
+      "command": "/path/to/ahma_mcp",
+      "args": ["--no-sandbox", "--tools-dir", ".ahma/tools"]
+    }
+  }
+}
+```
+
+**Note**: When `--no-sandbox` is used, Ahma relies on the outer sandbox for security. Only use this in environments that provide their own sandboxing.
+
 ### Example async tool use: AI-driven workflow
 
 Synchronous is simpler when the turns are fast. Async can be helpful for long-running tool calls.
