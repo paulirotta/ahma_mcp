@@ -9,10 +9,9 @@
                 ".ahma/tools"
             ]
         },
-        "Ahma SSE": {
-            "url": "http://localhost:3000/sse",
+        "Ahma HTTP VSCode": {
             "type": "http",
+            "url": "http://localhost:3000/mcp"
         }
-    },
-    "inputs": []
+    }
 }

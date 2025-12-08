@@ -61,7 +61,8 @@ impl SseEventParser {
     }
 }
 
-pub fn resolve_rpc_url(sse_url: &Url, endpoint: &str) -> Result<Url, McpHttpError> {
+/// Resolve an RPC endpoint URL relative to the base MCP URL
+pub fn resolve_rpc_url(base_url: &Url, endpoint: &str) -> Result<Url, McpHttpError> {
     let trimmed = endpoint.trim();
     if trimmed.is_empty() {
         return Err(McpHttpError::Custom(
@@ -72,7 +73,7 @@ pub fn resolve_rpc_url(sse_url: &Url, endpoint: &str) -> Result<Url, McpHttpErro
     match Url::parse(trimmed) {
         Ok(url) => Ok(url),
         Err(url::ParseError::RelativeUrlWithoutBase) => {
-            sse_url.join(trimmed).map_err(McpHttpError::from)
+            base_url.join(trimmed).map_err(McpHttpError::from)
         }
         Err(err) => Err(McpHttpError::from(err)),
     }

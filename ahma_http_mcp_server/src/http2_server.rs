@@ -40,10 +40,11 @@ pub async fn start_http2_server<H: ServerHandler + Send + Sync + Clone + 'static
     info!("Starting HTTP/2 server on {}", config.bind_addr);
     
     // Build the router
+    // MCP Streamable HTTP transport: single endpoint supporting both POST (requests) and GET (SSE)
+    // See: https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http
     let app = Router::new()
         .route("/health", get(health_check))
-        .route("/mcp", post(handle_mcp_post::<H>))
-        .route("/mcp/sse", get(handle_mcp_sse::<H>))
+        .route("/mcp", post(handle_mcp_post::<H>).get(handle_mcp_sse::<H>))
         .layer(
             CorsLayer::permissive()
         )

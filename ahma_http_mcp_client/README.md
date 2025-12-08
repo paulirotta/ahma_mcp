@@ -22,9 +22,10 @@ use url::Url;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-        let sse_url = Url::parse("https://mcp.atlassian.com/v1/sse")?;
+        // Note: External servers may use /sse (legacy), local Ahma servers use /mcp
+        let mcp_url = Url::parse("https://mcp.atlassian.com/v1/sse")?;
         let transport = HttpMcpTransport::new(
-                sse_url,
+                mcp_url,
                 Some("ATLAS_CLIENT_ID".to_string()),
                 Some("ATLAS_CLIENT_SECRET".to_string()),
         )?;

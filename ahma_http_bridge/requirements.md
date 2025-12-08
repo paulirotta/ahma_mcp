@@ -12,8 +12,8 @@ The Ahma HTTP Bridge provides an HTTP server that proxies JSON-RPC requests to a
 2. **BridgeState** - Shared state including message channels and pending request tracking
 3. **HTTP Endpoints**:
    - `GET /health` - Health check endpoint
-   - `POST /mcp` - JSON-RPC request/response endpoint
-   - `GET /sse` - Server-Sent Events for real-time notifications
+   - `POST /mcp` - JSON-RPC request endpoint
+   - `GET /mcp` - Server-Sent Events stream for notifications
 4. **Process Manager** - Manages MCP server subprocess lifecycle
 5. **SessionManager** - Per-session subprocess isolation (optional)
 
@@ -126,13 +126,13 @@ Accepts JSON-RPC 2.0 requests:
 - Requests with `id` field wait for response (60s timeout)
 - Notifications without `id` return immediately
 
-### GET /sse
+### GET /mcp
 
-Returns Server-Sent Events stream:
+Returns Server-Sent Events stream (per MCP Streamable HTTP spec):
 
-- Initial `endpoint` event with value `/mcp`
 - Broadcasts notifications from MCP server
 - Keep-alive messages for connection health
+- Same endpoint as POST, differentiated by HTTP method
 
 ### GET /health
 

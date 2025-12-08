@@ -87,13 +87,13 @@ Health check endpoint.
 OK
 ```
 
-### GET /sse
+### GET /mcp
 
-Server-Sent Events stream for real-time notifications.
+Server-Sent Events stream for real-time notifications (per MCP Streamable HTTP transport spec).
 
-- Sends an initial `endpoint` event announcing the absolute RPC URL (e.g., `http://localhost:3000/mcp`)
 - Streams JSON-RPC notifications emitted by the MCP server
 - Includes keep-alive comments to maintain the connection
+- Same endpoint as POST /mcp, differentiated by HTTP method
 
 ## How It Works
 
