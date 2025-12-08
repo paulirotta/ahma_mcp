@@ -27,3 +27,4 @@ webbrowser = "1.0.6"
 clap = {version = "4.5.53", features = ["derive"]}
 tempfile.workspace = true
 tracing-subscriber = "0.3"
+wiremock = "0.6"

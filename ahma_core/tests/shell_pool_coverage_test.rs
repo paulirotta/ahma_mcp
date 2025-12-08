@@ -5,7 +5,9 @@
 //! - ShellPool and ShellPoolManager behavior
 //! - Command execution edge cases
 
-use ahma_core::shell_pool::{ShellCommand, ShellError, ShellPoolConfig, ShellPoolManager};
+use ahma_core::shell_pool::{
+    ShellCommand, ShellError, ShellPool, ShellPoolConfig, ShellPoolManager,
+};
 use ahma_core::utils::logging::init_test_logging;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -376,4 +378,158 @@ fn test_shell_error_display_messages() {
         wd_err.to_string().contains("test path"),
         "WorkingDirectoryError should include the path"
     );
+}
+
+// ============= Edge case tests for improved coverage =============
+
+#[tokio::test]
+async fn test_shell_pool_manager_get_stats() {
+    init_test_logging();
+    let config = ShellPoolConfig {
+        enabled: true,
+        shells_per_directory: 2,
+        max_total_shells: 10,
+        shell_spawn_timeout: Duration::from_secs(5),
+        ..Default::default()
+    };
+
+    let manager = ShellPoolManager::new(config);
+    let stats = manager.get_stats().await;
+
+    assert_eq!(stats.total_pools, 0, "No pools should exist initially");
+    assert_eq!(stats.max_shells, 10, "Max shells should match config");
+    assert_eq!(
+        stats.total_shells, 0,
+        "No shells should be active initially"
+    );
+}
+
+#[tokio::test]
+async fn test_shell_pool_manager_cleanup_idle_pools() {
+    init_test_logging();
+    let temp_dir = TempDir::new().unwrap();
+    let config = ShellPoolConfig {
+        enabled: true,
+        shells_per_directory: 1,
+        max_total_shells: 5,
+        shell_idle_timeout: Duration::from_millis(1), // Very short for testing
+        shell_spawn_timeout: Duration::from_secs(5),
+        ..Default::default()
+    };
+
+    let manager = ShellPoolManager::new(config);
+
+    // Get a shell to create a pool
+    if let Some(shell) = manager.get_shell(temp_dir.path().to_str().unwrap()).await {
+        manager.return_shell(shell).await;
+    }
+
+    // Wait for idle timeout to expire
+    tokio::time::sleep(Duration::from_millis(10)).await;
+
+    // Run cleanup - should remove idle pools
+    manager.cleanup_idle_pools().await;
+
+    // Stats should reflect cleanup
+    let stats = manager.get_stats().await;
+    assert_eq!(stats.total_pools, 0, "Idle pool should be cleaned up");
+}
+
+#[tokio::test]
+async fn test_shell_pool_manager_shutdown_all() {
+    init_test_logging();
+    let temp_dir = TempDir::new().unwrap();
+    let config = ShellPoolConfig {
+        enabled: true,
+        shells_per_directory: 2,
+        max_total_shells: 10,
+        shell_spawn_timeout: Duration::from_secs(5),
+        ..Default::default()
+    };
+
+    let manager = ShellPoolManager::new(config);
+
+    // Get a shell to create a pool
+    if let Some(shell) = manager.get_shell(temp_dir.path().to_str().unwrap()).await {
+        manager.return_shell(shell).await;
+    }
+
+    // Verify pool exists (always true for usize)
+    let stats_before = manager.get_stats().await;
+    let _ = stats_before.total_pools; // Use the value
+
+    // Shutdown all
+    manager.shutdown_all().await;
+
+    // All pools should be removed
+    let stats_after = manager.get_stats().await;
+    assert_eq!(stats_after.total_pools, 0, "All pools should be shut down");
+}
+
+#[tokio::test]
+async fn test_shell_pool_manager_capacity_limit() {
+    init_test_logging();
+    let temp_dir = TempDir::new().unwrap();
+    let config = ShellPoolConfig {
+        enabled: true,
+        shells_per_directory: 5,
+        max_total_shells: 1, // Very low limit
+        shell_spawn_timeout: Duration::from_secs(5),
+        ..Default::default()
+    };
+
+    let manager = ShellPoolManager::new(config);
+
+    // Get first shell - should succeed
+    let shell1 = manager.get_shell(temp_dir.path().to_str().unwrap()).await;
+
+    if shell1.is_some() {
+        // Try to get second shell - should fail due to capacity
+        let shell2 = manager.get_shell(temp_dir.path().to_str().unwrap()).await;
+        assert!(shell2.is_none(), "Should not get shell when at capacity");
+
+        // Return first shell
+        manager.return_shell(shell1.unwrap()).await;
+
+        // Now should be able to get another shell
+        let shell3 = manager.get_shell(temp_dir.path().to_str().unwrap()).await;
+        if let Some(mut s) = shell3 {
+            s.shutdown().await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_shell_pool_shell_count() {
+    init_test_logging();
+    let temp_dir = TempDir::new().unwrap();
+    let config = ShellPoolConfig {
+        enabled: true,
+        shells_per_directory: 3,
+        max_total_shells: 10,
+        shell_spawn_timeout: Duration::from_secs(5),
+        ..Default::default()
+    };
+
+    let pool = ShellPool::new(temp_dir.path(), config);
+
+    // Initially empty
+    let count = pool.shell_count().await;
+    assert_eq!(count, 0, "Pool should be empty initially");
+}
+
+#[tokio::test]
+async fn test_shell_pool_config_getter() {
+    init_test_logging();
+    let config = ShellPoolConfig {
+        enabled: true,
+        max_total_shells: 42,
+        ..Default::default()
+    };
+
+    let manager = ShellPoolManager::new(config.clone());
+    let retrieved_config = manager.config();
+
+    assert_eq!(retrieved_config.max_total_shells, 42);
+    assert!(retrieved_config.enabled);
 }

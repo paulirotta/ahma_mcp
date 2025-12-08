@@ -569,6 +569,11 @@ Test coverage is tracked in the following areas:
 - Session stress tests (`ahma_http_bridge/tests/session_stress_test.rs`)
 - MCP service handler tests (`ahma_core/tests/mcp_service/`)
 
+**Coverage Exemptions** (files excluded from 80% target):
+
+- `ahma_core/src/test_utils.rs` — Testing infrastructure; testing test utilities creates circular dependencies
+- `ahma_http_bridge/src/main.rs` — Binary entry point; tested via CLI integration tests
+
 For detailed test documentation, see the test files directly.
 
 ---
