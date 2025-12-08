@@ -58,6 +58,7 @@ ahma_mcp --mode http --tools-dir ./my-tools
 Send JSON-RPC messages to the MCP server.
 
 **Request:**
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -68,6 +69,7 @@ Send JSON-RPC messages to the MCP server.
 ```
 
 **Response:**
+
 ```json
 {
   "jsonrpc": "2.0",
@@ -83,6 +85,7 @@ Send JSON-RPC messages to the MCP server.
 Health check endpoint.
 
 **Response:**
+
 ```
 OK
 ```
@@ -146,6 +149,7 @@ A test script is provided:
 ```
 
 This script:
+
 1. Starts the HTTP bridge
 2. Tests the health endpoint
 3. Sends MCP initialize request
@@ -156,12 +160,14 @@ This script:
 ## Benefits
 
 ### For Users
+
 - **Easy HTTP Access**: No need to understand stdio transport
 - **Web Integration**: Can be called from web browsers and HTTP clients
 - **Testing**: Easy to test with curl or Postman
 - **Debugging**: Can inspect requests/responses with HTTP tools
 
 ### For Developers
+
 - **Clean Separation**: Bridge is a separate crate
 - **Reusable**: Can be used as a library in other projects
 - **Maintainable**: Simple, focused implementation (~250 lines)
@@ -178,4 +184,3 @@ For production use with server-initiated messages, consider using WebSocket or t
 ## License
 
 MIT OR Apache-2.0
-
