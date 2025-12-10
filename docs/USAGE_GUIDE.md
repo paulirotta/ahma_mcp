@@ -271,8 +271,7 @@ status    # Shows concurrency analysis and await time metrics
 
 ```bash
 # High-resource operations: limit concurrency
-cargo build -j 2                    # Limit parallel jobs
-cargo test --test-threads 2         # Limit test parallelism
+cargo test --test-threads 4         # Limit test parallelism
 
 # Low-resource operations: maximize concurrency
 cargo check &                       # Multiple concurrent checks

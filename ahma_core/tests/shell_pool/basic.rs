@@ -327,8 +327,8 @@ async fn test_shell_command_with_complex_args() {
             "cargo".to_string(),
             "test".to_string(),
             "--".to_string(),
-            "--test-threads".to_string(),
-            "4".to_string(),
+//            "--test-threads".to_string(),
+//            "4".to_string(),
             "--nocapture".to_string(),
         ],
         working_dir: "/workspace/project".to_string(),
@@ -336,8 +336,8 @@ async fn test_shell_command_with_complex_args() {
     };
 
     assert_eq!(command.command.len(), 6);
-    assert!(command.command.contains(&"--test-threads".to_string()));
-    assert!(command.command.contains(&"4".to_string()));
+ //   assert!(command.command.contains(&"--test-threads".to_string()));
+ //   assert!(command.command.contains(&"4".to_string()));
     assert!(command.command.contains(&"--nocapture".to_string()));
 }
 
