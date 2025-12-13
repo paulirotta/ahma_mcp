@@ -6,7 +6,8 @@
             "command": "target/release/ahma_mcp",
             "args": [
                 "--tools-dir",
-                ".ahma/tools"
+                ".ahma/tools",
+                "--no-sandbox"
             ]
         },
         "Ahma HTTP VSCode": {

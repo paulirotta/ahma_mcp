@@ -1,7 +1,6 @@
 use ahma_http_mcp_client::client::HttpMcpTransport;
 use clap::Parser;
 use rmcp::{ServiceExt, model::CallToolRequestParam};
-use std::borrow::Cow;
 use url::Url;
 
 #[derive(Parser, Debug)]
@@ -68,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Searching for '{}'...", args.query);
 
         let params = CallToolRequestParam {
-            name: Cow::from(tool.name.clone()),
+            name: tool.name.clone(),
             arguments: Some(
                 serde_json::json!({ "query": args.query })
                     .as_object()

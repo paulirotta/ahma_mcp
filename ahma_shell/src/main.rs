@@ -51,8 +51,7 @@ use ahma_core::{
     tool_availability::{evaluate_tool_availability, format_install_guidance},
     utils::logging::init_logging,
 };
-// TODO: Re-enable when HTTP MCP client is fully implemented
-// use ahma_http_mcp_client::client::HttpMcpTransport;
+use ahma_http_mcp_client::client::HttpMcpTransport;
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use rmcp::ServiceExt;
@@ -668,22 +667,36 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     tracing::info!("Command timeout: {}s", cli.timeout);
 
     // --- MCP Client Mode ---
-    // TODO: Implement HTTP MCP client using rmcp 0.9.0 API
-    // The HttpMcpTransport is ready but needs to be integrated with rmcp's ServiceExt
-    // See: https://docs.rs/rmcp/0.9.0/rmcp/trait.ServiceExt.html
     if fs::try_exists(&cli.mcp_config).await.unwrap_or(false) {
         // Try to load the MCP config, but ignore if it's not a valid ahma_mcp config
         // (e.g., if it's a Cursor/VSCode MCP server config with "type": "stdio")
         match ahma_core::config::load_mcp_config(&cli.mcp_config).await {
             Ok(mcp_config) => {
                 if let Some(server_config) = mcp_config.servers.values().next()
-                    && let ahma_core::config::ServerConfig::Http(_http_config) = server_config
+                    && let ahma_core::config::ServerConfig::Http(http_config) = server_config
                 {
-                    tracing::warn!("HTTP MCP Client mode is not yet implemented in rmcp 0.9.0");
+                    tracing::info!("Initializing HTTP MCP Client for: {}", http_config.url);
+
+                    let url = url::Url::parse(&http_config.url)
+                        .context("Failed to parse MCP server URL")?;
+
+                    let transport = HttpMcpTransport::new(
+                        url,
+                        http_config.atlassian_client_id.clone(),
+                        http_config.atlassian_client_secret.clone(),
+                    )?;
+
+                    // Authenticate if needed
+                    transport.ensure_authenticated().await?;
+
+                    tracing::info!("Successfully connected to HTTP MCP server");
                     tracing::warn!(
-                        "The HttpMcpTransport has been implemented but needs integration"
+                        "Remote tools are not yet proxied to the client - this is a partial integration"
                     );
-                    return Err(anyhow!("HTTP MCP client not yet supported"));
+
+                    // Keep the transport alive for the duration of the process
+                    // This ensures the background SSE listener continues to run
+                    Box::leak(Box::new(transport));
                 }
             }
             Err(e) => {
@@ -811,6 +824,10 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
         force_synchronous,
     )
     .await?;
+
+    // Start the config watcher to support hot-reloading of tools
+    service_handler.start_config_watcher(cli.tools_dir.clone());
+
     let service = service_handler.serve(rmcp::transport::stdio()).await?;
 
     // ============================================================================

@@ -483,13 +483,13 @@ async fn test_shell_pool_manager_capacity_limit() {
     // Get first shell - should succeed
     let shell1 = manager.get_shell(temp_dir.path().to_str().unwrap()).await;
 
-    if shell1.is_some() {
+    if let Some(s1) = shell1 {
         // Try to get second shell - should fail due to capacity
         let shell2 = manager.get_shell(temp_dir.path().to_str().unwrap()).await;
         assert!(shell2.is_none(), "Should not get shell when at capacity");
 
         // Return first shell
-        manager.return_shell(shell1.unwrap()).await;
+        manager.return_shell(s1).await;
 
         // Now should be able to get another shell
         let shell3 = manager.get_shell(temp_dir.path().to_str().unwrap()).await;

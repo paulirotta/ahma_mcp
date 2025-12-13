@@ -212,13 +212,12 @@ async fn test_sync_sequence_tool_execution() -> Result<()> {
     assert!(!result.content.is_empty());
     let mut found_completion = false;
     for content in &result.content {
-        if let Some(text_content) = content.as_text() {
-            if text_content.text.contains("completed")
+        if let Some(text_content) = content.as_text()
+            && (text_content.text.contains("completed")
                 || text_content.text.contains("step1")
-                || text_content.text.contains("step2")
-            {
-                found_completion = true;
-            }
+                || text_content.text.contains("step2"))
+        {
+            found_completion = true;
         }
     }
     assert!(found_completion, "Sync sequence should show completion");
@@ -251,13 +250,12 @@ async fn test_async_sequence_tool_execution() -> Result<()> {
     assert!(!result.content.is_empty());
     let mut found_operation_id = false;
     for content in &result.content {
-        if let Some(text_content) = content.as_text() {
-            if text_content.text.contains("operation")
+        if let Some(text_content) = content.as_text()
+            && (text_content.text.contains("operation")
                 || text_content.text.contains("op_")
-                || text_content.text.contains("started")
-            {
-                found_operation_id = true;
-            }
+                || text_content.text.contains("started"))
+        {
+            found_operation_id = true;
         }
     }
     assert!(
@@ -352,10 +350,10 @@ async fn test_skip_sequence_step_via_env() -> Result<()> {
         // Check if skipped message appears
         let mut found_skipped = false;
         for content in &result.content {
-            if let Some(text_content) = content.as_text() {
-                if text_content.text.contains("skipped") {
-                    found_skipped = true;
-                }
+            if let Some(text_content) = content.as_text()
+                && text_content.text.contains("skipped")
+            {
+                found_skipped = true;
             }
         }
         // Note: Steps may or may not be skipped depending on implementation timing

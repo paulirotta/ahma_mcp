@@ -298,6 +298,6 @@ mod mcp_service_tests {
         // Test that service was created successfully with empty config
         // The actual list_tools call requires complex MCP context setup
         // which is better tested in integration tests
-        assert!(service.configs.is_empty());
+        assert!(service.configs.read().unwrap().is_empty());
     }
 }

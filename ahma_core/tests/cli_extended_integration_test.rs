@@ -235,7 +235,7 @@ mod flag_combination_tests {
                 stderr.contains("not found")
                     || stderr.contains("error")
                     || stderr.contains("Error")
-                    || stderr.len() > 0,
+                    || !stderr.is_empty(),
                 "Should have meaningful output on failure"
             );
         }
@@ -624,7 +624,7 @@ mod ahma_validate_extended_tests {
                         guidance_file.to_str().unwrap(),
                     ])
                     .output()
-                    .expect(&format!("Failed to validate {}", tool_name));
+                    .unwrap_or_else(|_| panic!("Failed to validate {}", tool_name));
 
                 if !output.status.success() {
                     let stderr = String::from_utf8_lossy(&output.stderr);

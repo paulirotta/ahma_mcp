@@ -4,7 +4,7 @@
     "command": "sequence",
     "enabled": true,
     "timeout_seconds": 1800,
-    "force_synchronous": true,
+    "synchronous": true,
     "sequence": [
         {
             "tool": "cargo",

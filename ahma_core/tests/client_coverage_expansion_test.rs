@@ -116,18 +116,18 @@ async fn test_client_status_no_operations() -> Result<()> {
     let result = client.call_tool(params).await?;
     assert!(!result.content.is_empty());
 
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
-            // Should indicate operations status
-            assert!(
-                text_content.text.contains("Operations")
-                    || text_content.text.contains("active")
-                    || text_content.text.contains("completed")
-                    || text_content.text.contains("No"),
-                "Expected status output, got: {}",
-                text_content.text
-            );
-        }
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text()
+    {
+        // Should indicate operations status
+        assert!(
+            text_content.text.contains("Operations")
+                || text_content.text.contains("active")
+                || text_content.text.contains("completed")
+                || text_content.text.contains("No"),
+            "Expected status output, got: {}",
+            text_content.text
+        );
     }
     Ok(())
 }
@@ -222,39 +222,39 @@ async fn test_async_operation_lifecycle() -> Result<()> {
     let start_result = client.call_tool(shell_params).await?;
     assert!(!start_result.content.is_empty());
 
-    if let Some(content) = start_result.content.first() {
-        if let Some(text_content) = content.as_text() {
-            // Check if it started as async (contains operation ID)
-            if text_content.text.contains("ID:") {
-                // Extract operation ID
-                let op_id = extract_op_id(&text_content.text);
+    if let Some(content) = start_result.content.first()
+        && let Some(text_content) = content.as_text()
+    {
+        // Check if it started as async (contains operation ID)
+        if text_content.text.contains("ID:") {
+            // Extract operation ID
+            let op_id = extract_op_id(&text_content.text);
 
-                // Check status while running
-                let status_params = CallToolRequestParam {
-                    name: Cow::Borrowed("status"),
-                    arguments: Some(
-                        json!({ "operation_id": op_id.clone() })
-                            .as_object()
-                            .unwrap()
-                            .clone(),
-                    ),
-                };
-                let status_result = client.call_tool(status_params).await?;
-                assert!(!status_result.content.is_empty());
+            // Check status while running
+            let status_params = CallToolRequestParam {
+                name: Cow::Borrowed("status"),
+                arguments: Some(
+                    json!({ "operation_id": op_id.clone() })
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                ),
+            };
+            let status_result = client.call_tool(status_params).await?;
+            assert!(!status_result.content.is_empty());
 
-                // Await completion
-                let await_params = CallToolRequestParam {
-                    name: Cow::Borrowed("await"),
-                    arguments: Some(
-                        json!({ "operation_id": op_id })
-                            .as_object()
-                            .unwrap()
-                            .clone(),
-                    ),
-                };
-                let await_result = client.call_tool(await_params).await?;
-                assert!(!await_result.content.is_empty());
-            }
+            // Await completion
+            let await_params = CallToolRequestParam {
+                name: Cow::Borrowed("await"),
+                arguments: Some(
+                    json!({ "operation_id": op_id })
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                ),
+            };
+            let await_result = client.call_tool(await_params).await?;
+            assert!(!await_result.content.is_empty());
         }
     }
     Ok(())

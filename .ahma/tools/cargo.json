@@ -95,7 +95,7 @@
                     "required": true
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "upgrade",
@@ -138,7 +138,7 @@
                     "description": "Specific dependencies to upgrade (optional, upgrades all if omitted)"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "update",
@@ -165,7 +165,7 @@
                     "description": "Update a specific package to exactly this version"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "check",
@@ -175,9 +175,14 @@
                     "name": "workspace",
                     "type": "boolean",
                     "description": "Check all packages in the workspace"
+                },
+                {
+                    "name": "package",
+                    "type": "string",
+                    "description": "Package to check"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "test",
@@ -200,7 +205,7 @@
                     "description": "Format all packages in the workspace"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "doc",
@@ -212,7 +217,7 @@
                     "description": "Do not build documentation for dependencies"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "clippy",
@@ -247,13 +252,13 @@
                 "skip_subcommand_args": true
             },
             "install_instructions": "Install with `rustup component add clippy`.",
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "qualitycheck",
             "description": "Comprehensive Rust code quality pipeline: format, lint with auto-fix, test, and build. Runs each step sequentially with proper delays to avoid Cargo.lock contention. This tool runs SYNCHRONOUSLY and provides complete results in a single response, making it ideal for pre-commit validation and CI preparation.",
             "enabled": true,
-            "force_synchronous": true,
+            "synchronous": true,
             "timeout_seconds": 1800,
             "sequence": [
                 {

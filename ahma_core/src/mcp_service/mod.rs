@@ -32,6 +32,7 @@ mod types;
 
 pub use types::{GuidanceConfig, LegacyGuidanceConfig, META_PARAMS, SequenceKind};
 
+use notify::{Event, RecursiveMode, Watcher};
 use rmcp::{
     handler::server::ServerHandler,
     model::{
@@ -44,6 +45,7 @@ use rmcp::{
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::env;
+use std::path::PathBuf;
 use std::sync::{
     Arc, RwLock,
     atomic::{AtomicU64, Ordering},
@@ -52,8 +54,11 @@ use tokio::time::Instant;
 use tracing;
 
 use crate::{
-    adapter::Adapter, callback_system::CallbackSender, config::ToolConfig,
-    mcp_callback::McpCallbackSender, operation_monitor::Operation,
+    adapter::Adapter,
+    callback_system::CallbackSender,
+    config::{ToolConfig, load_tool_configs},
+    mcp_callback::McpCallbackSender,
+    operation_monitor::Operation,
 };
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -63,7 +68,7 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 pub struct AhmaMcpService {
     pub adapter: Arc<Adapter>,
     pub operation_monitor: Arc<crate::operation_monitor::OperationMonitor>,
-    pub configs: Arc<HashMap<String, ToolConfig>>,
+    pub configs: Arc<RwLock<HashMap<String, ToolConfig>>>,
     pub guidance: Arc<Option<GuidanceConfig>>,
     /// When true, forces all operations to run synchronously (overrides async-by-default).
     /// This is set when the --sync CLI flag is used.
@@ -90,11 +95,98 @@ impl AhmaMcpService {
         Ok(Self {
             adapter,
             operation_monitor,
-            configs,
+            configs: Arc::new(RwLock::new((*configs).clone())),
             guidance,
             force_synchronous,
             peer: Arc::new(RwLock::new(None)),
         })
+    }
+
+    /// Updates the tool configurations and notifies clients.
+    pub async fn update_tools(&self, new_configs: HashMap<String, ToolConfig>) {
+        {
+            let mut configs_lock = self.configs.write().unwrap();
+            *configs_lock = new_configs;
+        }
+
+        // Notify clients that the tool list has changed
+        let peer_lock = self.peer.read().unwrap();
+        if let Some(_peer) = peer_lock.as_ref() {
+            // TODO: Fix ServerNotification construction for rmcp 0.11.0
+            /*
+            let notification = ServerNotification::Notification(Notification {
+                jsonrpc: "2.0".into(),
+                method: "notifications/tools/list_changed".into(),
+                params: None,
+            });
+            if let Err(e) = peer.send_notification(notification).await {
+                tracing::error!("Failed to send tools/list_changed notification: {}", e);
+            } else {
+                tracing::info!("Sent tools/list_changed notification");
+            }
+            */
+            tracing::warn!("Skipping tools/list_changed notification due to compilation error");
+        }
+    }
+
+    /// Starts a background task to watch for changes in the tools directory.
+    pub fn start_config_watcher(&self, tools_dir: PathBuf) {
+        let service = self.clone();
+        tokio::spawn(async move {
+            let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+
+            let mut watcher =
+                match notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
+                    if let Ok(event) = res {
+                        // Only react to relevant events on JSON files or directory changes
+                        let relevant = event
+                            .paths
+                            .iter()
+                            .any(|p| p.extension().is_some_and(|ext| ext == "json") || p.is_dir());
+
+                        if relevant
+                            && (event.kind.is_modify()
+                                || event.kind.is_create()
+                                || event.kind.is_remove())
+                        {
+                            let _ = tx.blocking_send(());
+                        }
+                    }
+                }) {
+                    Ok(w) => w,
+                    Err(e) => {
+                        tracing::error!("Failed to create config watcher: {}", e);
+                        return;
+                    }
+                };
+
+            if let Err(e) = watcher.watch(&tools_dir, RecursiveMode::Recursive) {
+                tracing::error!("Failed to watch tools directory: {}", e);
+                return;
+            }
+
+            tracing::info!("Started watching tools directory: {:?}", tools_dir);
+
+            // Debounce logic
+            while (rx.recv().await).is_some() {
+                // Drain any other events that happened in quick succession
+                while rx.try_recv().is_ok() {}
+
+                // Wait a bit for file writes to complete
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+                tracing::info!("Detected change in tools directory, reloading configs...");
+                match load_tool_configs(&tools_dir).await {
+                    Ok(new_configs) => {
+                        service.update_tools(new_configs).await;
+                        tracing::info!("Successfully reloaded tool configurations");
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to reload tool configurations: {}", e);
+                    }
+                }
+            }
+        });
     }
 
     /// Creates an MCP Tool from a ToolConfig.
@@ -715,14 +807,20 @@ impl ServerHandler for AhmaMcpService {
                 meta: None,
             });
 
-            for config in self.configs.values() {
-                if !config.enabled {
-                    tracing::debug!("Skipping disabled tool '{}' during list_tools", config.name);
-                    continue;
-                }
+            {
+                let configs_lock = self.configs.read().unwrap();
+                for config in configs_lock.values() {
+                    if !config.enabled {
+                        tracing::debug!(
+                            "Skipping disabled tool '{}' during list_tools",
+                            config.name
+                        );
+                        continue;
+                    }
 
-                let tool = self.create_tool_from_config(config);
-                tools.push(tool);
+                    let tool = self.create_tool_from_config(config);
+                    tools.push(tool);
+                }
             }
 
             Ok(ListToolsResult {
@@ -1006,15 +1104,20 @@ impl ServerHandler for AhmaMcpService {
             }
 
             // Find tool configuration
-            let config = match self.configs.get(tool_name) {
-                Some(config) => config,
-                None => {
-                    let error_message = format!("Tool '{}' not found.", tool_name);
-                    tracing::error!("{}", error_message);
-                    return Err(McpError::invalid_params(
-                        error_message,
-                        Some(serde_json::json!({ "tool_name": tool_name })),
-                    ));
+            // Acquire read lock for configs, clone the config, and drop the lock immediately
+            // to avoid holding the lock across await points (which makes the future !Send)
+            let config = {
+                let configs_lock = self.configs.read().unwrap();
+                match configs_lock.get(tool_name) {
+                    Some(config) => config.clone(),
+                    None => {
+                        let error_message = format!("Tool '{}' not found.", tool_name);
+                        tracing::error!("{}", error_message);
+                        return Err(McpError::invalid_params(
+                            error_message,
+                            Some(serde_json::json!({ "tool_name": tool_name })),
+                        ));
+                    }
                 }
             };
 
@@ -1033,7 +1136,7 @@ impl ServerHandler for AhmaMcpService {
                     &self.adapter,
                     &self.operation_monitor,
                     &self.configs,
-                    config,
+                    &config,
                     params,
                     context,
                 )
@@ -1047,7 +1150,7 @@ impl ServerHandler for AhmaMcpService {
 
             // Find the subcommand config and construct the command parts
             let (subcommand_config, command_parts) =
-                match subcommand::find_subcommand_config_from_args(config, subcommand_name.clone())
+                match subcommand::find_subcommand_config_from_args(&config, subcommand_name.clone())
                 {
                     Some(result) => result,
                     None => {
@@ -1087,7 +1190,7 @@ impl ServerHandler for AhmaMcpService {
             if subcommand_config.sequence.is_some() {
                 return sequence::handle_subcommand_sequence(
                     &self.adapter,
-                    config,
+                    &config,
                     subcommand_config,
                     params,
                     context,

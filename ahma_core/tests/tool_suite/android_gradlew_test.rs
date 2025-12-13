@@ -267,7 +267,7 @@ mod android_tests {
             let name = subcommand["name"].as_str().unwrap();
             // synchronous: true means always sync, false/None means can be async (obeys --async)
             let is_forced_sync = subcommand
-                .get("force_synchronous")
+                .get("synchronous")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
             let guidance_key = subcommand.get("guidance_key").and_then(|v| v.as_str());
@@ -275,7 +275,7 @@ mod android_tests {
             if sync_tasks.contains(&name) {
                 assert!(
                     is_forced_sync,
-                    "Task '{}' should be marked as force_synchronous to stay synchronous",
+                    "Task '{}' should be marked as synchronous to stay synchronous",
                     name
                 );
                 assert_eq!(
@@ -287,7 +287,7 @@ mod android_tests {
             } else if async_tasks.contains(&name) {
                 assert!(
                     !is_forced_sync,
-                    "Task '{}' should NOT be force_synchronous (can run async)",
+                    "Task '{}' should NOT be synchronous (can run async)",
                     name
                 );
                 assert_eq!(
