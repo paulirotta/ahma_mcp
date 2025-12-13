@@ -49,27 +49,26 @@ async fn test_async_operation_triggers_callbacks() -> Result<()> {
     assert!(!result.content.is_empty());
 
     // If async, the callback paths are exercised
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
-            if text_content.text.contains("ID:") {
-                // Extract operation ID
-                let op_id = extract_op_id(&text_content.text);
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text()
+        && text_content.text.contains("ID:")
+    {
+        // Extract operation ID
+        let op_id = extract_op_id(&text_content.text);
 
-                // Await completion - this triggers FinalResult callback
-                let await_params = CallToolRequestParam {
-                    name: Cow::Borrowed("await"),
-                    arguments: Some(
-                        json!({ "operation_id": op_id })
-                            .as_object()
-                            .unwrap()
-                            .clone(),
-                    ),
-                };
+        // Await completion - this triggers FinalResult callback
+        let await_params = CallToolRequestParam {
+            name: Cow::Borrowed("await"),
+            arguments: Some(
+                json!({ "operation_id": op_id })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        };
 
-                let await_result = client.call_tool(await_params).await?;
-                assert!(!await_result.content.is_empty());
-            }
-        }
+        let await_result = client.call_tool(await_params).await?;
+        assert!(!await_result.content.is_empty());
     }
 
     Ok(())
@@ -91,26 +90,25 @@ async fn test_failed_operation_callback() -> Result<()> {
     assert!(!result.content.is_empty());
 
     // If async, await and check for failure message
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
-            if text_content.text.contains("ID:") {
-                let op_id = extract_op_id(&text_content.text);
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text()
+        && text_content.text.contains("ID:")
+    {
+        let op_id = extract_op_id(&text_content.text);
 
-                let await_params = CallToolRequestParam {
-                    name: Cow::Borrowed("await"),
-                    arguments: Some(
-                        json!({ "operation_id": op_id })
-                            .as_object()
-                            .unwrap()
-                            .clone(),
-                    ),
-                };
+        let await_params = CallToolRequestParam {
+            name: Cow::Borrowed("await"),
+            arguments: Some(
+                json!({ "operation_id": op_id })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        };
 
-                let await_result = client.call_tool(await_params).await?;
-                // Failed operations should still produce output
-                assert!(!await_result.content.is_empty());
-            }
-        }
+        let await_result = client.call_tool(await_params).await?;
+        // Failed operations should still produce output
+        assert!(!await_result.content.is_empty());
     }
 
     Ok(())
@@ -135,50 +133,49 @@ async fn test_cancelled_operation_callback() -> Result<()> {
 
     let start_result = client.call_tool(shell_params).await?;
 
-    if let Some(content) = start_result.content.first() {
-        if let Some(text_content) = content.as_text() {
-            if text_content.text.contains("ID:") {
-                let op_id = extract_op_id(&text_content.text);
+    if let Some(content) = start_result.content.first()
+        && let Some(text_content) = content.as_text()
+        && text_content.text.contains("ID:")
+    {
+        let op_id = extract_op_id(&text_content.text);
 
-                // Cancel the operation - this should trigger Cancelled callback
-                let cancel_params = CallToolRequestParam {
-                    name: Cow::Borrowed("cancel"),
-                    arguments: Some(
-                        json!({ "operation_id": op_id })
-                            .as_object()
-                            .unwrap()
-                            .clone(),
-                    ),
-                };
+        // Cancel the operation - this should trigger Cancelled callback
+        let cancel_params = CallToolRequestParam {
+            name: Cow::Borrowed("cancel"),
+            arguments: Some(
+                json!({ "operation_id": op_id })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        };
 
-                let cancel_result = client.call_tool(cancel_params).await?;
-                assert!(!cancel_result.content.is_empty());
+        let cancel_result = client.call_tool(cancel_params).await?;
+        assert!(!cancel_result.content.is_empty());
 
-                // Await the cancelled operation to ensure it completes and resources are cleaned up
-                let await_params = CallToolRequestParam {
-                    name: Cow::Borrowed("await"),
-                    arguments: Some(
-                        json!({ "operation_id": op_id })
-                            .as_object()
-                            .unwrap()
-                            .clone(),
-                    ),
-                };
+        // Await the cancelled operation to ensure it completes and resources are cleaned up
+        let await_params = CallToolRequestParam {
+            name: Cow::Borrowed("await"),
+            arguments: Some(
+                json!({ "operation_id": op_id })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        };
 
-                let await_result = client.call_tool(await_params).await?;
-                assert!(!await_result.content.is_empty());
+        let await_result = client.call_tool(await_params).await?;
+        assert!(!await_result.content.is_empty());
 
-                // The cancellation message formatting is tested
-                if let Some(cancel_content) = cancel_result.content.first() {
-                    if let Some(cancel_text) = cancel_content.as_text() {
-                        // Should not have redundant "Cancelled: Canceled" pattern
-                        assert!(
-                            !cancel_text.text.contains("Cancelled: Canceled"),
-                            "Should not have redundant cancellation message"
-                        );
-                    }
-                }
-            }
+        // The cancellation message formatting is tested
+        if let Some(cancel_content) = cancel_result.content.first()
+            && let Some(cancel_text) = cancel_content.as_text()
+        {
+            // Should not have redundant "Cancelled: Canceled" pattern
+            assert!(
+                !cancel_text.text.contains("Cancelled: Canceled"),
+                "Should not have redundant cancellation message"
+            );
         }
     }
 
@@ -206,25 +203,24 @@ async fn test_stderr_output_callback() -> Result<()> {
     assert!(!result.content.is_empty());
 
     // If async, await to ensure stderr output is captured
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
-            if text_content.text.contains("ID:") {
-                let op_id = extract_op_id(&text_content.text);
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text()
+        && text_content.text.contains("ID:")
+    {
+        let op_id = extract_op_id(&text_content.text);
 
-                let await_params = CallToolRequestParam {
-                    name: Cow::Borrowed("await"),
-                    arguments: Some(
-                        json!({ "operation_id": op_id })
-                            .as_object()
-                            .unwrap()
-                            .clone(),
-                    ),
-                };
+        let await_params = CallToolRequestParam {
+            name: Cow::Borrowed("await"),
+            arguments: Some(
+                json!({ "operation_id": op_id })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        };
 
-                let await_result = client.call_tool(await_params).await?;
-                assert!(!await_result.content.is_empty());
-            }
-        }
+        let await_result = client.call_tool(await_params).await?;
+        assert!(!await_result.content.is_empty());
     }
 
     Ok(())

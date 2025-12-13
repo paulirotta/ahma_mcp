@@ -347,5 +347,5 @@
       ]
     }
   ],
-  "force_synchronous": true
+  "synchronous": true
 }

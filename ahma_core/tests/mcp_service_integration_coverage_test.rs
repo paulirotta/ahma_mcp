@@ -36,17 +36,17 @@ async fn test_status_tool_no_filters() -> Result<()> {
 
     // Should return status information
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
-            // Should contain operations status summary
-            assert!(
-                text_content.text.contains("Operations status")
-                    || text_content.text.contains("active")
-                    || text_content.text.contains("completed"),
-                "Status should show operations summary, got: {}",
-                text_content.text
-            );
-        }
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text()
+    {
+        // Should contain operations status summary
+        assert!(
+            text_content.text.contains("Operations status")
+                || text_content.text.contains("active")
+                || text_content.text.contains("completed"),
+            "Status should show operations summary, got: {}",
+            text_content.text
+        );
     }
 
     client.cancel().await?;
@@ -80,16 +80,16 @@ async fn test_status_tool_with_tool_filter() -> Result<()> {
     let result = client.call_tool(params).await?;
 
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
-            // Should mention the filtered tool
-            assert!(
-                text_content.text.contains("sandboxed_shell")
-                    || text_content.text.contains("Operations status"),
-                "Status should reference filter, got: {}",
-                text_content.text
-            );
-        }
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text()
+    {
+        // Should mention the filtered tool
+        assert!(
+            text_content.text.contains("sandboxed_shell")
+                || text_content.text.contains("Operations status"),
+            "Status should reference filter, got: {}",
+            text_content.text
+        );
     }
 
     client.cancel().await?;
@@ -116,17 +116,17 @@ async fn test_status_tool_with_operation_id_filter() -> Result<()> {
     let result = client.call_tool(params).await?;
 
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
-            // Should indicate operation not found
-            assert!(
-                text_content.text.contains("not found")
-                    || text_content.text.contains("total: 0")
-                    || text_content.text.contains("nonexistent_op_12345"),
-                "Status should indicate operation not found, got: {}",
-                text_content.text
-            );
-        }
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text()
+    {
+        // Should indicate operation not found
+        assert!(
+            text_content.text.contains("not found")
+                || text_content.text.contains("total: 0")
+                || text_content.text.contains("nonexistent_op_12345"),
+            "Status should indicate operation not found, got: {}",
+            text_content.text
+        );
     }
 
     client.cancel().await?;
@@ -151,17 +151,17 @@ async fn test_await_tool_no_pending_operations() -> Result<()> {
     let result = client.call_tool(params).await?;
 
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
-            // Should indicate no pending operations
-            assert!(
-                text_content.text.contains("No pending operations")
-                    || text_content.text.contains("Completed")
-                    || text_content.text.contains("operations"),
-                "Await should handle no pending ops, got: {}",
-                text_content.text
-            );
-        }
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text()
+    {
+        // Should indicate no pending operations
+        assert!(
+            text_content.text.contains("No pending operations")
+                || text_content.text.contains("Completed")
+                || text_content.text.contains("operations"),
+            "Await should handle no pending ops, got: {}",
+            text_content.text
+        );
     }
 
     client.cancel().await?;
@@ -187,16 +187,16 @@ async fn test_await_tool_nonexistent_operation_id() -> Result<()> {
     let result = client.call_tool(params).await?;
 
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
-            // Should indicate operation not found
-            assert!(
-                text_content.text.contains("not found")
-                    || text_content.text.contains("fake_operation_xyz"),
-                "Await should handle non-existent operation, got: {}",
-                text_content.text
-            );
-        }
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text()
+    {
+        // Should indicate operation not found
+        assert!(
+            text_content.text.contains("not found")
+                || text_content.text.contains("fake_operation_xyz"),
+            "Await should handle non-existent operation, got: {}",
+            text_content.text
+        );
     }
 
     client.cancel().await?;
@@ -223,16 +223,16 @@ async fn test_await_tool_with_tool_filter() -> Result<()> {
     let result = client.call_tool(params).await?;
 
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
-            // Should indicate no pending operations for this filter
-            assert!(
-                text_content.text.contains("No pending operations")
-                    || text_content.text.contains("nonexistent_tool"),
-                "Await should handle empty filter results, got: {}",
-                text_content.text
-            );
-        }
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text()
+    {
+        // Should indicate no pending operations for this filter
+        assert!(
+            text_content.text.contains("No pending operations")
+                || text_content.text.contains("nonexistent_tool"),
+            "Await should handle empty filter results, got: {}",
+            text_content.text
+        );
     }
 
     client.cancel().await?;
@@ -259,18 +259,17 @@ async fn test_await_for_completed_async_operation() -> Result<()> {
 
     // Extract operation ID if available
     let mut operation_id = None;
-    if let Some(content) = start_result.content.first() {
-        if let Some(text_content) = content.as_text() {
-            // Try to extract operation ID from the response
-            if let Some(idx) = text_content.text.find("operation_id") {
-                let rest = &text_content.text[idx..];
-                // Look for patterns like "operation_id": "op_123" or operation_id: op_123
-                for word in rest.split_whitespace().take(5) {
-                    if word.starts_with("op_") || word.starts_with("\"op_") {
-                        operation_id =
-                            Some(word.trim_matches(|c| c == '"' || c == ',').to_string());
-                        break;
-                    }
+    if let Some(content) = start_result.content.first()
+        && let Some(text_content) = content.as_text()
+    {
+        // Try to extract operation ID from the response
+        if let Some(idx) = text_content.text.find("operation_id") {
+            let rest = &text_content.text[idx..];
+            // Look for patterns like "operation_id": "op_123" or operation_id: op_123
+            for word in rest.split_whitespace().take(5) {
+                if word.starts_with("op_") || word.starts_with("\"op_") {
+                    operation_id = Some(word.trim_matches(|c| c == '"' || c == ',').to_string());
+                    break;
                 }
             }
         }
@@ -358,16 +357,16 @@ async fn test_cancel_tool_nonexistent_operation() -> Result<()> {
         let result = client.call_tool(params).await?;
 
         // Should indicate operation not found
-        if let Some(content) = result.content.first() {
-            if let Some(text_content) = content.as_text() {
-                assert!(
-                    text_content.text.contains("not found")
-                        || text_content.text.contains("❌")
-                        || text_content.text.contains("never existed"),
-                    "Cancel should report operation not found, got: {}",
-                    text_content.text
-                );
-            }
+        if let Some(content) = result.content.first()
+            && let Some(text_content) = content.as_text()
+        {
+            assert!(
+                text_content.text.contains("not found")
+                    || text_content.text.contains("❌")
+                    || text_content.text.contains("never existed"),
+                "Cancel should report operation not found, got: {}",
+                text_content.text
+            );
         }
     }
 
@@ -607,17 +606,17 @@ async fn test_file_tools_in_temp_directory() -> Result<()> {
 
         let result = client.call_tool(params).await?;
 
-        if let Some(content) = result.content.first() {
-            if let Some(text_content) = content.as_text() {
-                // Should see the test files we created
-                assert!(
-                    text_content.text.contains("test1.txt")
-                        || text_content.text.contains("test2.txt")
-                        || text_content.text.contains(".ahma"),
-                    "Should see files in temp dir, got: {}",
-                    text_content.text
-                );
-            }
+        if let Some(content) = result.content.first()
+            && let Some(text_content) = content.as_text()
+        {
+            // Should see the test files we created
+            assert!(
+                text_content.text.contains("test1.txt")
+                    || text_content.text.contains("test2.txt")
+                    || text_content.text.contains(".ahma"),
+                "Should see files in temp dir, got: {}",
+                text_content.text
+            );
         }
     }
 
@@ -649,19 +648,19 @@ async fn test_status_with_multiple_tool_filters() -> Result<()> {
     let result = client.call_tool(params).await?;
 
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
-            // Should process the comma-separated list
-            assert!(
-                text_content.text.contains("Operations status")
-                    || text_content.text.contains("cargo")
-                    || text_content.text.contains("git")
-                    || text_content.text.contains("sandboxed_shell")
-                    || text_content.text.contains("total"),
-                "Status should handle multiple filters, got: {}",
-                text_content.text
-            );
-        }
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text()
+    {
+        // Should process the comma-separated list
+        assert!(
+            text_content.text.contains("Operations status")
+                || text_content.text.contains("cargo")
+                || text_content.text.contains("git")
+                || text_content.text.contains("sandboxed_shell")
+                || text_content.text.contains("total"),
+            "Status should handle multiple filters, got: {}",
+            text_content.text
+        );
     }
 
     client.cancel().await?;
@@ -683,18 +682,18 @@ async fn test_await_with_multiple_tool_filters() -> Result<()> {
     let result = client.call_tool(params).await?;
 
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first() {
-        if let Some(text_content) = content.as_text() {
-            // Should indicate no pending operations for these tools
-            assert!(
-                text_content.text.contains("No pending operations")
-                    || text_content.text.contains("cargo")
-                    || text_content.text.contains("git")
-                    || text_content.text.contains("Completed"),
-                "Await should handle multiple filters, got: {}",
-                text_content.text
-            );
-        }
+    if let Some(content) = result.content.first()
+        && let Some(text_content) = content.as_text()
+    {
+        // Should indicate no pending operations for these tools
+        assert!(
+            text_content.text.contains("No pending operations")
+                || text_content.text.contains("cargo")
+                || text_content.text.contains("git")
+                || text_content.text.contains("Completed"),
+            "Await should handle multiple filters, got: {}",
+            text_content.text
+        );
     }
 
     client.cancel().await?;

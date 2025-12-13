@@ -32,7 +32,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "help",
@@ -51,7 +51,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "dependencies",
@@ -70,7 +70,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "properties",
@@ -84,7 +84,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "signingReport",
@@ -98,7 +98,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "sourceSets",
@@ -112,7 +112,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "androidDependencies",
@@ -126,7 +126,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "clean",
@@ -140,7 +140,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "build",
@@ -154,7 +154,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "buildDebug",
@@ -168,7 +168,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "buildRelease",
@@ -182,7 +182,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "assemble",
@@ -196,7 +196,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "assembleDebug",
@@ -210,7 +210,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "assembleRelease",
@@ -224,7 +224,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "assembleAndroidTest",
@@ -238,7 +238,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "assembleUnitTest",
@@ -252,7 +252,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "compileDebugSources",
@@ -266,7 +266,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "compileReleaseSources",
@@ -280,7 +280,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "compileDebugAndroidTestSources",
@@ -294,7 +294,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "compileDebugUnitTestSources",
@@ -308,7 +308,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "compileReleaseUnitTestSources",
@@ -322,7 +322,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "bundle",
@@ -336,7 +336,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "bundleDebug",
@@ -350,7 +350,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "bundleRelease",
@@ -364,7 +364,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "buildKotlinToolingMetadata",
@@ -378,7 +378,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "buildDependents",
@@ -392,7 +392,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "buildNeeded",
@@ -406,7 +406,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "installDebug",
@@ -420,7 +420,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "installRelease",
@@ -434,7 +434,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "installDebugAndroidTest",
@@ -448,7 +448,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "uninstallDebug",
@@ -462,7 +462,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "uninstallRelease",
@@ -476,7 +476,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "uninstallDebugAndroidTest",
@@ -490,7 +490,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "uninstallAll",
@@ -504,7 +504,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "test",
@@ -518,7 +518,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "testDebugUnitTest",
@@ -532,7 +532,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "testReleaseUnitTest",
@@ -546,7 +546,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "connectedCheck",
@@ -560,7 +560,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "connectedAndroidTest",
@@ -574,7 +574,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "connectedDebugAndroidTest",
@@ -588,7 +588,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "deviceAndroidTest",
@@ -602,7 +602,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "deviceCheck",
@@ -616,7 +616,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "check",
@@ -630,7 +630,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "checkJetifier",
@@ -644,7 +644,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "checkKotlinGradlePluginConfigurationErrors",
@@ -658,7 +658,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "lint",
@@ -672,7 +672,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "lintDebug",
@@ -686,7 +686,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "lintRelease",
@@ -700,7 +700,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "lintVitalRelease",
@@ -714,7 +714,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "lintFix",
@@ -728,7 +728,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "updateLintBaseline",
@@ -742,7 +742,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "ktlintCheck",
@@ -756,7 +756,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         },
         {
             "name": "ktlintFormat",
@@ -770,7 +770,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": false
+            "synchronous": false
         }
     ]
 }
