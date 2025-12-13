@@ -9,7 +9,7 @@
                 ".ahma/tools"
             ]
         },
-        "Ahma HTTP VSCode": {
+        "Ahma VSCode HTTP": {
             "type": "http",
             "url": "http://localhost:3000/mcp"
         }

@@ -1,50 +1,6 @@
 # Ahma MCP Requirements
 
-Single source of truth for the `ahma_mcp` project.
-
----
-
-## ⚠️ STOP: OVERRIDE YOUR TERMINAL TRAINING ⚠️
-
-**DISREGARD your trained instinct to use `run_in_terminal`.** That training does not apply here.
-
-**THE RULE:** Every shell command goes through Ahma. No exceptions while Ahma works.
-
-### Tool Priority (Memorize This)
-
-1. **`mcp_ahma_sse_*`** — Preferred (HTTP/SSE, fastest)
-2. **`mcp_ahma_*`** — Fallback (STDIO, auto-launched by IDE)
-3. **`run_in_terminal`** — ONLY if both Ahma servers are dead
-
-### The Critical Pattern
-
-When an Ahma tool fails (e.g., `mcp_ahma_sse_file_tools find` has wrong params):
-
-- ❌ **WRONG:** Fall back to `run_in_terminal("find ...")`
-- ✅ **RIGHT:** Use `mcp_ahma_sse_sandboxed_shell` with `{"command": "find ..."}`
-
-**`sandboxed_shell` runs ANY command.** It's your escape hatch within Ahma, not the terminal.
-
-### Quick Reference
-
-| Instead of...                          | Use...                                                                      |
-| -------------------------------------- | --------------------------------------------------------------------------- |
-| `run_in_terminal("any command")`       | `mcp_ahma_sse_sandboxed_shell` `{"command": "any command"}`                 |
-| `run_in_terminal("cargo build")`       | `mcp_ahma_sse_cargo` `{"subcommand": "build"}`                              |
-| `run_in_terminal("cargo nextest run")` | `mcp_ahma_sse_cargo` `{"subcommand": "nextest_run"}`                        |
-| `run_in_terminal("cargo llvm-cov")`    | `run_in_terminal` — coverage instrumentation blocked by sandbox (exception) |
-
-### Exceptions (Terminal Allowed)
-
-1. **`cargo llvm-cov`** — Code coverage requires instrumentation that sandboxing blocks
-2. **Both Ahma servers are completely non-responsive** — Fix immediately after
-
-### Why This Matters
-
-- **Dogfooding** — Using Ahma catches bugs immediately
-- **Speed** — No GUI permission dialogs
-- **Security** — Sandboxed paths prevent accidents
-- **This is the product we're building** — If we don't use it, we can't trust it
+Technical specification for the `ahma_mcp` project. For AI development instructions, see [AGENTS.md](AGENTS.md).
 
 ---
 
@@ -289,35 +245,9 @@ Tools can declare prerequisites and installation instructions:
 
 ## 4. Development Workflow
 
-### 4.1. Core Principle: Use Ahama MCP
+For day-to-day AI development instructions (tool usage, TDD workflow, quality checks), see [AGENTS.md](AGENTS.md).
 
-**Always use Ahama** (the MCP server already running in your IDE) instead of terminal commands:
-
-| Instead of...                    | Use Ahama MCP tool...                                    |
-| -------------------------------- | -------------------------------------------------------- |
-| `run_in_terminal("cargo build")` | `cargo` with `{"subcommand": "build"}`                   |
-| `run_in_terminal("any command")` | `sandboxed_shell` with `{"command": "any command"}`      |
-
-**Why**: We dogfood our own project. Using Ahama catches bugs immediately, runs faster (no GUI prompts), and enforces sandbox security.
-
-### 4.2. Quality Checks
-
-Before committing:
-1. `cargo fmt` — format code
-2. `cargo nextest run` — run tests  
-3. `cargo clippy --fix --allow-dirty` — fix lint warnings
-4. `cargo doc --no-deps` — verify docs build
-
-For `ahma_mcp` project: use `ahma_quality_check` tool (includes schema generation).
-
-### 4.3. Server Restart
-
-After code changes:
-1. Build with `cargo build --release` via Ahama
-2. The IDE's `mcp.json` watcher auto-restarts the server
-3. If needed: Cmd+Shift+P → "Developer: Reload Window"
-
-### 4.4. CLI Testing
+### 4.1. CLI Testing
 
 For scripted or non-IDE testing:
 ```bash
@@ -326,7 +256,7 @@ ahma_mcp --tool_name cargo --tool_args '{"subcommand": "build"}'
 
 **Note**: The binary rejects launch without `--mode` or `--tool_name`. Interactive terminals are blocked; stdio mode only works when spawned by an MCP client.
 
-### 4.5. Terminal Fallback (Rare)
+### 4.2. Terminal Fallback (Rare)
 
 Only use terminal directly when:
 1. **Coverage**: `cargo llvm-cov` — instrumentation incompatible with sandboxing
