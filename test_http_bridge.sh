@@ -41,7 +41,7 @@ fi
 echo
 echo "Testing SSE endpoint..."
 # We use curl with --max-time to just grab the first few lines
-SSE_OUTPUT=$(curl -N -s --max-time 2 http://localhost:3000/sse || true)
+SSE_OUTPUT=$(curl -N -s --max-time 2 http://localhost:3000/mcp || true)
 
 echo "SSE Output (first 200 chars):"
 echo "${SSE_OUTPUT:0:200}"

@@ -20,6 +20,7 @@
 //! ahma_mcp --list-tools --http http://localhost:3000
 //! ```
 
+use ahma_http_mcp_client::client::HttpMcpTransport;
 use anyhow::{Context, Result, anyhow};
 use rmcp::{
     ServiceExt,
@@ -30,6 +31,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::PathBuf};
 use tokio::process::Command;
 use tracing::info;
+use url::Url;
 
 /// Output format for tool listing
 #[derive(Debug, Clone, clap::ValueEnum, Default)]
@@ -195,54 +197,37 @@ pub async fn list_tools_stdio(command_args: &[String]) -> Result<ToolListResult>
 
 /// List tools from HTTP MCP server
 pub async fn list_tools_http(url: &str) -> Result<ToolListResult> {
-    // For now, use a simple HTTP client approach
-    let client = reqwest::Client::new();
+    let url = Url::parse(url).context("Invalid URL")?;
 
-    // Send tools/list request
-    let response = client
-        .post(format!("{}/mcp", url.trim_end_matches('/')))
-        .header("Content-Type", "application/json")
-        .json(&serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/list",
-            "params": {}
-        }))
-        .send()
-        .await
-        .with_context(|| format!("Failed to connect to HTTP MCP server at {}", url))?;
+    // Initialize HTTP transport
+    let transport =
+        HttpMcpTransport::new(url, None, None).context("Failed to create HTTP transport")?;
 
-    let response_text = response.text().await?;
-    let response_json: serde_json::Value = serde_json::from_str(&response_text)
-        .with_context(|| format!("Invalid JSON response: {}", response_text))?;
+    // Connect via rmcp client
+    let client = ().serve(transport).await.with_context(|| "Failed to connect to HTTP MCP server")?;
 
-    // Extract tools from response
-    let tools_array = response_json["result"]["tools"]
-        .as_array()
-        .ok_or_else(|| anyhow!("Invalid tools/list response format"))?;
+    // Get server info
+    let server_info_output = client.peer_info().map(|info| ServerInfoOutput {
+        name: info.server_info.name.clone(),
+        version: Some(info.server_info.version.clone()),
+    });
 
-    let tools: Vec<ToolOutput> = tools_array
-        .iter()
-        .map(|tool_json| {
-            let name = tool_json["name"].as_str().unwrap_or("unknown").to_string();
-            let description = tool_json["description"].as_str().map(|s| s.to_string());
+    // List tools
+    let tools_result = client.list_tools(None).await?;
 
-            let parameters = extract_parameters_from_json(&tool_json["inputSchema"]);
-
-            ToolOutput {
-                name,
-                description,
-                parameters,
-            }
-        })
+    let tools: Vec<ToolOutput> = tools_result
+        .tools
+        .into_iter()
+        .map(convert_tool_to_output)
         .collect();
 
     Ok(ToolListResult {
-        server_info: None,
+        server_info: server_info_output,
         tools,
     })
 }
 
+#[allow(dead_code)]
 pub fn extract_parameters_from_json(schema: &serde_json::Value) -> Vec<ParameterOutput> {
     let mut params = Vec::new();
 

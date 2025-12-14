@@ -6,10 +6,11 @@
             "command": "target/release/ahma_mcp",
             "args": [
                 "--tools-dir",
-                ".ahma/tools"
+                ".ahma/tools",
+                "--no-sandbox"
             ]
         },
-        "Ahma VSCode HTTP": {
+        "Ahma HTTP VSCode": {
             "type": "http",
             "url": "http://localhost:3000/mcp"
         }

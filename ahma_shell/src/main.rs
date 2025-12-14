@@ -51,8 +51,7 @@ use ahma_core::{
     tool_availability::{evaluate_tool_availability, format_install_guidance},
     utils::logging::init_logging,
 };
-// TODO: Re-enable when HTTP MCP client is fully implemented
-// use ahma_http_mcp_client::client::HttpMcpTransport;
+use ahma_http_mcp_client::client::HttpMcpTransport;
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use rmcp::ServiceExt;
@@ -153,10 +152,12 @@ struct Cli {
     #[arg(long, global = true)]
     sandbox_scope: Option<PathBuf>,
 
-    /// Skip sandbox prerequisite checks and use passthrough mode.
-    /// WARNING: This disables security sandboxing. Only use for testing.
-    #[arg(long, global = true, hide = true)]
-    skip_sandbox: bool,
+    /// Disable Ahma's kernel-level sandboxing (sandbox-exec on macOS, Landlock on Linux).
+    /// Use this when running inside another sandbox (e.g., Cursor, VS Code, Docker) where
+    /// nested sandboxing causes "Operation not permitted" errors. The outer sandbox still
+    /// provides security. Can also be set via AHMA_NO_SANDBOX=1 environment variable.
+    #[arg(long, global = true)]
+    no_sandbox: bool,
 
     /// Log to stderr instead of file (useful for debugging and seeing errors in terminal).
     /// Enables colored output on Mac/Linux.
@@ -194,17 +195,46 @@ async fn main() -> Result<()> {
         return run_list_tools_mode(&cli).await;
     }
 
-    // Check if sandbox should be skipped (for testing)
-    // Can be set via --skip-sandbox flag or AHMA_TEST_MODE environment variable
-    let skip_sandbox = cli.skip_sandbox || std::env::var("AHMA_TEST_MODE").is_ok();
+    // Check if sandbox should be disabled
+    // Can be set via --no-sandbox flag, AHMA_NO_SANDBOX=1, or AHMA_TEST_MODE (legacy)
+    let mut no_sandbox = cli.no_sandbox
+        || std::env::var("AHMA_NO_SANDBOX").is_ok()
+        || std::env::var("AHMA_TEST_MODE").is_ok();
 
-    if skip_sandbox {
-        tracing::warn!("Sandbox checks skipped - running in test mode WITHOUT security sandboxing");
+    if no_sandbox {
+        tracing::warn!("Ahma sandbox disabled via --no-sandbox flag or environment variable");
         sandbox::enable_test_mode();
     } else {
         // Check sandbox prerequisites before anything else
         if let Err(e) = sandbox::check_sandbox_prerequisites() {
             sandbox::exit_with_sandbox_error(&e);
+        }
+
+        // On macOS, test if sandbox-exec can actually be applied
+        // This detects when running inside another sandbox (Cursor, VS Code, Docker)
+        #[cfg(target_os = "macos")]
+        {
+            if let Err(e) = sandbox::test_sandbox_exec_available() {
+                match e {
+                    SandboxError::NestedSandboxDetected => {
+                        tracing::warn!(
+                            "Nested sandbox detected - Ahma is running inside another sandbox (e.g., Cursor IDE)"
+                        );
+                        tracing::warn!(
+                            "Ahma's sandbox will be disabled; the outer sandbox provides security"
+                        );
+                        tracing::info!(
+                            "To suppress this warning, use --no-sandbox or set AHMA_NO_SANDBOX=1"
+                        );
+                        sandbox::enable_test_mode();
+                        no_sandbox = true;
+                    }
+                    _ => {
+                        // Other sandbox errors should be fatal
+                        sandbox::exit_with_sandbox_error(&e);
+                    }
+                }
+            }
         }
     }
 
@@ -244,13 +274,25 @@ async fn main() -> Result<()> {
 
     tracing::info!("Sandbox scope initialized: {:?}", sandbox_scope);
 
-    // Apply kernel-level sandbox restrictions on Linux (skip in test mode)
+    // Apply kernel-level sandbox restrictions on Linux (skip if disabled)
     #[cfg(target_os = "linux")]
-    if !skip_sandbox {
+    if !no_sandbox {
         if let Err(e) = sandbox::enforce_landlock_sandbox(&sandbox_scope) {
             tracing::error!("Failed to enforce Landlock sandbox: {}", e);
             return Err(e);
         }
+    }
+
+    // Log the active sandbox mode for clarity
+    if no_sandbox {
+        tracing::info!("🔓 Sandbox mode: DISABLED (commands run without Ahma sandboxing)");
+    } else {
+        #[cfg(target_os = "linux")]
+        tracing::info!("🔒 Sandbox mode: LANDLOCK (Linux kernel-level file system restrictions)");
+        #[cfg(target_os = "macos")]
+        tracing::info!("🔒 Sandbox mode: SEATBELT (macOS sandbox-exec per-command restrictions)");
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        tracing::info!("🔒 Sandbox mode: ACTIVE");
     }
 
     // Determine mode based on CLI arguments
@@ -625,22 +667,36 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     tracing::info!("Command timeout: {}s", cli.timeout);
 
     // --- MCP Client Mode ---
-    // TODO: Implement HTTP MCP client using rmcp 0.9.0 API
-    // The HttpMcpTransport is ready but needs to be integrated with rmcp's ServiceExt
-    // See: https://docs.rs/rmcp/0.9.0/rmcp/trait.ServiceExt.html
     if fs::try_exists(&cli.mcp_config).await.unwrap_or(false) {
         // Try to load the MCP config, but ignore if it's not a valid ahma_mcp config
         // (e.g., if it's a Cursor/VSCode MCP server config with "type": "stdio")
         match ahma_core::config::load_mcp_config(&cli.mcp_config).await {
             Ok(mcp_config) => {
                 if let Some(server_config) = mcp_config.servers.values().next()
-                    && let ahma_core::config::ServerConfig::Http(_http_config) = server_config
+                    && let ahma_core::config::ServerConfig::Http(http_config) = server_config
                 {
-                    tracing::warn!("HTTP MCP Client mode is not yet implemented in rmcp 0.9.0");
+                    tracing::info!("Initializing HTTP MCP Client for: {}", http_config.url);
+
+                    let url = url::Url::parse(&http_config.url)
+                        .context("Failed to parse MCP server URL")?;
+
+                    let transport = HttpMcpTransport::new(
+                        url,
+                        http_config.atlassian_client_id.clone(),
+                        http_config.atlassian_client_secret.clone(),
+                    )?;
+
+                    // Authenticate if needed
+                    transport.ensure_authenticated().await?;
+
+                    tracing::info!("Successfully connected to HTTP MCP server");
                     tracing::warn!(
-                        "The HttpMcpTransport has been implemented but needs integration"
+                        "Remote tools are not yet proxied to the client - this is a partial integration"
                     );
-                    return Err(anyhow!("HTTP MCP client not yet supported"));
+
+                    // Keep the transport alive for the duration of the process
+                    // This ensures the background SSE listener continues to run
+                    Box::leak(Box::new(transport));
                 }
             }
             Err(e) => {
@@ -768,6 +824,10 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
         force_synchronous,
     )
     .await?;
+
+    // Start the config watcher to support hot-reloading of tools
+    service_handler.start_config_watcher(cli.tools_dir.clone());
+
     let service = service_handler.serve(rmcp::transport::stdio()).await?;
 
     // ============================================================================

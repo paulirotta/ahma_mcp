@@ -68,7 +68,7 @@
                     "description": "List one file per line"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "mv",
@@ -115,7 +115,7 @@
                     "description": "Verbose output, show what is being moved"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "cp",
@@ -180,7 +180,7 @@
                     "description": "Create hard links instead of copying"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "rm",
@@ -224,7 +224,7 @@
                     "description": "Verbose output, show what is being removed"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "grep",
@@ -304,7 +304,7 @@
                     "description": "Use extended regular expressions"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "sed",
@@ -354,7 +354,7 @@
                     "description": "Use extended regular expressions"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "touch",
@@ -392,7 +392,7 @@
                     "description": "Use specified timestamp instead of current time (YYYY-MM-DD HH:MM:SS)"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "pwd",
@@ -405,7 +405,7 @@
                     "format": "path"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "cd",
@@ -432,7 +432,7 @@
                     "description": "List directory contents after changing"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "cat",
@@ -476,7 +476,7 @@
                     "description": "Display TAB characters as ^I"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "find",
@@ -529,7 +529,7 @@
                     "description": "Maximum directory depth to search"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "head",
@@ -573,7 +573,7 @@
                     "description": "Never print headers giving file names"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "tail",
@@ -623,7 +623,7 @@
                     "description": "Never print headers giving file names"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         },
         {
             "name": "diff",
@@ -682,8 +682,8 @@
                     "description": "Report only whether files differ"
                 }
             ],
-            "force_synchronous": true
+            "synchronous": true
         }
     ],
-    "force_synchronous": true
+    "synchronous": true
 }

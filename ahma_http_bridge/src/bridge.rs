@@ -165,14 +165,12 @@ pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/mcp", post(handle_mcp_request).get(handle_sse))
-        .route("/sse", post(handle_mcp_request).get(handle_sse)) // Legacy compatibility
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
     info!("HTTP bridge listening on http://{}", config.bind_addr);
     info!("MCP endpoint (POST/GET): http://{}/mcp", config.bind_addr);
-    info!("Legacy SSE endpoint: http://{}/sse", config.bind_addr);
 
     // Start the server
     let listener = tokio::net::TcpListener::bind(config.bind_addr)
@@ -900,8 +898,7 @@ mod tests {
     fn create_app(state: Arc<BridgeState>) -> Router {
         Router::new()
             .route("/health", get(health_check))
-            .route("/mcp", post(handle_mcp_request))
-            .route("/sse", get(handle_sse))
+            .route("/mcp", post(handle_mcp_request).get(handle_sse))
             .layer(CorsLayer::permissive())
             .with_state(state)
     }
@@ -1174,7 +1171,7 @@ mod tests {
         let app = create_app(state);
 
         let request = Request::builder()
-            .uri("/sse")
+            .uri("/mcp")
             .header("accept", "text/event-stream")
             .body(Body::empty())
             .unwrap();

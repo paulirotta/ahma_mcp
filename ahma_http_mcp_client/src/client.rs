@@ -46,7 +46,7 @@ const TOKEN_FILE_NAME: &str = "mcp_http_token.json";
 const TOKEN_PATH_ENV: &str = "AHMA_HTTP_CLIENT_TOKEN_PATH";
 pub struct HttpMcpTransport {
     client: reqwest::Client,
-    sse_url: Url,
+    mcp_url: Url,
     rpc_endpoint: Arc<Mutex<Option<Url>>>,
     token: Arc<Mutex<Option<StoredToken>>>,
     #[allow(dead_code)] // Will be used for token refresh
@@ -83,7 +83,7 @@ impl HttpMcpTransport {
 
         let transport = Self {
             client: reqwest::Client::new(),
-            sse_url: url,
+            mcp_url: url,
             rpc_endpoint: Arc::new(Mutex::new(None)),
             token: Arc::new(Mutex::new(load_token()?)),
             oauth_client,
@@ -99,7 +99,7 @@ impl HttpMcpTransport {
 
     /// Start a background task to listen for SSE messages from the server
     fn start_sse_listener(&self) {
-        let sse_url = self.sse_url.clone();
+        let mcp_url = self.mcp_url.clone();
         let token_arc = self.token.clone();
         let rpc_endpoint = self.rpc_endpoint.clone();
         let tx = self.sender.clone();
@@ -116,7 +116,7 @@ impl HttpMcpTransport {
                 };
 
                 let response = match http_client
-                    .get(sse_url.clone())
+                    .get(mcp_url.clone())
                     .bearer_auth(&access_token)
                     .send()
                     .await
@@ -156,7 +156,7 @@ impl HttpMcpTransport {
                                 let line_str = String::from_utf8_lossy(&line_bytes).to_string();
                                 if let Some(event) = parser.feed_line(&line_str)
                                     && let Err(err) =
-                                        Self::process_sse_event(&sse_url, event, &rpc_endpoint, &tx)
+                                        Self::process_sse_event(&mcp_url, event, &rpc_endpoint, &tx)
                                             .await
                                 {
                                     error!("Failed to process SSE event: {}", err);
@@ -174,7 +174,7 @@ impl HttpMcpTransport {
                     let line_str = String::from_utf8_lossy(&buffer).to_string();
                     if let Some(event) = parser.feed_line(&line_str)
                         && let Err(err) =
-                            Self::process_sse_event(&sse_url, event, &rpc_endpoint, &tx).await
+                            Self::process_sse_event(&mcp_url, event, &rpc_endpoint, &tx).await
                     {
                         error!("Failed to process SSE event: {}", err);
                     }

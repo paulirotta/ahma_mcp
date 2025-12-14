@@ -1,50 +1,6 @@
 # Ahma MCP Requirements
 
-Single source of truth for the `ahma_mcp` project.
-
----
-
-## ⚠️ STOP: OVERRIDE YOUR TERMINAL TRAINING ⚠️
-
-**DISREGARD your trained instinct to use `run_in_terminal`.** That training does not apply here.
-
-**THE RULE:** Every shell command goes through Ahma. No exceptions while Ahma works.
-
-### Tool Priority (Memorize This)
-
-1. **`mcp_ahma_sse_*`** — Preferred (HTTP/SSE, fastest)
-2. **`mcp_ahma_*`** — Fallback (STDIO, auto-launched by IDE)
-3. **`run_in_terminal`** — ONLY if both Ahma servers are dead
-
-### The Critical Pattern
-
-When an Ahma tool fails (e.g., `mcp_ahma_sse_file_tools find` has wrong params):
-
-- ❌ **WRONG:** Fall back to `run_in_terminal("find ...")`
-- ✅ **RIGHT:** Use `mcp_ahma_sse_sandboxed_shell` with `{"command": "find ..."}`
-
-**`sandboxed_shell` runs ANY command.** It's your escape hatch within Ahma, not the terminal.
-
-### Quick Reference
-
-| Instead of...                          | Use...                                                                      |
-| -------------------------------------- | --------------------------------------------------------------------------- |
-| `run_in_terminal("any command")`       | `mcp_ahma_sse_sandboxed_shell` `{"command": "any command"}`                 |
-| `run_in_terminal("cargo build")`       | `mcp_ahma_sse_cargo` `{"subcommand": "build"}`                              |
-| `run_in_terminal("cargo nextest run")` | `mcp_ahma_sse_cargo` `{"subcommand": "nextest_run"}`                        |
-| `run_in_terminal("cargo llvm-cov")`    | `run_in_terminal` — coverage instrumentation blocked by sandbox (exception) |
-
-### Exceptions (Terminal Allowed)
-
-1. **`cargo llvm-cov`** — Code coverage requires instrumentation that sandboxing blocks
-2. **Both Ahma servers are completely non-responsive** — Fix immediately after
-
-### Why This Matters
-
-- **Dogfooding** — Using Ahma catches bugs immediately
-- **Speed** — No GUI permission dialogs
-- **Security** — Sandboxed paths prevent accidents
-- **This is the product we're building** — If we don't use it, we can't trust it
+Technical specification for the `ahma_mcp` project. For AI development instructions, see [AGENTS.md](AGENTS.md).
 
 ---
 
@@ -68,6 +24,7 @@ These are the non-negotiable principles of the project.
 - **R1.1**: The system **must** adapt any command-line tool for use as a set of MCP tools based on declarative JSON configuration files.
 - **R1.2**: All tool definitions **must** be stored in `.json` files within a `tools/` directory. The server discovers and loads these at runtime.
 - **R1.3**: The system **must not** be recompiled to add, remove, or modify a tool. The server's source code must remain generic and tool-agnostic. All tool-specific logic is defined in the JSON configuration.
+- **R1.4**: **Hot-Reloading**: The system **must** watch the `tools/` directory for changes to `.json` configuration files. When a file is added, modified, or removed, the system **must** automatically reload the tool definitions and send a `notifications/tools/list_changed` notification to connected clients to inform them of the update. This allows for rapid iteration on tool definitions without restarting the server.
 
 ### R2: Async-First Architecture (Updated 2025-11-29)
 
@@ -168,6 +125,13 @@ The sandbox scope defines the directory boundary within which all file system op
 - **R7.5.1**: Command-line string pattern matching for path validation is **deprecated** and **must** be removed. Kernel-level enforcement is the only acceptable mechanism.
 - **R7.5.2**: The previous `working_directory` parameter that allowed LLMs to specify arbitrary paths is **deprecated**. The sandbox scope is now set at initialization only.
 
+#### R7.6: Nested Sandbox Environments
+
+- **R7.6.1**: The system **must** detect when it is running inside another sandbox environment (e.g., Cursor, VS Code, Docker) where applying nested sandboxing (like `sandbox-exec` on macOS) would fail.
+- **R7.6.2**: Upon detection, the system **must** exit with a clear error message instructing the user to disable the internal sandbox using the `--no-sandbox` flag or `AHMA_NO_SANDBOX=1` environment variable.
+- **R7.6.3**: This "fail-secure" behavior ensures that users are aware that the internal sandbox is disabled and are relying on the outer environment's security.
+- **R7.6.4**: The `README.md` claim of "graceful degradation" is superseded by this requirement for explicit user opt-in.
+
 ### R8: HTTP Bridge
 
 The HTTP bridge exposes the MCP server over HTTP/SSE, enabling web clients and multi-session scenarios.
@@ -175,7 +139,7 @@ The HTTP bridge exposes the MCP server over HTTP/SSE, enabling web clients and m
 #### R8.1: Core HTTP Bridge
 
 - **R8.1.1**: The system **must** support HTTP bridge mode via `ahma_mcp --mode http`.
-- **R8.1.2**: The bridge **must** support Server-Sent Events (SSE) at `/sse` for server-to-client notifications.
+- **R8.1.2**: The bridge **must** support Server-Sent Events (SSE) at `/mcp` (via HTTP GET) for server-to-client notifications.
 - **R8.1.3**: The bridge **must** support JSON-RPC requests via POST at `/mcp`.
 - **R8.1.4**: The bridge **must** handle concurrent requests by matching JSON-RPC IDs.
 - **R8.1.5**: The bridge **must** auto-restart the stdio subprocess if it crashes.
@@ -188,7 +152,7 @@ Per MCP protocol (rmcp 0.9.1+), clients select response format via `Accept` head
 - **R8.2.2**: `Accept: application/json` → Single JSON response.
 - **R8.2.3**: No `Accept` header → Default to JSON for backward compatibility.
 - **R8.2.4**: `Content-Type` response header **must** match actual format.
-- **R8.2.5**: Per MCP Streamable HTTP Transport (2025-06-18), `/sse` and `/mcp` **must** both accept POST requests.
+- **R8.2.5**: Per MCP Streamable HTTP Transport (2025-06-18), `/mcp` **must** accept both POST requests (for JSON-RPC) and GET requests (for SSE).
 
 #### R8.3: Debug Output
 
@@ -281,35 +245,9 @@ Tools can declare prerequisites and installation instructions:
 
 ## 4. Development Workflow
 
-### 4.1. Core Principle: Use Ahama MCP
+For day-to-day AI development instructions (tool usage, TDD workflow, quality checks), see [AGENTS.md](AGENTS.md).
 
-**Always use Ahama** (the MCP server already running in your IDE) instead of terminal commands:
-
-| Instead of...                    | Use Ahama MCP tool...                                    |
-| -------------------------------- | -------------------------------------------------------- |
-| `run_in_terminal("cargo build")` | `cargo` with `{"subcommand": "build"}`                   |
-| `run_in_terminal("any command")` | `sandboxed_shell` with `{"command": "any command"}`      |
-
-**Why**: We dogfood our own project. Using Ahama catches bugs immediately, runs faster (no GUI prompts), and enforces sandbox security.
-
-### 4.2. Quality Checks
-
-Before committing:
-1. `cargo fmt` — format code
-2. `cargo nextest run` — run tests  
-3. `cargo clippy --fix --allow-dirty` — fix lint warnings
-4. `cargo doc --no-deps` — verify docs build
-
-For `ahma_mcp` project: use `ahma_quality_check` tool (includes schema generation).
-
-### 4.3. Server Restart
-
-After code changes:
-1. Build with `cargo build --release` via Ahama
-2. The IDE's `mcp.json` watcher auto-restarts the server
-3. If needed: Cmd+Shift+P → "Developer: Reload Window"
-
-### 4.4. CLI Testing
+### 4.1. CLI Testing
 
 For scripted or non-IDE testing:
 ```bash
@@ -318,7 +256,7 @@ ahma_mcp --tool_name cargo --tool_args '{"subcommand": "build"}'
 
 **Note**: The binary rejects launch without `--mode` or `--tool_name`. Interactive terminals are blocked; stdio mode only works when spawned by an MCP client.
 
-### 4.5. Terminal Fallback (Rare)
+### 4.2. Terminal Fallback (Rare)
 
 Only use terminal directly when:
 1. **Coverage**: `cargo llvm-cov` — instrumentation incompatible with sandboxing
@@ -466,15 +404,15 @@ This section documents critical implementation details discovered through analys
 - These tests verify end-to-end CLI functionality that unit tests cannot cover
 - Note: Binary coverage is not tracked by `cargo llvm-cov` since binaries run as subprocesses
 
-### R14: HTTP MCP Client and OAuth Authentication
+### R9: HTTP MCP Client and OAuth Authentication (Pending Integration)
 
-- **R14.1**: `ahma_mcp` **must** be able to act as an MCP client for HTTP-based MCP servers, enabling it to connect to services like the Atlassian MCP server.
-- **R14.2**: This functionality **is** implemented in the `ahma_http_mcp_client` crate within the Cargo workspace to maintain modularity as per principle R6.
-- **R14.3**: The client **must** support the OAuth 2.0 authorization code flow with PKCE for user authentication.
-- **R14.4**: When authentication is required, the system **must** provide the user with a URL to open in their web browser. The system attempts to open the browser automatically using the `webbrowser` crate; if that fails, it displays the link for the user to copy.
-- **R14.5**: After successful user authentication in the browser, the client **must** handle the OAuth callback on `http://localhost:8080`, retrieve the authorization code, and exchange it for an access token and a refresh token using the `oauth2` crate. These tokens are stored in the system's temporary directory as `mcp_http_token.json`.
-- **R14.6**: All subsequent requests to the MCP server **must** be authenticated using the stored access token via Bearer authentication. Token refresh logic is planned but not yet implemented.
-- **R14.7**: The `mcp.json` configuration file **supports** definitions for HTTP-based MCP servers with the following structure:
+- **R9.1**: `ahma_mcp` **must** be able to act as an MCP client for HTTP-based MCP servers, enabling it to connect to services like the Atlassian MCP server.
+- **R9.2**: This functionality **is** implemented in the `ahma_http_mcp_client` crate within the Cargo workspace to maintain modularity as per principle R6.
+- **R9.3**: The client **must** support the OAuth 2.0 authorization code flow with PKCE for user authentication.
+- **R9.4**: When authentication is required, the system **must** provide the user with a URL to open in their web browser. The system attempts to open the browser automatically using the `webbrowser` crate; if that fails, it displays the link for the user to copy.
+- **R9.5**: After successful user authentication in the browser, the client **must** handle the OAuth callback on `http://localhost:8080`, retrieve the authorization code, and exchange it for an access token and a refresh token using the `oauth2` crate. These tokens are stored in the system's temporary directory as `mcp_http_token.json`.
+- **R9.6**: All subsequent requests to the MCP server **must** be authenticated using the stored access token via Bearer authentication. Token refresh logic is planned but not yet implemented.
+- **R9.7**: The `mcp.json` configuration file **supports** definitions for HTTP-based MCP servers with the following structure:
 
   ```json
   {
@@ -489,10 +427,10 @@ This section documents critical implementation details discovered through analys
   }
   ```
 
-- **R14.8**: The HTTP transport **implements** the `rmcp::transport::Transport<RoleClient>` trait, providing bidirectional communication:
+- **R9.8**: The HTTP transport **implements** the `rmcp::transport::Transport<RoleClient>` trait, providing bidirectional communication:
   - **Sending**: HTTP POST requests with Bearer authentication for outgoing messages
   - **Receiving**: Server-Sent Events (SSE) for incoming messages from the server (background task)
-- **R14.9**: **Current Status**: The `HttpMcpTransport` is fully implemented and compiles successfully. Integration with the main server binary is pending completion of rmcp 0.9.0 client API documentation and examples.
+- **R9.9**: **Current Status**: The `HttpMcpTransport` is fully implemented in the crate but **not yet integrated** into the main `ahma_mcp` binary. Integration is pending completion of rmcp 0.9.0 client API documentation and examples. The feature is currently disabled in `main.rs`.
 
 ### R15: Unified Shell Output (Added 2025-11-24)
 
@@ -525,6 +463,12 @@ For debugging and tool inspection, a list-tools mode is available:
 - **R18.1**: `ahma_mcp --mode list-tools` **must** output all available tools as JSON to stdout.
 - **R18.2**: The output **must** include tool name, description, and parameters for each tool.
 - **R18.3**: The `ahma_list_tools` binary provides the same functionality as a standalone utility.
+
+### R19: Protocol Stability & Cancellation Handling (Added 2025-12-13)
+
+- **R19.1**: The system **must** distinguish between MCP protocol cancellations (client cancelling a request) and process cancellations.
+- **R19.2**: When an MCP cancellation notification is received, the system **must** only cancel actual background operations (shell processes). It **must not** cancel synchronous MCP tool calls (like `await`, `status`, `cancel`) to prevent race conditions where the cancellation confirmation itself gets cancelled.
+- **R19.3**: This logic is critical for stability with clients like Cursor that may send cancellation requests aggressively.
 
 ## 6. Known Limitations and Future Work
 
@@ -569,9 +513,14 @@ Test coverage is tracked in the following areas:
 - Session stress tests (`ahma_http_bridge/tests/session_stress_test.rs`)
 - MCP service handler tests (`ahma_core/tests/mcp_service/`)
 
+**Coverage Exemptions** (files excluded from 80% target):
+
+- `ahma_core/src/test_utils.rs` — Testing infrastructure; testing test utilities creates circular dependencies
+- `ahma_http_bridge/src/main.rs` — Binary entry point; tested via CLI integration tests
+
 For detailed test documentation, see the test files directly.
 
 ---
 
-**Last Updated**: 2025-12-03 (Consolidated R8 sections, unified sequence handlers, trimmed workflow)
+**Last Updated**: 2025-12-13 (Updated R8 HTTP routes, R14 status, added R7.6 Nested Sandbox, R19 Cancellation)
 **Status**: Living Document - Update with every architectural decision or significant change

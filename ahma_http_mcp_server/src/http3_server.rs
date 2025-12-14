@@ -173,7 +173,9 @@ async fn handle_request<H: ServerHandler + Send + Sync + Clone + 'static>(
                 }
             }
         }
-        (&Method::GET, "/mcp/sse") => {
+        (&Method::GET, "/mcp") => {
+            // MCP Streamable HTTP: GET /mcp returns SSE stream
+            // Note: SSE not fully supported over HTTP/3, consider using HTTP/2
             warn!("SSE not fully supported over HTTP/3, consider using HTTP/2");
             Response::builder()
                 .status(StatusCode::NOT_IMPLEMENTED)

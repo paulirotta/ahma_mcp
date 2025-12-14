@@ -89,6 +89,11 @@ pub enum SandboxError {
 
     #[error("Sandbox prerequisite check failed: {0}")]
     PrerequisiteFailed(String),
+
+    #[error(
+        "Nested sandbox detected - running inside another sandbox (e.g., Cursor, VS Code, Docker)"
+    )]
+    NestedSandboxDetected,
 }
 
 /// Initialize the sandbox scope. This can only be called once.
@@ -283,6 +288,57 @@ fn check_macos_sandbox_available() -> Result<(), SandboxError> {
     }
 }
 
+/// Test if sandbox-exec can actually be applied (detects nested sandbox environments).
+///
+/// On macOS, when running inside another sandbox (like Cursor or VS Code's sandbox),
+/// attempting to apply sandbox-exec will fail with "Operation not permitted".
+/// This function performs a lightweight test to detect this condition.
+///
+/// # Returns
+/// * `Ok(())` if sandbox-exec can be applied
+/// * `Err(SandboxError::NestedSandboxDetected)` if we're inside another sandbox
+#[cfg(target_os = "macos")]
+pub fn test_sandbox_exec_available() -> Result<(), SandboxError> {
+    use std::process::Command;
+
+    // Use a minimal sandbox profile that just allows everything
+    // This tests if sandbox-exec can be applied at all
+    let test_profile = "(version 1)(allow default)";
+
+    let result = Command::new("sandbox-exec")
+        .args(["-p", test_profile, "/usr/bin/true"])
+        .output();
+
+    match result {
+        Ok(output) if output.status.success() => Ok(()),
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // Check for the specific error that indicates nested sandbox
+            if stderr.contains("Operation not permitted")
+                || stderr.contains("sandbox_apply")
+                || output.status.code() == Some(71)
+            {
+                // Exit code 71 is often returned for sandbox permission errors
+                Err(SandboxError::NestedSandboxDetected)
+            } else {
+                // Some other error - treat as nested sandbox to be safe
+                tracing::debug!("sandbox-exec test failed with unexpected error: {}", stderr);
+                Err(SandboxError::NestedSandboxDetected)
+            }
+        }
+        Err(e) => {
+            tracing::debug!("sandbox-exec test failed to execute: {}", e);
+            Err(SandboxError::MacOSSandboxNotAvailable)
+        }
+    }
+}
+
+/// No-op on non-macOS platforms - always returns Ok
+#[cfg(not(target_os = "macos"))]
+pub fn test_sandbox_exec_available() -> Result<(), SandboxError> {
+    Ok(())
+}
+
 /// Display an error message about missing sandbox prerequisites and exit.
 pub fn exit_with_sandbox_error(error: &SandboxError) -> ! {
     eprintln!("\n❌ SECURITY ERROR: Cannot start MCP server\n");
@@ -308,6 +364,15 @@ pub fn exit_with_sandbox_error(error: &SandboxError) -> ! {
         }
         SandboxError::PrerequisiteFailed(msg) => {
             eprintln!("{}\n", msg);
+        }
+        SandboxError::NestedSandboxDetected => {
+            eprintln!("Ahma detected it is running inside another sandbox environment.\n");
+            eprintln!("This typically happens when running in:");
+            eprintln!("  - Cursor IDE (which sandboxes MCP servers)");
+            eprintln!("  - VS Code with certain extensions");
+            eprintln!("  - Docker containers with security restrictions\n");
+            eprintln!("To fix this, use --no-sandbox flag or set AHMA_NO_SANDBOX=1");
+            eprintln!("The outer sandbox still provides security for your workspace.\n");
         }
         _ => {}
     }

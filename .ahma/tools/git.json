@@ -36,7 +36,7 @@
           "format": "path"
         }
       ],
-      "force_synchronous": true
+      "synchronous": true
     },
     {
       "name": "add",
@@ -64,7 +64,7 @@
           "format": "path"
         }
       ],
-      "force_synchronous": false
+      "synchronous": false
     },
     {
       "name": "commit",
@@ -91,7 +91,7 @@
         }
       ],
       "positional_args": [],
-      "force_synchronous": false
+      "synchronous": false
     },
     {
       "name": "push",
@@ -120,7 +120,7 @@
           "description": "Force push even if it results in non-fast-forward updates."
         }
       ],
-      "force_synchronous": false
+      "synchronous": false
     },
     {
       "name": "log",
@@ -150,7 +150,7 @@
           "required": false
         }
       ],
-      "force_synchronous": false
+      "synchronous": false
     }
   ]
 }

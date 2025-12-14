@@ -874,7 +874,15 @@ async fn test_cargo_check() {
 // Test: Concurrent Tool Execution (Stress Test)
 // =============================================================================
 
+/// Stress test for concurrent tool calls.
+///
+/// This test is ignored by default because:
+/// 1. It requires an external SSE server to be running
+/// 2. It tests edge-case concurrent behavior that may be flaky
+///
+/// Run manually with: `cargo nextest run test_concurrent_tool_calls --run-ignored`
 #[tokio::test]
+#[ignore]
 async fn test_concurrent_tool_calls() {
     if !is_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
@@ -958,7 +966,15 @@ async fn test_concurrent_tool_calls() {
 // Test: High-Volume Stress Test
 // =============================================================================
 
+/// High-volume stress test for concurrent requests.
+///
+/// This test is ignored by default because:
+/// 1. It requires an external SSE server to be running
+/// 2. It sends 50 concurrent requests which may overwhelm the server
+///
+/// Run manually with: `cargo nextest run test_high_volume_concurrent_requests --run-ignored`
 #[tokio::test]
+#[ignore]
 async fn test_high_volume_concurrent_requests() {
     if !is_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");

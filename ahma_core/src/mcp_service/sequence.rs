@@ -21,11 +21,13 @@ use super::types::{META_PARAMS, SequenceKind};
 
 static SEQUENCE_ID: AtomicU64 = AtomicU64::new(1);
 
+use std::sync::{Arc, RwLock};
+
 /// Handles execution of sequence tools - tools that invoke multiple other tools in order.
 pub async fn handle_sequence_tool(
     adapter: &Adapter,
     _operation_monitor: &OperationMonitor,
-    configs: &std::collections::HashMap<String, ToolConfig>,
+    configs: &Arc<RwLock<std::collections::HashMap<String, ToolConfig>>>,
     config: &ToolConfig,
     params: CallToolRequestParam,
     context: RequestContext<RoleServer>,
@@ -48,7 +50,7 @@ pub async fn handle_sequence_tool(
 /// Handles synchronous sequence execution - blocks until all steps complete
 async fn handle_sequence_tool_sync(
     adapter: &Adapter,
-    configs: &std::collections::HashMap<String, ToolConfig>,
+    configs: &Arc<RwLock<std::collections::HashMap<String, ToolConfig>>>,
     config: &ToolConfig,
     params: CallToolRequestParam,
     sequence: &[SequenceStep],
@@ -82,29 +84,34 @@ async fn handle_sequence_tool_sync(
         }
         merged_args.extend(step.args.clone());
 
-        let step_tool_config = match configs.get(&step.tool) {
-            Some(cfg) => cfg,
+        // Acquire read lock to get tool config
+        let step_tool_config = {
+            let configs_lock = configs.read().unwrap();
+            match configs_lock.get(&step.tool) {
+                Some(cfg) => cfg.clone(), // Clone to release lock
+                None => {
+                    let error_message = format!(
+                        "Tool '{}' referenced in sequence step is not configured.",
+                        step.tool
+                    );
+                    return Err(McpError::internal_error(error_message, None));
+                }
+            }
+        };
+
+        let (subcommand_config, command_parts) = match find_subcommand_config_from_args(
+            &step_tool_config,
+            Some(step.subcommand.clone()),
+        ) {
+            Some(result) => result,
             None => {
                 let error_message = format!(
-                    "Tool '{}' referenced in sequence step is not configured.",
-                    step.tool
+                    "Subcommand '{}' for tool '{}' not found in sequence step.",
+                    step.subcommand, step.tool
                 );
                 return Err(McpError::internal_error(error_message, None));
             }
         };
-
-        let (subcommand_config, command_parts) =
-            match find_subcommand_config_from_args(step_tool_config, Some(step.subcommand.clone()))
-            {
-                Some(result) => result,
-                None => {
-                    let error_message = format!(
-                        "Subcommand '{}' for tool '{}' not found in sequence step.",
-                        step.subcommand, step.tool
-                    );
-                    return Err(McpError::internal_error(error_message, None));
-                }
-            };
 
         // Execute synchronously and wait for result
         let step_result = adapter
@@ -184,7 +191,7 @@ async fn handle_sequence_tool_sync(
 /// Handles asynchronous sequence execution - starts all steps and returns immediately
 async fn handle_sequence_tool_async(
     adapter: &Adapter,
-    configs: &std::collections::HashMap<String, ToolConfig>,
+    configs: &Arc<RwLock<std::collections::HashMap<String, ToolConfig>>>,
     params: CallToolRequestParam,
     context: RequestContext<RoleServer>,
     sequence: &[SequenceStep],
@@ -226,29 +233,34 @@ async fn handle_sequence_tool_async(
         merged_args.extend(step.args.clone());
         step_params.arguments = Some(merged_args);
 
-        let step_tool_config = match configs.get(&step.tool) {
-            Some(cfg) => cfg,
+        // Acquire read lock to get tool config
+        let step_tool_config = {
+            let configs_lock = configs.read().unwrap();
+            match configs_lock.get(&step.tool) {
+                Some(cfg) => cfg.clone(), // Clone to release lock
+                None => {
+                    let error_message = format!(
+                        "Tool '{}' referenced in sequence step is not configured.",
+                        step.tool
+                    );
+                    return Err(McpError::internal_error(error_message, None));
+                }
+            }
+        };
+
+        let (subcommand_config, command_parts) = match find_subcommand_config_from_args(
+            &step_tool_config,
+            Some(step.subcommand.clone()),
+        ) {
+            Some(result) => result,
             None => {
                 let error_message = format!(
-                    "Tool '{}' referenced in sequence step is not configured.",
-                    step.tool
+                    "Subcommand '{}' for tool '{}' not found in sequence step.",
+                    step.subcommand, step.tool
                 );
                 return Err(McpError::internal_error(error_message, None));
             }
         };
-
-        let (subcommand_config, command_parts) =
-            match find_subcommand_config_from_args(step_tool_config, Some(step.subcommand.clone()))
-            {
-                Some(result) => result,
-                None => {
-                    let error_message = format!(
-                        "Subcommand '{}' for tool '{}' not found in sequence step.",
-                        step.subcommand, step.tool
-                    );
-                    return Err(McpError::internal_error(error_message, None));
-                }
-            };
 
         let operation_id = format!("op_{}", SEQUENCE_ID.fetch_add(1, Ordering::SeqCst));
         let callback: Box<dyn CallbackSender> = Box::new(McpCallbackSender::new(
