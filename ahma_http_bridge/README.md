@@ -179,7 +179,7 @@ This script:
 - **Single Request at a Time**: Requests are serialized through the subprocess
 - **No Streaming**: Large responses are buffered completely
 
-For production use with server-initiated messages, consider using WebSocket or the full `ahma_http_mcp_server` implementation.
+For production use with server-initiated messages, consider using WebSocket.
 
 ## License
 
