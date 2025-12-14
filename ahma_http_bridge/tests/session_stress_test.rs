@@ -130,9 +130,9 @@ async fn test_concurrent_creation_and_termination() {
         let (term_result, _exists_result) = tokio::join!(handle1, handle2);
 
         // Termination should succeed or the session should not exist after
-        if term_result.is_ok() {
+        if let Ok(inner_result) = term_result {
             assert!(
-                !sm.session_exists(&session_id) || term_result.unwrap().is_ok(),
+                !sm.session_exists(&session_id) || inner_result.is_ok(),
                 "Session should not exist after termination"
             );
         }

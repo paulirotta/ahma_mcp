@@ -39,6 +39,7 @@
 
 use crate::operation_monitor::{Operation, OperationMonitor, OperationStatus};
 use crate::path_security;
+use crate::retry::{self, RetryConfig};
 use crate::sandbox;
 use crate::shell_pool::ShellPoolManager;
 use anyhow::{Context, Result};
@@ -96,6 +97,8 @@ pub struct Adapter {
     temp_files: Arc<Mutex<Vec<NamedTempFile>>>,
     /// The root directory for path validation (sandbox root).
     root_path: std::path::PathBuf,
+    /// Optional retry configuration for transient error handling.
+    retry_config: Option<RetryConfig>,
 }
 
 impl Adapter {
@@ -107,6 +110,7 @@ impl Adapter {
             task_handles: Arc::new(Mutex::new(HashMap::new())),
             temp_files: Arc::new(Mutex::new(Vec::new())),
             root_path: std::env::current_dir()?,
+            retry_config: None,
         })
     }
 
@@ -114,6 +118,17 @@ impl Adapter {
     pub fn with_root(mut self, root: std::path::PathBuf) -> Self {
         self.root_path = root;
         self
+    }
+
+    /// Sets retry configuration for transient error handling.
+    pub fn with_retry_config(mut self, config: RetryConfig) -> Self {
+        self.retry_config = Some(config);
+        self
+    }
+
+    /// Returns the retry configuration, if set.
+    pub fn retry_config(&self) -> Option<&RetryConfig> {
+        self.retry_config.as_ref()
     }
 
     /// Gracefully shuts down the adapter by cancelling active operations, aborting tasks,
@@ -266,6 +281,54 @@ impl Adapter {
                         stdout
                     ))
                 }
+            }
+        }
+    }
+
+    /// Synchronously executes a command with optional retry logic for transient errors.
+    ///
+    /// If a `RetryConfig` is set on the adapter, transient errors (timeouts, resource
+    /// exhaustion, network issues) will be retried with exponential backoff.
+    /// Permanent errors (command not found, permission denied) fail immediately.
+    ///
+    /// If no retry config is set, this behaves identically to `execute_sync_in_dir`.
+    pub async fn execute_sync_with_retry(
+        &self,
+        command: &str,
+        args: Option<Map<String, serde_json::Value>>,
+        working_dir: &str,
+        timeout_seconds: Option<u64>,
+        subcommand_config: Option<&crate::config::SubcommandConfig>,
+    ) -> Result<String, anyhow::Error> {
+        match &self.retry_config {
+            Some(config) => {
+                // Clone args for each retry attempt since the closure needs ownership
+                let args_clone = args.clone();
+                retry::execute_with_retry(config, || {
+                    let args_inner = args_clone.clone();
+                    async move {
+                        self.execute_sync_in_dir(
+                            command,
+                            args_inner,
+                            working_dir,
+                            timeout_seconds,
+                            subcommand_config,
+                        )
+                        .await
+                    }
+                })
+                .await
+            }
+            None => {
+                // No retry config, execute directly
+                self.execute_sync_in_dir(
+                    command,
+                    args,
+                    working_dir,
+                    timeout_seconds,
+                    subcommand_config,
+                )
+                .await
             }
         }
     }
