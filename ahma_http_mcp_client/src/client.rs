@@ -1,8 +1,4 @@
-use crate::{
-    error::{McpHttpError, Result},
-    sse::{SseEvent, SseEventParser, resolve_rpc_url},
-};
-use futures::StreamExt;
+use crate::error::{McpHttpError, Result};
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, RedirectUrl,
     Scope, TokenResponse, TokenUrl, basic::BasicClient,
@@ -18,7 +14,6 @@ use std::{
     io::{BufReader, BufWriter, Write},
     path::PathBuf,
     sync::Arc,
-    time::Duration,
 };
 use tokio::sync::{Mutex, mpsc};
 use tracing::{error, info};
@@ -40,14 +35,11 @@ type ConfiguredOAuthClient = oauth2::Client<
     oauth2::EndpointSet,
 >;
 
-const RPC_ENDPOINT_WAIT_ATTEMPTS: usize = 300;
-const RPC_ENDPOINT_WAIT_DELAY_MS: u64 = 100;
 const TOKEN_FILE_NAME: &str = "mcp_http_token.json";
 const TOKEN_PATH_ENV: &str = "AHMA_HTTP_CLIENT_TOKEN_PATH";
 pub struct HttpMcpTransport {
     client: reqwest::Client,
     mcp_url: Url,
-    rpc_endpoint: Arc<Mutex<Option<Url>>>,
     token: Arc<Mutex<Option<StoredToken>>>,
     #[allow(dead_code)] // Will be used for token refresh
     oauth_client: Option<ConfiguredOAuthClient>,
@@ -84,147 +76,13 @@ impl HttpMcpTransport {
         let transport = Self {
             client: reqwest::Client::new(),
             mcp_url: url,
-            rpc_endpoint: Arc::new(Mutex::new(None)),
             token: Arc::new(Mutex::new(load_token()?)),
             oauth_client,
             receiver: Arc::new(Mutex::new(receiver)),
             sender,
         };
 
-        // Start SSE listener in background
-        transport.start_sse_listener();
-
         Ok(transport)
-    }
-
-    /// Start a background task to listen for SSE messages from the server
-    fn start_sse_listener(&self) {
-        let mcp_url = self.mcp_url.clone();
-        let token_arc = self.token.clone();
-        let rpc_endpoint = self.rpc_endpoint.clone();
-        let tx = self.sender.clone();
-        let http_client = self.client.clone();
-
-        tokio::spawn(async move {
-            loop {
-                let access_token = match token_arc.lock().await.as_ref() {
-                    Some(t) => t.access_token.clone(),
-                    None => {
-                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                        continue;
-                    }
-                };
-
-                let response = match http_client
-                    .get(mcp_url.clone())
-                    .bearer_auth(&access_token)
-                    .send()
-                    .await
-                {
-                    Ok(res) if res.status().is_success() => res,
-                    Ok(res) => {
-                        error!("SSE connection failed with status: {}", res.status());
-                        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                        continue;
-                    }
-                    Err(e) => {
-                        error!("SSE connection failed: {}", e);
-                        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                        continue;
-                    }
-                };
-
-                use futures::TryStreamExt;
-                let mut stream = response.bytes_stream().map_err(std::io::Error::other);
-                let mut parser = SseEventParser::new();
-                let mut buffer: Vec<u8> = Vec::new();
-
-                while let Some(item) = stream.next().await {
-                    match item {
-                        Ok(chunk) => {
-                            buffer.extend_from_slice(&chunk);
-
-                            while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
-                                let mut line_bytes: Vec<u8> = buffer.drain(..=pos).collect();
-                                if matches!(line_bytes.last(), Some(b'\n')) {
-                                    line_bytes.pop();
-                                }
-                                if matches!(line_bytes.last(), Some(b'\r')) {
-                                    line_bytes.pop();
-                                }
-
-                                let line_str = String::from_utf8_lossy(&line_bytes).to_string();
-                                if let Some(event) = parser.feed_line(&line_str)
-                                    && let Err(err) =
-                                        Self::process_sse_event(&mcp_url, event, &rpc_endpoint, &tx)
-                                            .await
-                                {
-                                    error!("Failed to process SSE event: {}", err);
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            error!("Error in SSE stream: {}", e);
-                            break;
-                        }
-                    }
-                }
-
-                if !buffer.is_empty() {
-                    let line_str = String::from_utf8_lossy(&buffer).to_string();
-                    if let Some(event) = parser.feed_line(&line_str)
-                        && let Err(err) =
-                            Self::process_sse_event(&mcp_url, event, &rpc_endpoint, &tx).await
-                    {
-                        error!("Failed to process SSE event: {}", err);
-                    }
-                }
-            }
-        });
-    }
-
-    async fn process_sse_event(
-        base_url: &Url,
-        event: SseEvent,
-        rpc_endpoint: &Arc<Mutex<Option<Url>>>,
-        tx: &mpsc::Sender<RxJsonRpcMessage<RoleClient>>,
-    ) -> Result<()> {
-        if event.event_type.as_deref() == Some("endpoint") {
-            let resolved = resolve_rpc_url(base_url, event.data.trim())?;
-            let mut endpoint_lock = rpc_endpoint.lock().await;
-            let update_needed = endpoint_lock
-                .as_ref()
-                .map(|current| current != &resolved)
-                .unwrap_or(true);
-
-            if update_needed {
-                info!("RPC endpoint set to {}", resolved);
-                *endpoint_lock = Some(resolved);
-            }
-            return Ok(());
-        }
-
-        if event.data.trim().is_empty() {
-            return Ok(());
-        }
-
-        let message: RxJsonRpcMessage<RoleClient> = serde_json::from_str(&event.data)?;
-        tx.send(message)
-            .await
-            .map_err(|e| McpHttpError::Custom(format!("Failed to deliver SSE message: {}", e)))?;
-
-        Ok(())
-    }
-
-    async fn wait_for_rpc_endpoint(rpc_endpoint: Arc<Mutex<Option<Url>>>) -> Result<Url> {
-        for _ in 0..RPC_ENDPOINT_WAIT_ATTEMPTS {
-            if let Some(url) = rpc_endpoint.lock().await.clone() {
-                return Ok(url);
-            }
-            tokio::time::sleep(Duration::from_millis(RPC_ENDPOINT_WAIT_DELAY_MS)).await;
-        }
-
-        Err(McpHttpError::MissingRpcEndpoint)
     }
 
     #[allow(dead_code)] // Will be used when HTTP client is integrated
@@ -370,11 +228,10 @@ impl Transport<RoleClient> for HttpMcpTransport {
     {
         let client = self.client.clone();
         let token = self.token.clone();
-        let rpc_endpoint = self.rpc_endpoint.clone();
+        let mcp_url = self.mcp_url.clone();
+        let sender = self.sender.clone();
 
         async move {
-            let rpc_url = Self::wait_for_rpc_endpoint(rpc_endpoint).await?;
-
             // Ensure authenticated
             let token_lock = token.lock().await;
             let access_token = token_lock
@@ -384,7 +241,7 @@ impl Transport<RoleClient> for HttpMcpTransport {
             drop(token_lock);
 
             let res = client
-                .post(rpc_url)
+                .post(mcp_url)
                 .bearer_auth(access_token)
                 .json(&item)
                 .send()
@@ -396,6 +253,29 @@ impl Transport<RoleClient> for HttpMcpTransport {
                 let err_msg = format!("HTTP Error: {} - {}", status, text);
                 error!("{}", err_msg);
                 return Err(McpHttpError::Custom(err_msg));
+            }
+
+            // Try to parse response as JSON-RPC message and send to channel
+            // Note: Notifications might not return a body, or return empty body
+            let content_length = res.content_length().unwrap_or(0);
+            if content_length > 0 {
+                match res.json::<RxJsonRpcMessage<RoleClient>>().await {
+                    Ok(msg) => {
+                        if let Err(e) = sender.send(msg).await {
+                            error!("Failed to send response to channel: {}", e);
+                            return Err(McpHttpError::Custom(format!("Channel error: {}", e)));
+                        }
+                    }
+                    Err(e) => {
+                        // If we can't parse it as a message, maybe it's empty or something else?
+                        // For now, log error but don't fail the send if it was a notification?
+                        // But we don't know if it was a notification here easily without checking item.
+                        // If it was a request, we expect a response.
+                        error!("Failed to parse response body: {}", e);
+                        // We should probably return error if we expected a response but got garbage
+                        return Err(McpHttpError::HttpRequest(e));
+                    }
+                }
             }
 
             Ok(())
@@ -463,51 +343,6 @@ mod tests {
         GUARD.get_or_init(|| StdMutex::new(()))
     }
 
-    #[tokio::test]
-    async fn process_sse_endpoint_event_updates_rpc_url() {
-        let base = Url::parse("https://example.com/sse").unwrap();
-        let rpc_endpoint = Arc::new(Mutex::new(None));
-        let (tx, mut rx) = mpsc::channel(1);
-        let event = SseEvent {
-            event_type: Some("endpoint".to_string()),
-            data: "/mcp".to_string(),
-        };
-
-        HttpMcpTransport::process_sse_event(&base, event, &rpc_endpoint, &tx)
-            .await
-            .unwrap();
-
-        let stored = rpc_endpoint.lock().await.clone().unwrap();
-        assert_eq!(stored.as_str(), "https://example.com/mcp");
-        assert!(rx.try_recv().is_err());
-    }
-
-    #[tokio::test]
-    async fn process_sse_event_forwards_jsonrpc_messages() {
-        let base = Url::parse("https://example.com/sse").unwrap();
-        let rpc_endpoint = Arc::new(Mutex::new(None));
-        let (tx, mut rx) = mpsc::channel(1);
-        let payload = r#"{"jsonrpc":"2.0","id":"42","result":{"message":"hi"}}"#;
-
-        HttpMcpTransport::process_sse_event(
-            &base,
-            SseEvent {
-                event_type: None,
-                data: payload.to_string(),
-            },
-            &rpc_endpoint,
-            &tx,
-        )
-        .await
-        .unwrap();
-
-        let received = rx.recv().await.unwrap();
-        if !matches!(&received, RxJsonRpcMessage::<RoleClient>::Response(_)) {
-            panic!("unexpected message: {:?}", received);
-        }
-        serde_json::to_string(&received).unwrap();
-    }
-
     #[test]
     fn load_token_returns_none_when_override_missing() {
         let _guard = token_env_guard().lock().unwrap();
@@ -551,109 +386,6 @@ mod tests {
         unsafe {
             env::remove_var(TOKEN_PATH_ENV);
         }
-    }
-
-    // === Additional client tests ===
-
-    #[tokio::test]
-    async fn process_sse_event_ignores_empty_data() {
-        let base = Url::parse("https://example.com/sse").unwrap();
-        let rpc_endpoint = Arc::new(Mutex::new(None));
-        let (tx, mut rx) = mpsc::channel(1);
-
-        HttpMcpTransport::process_sse_event(
-            &base,
-            SseEvent {
-                event_type: None,
-                data: "   ".to_string(), // Empty/whitespace only
-            },
-            &rpc_endpoint,
-            &tx,
-        )
-        .await
-        .unwrap();
-
-        // Nothing should be sent
-        assert!(rx.try_recv().is_err());
-    }
-
-    #[tokio::test]
-    async fn process_sse_event_endpoint_with_whitespace() {
-        let base = Url::parse("https://example.com/sse").unwrap();
-        let rpc_endpoint = Arc::new(Mutex::new(None));
-        let (tx, _rx) = mpsc::channel(1);
-
-        HttpMcpTransport::process_sse_event(
-            &base,
-            SseEvent {
-                event_type: Some("endpoint".to_string()),
-                data: "  /mcp  \n".to_string(), // Whitespace trimmed
-            },
-            &rpc_endpoint,
-            &tx,
-        )
-        .await
-        .unwrap();
-
-        let stored = rpc_endpoint.lock().await.clone().unwrap();
-        assert_eq!(stored.as_str(), "https://example.com/mcp");
-    }
-
-    #[tokio::test]
-    async fn process_sse_event_invalid_json_fails() {
-        let base = Url::parse("https://example.com/sse").unwrap();
-        let rpc_endpoint = Arc::new(Mutex::new(None));
-        let (tx, _rx) = mpsc::channel(1);
-
-        let result = HttpMcpTransport::process_sse_event(
-            &base,
-            SseEvent {
-                event_type: None,
-                data: "not valid json".to_string(),
-            },
-            &rpc_endpoint,
-            &tx,
-        )
-        .await;
-
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn process_sse_endpoint_only_updates_when_different() {
-        let base = Url::parse("https://example.com/sse").unwrap();
-        let rpc_endpoint = Arc::new(Mutex::new(Some(
-            Url::parse("https://example.com/mcp").unwrap(),
-        )));
-        let (tx, _rx) = mpsc::channel(1);
-
-        // Same endpoint - should not log update
-        HttpMcpTransport::process_sse_event(
-            &base,
-            SseEvent {
-                event_type: Some("endpoint".to_string()),
-                data: "/mcp".to_string(),
-            },
-            &rpc_endpoint,
-            &tx,
-        )
-        .await
-        .unwrap();
-
-        // Endpoint should still be the same
-        let stored = rpc_endpoint.lock().await.clone().unwrap();
-        assert_eq!(stored.as_str(), "https://example.com/mcp");
-    }
-
-    #[tokio::test]
-    async fn wait_for_rpc_endpoint_returns_immediately_when_set() {
-        let rpc_endpoint = Arc::new(Mutex::new(Some(
-            Url::parse("https://example.com/mcp").unwrap(),
-        )));
-
-        let result = HttpMcpTransport::wait_for_rpc_endpoint(rpc_endpoint).await;
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().as_str(), "https://example.com/mcp");
     }
 
     #[test]

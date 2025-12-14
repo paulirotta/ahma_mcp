@@ -61,6 +61,7 @@ pub mod terminal_output;
 pub mod tool_availability;
 pub mod tool_hints;
 pub mod utils;
+mod check_service_ext;
 
 // Test utilities
 pub mod test_utils;
