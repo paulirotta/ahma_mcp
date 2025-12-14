@@ -5,10 +5,10 @@ default-members = [
   "ahma_validate",
   "generate_tool_schema",
   "ahma_http_bridge",
-  "ahma_http_mcp_client",
+  "ahma_http_mcp_client", # "ahma_http_mcp_server",
 ]
+exclude = ["ahma_http_mcp_server"]
 members = ["ahma_core", "ahma_shell", "ahma_validate", "generate_tool_schema", "ahma_http_bridge", "ahma_http_mcp_client"]
-# Note: ahma_http_mcp_server is excluded until rmcp integration is complete
 resolver = "2"
 
 [workspace.package]
@@ -27,7 +27,7 @@ directories = "6.0.0"
 futures = "0.3.31"
 landlock = "0.4.4"
 regex = "1.12.2"
-rmcp = {version = "0.11.0", features = ["server", "client", "macros", "transport-io", "transport-child-process", "elicitation", "schemars"]}
+rmcp = {git = "https://github.com/modelcontextprotocol/rust-sdk", branch = "main", features = ["server", "client", "macros", "transport-io", "transport-child-process", "elicitation", "schemars"]}
 schemars = "1.1.0"
 serde = "1.0.228"
 serde_json = "1.0.145"

@@ -1,9 +1,9 @@
 #!/bin/bash
-# Test script for the HTTP bridge with SSE support
+# Test script for the HTTP bridge
 
 set -e
 
-echo "🧪 Testing Ahma HTTP Bridge (SSE & POST)"
+echo "🧪 Testing Ahma HTTP Bridge (POST)"
 echo "========================================"
 echo
 
@@ -34,30 +34,6 @@ if [ "$HEALTH_RESPONSE" = "OK" ]; then
     echo "✅ Health check passed"
 else
     echo "❌ Health check failed: $HEALTH_RESPONSE"
-    exit 1
-fi
-
-# Test SSE endpoint (check for 'endpoint' event)
-echo
-echo "Testing SSE endpoint..."
-# We use curl with --max-time to just grab the first few lines
-SSE_OUTPUT=$(curl -N -s --max-time 2 http://localhost:3000/mcp || true)
-
-echo "SSE Output (first 200 chars):"
-echo "${SSE_OUTPUT:0:200}"
-
-if echo "$SSE_OUTPUT" | grep -q "event: endpoint"; then
-    echo "✅ SSE endpoint event received"
-else
-    echo "❌ SSE endpoint event NOT received"
-    exit 1
-fi
-
-EXPECTED_ENDPOINT="data: http://localhost:3000/mcp"
-if echo "$SSE_OUTPUT" | grep -q "$EXPECTED_ENDPOINT"; then
-    echo "✅ SSE endpoint data correct ($EXPECTED_ENDPOINT)"
-else
-    echo "❌ SSE endpoint data incorrect"
     exit 1
 fi
 

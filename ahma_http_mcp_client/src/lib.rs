@@ -1,6 +1,5 @@
 pub mod client;
 pub mod error;
-pub mod sse;
 
 pub fn add(left: u64, right: u64) -> u64 {
     left + right

@@ -6,7 +6,6 @@
 //! - HTTP/3 support using Quinn and h3
 //! - HTTP/2 fallback using Axum
 //! - Automatic self-signed certificate generation for localhost
-//! - Server-Sent Events (SSE) for server-initiated messages
 //! - Full MCP protocol support
 //!
 //! ## Features

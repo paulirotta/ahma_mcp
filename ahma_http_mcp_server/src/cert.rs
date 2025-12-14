@@ -32,7 +32,7 @@ fn generate_localhost_cert() -> Result<(String, String)> {
     
     // Set subject alternative names for localhost
     params.subject_alt_names = vec![
-        SanType::DnsName(rcgen::Ia5String::try_from("localhost").unwrap()),
+        SanType::DnsName(rcgen::string::Ia5String::try_from("localhost").unwrap()),
         SanType::IpAddress(std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1))),
         SanType::IpAddress(std::net::IpAddr::V6(std::net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1))),
     ];

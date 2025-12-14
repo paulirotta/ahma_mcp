@@ -14,7 +14,6 @@ This crate is currently under development. The architecture has been designed bu
 - **HTTP/2 Fallback**: Automatically falls back to HTTP/2 if HTTP/3 is unavailable  
 - **Zero Configuration**: Automatically generates and caches self-signed TLS certificates
 - **Localhost Only**: Designed for secure local development
-- **Server-Sent Events**: Supports SSE for server-initiated messages (HTTP/2 only)
 - **Full MCP Support**: Complete implementation of the Model Context Protocol
 
 ## Architecture

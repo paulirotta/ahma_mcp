@@ -5,13 +5,12 @@ use crate::{
     error::{Result, ServerError},
     handler::McpServerState,
 };
-use bytes::Bytes;
+use bytes::{Bytes, Buf};
 use h3::server::RequestStream;
 use http::{Method, Request, Response, StatusCode};
-use http_body_util::Full;
 use rmcp::handler::server::ServerHandler;
 use std::{net::SocketAddr, sync::Arc};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 /// HTTP/3 server configuration
 pub struct Http3ServerConfig {
@@ -75,7 +74,7 @@ pub async fn start_http3_server<H: ServerHandler + Send + Sync + Clone + 'static
     while let Some(conn) = endpoint.accept().await {
         let state = state.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(conn, state).await {
+            if let Err(e) = handle_connection::<H>(conn, state).await {
                 error!("Connection error: {}", e);
             }
         });
@@ -145,9 +144,10 @@ async fn handle_request<H: ServerHandler + Send + Sync + Clone + 'static>(
                 .map_err(|e| ServerError::Http3(format!("Failed to read body: {}", e)))?;
             
             match body {
-                Some(data) => {
+                Some(mut data) => {
                     // Parse JSON
-                    let json: serde_json::Value = serde_json::from_slice(&data)
+                    let bytes = data.copy_to_bytes(data.remaining());
+                    let json: serde_json::Value = serde_json::from_slice(&bytes)
                         .map_err(|e| ServerError::Json(e))?;
                     
                     // Process through handler
@@ -172,15 +172,6 @@ async fn handle_request<H: ServerHandler + Send + Sync + Clone + 'static>(
                         .unwrap()
                 }
             }
-        }
-        (&Method::GET, "/mcp") => {
-            // MCP Streamable HTTP: GET /mcp returns SSE stream
-            // Note: SSE not fully supported over HTTP/3, consider using HTTP/2
-            warn!("SSE not fully supported over HTTP/3, consider using HTTP/2");
-            Response::builder()
-                .status(StatusCode::NOT_IMPLEMENTED)
-                .body(())
-                .unwrap()
         }
         _ => {
             Response::builder()
@@ -208,18 +199,18 @@ async fn process_mcp_message<H: ServerHandler + Send + Sync + Clone + 'static>(
     let message: RxJsonRpcMessage<RoleServer> = serde_json::from_value(payload)
         .map_err(|e| ServerError::Json(e))?;
     
-    // Process the message through the handler
-    let mut handler = state.handler.lock().await;
+    // Process the message through the server
+    let mut server = state.server.lock().await;
     
     let response = match message {
         RxJsonRpcMessage::Request(req) => {
             debug!("Processing request");
             
             // Handle the request using the Service trait
-            match handler.call(req.request).await {
+            match server.call(req.request).await {
                 Ok(response) => {
                     debug!("Request handled successfully");
-                    TxJsonRpcMessage::Response(rmcp::protocol::JsonRpcResponse {
+                    TxJsonRpcMessage::Response(rmcp::model::JsonRpcResponse {
                         jsonrpc: "2.0".to_string(),
                         id: req.id,
                         result: serde_json::to_value(response).unwrap_or(serde_json::json!({})),
@@ -234,7 +225,7 @@ async fn process_mcp_message<H: ServerHandler + Send + Sync + Clone + 'static>(
         RxJsonRpcMessage::Notification(notif) => {
             debug!("Processing notification");
             
-            if let Err(e) = handler.call(notif.notification).await {
+            if let Err(e) = server.call(notif.notification).await {
                 error!("Error handling notification: {:?}", e);
             }
             
