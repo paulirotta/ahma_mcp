@@ -316,28 +316,27 @@ async fn health_check() -> impl IntoResponse {
 /// 1. Send `roots/list` requests to discover client workspace folders
 /// 2. Send notifications (if any)
 /// 3. Send requests that need client responses
+///
+/// Note: Returns 404 (not 400/501) when session ID is missing or invalid. This prevents
+/// clients from detecting SSE support during initial probing, avoiding OAuth prompts
+/// for servers that don't require authentication.
 async fn handle_sse_stream(State(state): State<Arc<BridgeState>>, headers: HeaderMap) -> Response {
     // SSE is only supported in session isolation mode
+    // Return 404 to hide SSE from probing clients (prevents OAuth prompts)
     if !state.session_isolation {
-        return (
-            StatusCode::NOT_IMPLEMENTED,
-            "SSE is only available in session isolation mode",
-        )
-            .into_response();
+        return StatusCode::NOT_FOUND.into_response();
     }
 
     // Get session ID from header - required for SSE
+    // Return 404 (not 400) to hide SSE from clients without a session
     let session_id = match headers
         .get(MCP_SESSION_ID_HEADER)
         .and_then(|v| v.to_str().ok())
     {
         Some(id) => id.to_string(),
         None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                "Mcp-Session-Id header required for SSE connection",
-            )
-                .into_response();
+            // 404 makes clients think SSE doesn't exist, avoiding OAuth probes
+            return StatusCode::NOT_FOUND.into_response();
         }
     };
 
@@ -345,25 +344,21 @@ async fn handle_sse_stream(State(state): State<Arc<BridgeState>>, headers: Heade
     let session_manager = match &state.session_manager {
         Some(sm) => sm,
         None => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Session manager not available",
-            )
-                .into_response();
+            return StatusCode::NOT_FOUND.into_response();
         }
     };
 
-    // Get the session
+    // Get the session - 404 if not found
     let session = match session_manager.get_session(&session_id) {
         Some(s) => s,
         None => {
-            return (StatusCode::NOT_FOUND, "Session not found").into_response();
+            return StatusCode::NOT_FOUND.into_response();
         }
     };
 
     // Check if session is terminated
     if session.is_terminated() {
-        return (StatusCode::GONE, "Session has been terminated").into_response();
+        return StatusCode::NOT_FOUND.into_response();
     }
 
     info!(session_id = %session_id, "SSE stream opened");
