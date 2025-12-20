@@ -1,6 +1,50 @@
 use ahma_http_bridge::{BridgeConfig, start_bridge};
-use std::path::Path;
+use clap::Parser;
+use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+/// HTTP-to-stdio bridge for MCP servers with session isolation support.
+///
+/// Enables multiple IDE instances to share a single HTTP endpoint while maintaining
+/// separate sandbox scopes based on each client's workspace roots.
+#[derive(Parser, Debug)]
+#[command(name = "ahma_http_bridge")]
+#[command(version, about)]
+struct Args {
+    /// Enable session isolation mode (separate subprocess per client).
+    /// Each client gets its own sandbox scope derived from its workspace roots.
+    /// Recommended for multi-project usage.
+    #[arg(long, default_value_t = true)]
+    session_isolation: bool,
+
+    /// Disable session isolation (single shared subprocess for all clients).
+    /// Use this if all clients share the same project directory.
+    #[arg(long, conflicts_with = "session_isolation")]
+    no_session_isolation: bool,
+
+    /// Address to bind the HTTP server.
+    #[arg(long, default_value = "127.0.0.1:3000")]
+    bind_addr: SocketAddr,
+
+    /// Default sandbox scope if client provides no workspace roots.
+    /// Only used in session isolation mode.
+    #[arg(long, default_value = ".")]
+    default_sandbox_scope: PathBuf,
+
+    /// Command to run the MCP server subprocess.
+    /// If not specified, auto-detects local debug binary or uses 'ahma_mcp'.
+    #[arg(long)]
+    server_command: Option<String>,
+
+    /// Additional arguments to pass to the MCP server subprocess.
+    #[arg(long)]
+    server_args: Vec<String>,
+
+    /// Enable colored terminal output for subprocess I/O (debug mode).
+    #[arg(long)]
+    colored_output: bool,
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -12,19 +56,44 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let mut config = BridgeConfig::default();
+    let args = Args::parse();
 
-    // Auto-detect local binary for development
+    // Determine server command: explicit arg > local debug binary > default
     let cwd = std::env::current_dir()?;
-    if let Some(local_binary) = detect_local_debug_binary(&cwd) {
-        config.server_command = local_binary;
-        // Enable colored output in debug mode (when using local debug binary)
-        config.enable_colored_output = true;
-        tracing::info!("Debug mode detected - colored terminal output enabled");
-    }
+    let (server_command, enable_colored_output) = match args.server_command {
+        Some(cmd) => (cmd, args.colored_output),
+        None => {
+            if let Some(local_binary) = detect_local_debug_binary(&cwd) {
+                tracing::info!("Debug mode detected - using local binary, colored output enabled");
+                (local_binary, true)
+            } else {
+                ("ahma_mcp".to_string(), args.colored_output)
+            }
+        }
+    };
+
+    // Determine session isolation mode
+    let session_isolation = !args.no_session_isolation;
+
+    let config = BridgeConfig {
+        bind_addr: args.bind_addr,
+        server_command,
+        server_args: args.server_args,
+        enable_colored_output,
+        session_isolation,
+        default_sandbox_scope: args.default_sandbox_scope,
+    };
 
     tracing::info!("Starting Ahma HTTP Bridge on {}", config.bind_addr);
     tracing::info!("Proxying to command: {}", config.server_command);
+    tracing::info!(
+        "Session isolation: {} (each client gets separate sandbox)",
+        if config.session_isolation {
+            "enabled"
+        } else {
+            "disabled"
+        }
+    );
 
     start_bridge(config).await?;
     Ok(())

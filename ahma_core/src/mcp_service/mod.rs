@@ -645,6 +645,73 @@ impl AhmaMcpService {
 
         DEFAULT_AWAIT_TIMEOUT.max(max_op_timeout)
     }
+
+    /// Query the client for workspace roots and initialize the sandbox scope.
+    ///
+    /// This implements the MCP roots protocol where the server requests the
+    /// client's workspace roots to establish sandbox boundaries.
+    async fn configure_sandbox_from_roots(&self, peer: &Peer<RoleServer>) {
+        use crate::sandbox::{get_sandbox_scopes, initialize_sandbox_scopes};
+
+        // Check if sandbox is already configured (e.g., via --sandbox-scope CLI arg)
+        if get_sandbox_scopes().is_some() {
+            tracing::debug!("Sandbox already configured via CLI, skipping roots/list");
+            return;
+        }
+
+        tracing::info!("Requesting workspace roots from client via roots/list");
+
+        match peer.list_roots().await {
+            Ok(roots_result) => {
+                let roots = &roots_result.roots;
+                if roots.is_empty() {
+                    tracing::warn!(
+                        "Client returned empty roots list, sandbox will use fallback behavior"
+                    );
+                    return;
+                }
+
+                // Extract file:// URIs and convert to paths
+                let paths: Vec<PathBuf> = roots
+                    .iter()
+                    .filter_map(|root| root.uri.strip_prefix("file://").map(PathBuf::from))
+                    .collect();
+
+                if paths.is_empty() {
+                    tracing::warn!("No file:// roots found in client response, sandbox unchanged");
+                    return;
+                }
+
+                tracing::info!(
+                    "Received {} workspace root(s) from client: {:?}",
+                    paths.len(),
+                    paths
+                );
+
+                // Initialize sandbox with client's workspace roots
+                match initialize_sandbox_scopes(&paths) {
+                    Ok(()) => {
+                        tracing::info!("Sandbox scope initialized from client roots: {:?}", paths);
+                    }
+                    Err(e) => {
+                        // AlreadyInitialized is expected if CLI arg was used
+                        tracing::debug!(
+                            "Could not set sandbox from roots (may already be set): {}",
+                            e
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                // Client may not support roots capability - this is not an error
+                tracing::info!(
+                    "Client does not support roots/list or request failed: {}. \
+                     Sandbox will use fallback behavior.",
+                    e
+                );
+            }
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -687,6 +754,10 @@ impl ServerHandler for AhmaMcpService {
                     );
                 }
             }
+
+            // Query client for workspace roots and configure sandbox
+            // Per MCP spec, server sends roots/list request to client
+            self.configure_sandbox_from_roots(peer).await;
         }
     }
 

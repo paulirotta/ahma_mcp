@@ -19,8 +19,9 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// Global sandbox scope - set once at initialization, immutable thereafter
-static SANDBOX_SCOPE: OnceLock<PathBuf> = OnceLock::new();
+/// Global sandbox scopes - set once at initialization, immutable thereafter
+/// Multiple scopes are supported to allow multi-root workspaces
+static SANDBOX_SCOPES: OnceLock<Vec<PathBuf>> = OnceLock::new();
 
 /// Test mode flag - when true, sandbox is bypassed (for test environments)
 /// Initialized lazily to check for CARGO_PKG_NAME environment variable which indicates test context
@@ -63,6 +64,22 @@ pub fn is_test_mode() -> bool {
     });
     TEST_MODE.load(Ordering::SeqCst)
 }
+
+/// Format sandbox scopes for error messages
+fn format_scopes(scopes: &[PathBuf]) -> String {
+    if scopes.is_empty() {
+        " (none configured)".to_string()
+    } else if scopes.len() == 1 {
+        format!(" '{}'", scopes[0].display())
+    } else {
+        let scope_list: Vec<String> = scopes
+            .iter()
+            .map(|s| format!("'{}'", s.display()))
+            .collect();
+        format!("s [{}]", scope_list.join(", "))
+    }
+}
+
 /// Errors specific to sandbox operations
 #[derive(Debug, thiserror::Error)]
 pub enum SandboxError {
@@ -72,8 +89,8 @@ pub enum SandboxError {
     #[error("Sandbox scope not initialized - call initialize_sandbox_scope first")]
     NotInitialized,
 
-    #[error("Path '{path}' is outside the sandbox scope '{scope}'")]
-    PathOutsideSandbox { path: PathBuf, scope: PathBuf },
+    #[error("Path '{path}' is outside the sandbox root{}", format_scopes(.scopes))]
+    PathOutsideSandbox { path: PathBuf, scopes: Vec<PathBuf> },
 
     #[error("Landlock is not available on this system (requires Linux kernel 5.13+)")]
     LandlockNotAvailable,
@@ -96,7 +113,7 @@ pub enum SandboxError {
     NestedSandboxDetected,
 }
 
-/// Initialize the sandbox scope. This can only be called once.
+/// Initialize the sandbox scope with a single root. This can only be called once.
 ///
 /// # Arguments
 /// * `scope` - The root directory for all file system operations
@@ -105,42 +122,68 @@ pub enum SandboxError {
 /// * `Ok(())` if initialization succeeded
 /// * `Err(SandboxError::AlreadyInitialized)` if already initialized
 pub fn initialize_sandbox_scope(scope: &Path) -> Result<(), SandboxError> {
-    let canonical =
-        std::fs::canonicalize(scope).map_err(|e| SandboxError::CanonicalizationFailed {
-            path: scope.to_path_buf(),
-            reason: e.to_string(),
-        })?;
+    initialize_sandbox_scopes(&[scope.to_path_buf()])
+}
 
-    SANDBOX_SCOPE
-        .set(canonical)
+/// Initialize the sandbox with multiple root directories. This can only be called once.
+///
+/// # Arguments
+/// * `scopes` - The root directories for all file system operations
+///
+/// # Returns
+/// * `Ok(())` if initialization succeeded
+/// * `Err(SandboxError::AlreadyInitialized)` if already initialized
+pub fn initialize_sandbox_scopes(scopes: &[PathBuf]) -> Result<(), SandboxError> {
+    let mut canonicalized = Vec::with_capacity(scopes.len());
+    for scope in scopes {
+        let canonical =
+            std::fs::canonicalize(scope).map_err(|e| SandboxError::CanonicalizationFailed {
+                path: scope.clone(),
+                reason: e.to_string(),
+            })?;
+        canonicalized.push(canonical);
+    }
+
+    SANDBOX_SCOPES
+        .set(canonicalized)
         .map_err(|_| SandboxError::AlreadyInitialized)
 }
 
-/// Get the current sandbox scope.
+/// Get the current sandbox scope (first root for backwards compatibility).
 ///
 /// # Returns
 /// * `Some(&PathBuf)` if initialized
 /// * `None` if not yet initialized
 pub fn get_sandbox_scope() -> Option<&'static PathBuf> {
-    SANDBOX_SCOPE.get()
+    SANDBOX_SCOPES.get().and_then(|v| v.first())
 }
 
-/// Check if a path is within the sandbox scope.
+/// Get all sandbox scopes.
+///
+/// # Returns
+/// * `Some(&Vec<PathBuf>)` if initialized
+/// * `None` if not yet initialized
+pub fn get_sandbox_scopes() -> Option<&'static Vec<PathBuf>> {
+    SANDBOX_SCOPES.get()
+}
+
+/// Check if a path is within any of the sandbox scopes.
 ///
 /// # Arguments
 /// * `path` - The path to validate
 ///
 /// # Returns
 /// * `Ok(PathBuf)` - The canonicalized path if valid
-/// * `Err(SandboxError)` - If path is outside sandbox or sandbox not initialized
+/// * `Err(SandboxError)` - If path is outside all sandbox scopes or sandbox not initialized
 pub fn validate_path_in_sandbox(path: &Path) -> Result<PathBuf, SandboxError> {
-    let scope = SANDBOX_SCOPE.get().ok_or(SandboxError::NotInitialized)?;
+    let scopes = SANDBOX_SCOPES.get().ok_or(SandboxError::NotInitialized)?;
+    let first_scope = scopes.first().ok_or(SandboxError::NotInitialized)?;
 
-    // If path is relative, join with sandbox scope
+    // If path is relative, join with first sandbox scope
     let full_path = if path.is_absolute() {
         path.to_path_buf()
     } else {
-        scope.join(path)
+        first_scope.join(path)
     };
 
     // Try to canonicalize the path
@@ -148,24 +191,25 @@ pub fn validate_path_in_sandbox(path: &Path) -> Result<PathBuf, SandboxError> {
         Ok(p) => p,
         Err(_) => {
             // For non-existent paths (e.g., files to be created), normalize lexically
-            // and check the parent directory
+            // and check against all scopes
             let normalized = normalize_path_lexically(&full_path);
-            if !normalized.starts_with(scope) {
+            if !scopes.iter().any(|scope| normalized.starts_with(scope)) {
                 return Err(SandboxError::PathOutsideSandbox {
                     path: path.to_path_buf(),
-                    scope: scope.clone(),
+                    scopes: scopes.clone(),
                 });
             }
             normalized
         }
     };
 
-    if canonical.starts_with(scope) {
+    // Check if canonical path is within any scope
+    if scopes.iter().any(|scope| canonical.starts_with(scope)) {
         Ok(canonical)
     } else {
         Err(SandboxError::PathOutsideSandbox {
             path: path.to_path_buf(),
-            scope: scope.clone(),
+            scopes: scopes.clone(),
         })
     }
 }
@@ -798,7 +842,7 @@ mod tests {
     fn test_sandbox_error_display() {
         let err = SandboxError::PathOutsideSandbox {
             path: PathBuf::from("/etc/passwd"),
-            scope: PathBuf::from("/home/user/project"),
+            scopes: vec![PathBuf::from("/home/user/project")],
         };
         let msg = format!("{}", err);
         assert!(msg.contains("/etc/passwd"));

@@ -59,8 +59,8 @@ pub struct Session {
     pending_requests: Arc<DashMap<String, oneshot::Sender<Value>>>,
     /// Broadcast channel for SSE events from this session
     broadcast_tx: broadcast::Sender<String>,
-    /// Sandbox scope (set on first roots/list response)
-    sandbox_scope: Mutex<Option<PathBuf>>,
+    /// Sandbox scopes (set on first roots/list response) - supports multiple roots
+    sandbox_scopes: Mutex<Option<Vec<PathBuf>>>,
     /// Whether sandbox has been locked (cannot change after first set)
     sandbox_locked: AtomicBool,
     /// Whether the session has been terminated
@@ -82,9 +82,18 @@ impl Session {
         self.sandbox_locked.load(Ordering::SeqCst)
     }
 
-    /// Get the sandbox scope (if set)
+    /// Get the first sandbox scope (for backwards compatibility)
     pub async fn get_sandbox_scope(&self) -> Option<PathBuf> {
-        self.sandbox_scope.lock().await.clone()
+        self.sandbox_scopes
+            .lock()
+            .await
+            .as_ref()
+            .and_then(|v| v.first().cloned())
+    }
+
+    /// Get all sandbox scopes
+    pub async fn get_sandbox_scopes(&self) -> Option<Vec<PathBuf>> {
+        self.sandbox_scopes.lock().await.clone()
     }
 
     /// Subscribe to SSE events from this session
@@ -167,7 +176,7 @@ impl SessionManager {
             sender: Mutex::new(tx),
             pending_requests: pending_requests.clone(),
             broadcast_tx: broadcast_tx.clone(),
-            sandbox_scope: Mutex::new(None),
+            sandbox_scopes: Mutex::new(None),
             sandbox_locked: AtomicBool::new(false),
             terminated: AtomicBool::new(false),
             termination_reason: Mutex::new(None),
@@ -289,9 +298,9 @@ impl SessionManager {
 
     /// Lock sandbox scope for a session (called when processing roots/list response)
     ///
-    /// Per R8D.7-R8D.8, sandbox scope is determined from first root and cannot be changed.
-    /// This method restarts the subprocess with the correct `--sandbox-scope` argument
-    /// to ensure file operations are validated against the client's workspace.
+    /// Per R8D.7-R8D.8, sandbox scope is determined from roots and cannot be changed.
+    /// This method restarts the subprocess with the correct `--sandbox-scope` arguments
+    /// to ensure file operations are validated against the client's workspace(s).
     pub async fn lock_sandbox(&self, session_id: &str, roots: &[McpRoot]) -> Result<()> {
         let session = self.sessions.get(session_id).ok_or_else(|| {
             BridgeError::Communication(format!("Session not found: {}", session_id))
@@ -303,40 +312,45 @@ impl SessionManager {
             ));
         }
 
-        // Use first root as sandbox scope, or default if no roots
-        let scope = roots
-            .first()
-            .and_then(|r| r.uri.strip_prefix("file://"))
-            .map(PathBuf::from)
-            .unwrap_or_else(|| self.config.default_scope.clone());
+        // Extract all roots as sandbox scopes, or use default if no roots
+        let scopes: Vec<PathBuf> = roots
+            .iter()
+            .filter_map(|r| r.uri.strip_prefix("file://").map(PathBuf::from))
+            .collect();
+
+        let scopes = if scopes.is_empty() {
+            vec![self.config.default_scope.clone()]
+        } else {
+            scopes
+        };
 
         info!(
             session_id = %session_id,
-            sandbox_scope = %scope.display(),
-            "Locking sandbox scope for session"
+            sandbox_scopes = ?scopes,
+            "Locking sandbox scope(s) for session"
         );
 
-        // Store the sandbox scope
-        *session.sandbox_scope.lock().await = Some(scope.clone());
+        // Store the sandbox scopes
+        *session.sandbox_scopes.lock().await = Some(scopes.clone());
         session.sandbox_locked.store(true, Ordering::SeqCst);
 
-        // Restart subprocess with the correct sandbox scope
+        // Restart subprocess with the correct sandbox scope(s)
         // This is necessary because the subprocess was started without knowing the client's workspace
         drop(session); // Release the lock before restart
-        self.restart_session_with_sandbox(session_id, &scope)
+        self.restart_session_with_sandbox(session_id, &scopes)
             .await?;
 
         Ok(())
     }
 
-    /// Restart a session's subprocess with a specific sandbox scope.
+    /// Restart a session's subprocess with specific sandbox scopes.
     ///
     /// This terminates the existing subprocess and starts a new one with
-    /// `--sandbox-scope <path>` added to the arguments.
+    /// `--sandbox-scope <path>` arguments added for each scope.
     async fn restart_session_with_sandbox(
         &self,
         session_id: &str,
-        sandbox_scope: &std::path::Path,
+        sandbox_scopes: &[PathBuf],
     ) -> Result<()> {
         let session = self.sessions.get(session_id).ok_or_else(|| {
             BridgeError::Communication(format!("Session not found: {}", session_id))
@@ -344,8 +358,8 @@ impl SessionManager {
 
         info!(
             session_id = %session_id,
-            sandbox_scope = %sandbox_scope.display(),
-            "Restarting subprocess with sandbox scope"
+            sandbox_scopes = ?sandbox_scopes,
+            "Restarting subprocess with sandbox scope(s)"
         );
 
         // Kill the existing subprocess
@@ -354,12 +368,14 @@ impl SessionManager {
             info!(session_id = %session_id, "Killed existing subprocess");
         }
 
-        // Build new args with --sandbox-scope
+        // Build new args with --sandbox-scope for each scope
         let mut new_args = self.config.server_args.clone();
-        new_args.push("--sandbox-scope".to_string());
-        new_args.push(sandbox_scope.display().to_string());
+        for scope in sandbox_scopes {
+            new_args.push("--sandbox-scope".to_string());
+            new_args.push(scope.display().to_string());
+        }
 
-        // Spawn new subprocess with sandbox scope
+        // Spawn new subprocess with sandbox scope(s)
         let stderr_mode = if self.config.enable_colored_output {
             Stdio::piped()
         } else {
@@ -405,8 +421,8 @@ impl SessionManager {
 
         info!(
             session_id = %session_id,
-            sandbox_scope = %sandbox_scope.display(),
-            "Subprocess restarted successfully with sandbox scope"
+            sandbox_scopes = ?sandbox_scopes,
+            "Subprocess restarted successfully with sandbox scope(s)"
         );
 
         Ok(())
@@ -422,10 +438,10 @@ impl SessionManager {
 
         if session.sandbox_locked.load(Ordering::SeqCst) {
             // Security violation: attempt to change roots after sandbox lock
-            let scope = session.sandbox_scope.lock().await.clone();
+            let scopes = session.sandbox_scopes.lock().await.clone();
             error!(
                 session_id = %session_id,
-                sandbox_scope = ?scope,
+                sandbox_scopes = ?scopes,
                 "Roots change rejected after sandbox lock - terminating session"
             );
 

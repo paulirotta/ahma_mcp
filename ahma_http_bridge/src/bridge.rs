@@ -6,18 +6,25 @@ use axum::{
     Json, Router,
     extract::State,
     http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
+    response::{
+        IntoResponse, Response,
+        sse::{Event, KeepAlive, Sse},
+    },
     routing::{get, post},
 };
 use dashmap::DashMap;
+use futures::stream::StreamExt;
 use owo_colors::OwoColorize;
 use serde_json::Value;
-use std::{net::SocketAddr, path::PathBuf, process::Stdio, sync::Arc, time::Duration};
+use std::{
+    convert::Infallible, net::SocketAddr, path::PathBuf, process::Stdio, sync::Arc, time::Duration,
+};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::Command,
     sync::{mpsc, oneshot},
 };
+use tokio_stream::wrappers::BroadcastStream;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::{debug, error, info, warn};
 
@@ -113,17 +120,18 @@ pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
     };
 
     // Build the router
-    // MCP Streamable HTTP transport: single endpoint supporting POST (requests)
+    // MCP Streamable HTTP transport: single endpoint supporting POST (requests) and GET (SSE)
     // See: https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http
     let app = Router::new()
         .route("/health", get(health_check))
-        .route("/mcp", post(handle_mcp_request))
+        .route("/mcp", post(handle_mcp_request).get(handle_sse_stream))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
     info!("HTTP bridge listening on http://{}", config.bind_addr);
     info!("MCP endpoint (POST): http://{}/mcp", config.bind_addr);
+    info!("MCP endpoint (GET/SSE): http://{}/mcp", config.bind_addr);
 
     // Start the server
     let listener = tokio::net::TcpListener::bind(config.bind_addr)
@@ -298,8 +306,94 @@ async fn health_check() -> impl IntoResponse {
     (StatusCode::OK, "OK")
 }
 
-// /// Handle SSE connections
-// // SSE removed
+/// Handle SSE stream connections for server-to-client messages
+///
+/// This enables the MCP Streamable HTTP transport pattern where:
+/// - POST /mcp sends client→server requests (existing)
+/// - GET /mcp opens SSE stream for server→client messages (this handler)
+///
+/// The server uses SSE to:
+/// 1. Send `roots/list` requests to discover client workspace folders
+/// 2. Send notifications (if any)
+/// 3. Send requests that need client responses
+async fn handle_sse_stream(State(state): State<Arc<BridgeState>>, headers: HeaderMap) -> Response {
+    // SSE is only supported in session isolation mode
+    if !state.session_isolation {
+        return (
+            StatusCode::NOT_IMPLEMENTED,
+            "SSE is only available in session isolation mode",
+        )
+            .into_response();
+    }
+
+    // Get session ID from header - required for SSE
+    let session_id = match headers
+        .get(MCP_SESSION_ID_HEADER)
+        .and_then(|v| v.to_str().ok())
+    {
+        Some(id) => id.to_string(),
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                "Mcp-Session-Id header required for SSE connection",
+            )
+                .into_response();
+        }
+    };
+
+    // Get session manager
+    let session_manager = match &state.session_manager {
+        Some(sm) => sm,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Session manager not available",
+            )
+                .into_response();
+        }
+    };
+
+    // Get the session
+    let session = match session_manager.get_session(&session_id) {
+        Some(s) => s,
+        None => {
+            return (StatusCode::NOT_FOUND, "Session not found").into_response();
+        }
+    };
+
+    // Check if session is terminated
+    if session.is_terminated() {
+        return (StatusCode::GONE, "Session has been terminated").into_response();
+    }
+
+    info!(session_id = %session_id, "SSE stream opened");
+
+    // Subscribe to the session's broadcast channel
+    let rx = session.subscribe();
+
+    // Convert broadcast receiver to a stream of SSE events
+    let stream = BroadcastStream::new(rx).filter_map(move |result| {
+        let session_id = session_id.clone();
+        async move {
+            match result {
+                Ok(msg) => {
+                    debug!(session_id = %session_id, "Sending SSE event: {}", msg);
+                    Some(Ok::<_, Infallible>(Event::default().data(msg)))
+                }
+                Err(e) => {
+                    warn!(session_id = %session_id, "Broadcast receive error: {}", e);
+                    // Skip errors (lagged receiver)
+                    None
+                }
+            }
+        }
+    });
+
+    // Return SSE response with keep-alive
+    Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
+}
 
 /// Create a JSON response with appropriate headers
 fn json_response(value: Value) -> Response {
@@ -476,6 +570,7 @@ async fn handle_session_isolated_request(
                 info!(session_id = %new_session_id, "Session created, forwarding initialize request");
 
                 // Forward the initialize request to the new session
+                // Sandbox will be locked when client responds to roots/list via SSE
                 match session_manager
                     .send_request(&new_session_id, &payload)
                     .await
@@ -555,6 +650,50 @@ async fn handle_session_isolated_request(
                 .unwrap_or_else(|_| (StatusCode::FORBIDDEN, "Session terminated").into_response());
         }
 
+        // Check if this is a CLIENT RESPONSE (has id + result/error, no method)
+        // This happens when server sends a request via SSE and client responds via POST
+        let is_client_response = method.is_none()
+            && payload.get("id").is_some()
+            && (payload.get("result").is_some() || payload.get("error").is_some());
+
+        if is_client_response {
+            debug!(session_id = %session_id, "Received client response, forwarding to subprocess");
+
+            // Check if this is a roots/list response - extract roots and lock sandbox
+            if let Some(result) = payload.get("result")
+                && let Some(roots) = result.get("roots").and_then(|r| r.as_array())
+            {
+                let mcp_roots: Vec<McpRoot> = roots
+                    .iter()
+                    .filter_map(|r| serde_json::from_value(r.clone()).ok())
+                    .collect();
+
+                info!(
+                    session_id = %session_id,
+                    roots = ?mcp_roots,
+                    "Locking sandbox from roots/list response"
+                );
+
+                if let Err(e) = session_manager.lock_sandbox(&session_id, &mcp_roots).await {
+                    warn!(session_id = %session_id, "Failed to lock sandbox: {}", e);
+                }
+            }
+
+            // Forward the response to the subprocess (fire and forget)
+            if let Err(e) = session_manager.send_message(&session_id, &payload).await {
+                error!(session_id = %session_id, "Failed to forward client response: {}", e);
+                return error_response(-32603, &format!("Failed to forward response: {}", e));
+            }
+
+            // Return 202 Accepted - no response expected
+            return Response::builder()
+                .status(StatusCode::ACCEPTED)
+                .header("content-type", "application/json")
+                .header(MCP_SESSION_ID_HEADER, session_id.as_str())
+                .body(axum::body::Body::from("{}"))
+                .unwrap_or_else(|_| StatusCode::ACCEPTED.into_response());
+        }
+
         // Forward request to session
         match session_manager.send_request(&session_id, &payload).await {
             Ok(response) => {
@@ -593,7 +732,8 @@ async fn handle_session_isolated_request(
         }
     } else {
         // No session ID and not an initialize request (R8D.5)
-        warn!(
+        // This is a client error, not a server issue - use debug level
+        debug!(
             "Request without session ID for non-initialize method: {:?}",
             method
         );
