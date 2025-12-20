@@ -160,6 +160,12 @@ struct Cli {
     #[arg(long, global = true)]
     no_sandbox: bool,
 
+    /// Defer sandbox initialization until the client provides workspace roots via roots/list.
+    /// Used by HTTP bridge to allow clients to specify their own workspace scope.
+    /// The sandbox will be initialized from the roots/list response instead of cwd.
+    #[arg(long, global = true)]
+    defer_sandbox: bool,
+
     /// Log to stderr instead of file (useful for debugging and seeing errors in terminal).
     /// Enables colored output on Mac/Linux.
     #[arg(long, global = true)]
@@ -282,25 +288,29 @@ async fn main() -> Result<()> {
         ]
     };
 
-    // Initialize the global sandbox scope(s) (can only be done once)
-    if let Err(e) = sandbox::initialize_sandbox_scopes(&sandbox_scopes) {
-        match e {
-            SandboxError::AlreadyInitialized => {
-                // This shouldn't happen in normal operation, but handle gracefully
-                tracing::warn!("Sandbox scope was already initialized");
-            }
-            _ => {
-                return Err(anyhow!("Failed to initialize sandbox scope: {}", e));
+    // Skip sandbox initialization if deferred (will be set via roots/list)
+    if cli.defer_sandbox {
+        tracing::info!("Sandbox initialization deferred - will be set from client roots/list");
+    } else {
+        // Initialize the global sandbox scope(s) (can only be done once)
+        if let Err(e) = sandbox::initialize_sandbox_scopes(&sandbox_scopes) {
+            match e {
+                SandboxError::AlreadyInitialized => {
+                    // This shouldn't happen in normal operation, but handle gracefully
+                    tracing::warn!("Sandbox scope was already initialized");
+                }
+                _ => {
+                    return Err(anyhow!("Failed to initialize sandbox scope: {}", e));
+                }
             }
         }
+        tracing::info!("Sandbox scope(s) initialized: {:?}", sandbox_scopes);
     }
 
-    tracing::info!("Sandbox scope(s) initialized: {:?}", sandbox_scopes);
-
-    // Apply kernel-level sandbox restrictions on Linux (skip if disabled)
+    // Apply kernel-level sandbox restrictions on Linux (skip if disabled or deferred)
     // Note: Landlock only supports a single root, so we use the first scope
     #[cfg(target_os = "linux")]
-    if !no_sandbox {
+    if !no_sandbox && !cli.defer_sandbox {
         if let Some(first_scope) = sandbox_scopes.first() {
             if let Err(e) = sandbox::enforce_landlock_sandbox(first_scope) {
                 tracing::error!("Failed to enforce Landlock sandbox: {}", e);

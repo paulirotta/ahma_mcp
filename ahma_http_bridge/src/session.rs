@@ -148,8 +148,12 @@ impl SessionManager {
             Stdio::inherit()
         };
 
+        // Add --defer-sandbox so the subprocess waits for roots/list to set sandbox scope
+        let mut args = self.config.server_args.clone();
+        args.push("--defer-sandbox".to_string());
+
         let mut child = Command::new(&self.config.server_command)
-            .args(&self.config.server_args)
+            .args(&args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(stderr_mode)
