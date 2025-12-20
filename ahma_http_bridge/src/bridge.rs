@@ -569,6 +569,11 @@ async fn handle_session_isolated_request(
             Ok(new_session_id) => {
                 info!(session_id = %new_session_id, "Session created, forwarding initialize request");
 
+                // Store the initialize request for potential subprocess restart
+                if let Some(session) = session_manager.get_session(&new_session_id) {
+                    session.store_initialize_request(payload.clone()).await;
+                }
+
                 // Forward the initialize request to the new session
                 // Sandbox will be locked when client responds to roots/list via SSE
                 match session_manager
@@ -670,6 +675,7 @@ async fn handle_session_isolated_request(
             debug!(session_id = %session_id, "Received client response, forwarding to subprocess");
 
             // Check if this is a roots/list response - extract roots and lock sandbox
+            let mut subprocess_restarted = false;
             if let Some(result) = payload.get("result")
                 && let Some(roots) = result.get("roots").and_then(|r| r.as_array())
             {
@@ -684,15 +690,28 @@ async fn handle_session_isolated_request(
                     "Locking sandbox from roots/list response"
                 );
 
-                if let Err(e) = session_manager.lock_sandbox(&session_id, &mcp_roots).await {
-                    warn!(session_id = %session_id, "Failed to lock sandbox: {}", e);
+                match session_manager.lock_sandbox(&session_id, &mcp_roots).await {
+                    Ok(true) => {
+                        // Subprocess was restarted with correct sandbox - don't forward the roots response
+                        // The new subprocess hasn't sent a roots/list request and is already configured
+                        subprocess_restarted = true;
+                        info!(session_id = %session_id, "Subprocess restarted, not forwarding roots/list response");
+                    }
+                    Ok(false) => {
+                        // Sandbox was already locked, proceed normally
+                    }
+                    Err(e) => {
+                        warn!(session_id = %session_id, "Failed to lock sandbox: {}", e);
+                    }
                 }
             }
 
-            // Forward the response to the subprocess (fire and forget)
-            if let Err(e) = session_manager.send_message(&session_id, &payload).await {
-                error!(session_id = %session_id, "Failed to forward client response: {}", e);
-                return error_response(-32603, &format!("Failed to forward response: {}", e));
+            // Only forward the response if subprocess wasn't restarted
+            if !subprocess_restarted {
+                if let Err(e) = session_manager.send_message(&session_id, &payload).await {
+                    error!(session_id = %session_id, "Failed to forward client response: {}", e);
+                    return error_response(-32603, &format!("Failed to forward response: {}", e));
+                }
             }
 
             // Return 202 Accepted - no response expected

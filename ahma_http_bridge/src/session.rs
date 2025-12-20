@@ -65,6 +65,8 @@ pub struct Session {
     sandbox_locked: AtomicBool,
     /// Whether the session has been terminated
     terminated: AtomicBool,
+    /// Stored initialize request for replay after subprocess restart
+    initialize_request: Mutex<Option<Value>>,
     /// Termination reason (if terminated)
     termination_reason: Mutex<Option<SessionTerminationReason>>,
     /// Handle to the subprocess (for cleanup)
@@ -133,6 +135,11 @@ impl Session {
         Ok(false)
     }
 
+    /// Store the initialize request for replay after subprocess restart
+    pub async fn store_initialize_request(&self, request: Value) {
+        *self.initialize_request.lock().await = Some(request);
+    }
+
     /// Send roots/list_changed notification to subprocess.
     /// This triggers the server to call roots/list, which goes back through SSE.
     async fn send_roots_list_changed(&self) -> Result<()> {
@@ -141,12 +148,9 @@ impl Session {
             "method": "notifications/roots/list_changed"
         });
         let json_str = serde_json::to_string(&notification)?;
-        self.sender
-            .lock()
-            .await
-            .send(json_str)
-            .await
-            .map_err(|e| BridgeError::Communication(format!("Failed to send roots/list_changed: {}", e)))?;
+        self.sender.lock().await.send(json_str).await.map_err(|e| {
+            BridgeError::Communication(format!("Failed to send roots/list_changed: {}", e))
+        })?;
         info!(session_id = %self.id, "Sent roots/list_changed notification to subprocess");
         Ok(())
     }
@@ -237,6 +241,7 @@ impl SessionManager {
             child_handle: Mutex::new(Some(child)),
             sse_connected: AtomicBool::new(false),
             mcp_initialized: AtomicBool::new(false),
+            initialize_request: Mutex::new(None),
         });
 
         // Spawn the I/O handler task
@@ -357,15 +362,18 @@ impl SessionManager {
     /// Per R8D.7-R8D.8, sandbox scope is determined from roots and cannot be changed.
     /// This method restarts the subprocess with the correct `--sandbox-scope` arguments
     /// to ensure file operations are validated against the client's workspace(s).
-    pub async fn lock_sandbox(&self, session_id: &str, roots: &[McpRoot]) -> Result<()> {
+    ///
+    /// Returns `true` if the subprocess was restarted (caller should NOT forward the
+    /// roots/list response to the new subprocess, as it's already configured via CLI args
+    /// and hasn't completed MCP handshake yet).
+    pub async fn lock_sandbox(&self, session_id: &str, roots: &[McpRoot]) -> Result<bool> {
         let session = self.sessions.get(session_id).ok_or_else(|| {
             BridgeError::Communication(format!("Session not found: {}", session_id))
         })?;
 
         if session.sandbox_locked.load(Ordering::SeqCst) {
-            return Err(BridgeError::Communication(
-                "Sandbox already locked".to_string(),
-            ));
+            // Already locked, no restart needed
+            return Ok(false);
         }
 
         // Extract all roots as sandbox scopes, or use default if no roots
@@ -396,7 +404,8 @@ impl SessionManager {
         self.restart_session_with_sandbox(session_id, &scopes)
             .await?;
 
-        Ok(())
+        // Subprocess was restarted - caller should not forward the roots response
+        Ok(true)
     }
 
     /// Restart a session's subprocess with specific sandbox scopes.
@@ -474,6 +483,51 @@ impl SessionManager {
         tokio::spawn(async move {
             Self::handle_session_io(session_clone, rx, stdin, stdout, stderr, colored_output).await;
         });
+
+        // Replay MCP handshake: send stored initialize request + initialized notification
+        if let Some(init_request) = session.initialize_request.lock().await.as_ref() {
+            info!(session_id = %session_id, "Replaying MCP handshake to restarted subprocess");
+
+            // Send initialize request
+            let json_str = serde_json::to_string(init_request).map_err(|e| {
+                BridgeError::Communication(format!("Failed to serialize init request: {}", e))
+            })?;
+            session
+                .sender
+                .lock()
+                .await
+                .send(json_str)
+                .await
+                .map_err(|e| {
+                    BridgeError::Communication(format!("Failed to send init request: {}", e))
+                })?;
+
+            // Give the subprocess a moment to process and respond
+            // The I/O handler will receive the response and process it
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+            // Send initialized notification
+            let initialized = serde_json::json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized"
+            });
+            let json_str = serde_json::to_string(&initialized).map_err(|e| {
+                BridgeError::Communication(format!("Failed to serialize initialized: {}", e))
+            })?;
+            session
+                .sender
+                .lock()
+                .await
+                .send(json_str)
+                .await
+                .map_err(|e| {
+                    BridgeError::Communication(format!("Failed to send initialized: {}", e))
+                })?;
+
+            info!(session_id = %session_id, "MCP handshake replayed successfully");
+        } else {
+            warn!(session_id = %session_id, "No stored initialize request for handshake replay");
+        }
 
         info!(
             session_id = %session_id,

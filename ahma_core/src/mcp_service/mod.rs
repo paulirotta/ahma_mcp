@@ -774,9 +774,7 @@ impl ServerHandler for AhmaMcpService {
                         .await;
                 });
             } else {
-                tracing::info!(
-                    "Sandbox deferred - waiting for roots/list_changed notification"
-                );
+                tracing::info!("Sandbox deferred - waiting for roots/list_changed notification");
             }
         }
     }

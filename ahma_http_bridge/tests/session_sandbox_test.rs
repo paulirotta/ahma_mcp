@@ -146,9 +146,14 @@ async fn test_sandbox_scope_immutable_after_lock() {
         .lock_sandbox(&session_id, &second_roots)
         .await;
 
+    // Second lock returns Ok(false) - sandbox was already locked, no restart
     assert!(
-        result.is_err(),
-        "Second lock_sandbox call should fail (sandbox already locked)"
+        result.is_ok(),
+        "Second lock_sandbox call should succeed but return false"
+    );
+    assert!(
+        !result.unwrap(),
+        "Second lock_sandbox should return false (already locked, no restart)"
     );
 }
 
