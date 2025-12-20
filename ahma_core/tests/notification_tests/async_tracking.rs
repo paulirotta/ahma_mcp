@@ -239,6 +239,7 @@ async fn test_operation_completion_tracking() {
         configs,
         Arc::new(None),
         false,
+        false,
     )
     .await
     .unwrap();

@@ -363,6 +363,11 @@ async fn handle_sse_stream(State(state): State<Arc<BridgeState>>, headers: Heade
 
     info!(session_id = %session_id, "SSE stream opened");
 
+    // Mark SSE as connected - if MCP is already initialized, this will trigger roots/list_changed
+    if let Err(e) = session.mark_sse_connected().await {
+        warn!(session_id = %session_id, "Failed to mark SSE connected: {}", e);
+    }
+
     // Subscribe to the session's broadcast channel
     let rx = session.subscribe();
 
@@ -643,6 +648,16 @@ async fn handle_session_isolated_request(
                     .unwrap_or_default(),
                 ))
                 .unwrap_or_else(|_| (StatusCode::FORBIDDEN, "Session terminated").into_response());
+        }
+
+        // Check for initialized notification - this completes the MCP handshake
+        // Once both SSE is connected AND initialized is received, we send roots/list_changed
+        if method == Some("notifications/initialized") {
+            if let Some(session) = session_manager.get_session(&session_id) {
+                if let Err(e) = session.mark_mcp_initialized().await {
+                    warn!(session_id = %session_id, "Failed to mark MCP initialized: {}", e);
+                }
+            }
         }
 
         // Check if this is a CLIENT RESPONSE (has id + result/error, no method)

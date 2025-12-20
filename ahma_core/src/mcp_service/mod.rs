@@ -73,6 +73,9 @@ pub struct AhmaMcpService {
     /// When true, forces all operations to run synchronously (overrides async-by-default).
     /// This is set when the --sync CLI flag is used.
     pub force_synchronous: bool,
+    /// When true, sandbox initialization is deferred until roots/list_changed notification.
+    /// This is used in HTTP bridge mode where SSE must connect before server→client requests.
+    pub defer_sandbox: bool,
     /// The peer handle for sending notifications to the client.
     /// This is populated by capturing it from the first request context.
     pub peer: Arc<RwLock<Option<Peer<RoleServer>>>>,
@@ -86,6 +89,7 @@ impl AhmaMcpService {
         configs: Arc<HashMap<String, ToolConfig>>,
         guidance: Arc<Option<GuidanceConfig>>,
         force_synchronous: bool,
+        defer_sandbox: bool,
     ) -> Result<Self, anyhow::Error> {
         // Start the background monitor for operation timeouts
         crate::operation_monitor::OperationMonitor::start_background_monitor(
@@ -98,6 +102,7 @@ impl AhmaMcpService {
             configs: Arc::new(RwLock::new((*configs).clone())),
             guidance,
             force_synchronous,
+            defer_sandbox,
             peer: Arc::new(RwLock::new(None)),
         })
     }
@@ -757,7 +762,44 @@ impl ServerHandler for AhmaMcpService {
 
             // Query client for workspace roots and configure sandbox
             // Per MCP spec, server sends roots/list request to client
-            self.configure_sandbox_from_roots(peer).await;
+            // IMPORTANT: Only do this if sandbox is NOT deferred.
+            // In HTTP bridge mode with --defer-sandbox, we wait for roots/list_changed
+            // notification which is sent by the bridge when SSE connects.
+            if !self.defer_sandbox {
+                let peer_clone = peer.clone();
+                let service_clone = self.clone();
+                tokio::spawn(async move {
+                    service_clone
+                        .configure_sandbox_from_roots(&peer_clone)
+                        .await;
+                });
+            } else {
+                tracing::info!(
+                    "Sandbox deferred - waiting for roots/list_changed notification"
+                );
+            }
+        }
+    }
+
+    fn on_roots_list_changed(
+        &self,
+        context: NotificationContext<RoleServer>,
+    ) -> impl std::future::Future<Output = ()> + Send + '_ {
+        async move {
+            tracing::info!("Received roots/list_changed notification");
+
+            // This notification is sent by the HTTP bridge when SSE connects.
+            // It signals that we can now safely call roots/list.
+            let peer = &context.peer;
+
+            // Spawn as background task to avoid blocking message processing
+            let peer_clone = peer.clone();
+            let service_clone = self.clone();
+            tokio::spawn(async move {
+                service_clone
+                    .configure_sandbox_from_roots(&peer_clone)
+                    .await;
+            });
         }
     }
 

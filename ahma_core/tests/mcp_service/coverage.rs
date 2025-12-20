@@ -205,7 +205,7 @@ async fn test_service_creation_and_basic_functionality() {
     let configs = Arc::new(HashMap::new());
     let guidance = Arc::new(None);
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false)
+    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false, false)
         .await
         .unwrap();
 
@@ -290,6 +290,7 @@ async fn test_service_with_configs() {
         Arc::clone(&operation_monitor),
         Arc::new(configs),
         guidance,
+        false,
         false,
     )
     .await
@@ -441,7 +442,7 @@ async fn test_service_with_tool_configs() {
     let configs = Arc::new(configs);
     let guidance = Arc::new(None);
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false)
+    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false, false)
         .await
         .unwrap();
 

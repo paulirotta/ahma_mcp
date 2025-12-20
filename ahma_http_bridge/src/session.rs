@@ -69,6 +69,10 @@ pub struct Session {
     termination_reason: Mutex<Option<SessionTerminationReason>>,
     /// Handle to the subprocess (for cleanup)
     child_handle: Mutex<Option<Child>>,
+    /// Whether SSE is connected (client opened GET /mcp)
+    sse_connected: AtomicBool,
+    /// Whether initialized notification was received (MCP handshake complete)
+    mcp_initialized: AtomicBool,
 }
 
 impl Session {
@@ -99,6 +103,52 @@ impl Session {
     /// Subscribe to SSE events from this session
     pub fn subscribe(&self) -> broadcast::Receiver<String> {
         self.broadcast_tx.subscribe()
+    }
+
+    /// Mark SSE as connected and trigger roots/list_changed if MCP is already initialized.
+    /// Returns true if roots/list_changed was sent.
+    pub async fn mark_sse_connected(&self) -> Result<bool> {
+        self.sse_connected.store(true, Ordering::SeqCst);
+        debug!(session_id = %self.id, "SSE marked as connected");
+
+        // If MCP is already initialized, send roots/list_changed now
+        if self.mcp_initialized.load(Ordering::SeqCst) {
+            self.send_roots_list_changed().await?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    /// Mark MCP as initialized (handshake complete) and trigger roots/list_changed if SSE is already connected.
+    /// Returns true if roots/list_changed was sent.
+    pub async fn mark_mcp_initialized(&self) -> Result<bool> {
+        self.mcp_initialized.store(true, Ordering::SeqCst);
+        debug!(session_id = %self.id, "MCP marked as initialized");
+
+        // If SSE is already connected, send roots/list_changed now
+        if self.sse_connected.load(Ordering::SeqCst) {
+            self.send_roots_list_changed().await?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    /// Send roots/list_changed notification to subprocess.
+    /// This triggers the server to call roots/list, which goes back through SSE.
+    async fn send_roots_list_changed(&self) -> Result<()> {
+        let notification = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/roots/list_changed"
+        });
+        let json_str = serde_json::to_string(&notification)?;
+        self.sender
+            .lock()
+            .await
+            .send(json_str)
+            .await
+            .map_err(|e| BridgeError::Communication(format!("Failed to send roots/list_changed: {}", e)))?;
+        info!(session_id = %self.id, "Sent roots/list_changed notification to subprocess");
+        Ok(())
     }
 }
 
@@ -185,6 +235,8 @@ impl SessionManager {
             terminated: AtomicBool::new(false),
             termination_reason: Mutex::new(None),
             child_handle: Mutex::new(Some(child)),
+            sse_connected: AtomicBool::new(false),
+            mcp_initialized: AtomicBool::new(false),
         });
 
         // Spawn the I/O handler task
@@ -582,7 +634,7 @@ impl SessionManager {
                             }
                         }
 
-                        // Not a response, broadcast as SSE event
+                        // Not a response to a pending request - broadcast as SSE event
                         let _ = session.broadcast_tx.send(line);
                     } else {
                         warn!(session_id = %session.id, "Failed to parse JSON from subprocess: {}", line);

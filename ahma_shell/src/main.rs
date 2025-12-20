@@ -860,12 +860,14 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     // Create and start the MCP service
     // With async-by-default, we pass force_synchronous=true when --sync flag is used
     let force_synchronous = cli.sync;
+    let defer_sandbox = cli.defer_sandbox;
     let service_handler = AhmaMcpService::new(
         adapter.clone(),
         operation_monitor.clone(),
         configs,
         Arc::new(guidance_config),
         force_synchronous,
+        defer_sandbox,
     )
     .await?;
 
