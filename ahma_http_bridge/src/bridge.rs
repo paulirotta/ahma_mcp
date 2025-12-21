@@ -654,25 +654,26 @@ async fn handle_session_isolated_request(
         // This keeps the subprocess in a safe, non-executing state while sandbox initialization completes.
         if method == Some("tools/call")
             && let Some(session) = session_manager.get_session(&session_id)
-                && !session.is_sandbox_locked() {
-                    let error_json = serde_json::json!({
-                        "jsonrpc": "2.0",
-                        "error": {
-                            "code": -32001,
-                            "message": "Sandbox initializing from client roots - retry tools/call after roots/list completes"
-                        }
-                    });
-                    return Response::builder()
-                        .status(StatusCode::CONFLICT)
-                        .header("content-type", "application/json")
-                        .header(MCP_SESSION_ID_HEADER, session_id.as_str())
-                        .body(axum::body::Body::from(
-                            serde_json::to_vec(&error_json).unwrap_or_default(),
-                        ))
-                        .unwrap_or_else(|_| {
-                            (StatusCode::CONFLICT, "Sandbox initializing").into_response()
-                        });
+            && !session.is_sandbox_locked()
+        {
+            let error_json = serde_json::json!({
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32001,
+                    "message": "Sandbox initializing from client roots - retry tools/call after roots/list completes"
                 }
+            });
+            return Response::builder()
+                .status(StatusCode::CONFLICT)
+                .header("content-type", "application/json")
+                .header(MCP_SESSION_ID_HEADER, session_id.as_str())
+                .body(axum::body::Body::from(
+                    serde_json::to_vec(&error_json).unwrap_or_default(),
+                ))
+                .unwrap_or_else(|_| {
+                    (StatusCode::CONFLICT, "Sandbox initializing").into_response()
+                });
+        }
 
         let mut is_initialized_notification = false;
 
@@ -763,9 +764,10 @@ async fn handle_session_isolated_request(
 
                 if is_initialized_notification
                     && let Some(session) = session_manager.get_session(&session_id)
-                        && let Err(e) = session.mark_mcp_initialized().await {
-                            warn!(session_id = %session_id, "Failed to mark MCP initialized: {}", e);
-                        }
+                    && let Err(e) = session.mark_mcp_initialized().await
+                {
+                    warn!(session_id = %session_id, "Failed to mark MCP initialized: {}", e);
+                }
 
                 http_response
             }
@@ -1033,6 +1035,12 @@ for line in sys.stdin:
             .get_session(&session_id)
             .expect("Session should exist");
         assert!(session.is_sandbox_locked());
+
+        let sandbox_scope = session
+            .get_sandbox_scope()
+            .await
+            .expect("Sandbox scope should be set after roots lock");
+        assert_eq!(sandbox_scope, temp_dir.path().to_path_buf());
 
         // 3) tools/call should now be forwarded and succeed.
         let response = app
