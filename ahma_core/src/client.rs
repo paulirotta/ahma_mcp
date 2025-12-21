@@ -43,7 +43,7 @@ impl Client {
                 |cmd| {
                     cmd.arg("run")
                         .arg("--package")
-                        .arg("ahma_shell")
+                        .arg("ahma_core")
                         .arg("--bin")
                         .arg("ahma_mcp")
                         .arg("--");

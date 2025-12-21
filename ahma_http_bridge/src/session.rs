@@ -86,6 +86,11 @@ impl Session {
         self.sandbox_locked.load(Ordering::SeqCst)
     }
 
+    /// Check if the SSE stream is connected (client opened GET /mcp)
+    pub fn is_sse_connected(&self) -> bool {
+        self.sse_connected.load(Ordering::SeqCst)
+    }
+
     /// Get the first sandbox scope (for backwards compatibility)
     pub async fn get_sandbox_scope(&self) -> Option<PathBuf> {
         self.sandbox_scopes

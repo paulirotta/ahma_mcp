@@ -272,7 +272,7 @@ pub mod test_client {
                         .current_dir(&workspace_dir)
                         .arg("run")
                         .arg("--package")
-                        .arg("ahma_shell")
+                        .arg("ahma_core")
                         .arg("--bin")
                         .arg("ahma_mcp")
                         .arg("--");
@@ -336,7 +336,7 @@ pub mod test_client {
                         .arg("--manifest-path")
                         .arg(workspace_dir.join("Cargo.toml"))
                         .arg("--package")
-                        .arg("ahma_shell")
+                        .arg("ahma_core")
                         .arg("--bin")
                         .arg("ahma_mcp")
                         .arg("--");

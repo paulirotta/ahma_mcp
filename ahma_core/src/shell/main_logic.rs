@@ -40,10 +40,11 @@
 //! 7. `service.start_server()` is awaited, running the server indefinitely until it
 //!    is shut down.
 
-use ahma_core::config::load_tool_configs;
+mod list_tools;
+
 use ahma_core::{
     adapter::Adapter,
-    config::{SubcommandConfig, ToolConfig},
+    config::{SubcommandConfig, ToolConfig, load_tool_configs},
     mcp_service::{AhmaMcpService, GuidanceConfig},
     operation_monitor::{MonitorConfig, OperationMonitor},
     sandbox::{self, SandboxError},
@@ -66,8 +67,6 @@ use std::{
 };
 use tokio::{fs, signal};
 use tracing::{info, instrument};
-
-mod list_tools;
 
 /// Ahma MCP Server: A generic, config-driven adapter for CLI tools.
 #[derive(Parser, Debug)]
@@ -185,8 +184,11 @@ struct Cli {
 }
 
 #[tokio::main]
-#[instrument]
 async fn main() -> Result<()> {
+    ahma_core::shell::run().await
+}
+
+pub async fn run() -> Result<()> {
     let cli = Cli::parse();
 
     // Initialize logging
@@ -372,7 +374,7 @@ async fn main() -> Result<()> {
     }
 }
 
-fn find_matching_tool<'a>(
+pub fn find_matching_tool<'a>(
     configs: &'a HashMap<String, ToolConfig>,
     tool_name: &str,
 ) -> Result<(&'a str, &'a ToolConfig)> {
@@ -390,7 +392,7 @@ fn find_matching_tool<'a>(
         .ok_or_else(|| anyhow!("No matching tool configuration found for '{}'", tool_name))
 }
 
-fn find_tool_config<'a>(
+pub fn find_tool_config<'a>(
     configs: &'a HashMap<String, ToolConfig>,
     tool_name: &str,
 ) -> Option<(&'a str, &'a ToolConfig)> {
@@ -404,7 +406,7 @@ fn find_tool_config<'a>(
         .map(|(key, config)| (key.as_str(), config))
 }
 
-fn resolve_cli_subcommand<'a>(
+pub fn resolve_cli_subcommand<'a>(
     config_key: &str,
     config: &'a ToolConfig,
     tool_name: &str,
@@ -485,7 +487,7 @@ fn resolve_cli_subcommand<'a>(
     Ok((subcommand_config, command_parts))
 }
 
-async fn run_cli_sequence(
+pub async fn run_cli_sequence(
     adapter: &Adapter,
     configs: &HashMap<String, ToolConfig>,
     parent_config: &ToolConfig,
@@ -564,7 +566,7 @@ async fn run_cli_sequence(
     Ok(())
 }
 
-fn parse_env_list(key: &str) -> Option<HashSet<String>> {
+pub fn parse_env_list(key: &str) -> Option<HashSet<String>> {
     env::var(key).ok().map(|list| {
         list.split(',')
             .map(|entry| entry.trim().to_ascii_lowercase())
@@ -573,7 +575,7 @@ fn parse_env_list(key: &str) -> Option<HashSet<String>> {
     })
 }
 
-fn should_skip(set: &Option<HashSet<String>>, value: &str) -> bool {
+pub fn should_skip(set: &Option<HashSet<String>>, value: &str) -> bool {
     set.as_ref()
         .map(|items| items.contains(&value.to_ascii_lowercase()))
         .unwrap_or(false)

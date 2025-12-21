@@ -11,7 +11,18 @@ version.workspace = true
 name = "ahma_core"
 path = "src/lib.rs"
 
+[[bin]]
+name = "ahma_mcp"
+path = "src/shell/bin.rs"
+
 [dependencies]
+ahma_http_bridge = { path = "../ahma_http_bridge" }
+ahma_http_mcp_client = { path = "../ahma_http_mcp_client" }
+clap.workspace = true
+ctrlc.workspace = true
+dirs.workspace = true
+reqwest = { workspace = true, features = ["json", "rustls-tls"] }
+url.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 chrono.workspace = true

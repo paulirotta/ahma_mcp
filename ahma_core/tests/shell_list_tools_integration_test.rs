@@ -29,7 +29,7 @@ fn test_list_tools_help() {
     } else {
         eprintln!("Warning: Pre-built binary not found, falling back to cargo run");
         Command::new("cargo")
-            .args(["run", "-p", "ahma_shell", "--", "--help"])
+            .args(["run", "-p", "ahma_core", "--", "--help"])
             .output()
             .expect("Failed to execute command")
     };
@@ -64,7 +64,7 @@ fn test_list_tools_from_stdio_server() {
     if !ahma_binary.exists() {
         eprintln!("Warning: Pre-built binary not found. Run 'cargo build' first for faster tests.");
         let build_output = Command::new("cargo")
-            .args(["build", "-p", "ahma_shell"])
+            .args(["build", "-p", "ahma_core"])
             .output()
             .expect("Failed to build");
         assert!(build_output.status.success(), "Failed to build");
@@ -115,7 +115,7 @@ fn test_list_tools_json_format() {
     // Check if pre-built binary exists
     if !ahma_binary.exists() {
         let build_output = Command::new("cargo")
-            .args(["build", "-p", "ahma_shell"])
+            .args(["build", "-p", "ahma_core"])
             .output()
             .expect("Failed to build");
         assert!(build_output.status.success(), "Failed to build");
@@ -167,7 +167,7 @@ fn test_list_tools_output_format() {
     // Check if pre-built binary exists
     if !ahma_binary.exists() {
         let build_output = Command::new("cargo")
-            .args(["build", "-p", "ahma_shell"])
+            .args(["build", "-p", "ahma_core"])
             .output()
             .expect("Failed to build");
         assert!(build_output.status.success(), "Failed to build");

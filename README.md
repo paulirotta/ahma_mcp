@@ -12,7 +12,13 @@ _Create agents from your command line tools with one JSON file, then watch them 
 
 This project is actively used and still undergoing rapid evolution. http MCP is still a work in progress, setup isn't as smooth as we like yet and expect breaking changes including CLI parameters.
 
-We adapt concepts from [Requirements Engineering](https://en.wikipedia.org/wiki/Requirements_engineering), Test Driven Development (TDD) and AI coding tools into `requirements.md`
+## Documentation
+
+- **[AGENTS.md](AGENTS.md)**: AI agent development guide (setup, testing, code style, tool usage)
+- **[requirements.md](requirements.md)**: Product requirements and architecture
+- **Crate-specific docs**: Each crate has AGENTS.md (symlinked) and requirements.md for crate-specific requirements
+
+**Note on AGENTS.md symlinks**: Each crate directory (`ahma_core/`, `ahma_http_bridge/`, etc.) contains a symlink to the root `AGENTS.md`. This ensures AI coding assistants always have access to development guidance regardless of which directory is opened as the project root. If you're working in a crate subdirectory, the AGENTS.md you see is the same workspace-wide file.
 
 ## Key Features
 

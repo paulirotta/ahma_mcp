@@ -89,7 +89,10 @@ pub enum SandboxError {
     #[error("Sandbox scope not initialized - call initialize_sandbox_scope first")]
     NotInitialized,
 
-    #[error("Path '{path}' is outside the sandbox root{}", format_scopes(.scopes))]
+    #[error(
+        "Path '{path}' is outside the sandbox root{} (this usually means your MCP session is scoped to a different workspace root; reconnect from the intended workspace or use a multi-root workspace)",
+        format_scopes(.scopes)
+    )]
     PathOutsideSandbox { path: PathBuf, scopes: Vec<PathBuf> },
 
     #[error("Landlock is not available on this system (requires Linux kernel 5.13+)")]
