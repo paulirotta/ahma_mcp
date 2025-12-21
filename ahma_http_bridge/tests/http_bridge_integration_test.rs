@@ -80,11 +80,10 @@ async fn start_http_bridge(
 
     for _ in 0..30 {
         sleep(Duration::from_millis(200)).await;
-        if let Ok(resp) = client.get(&health_url).send().await {
-            if resp.status().is_success() {
+        if let Ok(resp) = client.get(&health_url).send().await
+            && resp.status().is_success() {
                 return child;
             }
-        }
     }
 
     panic!("HTTP bridge failed to start within timeout");
@@ -124,7 +123,11 @@ async fn send_mcp_request(
             .unwrap_or("unknown")
     );
     for (name, value) in response.headers().iter() {
-        eprintln!("  {}: {:?}", name, value);
+        if name.as_str().eq_ignore_ascii_case("mcp-session-id") {
+            eprintln!("  {}: <redacted>", name);
+        } else {
+            eprintln!("  {}: {:?}", name, value);
+        }
     }
 
     // Get session ID from response header (case-insensitive)
@@ -218,7 +221,8 @@ async fn test_tool_call_with_different_working_directory() {
 
     // Debug: print the response
     eprintln!("Initialize response: {:?}", init_response);
-    eprintln!("Session ID from header: {:?}", session_id);
+    // Session IDs should not be logged verbatim (CodeQL).
+    eprintln!("Session ID from header: <redacted>");
 
     // In single-process mode (no --session-isolation), there's no session ID
     // Just verify initialize succeeded

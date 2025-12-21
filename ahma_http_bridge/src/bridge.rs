@@ -828,19 +828,38 @@ async fn handle_session_isolated_request(
                     .filter_map(|r| serde_json::from_value(r.clone()).ok())
                     .collect();
 
-                info!(
-                    session_id = %session_id,
-                    roots = ?mcp_roots,
-                    "Locking sandbox from roots/list response"
-                );
+                // IMPORTANT: Do not lock the sandbox from an empty roots list *before* SSE is connected.
+                // During early handshake, the bridge may return an empty roots response because the
+                // client hasn't opened the SSE stream yet. Locking here would incorrectly bind the
+                // session to default_sandbox_scope (often the server's own repo).
+                let should_lock = if mcp_roots.is_empty() {
+                    session_manager
+                        .get_session(&session_id)
+                        .is_some_and(|s| s.is_sse_connected())
+                } else {
+                    true
+                };
 
-                match session_manager.lock_sandbox(&session_id, &mcp_roots).await {
-                    Ok(true) => {
-                        info!(session_id = %session_id, "Sandbox locked from first roots/list response");
-                    }
-                    Ok(false) => {}
-                    Err(e) => {
-                        warn!(session_id = %session_id, "Failed to record sandbox scopes: {}", e)
+                if !should_lock {
+                    debug!(
+                        session_id = %session_id,
+                        "Skipping sandbox lock from empty roots/list response (SSE not connected yet)"
+                    );
+                } else {
+                    info!(
+                        session_id = %session_id,
+                        roots = ?mcp_roots,
+                        "Locking sandbox from roots/list response"
+                    );
+
+                    match session_manager.lock_sandbox(&session_id, &mcp_roots).await {
+                        Ok(true) => {
+                            info!(session_id = %session_id, "Sandbox locked from first roots/list response");
+                        }
+                        Ok(false) => {}
+                        Err(e) => {
+                            warn!(session_id = %session_id, "Failed to record sandbox scopes: {}", e)
+                        }
                     }
                 }
             }
@@ -873,7 +892,22 @@ async fn handle_session_isolated_request(
                         .filter_map(|r| serde_json::from_value(r.clone()).ok())
                         .collect();
 
-                    if let Err(e) = session_manager.lock_sandbox(&session_id, &mcp_roots).await {
+                    let should_lock = if mcp_roots.is_empty() {
+                        session_manager
+                            .get_session(&session_id)
+                            .is_some_and(|s| s.is_sse_connected())
+                    } else {
+                        true
+                    };
+
+                    if !should_lock {
+                        debug!(
+                            session_id = %session_id,
+                            "Skipping sandbox lock from empty roots/list response (SSE not connected yet)"
+                        );
+                    } else if let Err(e) =
+                        session_manager.lock_sandbox(&session_id, &mcp_roots).await
+                    {
                         warn!(session_id = %session_id, "Failed to lock sandbox: {}", e);
                         // Don't fail the request, just log the warning
                     }

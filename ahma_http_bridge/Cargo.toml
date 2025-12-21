@@ -27,6 +27,6 @@ tracing.workspace = true
 uuid = {version = "1.19.0", features = ["v4", "serde"]}
 
 [dev-dependencies]
-reqwest = { workspace = true, features = ["json"] }
+reqwest = { workspace = true, features = ["json", "stream"] }
 tempfile.workspace = true
 tower = {version = "0.5.2", features = ["util"]}
