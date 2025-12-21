@@ -69,6 +69,11 @@ struct BridgeState {
     session_manager: Option<Arc<SessionManager>>,
     /// Whether session isolation mode is enabled
     session_isolation: bool,
+    /// Whether the subprocess has been initialized (single-process mode only)
+    /// The subprocess must receive "initialize" before any other request
+    /// Note: This is stored in the struct but managed by manage_process() via Arc clone
+    #[allow(dead_code)]
+    subprocess_initialized: Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// MCP Session-Id header name (per MCP spec 2025-03-26)
@@ -98,17 +103,20 @@ pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
             pending_requests,
             session_manager: Some(session_manager),
             session_isolation: true,
+            subprocess_initialized: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         })
     } else {
         // Single-process mode: use existing implementation
         let (tx, rx) = mpsc::channel(100);
+        let subprocess_initialized = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
         // Start the process manager
         let manager_pending = pending_requests.clone();
         let manager_config = config.clone();
+        let manager_initialized = subprocess_initialized.clone();
 
         tokio::spawn(async move {
-            manage_process(manager_config, rx, manager_pending).await;
+            manage_process(manager_config, rx, manager_pending, manager_initialized).await;
         });
 
         Arc::new(BridgeState {
@@ -116,6 +124,7 @@ pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
             pending_requests,
             session_manager: None,
             session_isolation: false,
+            subprocess_initialized,
         })
     };
 
@@ -149,8 +158,12 @@ async fn manage_process(
     config: BridgeConfig,
     mut rx: mpsc::Receiver<Value>,
     pending_requests: Arc<DashMap<String, oneshot::Sender<Value>>>,
+    subprocess_initialized: Arc<std::sync::atomic::AtomicBool>,
 ) {
     loop {
+        // Reset initialized state on (re)start
+        subprocess_initialized.store(false, std::sync::atomic::Ordering::SeqCst);
+
         info!(
             "Spawning MCP server: {} {}",
             config.server_command,
@@ -191,6 +204,122 @@ async fn manage_process(
         } else {
             None
         };
+
+        // Auto-initialize the subprocess (MCP protocol requires this before any other request)
+        // The HTTP bridge handles this internally so clients don't need to send initialize
+        let init_request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": "__internal_init__",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "ahma_http_bridge",
+                    "version": env!("CARGO_PKG_VERSION")
+                }
+            }
+        });
+
+        let init_json =
+            serde_json::to_string(&init_request).expect("Failed to serialize init request");
+        info!("Sending auto-initialize to subprocess");
+
+        if config.enable_colored_output {
+            let pretty = serde_json::to_string_pretty(&init_request)
+                .expect("Failed to serialize init request");
+            eprintln!("{}\n{}", "→ STDIN (auto-init):".cyan(), pretty.cyan());
+        }
+
+        let init_result = async {
+            stdin.write_all(init_json.as_bytes()).await?;
+            stdin.write_all(b"\n").await?;
+            stdin.flush().await?;
+
+            // Wait for the initialize response
+            loop {
+                match stdout_reader.next_line().await {
+                    Ok(Some(line)) => {
+                        if line.is_empty() {
+                            continue;
+                        }
+
+                        if config.enable_colored_output {
+                            if let Ok(parsed) = serde_json::from_str::<Value>(&line) {
+                                let pretty = serde_json::to_string_pretty(&parsed)
+                                    .unwrap_or_else(|_| line.clone());
+                                eprintln!(
+                                    "{}\n{}",
+                                    "← STDOUT (init response):".green(),
+                                    pretty.green()
+                                );
+                            }
+                        }
+
+                        if let Ok(value) = serde_json::from_str::<Value>(&line) {
+                            if let Some(id) = value.get("id") {
+                                if id.as_str() == Some("__internal_init__")
+                                    || id.to_string() == "\"__internal_init__\""
+                                {
+                                    // Got our init response
+                                    if value.get("error").is_some() {
+                                        return Err(std::io::Error::other(format!(
+                                            "Initialize failed: {}",
+                                            line
+                                        )));
+                                    }
+                                    return Ok(());
+                                }
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        return Err(std::io::Error::other("stdout closed during init"));
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+        }
+        .await;
+
+        match init_result {
+            Ok(()) => {
+                // Send the "notifications/initialized" notification per MCP protocol
+                let initialized_notification = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "method": "notifications/initialized"
+                });
+
+                if let Ok(notif_json) = serde_json::to_string(&initialized_notification) {
+                    if config.enable_colored_output {
+                        let pretty = serde_json::to_string_pretty(&initialized_notification)
+                            .unwrap_or_default();
+                        eprintln!(
+                            "{}\n{}",
+                            "→ STDIN (initialized notif):".cyan(),
+                            pretty.cyan()
+                        );
+                    }
+
+                    if let Err(e) = stdin.write_all(notif_json.as_bytes()).await {
+                        error!("Failed to send initialized notification: {}", e);
+                    } else {
+                        let _ = stdin.write_all(b"\n").await;
+                        let _ = stdin.flush().await;
+                    }
+                }
+
+                info!("Subprocess initialized successfully");
+                subprocess_initialized.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            Err(e) => {
+                error!("Failed to initialize subprocess: {}", e);
+                // Kill and restart
+                let _ = child.kill().await;
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+        }
 
         loop {
             tokio::select! {
@@ -864,6 +993,7 @@ mod tests {
             pending_requests,
             session_manager: None,
             session_isolation: false,
+            subprocess_initialized: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         })
     }
 
@@ -1098,6 +1228,7 @@ for line in sys.stdin:
             pending_requests,
             session_manager: None,
             session_isolation: false,
+            subprocess_initialized: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         });
         let app = create_app(state);
 
@@ -1138,6 +1269,7 @@ for line in sys.stdin:
             pending_requests: pending_requests.clone(),
             session_manager: None,
             session_isolation: false,
+            subprocess_initialized: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         });
         let app = create_app(state);
 
@@ -1189,6 +1321,7 @@ for line in sys.stdin:
             pending_requests: pending_requests.clone(),
             session_manager: None,
             session_isolation: false,
+            subprocess_initialized: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         });
         let app = create_app(state);
 
@@ -1239,6 +1372,7 @@ for line in sys.stdin:
             pending_requests,
             session_manager: None,
             session_isolation: false,
+            subprocess_initialized: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         });
         let app = create_app(state);
 
@@ -1276,6 +1410,7 @@ for line in sys.stdin:
             pending_requests: pending_requests.clone(),
             session_manager: None,
             session_isolation: false,
+            subprocess_initialized: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         });
         let app = create_app(state);
 
@@ -1352,6 +1487,7 @@ for line in sys.stdin:
             pending_requests: pending_requests.clone(),
             session_manager: None,
             session_isolation: false,
+            subprocess_initialized: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         });
         let app = create_app(state);
 
@@ -1409,6 +1545,7 @@ for line in sys.stdin:
             pending_requests: pending_requests.clone(),
             session_manager: None,
             session_isolation: false,
+            subprocess_initialized: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         });
         let app = create_app(state);
 
@@ -1461,6 +1598,7 @@ for line in sys.stdin:
             pending_requests: pending_requests.clone(),
             session_manager: None,
             session_isolation: false,
+            subprocess_initialized: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         });
         let app = create_app(state);
 

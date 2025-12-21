@@ -1,14 +1,13 @@
 [workspace]
 default-members = [
   "ahma_core",
-  "ahma_shell",
   "ahma_validate",
   "generate_tool_schema",
   "ahma_http_bridge",
   "ahma_http_mcp_client",
 ]
 # exclude = ["ahma_http_mcp_server"]
-members = ["ahma_core", "ahma_shell", "ahma_validate", "generate_tool_schema", "ahma_http_bridge", "ahma_http_mcp_client"]
+members = ["ahma_core", "ahma_validate", "generate_tool_schema", "ahma_http_bridge", "ahma_http_mcp_client"]
 resolver = "2"
 
 [workspace.package]
@@ -39,8 +38,11 @@ toml = "0.9.10"
 tracing = "0.1.44"
 tracing-appender = "0.2.4"
 tracing-subscriber = {version = "0.3.22", features = ["env-filter"]}
-# CLI dependencies
 clap = {version = "4.5.53", features = ["derive"]}
+ctrlc = "3.5.1"
+dirs = "6.0.0"
+reqwest = {version = "0.12.26", default-features = false}
+url = "2.5.7"
 
 [profile.coverage]
 debug = true

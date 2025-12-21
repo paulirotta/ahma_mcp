@@ -51,7 +51,7 @@ mod file_tools_tests {
 
     #[test]
     fn test_file_tools_pwd() {
-        let binary = build_binary("ahma_shell", "ahma_mcp");
+        let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -84,7 +84,7 @@ mod file_tools_tests {
 
     #[test]
     fn test_file_tools_touch_and_ls() {
-        let binary = build_binary("ahma_shell", "ahma_mcp");
+        let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -142,7 +142,7 @@ mod file_tools_tests {
 
     #[test]
     fn test_file_tools_cp_and_mv() {
-        let binary = build_binary("ahma_shell", "ahma_mcp");
+        let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -210,7 +210,7 @@ mod file_tools_tests {
 
     #[test]
     fn test_file_tools_rm() {
-        let binary = build_binary("ahma_shell", "ahma_mcp");
+        let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -245,7 +245,7 @@ mod file_tools_tests {
 
     #[test]
     fn test_file_tools_cat_and_grep() {
-        let binary = build_binary("ahma_shell", "ahma_mcp");
+        let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -313,7 +313,7 @@ mod sandboxed_shell_tests {
 
     #[test]
     fn test_sandboxed_shell_echo() {
-        let binary = build_binary("ahma_shell", "ahma_mcp");
+        let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -343,7 +343,7 @@ mod sandboxed_shell_tests {
 
     #[test]
     fn test_sandboxed_shell_write_file() {
-        let binary = build_binary("ahma_shell", "ahma_mcp");
+        let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
         let temp_dir = TempDir::new().expect("Failed to create temp dir");

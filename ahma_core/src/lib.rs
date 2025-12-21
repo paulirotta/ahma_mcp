@@ -57,6 +57,7 @@ pub mod path_security;
 pub mod retry;
 pub mod sandbox;
 pub mod schema_validation;
+pub mod shell;
 pub mod shell_pool;
 pub mod terminal_output;
 pub mod tool_availability;
