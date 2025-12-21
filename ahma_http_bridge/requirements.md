@@ -44,6 +44,24 @@ When running with `--session-isolation` flag, the HTTP bridge supports per-sessi
 
 See [docs/session-isolation.md](../docs/session-isolation.md) for detailed architecture.
 
+## Deferred Sandbox & Restart
+
+When a session is restarted (e.g., to apply a sandbox lock after receiving `roots/list`), the bridge must ensure the new subprocess is fully initialized before processing further requests.
+
+### Initialization Flow
+
+1.  **Deferred Initialization**: The bridge marks a session as "initialized" only after the `initialized` notification has been successfully sent to the MCP server. This prevents race conditions where requests might be sent to an uninitialized server.
+2.  **Restart Handling**: When a session is restarted with a sandbox:
+    - The bridge sends an `initialize` request to the new subprocess.
+    - It waits for the `initialize` response.
+    - It sends the `initialized` notification.
+    - Only then is the session considered ready.
+
+### Invariants
+
+- **No Request Loss**: Client requests received during a restart are queued or handled gracefully.
+- **Atomic Switch**: The session state transitions atomically from the old subprocess to the new one.
+
 ## Testing Standards
 
 ### Coverage Goals

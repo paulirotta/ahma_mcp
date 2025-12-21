@@ -488,6 +488,30 @@ impl SessionManager {
         if let Some(init_request) = session.initialize_request.lock().await.as_ref() {
             info!(session_id = %session_id, "Replaying MCP handshake to restarted subprocess");
 
+            // Extract ID from init_request
+            let id_opt = init_request.get("id").map(|id| {
+                if id.is_string() {
+                    id.as_str().unwrap().to_string()
+                } else {
+                    id.to_string()
+                }
+            });
+
+            // Create oneshot channel for response
+            let (response_tx, response_rx) = if id_opt.is_some() {
+                let (tx, rx) = oneshot::channel();
+                (Some(tx), Some(rx))
+            } else {
+                (None, None)
+            };
+
+            // Register pending request
+            if let Some(id) = &id_opt {
+                session
+                    .pending_requests
+                    .insert(id.clone(), response_tx.unwrap());
+            }
+
             // Send initialize request
             let json_str = serde_json::to_string(init_request).map_err(|e| {
                 BridgeError::Communication(format!("Failed to serialize init request: {}", e))
@@ -499,12 +523,29 @@ impl SessionManager {
                 .send(json_str)
                 .await
                 .map_err(|e| {
+                    if let Some(id) = &id_opt {
+                        session.pending_requests.remove(id);
+                    }
                     BridgeError::Communication(format!("Failed to send init request: {}", e))
                 })?;
 
-            // Give the subprocess a moment to process and respond
-            // The I/O handler will receive the response and process it
-            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            // Wait for response
+            if let Some(rx) = response_rx {
+                match tokio::time::timeout(std::time::Duration::from_secs(5), rx).await {
+                    Ok(Ok(_)) => {
+                        info!(session_id = %session_id, "Received initialize response from restarted subprocess");
+                    }
+                    Ok(Err(_)) => {
+                        warn!(session_id = %session_id, "Initialize response channel closed");
+                    }
+                    Err(_) => {
+                        if let Some(id) = &id_opt {
+                            session.pending_requests.remove(id);
+                        }
+                        warn!(session_id = %session_id, "Initialize request timed out");
+                    }
+                }
+            }
 
             // Send initialized notification
             let initialized = serde_json::json!({
