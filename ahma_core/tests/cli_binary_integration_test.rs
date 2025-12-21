@@ -56,7 +56,7 @@ mod ahma_mcp_tests {
 
     #[test]
     fn test_ahma_mcp_help() {
-        let binary = build_binary("ahma_shell", "ahma_mcp");
+        let binary = build_binary("ahma_core", "ahma_mcp");
 
         let output = test_command(&binary)
             .arg("--help")
@@ -89,7 +89,7 @@ mod ahma_mcp_tests {
 
     #[test]
     fn test_ahma_mcp_version() {
-        let binary = build_binary("ahma_shell", "ahma_mcp");
+        let binary = build_binary("ahma_core", "ahma_mcp");
 
         let output = test_command(&binary)
             .arg("--version")
@@ -116,7 +116,7 @@ mod ahma_mcp_tests {
 
     #[test]
     fn test_ahma_mcp_cli_mode_invalid_tool() {
-        let binary = build_binary("ahma_shell", "ahma_mcp");
+        let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
 
@@ -149,7 +149,7 @@ mod ahma_mcp_tests {
     #[test]
     fn test_ahma_mcp_cli_mode_echo_tool() {
         // Test using a simple echo-like tool if available
-        let binary = build_binary("ahma_shell", "ahma_mcp");
+        let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
 
@@ -185,7 +185,7 @@ mod ahma_mcp_tests {
     fn test_ahma_mcp_stdio_mode_rejects_tty() {
         // When run from a terminal (TTY), stdio mode should be rejected
         // Note: This test behavior depends on the test runner's TTY state
-        let binary = build_binary("ahma_shell", "ahma_mcp");
+        let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
 
@@ -502,7 +502,7 @@ mod ahma_list_tools_mode_tests {
     #[test]
     fn test_ahma_mcp_list_tools_help() {
         // The --list-tools help is shown as part of main --help
-        let binary = build_binary("ahma_shell", "ahma_mcp");
+        let binary = build_binary("ahma_core", "ahma_mcp");
 
         let output = test_command(&binary)
             .arg("--help")
@@ -529,7 +529,7 @@ mod ahma_list_tools_mode_tests {
 
     #[test]
     fn test_ahma_mcp_list_tools_no_connection_method() {
-        let binary = build_binary("ahma_shell", "ahma_mcp");
+        let binary = build_binary("ahma_core", "ahma_mcp");
 
         // Running --list-tools without any connection method should fail gracefully
         let output = test_command(&binary)
@@ -554,7 +554,7 @@ mod ahma_list_tools_mode_tests {
     #[test]
     fn test_ahma_mcp_list_tools_with_stdio_server() {
         // This test connects to another ahma_mcp binary via stdio
-        let binary = build_binary("ahma_shell", "ahma_mcp");
+        let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
 
@@ -594,7 +594,7 @@ mod ahma_list_tools_mode_tests {
 
     #[test]
     fn test_ahma_mcp_list_tools_json_format() {
-        let binary = build_binary("ahma_shell", "ahma_mcp");
+        let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
 

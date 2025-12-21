@@ -25,7 +25,7 @@ async fn test_freeform_argument_passing_ls() -> Result<()> {
     cmd.args([
         "run",
         "--package",
-        "ahma_shell",
+        "ahma_core",
         "--bin",
         "ahma_mcp",
         "--",
@@ -87,7 +87,7 @@ edition = "2021"
     cmd.args([
         "run",
         "--package",
-        "ahma_shell",
+        "ahma_core",
         "--bin",
         "ahma_mcp",
         "--",

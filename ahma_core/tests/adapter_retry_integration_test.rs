@@ -6,6 +6,7 @@
 use ahma_core::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_core::retry::RetryConfig;
 use ahma_core::shell_pool::{ShellPoolConfig, ShellPoolManager};
+use ahma_core::test_utils::init_test_sandbox;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -15,6 +16,8 @@ fn create_test_adapter_with_retry_and_root(
     retry_config: Option<RetryConfig>,
     root: PathBuf,
 ) -> ahma_core::adapter::Adapter {
+    init_test_sandbox();
+
     let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
         Duration::from_secs(30),
     )));
@@ -33,6 +36,8 @@ fn create_test_adapter_with_retry_and_root(
 fn create_test_adapter_with_retry(
     retry_config: Option<RetryConfig>,
 ) -> ahma_core::adapter::Adapter {
+    init_test_sandbox();
+
     let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
         Duration::from_secs(30),
     )));
