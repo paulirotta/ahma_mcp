@@ -65,8 +65,6 @@ pub struct Session {
     sandbox_locked: AtomicBool,
     /// Whether the session has been terminated
     terminated: AtomicBool,
-    /// Stored initialize request for replay after subprocess restart
-    initialize_request: Mutex<Option<Value>>,
     /// Termination reason (if terminated)
     termination_reason: Mutex<Option<SessionTerminationReason>>,
     /// Handle to the subprocess (for cleanup)
@@ -133,11 +131,6 @@ impl Session {
             return Ok(true);
         }
         Ok(false)
-    }
-
-    /// Store the initialize request for replay after subprocess restart
-    pub async fn store_initialize_request(&self, request: Value) {
-        *self.initialize_request.lock().await = Some(request);
     }
 
     /// Send roots/list_changed notification to subprocess.
@@ -241,7 +234,6 @@ impl SessionManager {
             child_handle: Mutex::new(Some(child)),
             sse_connected: AtomicBool::new(false),
             mcp_initialized: AtomicBool::new(false),
-            initialize_request: Mutex::new(None),
         });
 
         // Spawn the I/O handler task
@@ -357,22 +349,22 @@ impl SessionManager {
         }
     }
 
-    /// Lock sandbox scope for a session (called when processing roots/list response)
+    /// Lock sandbox scope for a session (called when observing first roots/list response).
     ///
-    /// Per R8D.7-R8D.8, sandbox scope is determined from roots and cannot be changed.
-    /// This method restarts the subprocess with the correct `--sandbox-scope` arguments
-    /// to ensure file operations are validated against the client's workspace(s).
+    /// Per R8.4.4-R8.4.5, sandbox scope is determined from the first roots/list response
+    /// and cannot be changed. In the simplified design, the subprocess is spawned with
+    /// `--defer-sandbox` and configures its own sandbox after roots are received.
     ///
-    /// Returns `true` if the subprocess was restarted (caller should NOT forward the
-    /// roots/list response to the new subprocess, as it's already configured via CLI args
-    /// and hasn't completed MCP handshake yet).
+    /// This method only records the scopes for bridge-side enforcement (e.g. rejecting
+    /// roots changes after lock) and for debugging.
+    ///
+    /// Returns `true` if the sandbox was newly locked by this call.
     pub async fn lock_sandbox(&self, session_id: &str, roots: &[McpRoot]) -> Result<bool> {
         let session = self.sessions.get(session_id).ok_or_else(|| {
             BridgeError::Communication(format!("Session not found: {}", session_id))
         })?;
 
         if session.sandbox_locked.load(Ordering::SeqCst) {
-            // Already locked, no restart needed
             return Ok(false);
         }
 
@@ -398,185 +390,7 @@ impl SessionManager {
         *session.sandbox_scopes.lock().await = Some(scopes.clone());
         session.sandbox_locked.store(true, Ordering::SeqCst);
 
-        // Restart subprocess with the correct sandbox scope(s)
-        // This is necessary because the subprocess was started without knowing the client's workspace
-        drop(session); // Release the lock before restart
-        self.restart_session_with_sandbox(session_id, &scopes)
-            .await?;
-
-        // Subprocess was restarted - caller should not forward the roots response
         Ok(true)
-    }
-
-    /// Restart a session's subprocess with specific sandbox scopes.
-    ///
-    /// This terminates the existing subprocess and starts a new one with
-    /// `--sandbox-scope <path>` arguments added for each scope.
-    async fn restart_session_with_sandbox(
-        &self,
-        session_id: &str,
-        sandbox_scopes: &[PathBuf],
-    ) -> Result<()> {
-        let session = self.sessions.get(session_id).ok_or_else(|| {
-            BridgeError::Communication(format!("Session not found: {}", session_id))
-        })?;
-
-        info!(
-            session_id = %session_id,
-            sandbox_scopes = ?sandbox_scopes,
-            "Restarting subprocess with sandbox scope(s)"
-        );
-
-        // Kill the existing subprocess
-        if let Some(mut child) = session.child_handle.lock().await.take() {
-            let _ = child.kill().await;
-            info!(session_id = %session_id, "Killed existing subprocess");
-        }
-
-        // Build new args with --sandbox-scope for each scope
-        let mut new_args = self.config.server_args.clone();
-        for scope in sandbox_scopes {
-            new_args.push("--sandbox-scope".to_string());
-            new_args.push(scope.display().to_string());
-        }
-
-        // Spawn new subprocess with sandbox scope(s)
-        let stderr_mode = if self.config.enable_colored_output {
-            Stdio::piped()
-        } else {
-            Stdio::inherit()
-        };
-
-        let mut child = Command::new(&self.config.server_command)
-            .args(&new_args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(stderr_mode)
-            .spawn()
-            .map_err(|e| {
-                BridgeError::ServerProcess(format!(
-                    "Failed to restart subprocess with sandbox: {}",
-                    e
-                ))
-            })?;
-
-        let stdin = child.stdin.take().expect("Failed to get stdin");
-        let stdout = child.stdout.take().expect("Failed to get stdout");
-        let stderr = if self.config.enable_colored_output {
-            child.stderr.take()
-        } else {
-            None
-        };
-
-        // Store the new child handle
-        *session.child_handle.lock().await = Some(child);
-
-        // Create new channels for the restarted subprocess
-        let (tx, rx) = mpsc::channel::<String>(100);
-
-        // Update the session's sender with the new channel
-        *session.sender.lock().await = tx;
-
-        // Spawn the I/O handler task for the new subprocess
-        let session_clone = session.clone();
-        let colored_output = self.config.enable_colored_output;
-        tokio::spawn(async move {
-            Self::handle_session_io(session_clone, rx, stdin, stdout, stderr, colored_output).await;
-        });
-
-        // Replay MCP handshake: send stored initialize request + initialized notification
-        if let Some(init_request) = session.initialize_request.lock().await.as_ref() {
-            info!(session_id = %session_id, "Replaying MCP handshake to restarted subprocess");
-
-            // Extract ID from init_request
-            let id_opt = init_request.get("id").map(|id| {
-                if id.is_string() {
-                    id.as_str().unwrap().to_string()
-                } else {
-                    id.to_string()
-                }
-            });
-
-            // Create oneshot channel for response
-            let (response_tx, response_rx) = if id_opt.is_some() {
-                let (tx, rx) = oneshot::channel();
-                (Some(tx), Some(rx))
-            } else {
-                (None, None)
-            };
-
-            // Register pending request
-            if let Some(id) = &id_opt {
-                session
-                    .pending_requests
-                    .insert(id.clone(), response_tx.unwrap());
-            }
-
-            // Send initialize request
-            let json_str = serde_json::to_string(init_request).map_err(|e| {
-                BridgeError::Communication(format!("Failed to serialize init request: {}", e))
-            })?;
-            session
-                .sender
-                .lock()
-                .await
-                .send(json_str)
-                .await
-                .map_err(|e| {
-                    if let Some(id) = &id_opt {
-                        session.pending_requests.remove(id);
-                    }
-                    BridgeError::Communication(format!("Failed to send init request: {}", e))
-                })?;
-
-            // Wait for response
-            if let Some(rx) = response_rx {
-                match tokio::time::timeout(std::time::Duration::from_secs(5), rx).await {
-                    Ok(Ok(_)) => {
-                        info!(session_id = %session_id, "Received initialize response from restarted subprocess");
-                    }
-                    Ok(Err(_)) => {
-                        warn!(session_id = %session_id, "Initialize response channel closed");
-                    }
-                    Err(_) => {
-                        if let Some(id) = &id_opt {
-                            session.pending_requests.remove(id);
-                        }
-                        warn!(session_id = %session_id, "Initialize request timed out");
-                    }
-                }
-            }
-
-            // Send initialized notification
-            let initialized = serde_json::json!({
-                "jsonrpc": "2.0",
-                "method": "notifications/initialized"
-            });
-            let json_str = serde_json::to_string(&initialized).map_err(|e| {
-                BridgeError::Communication(format!("Failed to serialize initialized: {}", e))
-            })?;
-            session
-                .sender
-                .lock()
-                .await
-                .send(json_str)
-                .await
-                .map_err(|e| {
-                    BridgeError::Communication(format!("Failed to send initialized: {}", e))
-                })?;
-
-            info!(session_id = %session_id, "MCP handshake replayed successfully");
-        } else {
-            warn!(session_id = %session_id, "No stored initialize request for handshake replay");
-        }
-
-        info!(
-            session_id = %session_id,
-            sandbox_scopes = ?sandbox_scopes,
-            "Subprocess restarted successfully with sandbox scope(s)"
-        );
-
-        Ok(())
     }
 
     /// Handle roots/list_changed notification

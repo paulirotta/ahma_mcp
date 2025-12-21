@@ -73,6 +73,13 @@ async fn handle_sequence_tool_sync(
             .get("working_directory")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
+            .or_else(|| {
+                if crate::sandbox::is_test_mode() {
+                    None
+                } else {
+                    crate::sandbox::get_sandbox_scope().map(|p| p.to_string_lossy().to_string())
+                }
+            })
             .unwrap_or_else(|| ".".to_string());
 
         // Merge arguments, excluding meta-parameters
@@ -215,6 +222,13 @@ async fn handle_sequence_tool_async(
             .get("working_directory")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
+            .or_else(|| {
+                if crate::sandbox::is_test_mode() {
+                    None
+                } else {
+                    crate::sandbox::get_sandbox_scope().map(|p| p.to_string_lossy().to_string())
+                }
+            })
             .unwrap_or_else(|| ".".to_string());
 
         // Merge arguments, excluding meta-parameters from parent

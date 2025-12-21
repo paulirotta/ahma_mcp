@@ -1297,6 +1297,14 @@ impl ServerHandler for AhmaMcpService {
                     }
                 };
 
+            // Delay tool execution until sandbox is initialized from roots/list.
+            // This is critical in HTTP bridge mode with deferred sandbox initialization.
+            if crate::sandbox::get_sandbox_scopes().is_none() && !crate::sandbox::is_test_mode() {
+                let error_message = "Sandbox initializing from client roots - retry tools/call after roots/list completes".to_string();
+                tracing::warn!("{}", error_message);
+                return Err(McpError::internal_error(error_message, None));
+            }
+
             // Check if the subcommand itself is a sequence
             if subcommand_config.sequence.is_some() {
                 return sequence::handle_subcommand_sequence(
@@ -1315,6 +1323,13 @@ impl ServerHandler for AhmaMcpService {
                 .get("working_directory")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
+                .or_else(|| {
+                    if crate::sandbox::is_test_mode() {
+                        None
+                    } else {
+                        crate::sandbox::get_sandbox_scope().map(|p| p.to_string_lossy().to_string())
+                    }
+                })
                 .unwrap_or_else(|| ".".to_string());
 
             let timeout = arguments.get("timeout_seconds").and_then(|v| v.as_u64());

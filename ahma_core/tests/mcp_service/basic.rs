@@ -291,9 +291,10 @@ mod mcp_service_tests {
         let configs = Arc::new(HashMap::new());
         let guidance = Arc::new(None);
 
-        let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false, false)
-            .await
-            .unwrap();
+        let service =
+            AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false, false)
+                .await
+                .unwrap();
 
         // Test that service was created successfully with empty config
         // The actual list_tools call requires complex MCP context setup

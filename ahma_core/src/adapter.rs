@@ -36,6 +36,10 @@
 //! - **Performance-Oriented Async**: The integration with `ShellPoolManager` ensures that
 //!   asynchronous operations are executed with minimal overhead, which is critical for a
 //!   responsive user experience in a server context.
+//!
+//! ## Security Note
+//! Kernel-enforced sandboxing is the only security boundary (R7). The adapter does not
+//! attempt to parse command strings for security.
 
 use crate::operation_monitor::{Operation, OperationMonitor, OperationStatus};
 use crate::path_security;
@@ -221,10 +225,15 @@ impl Adapter {
             args
         );
 
-        // Validate working directory against sandbox scope
-        let safe_wd =
-            path_security::validate_path(std::path::Path::new(working_dir), &self.root_path)
-                .await?;
+        // Validate working directory against sandbox scope.
+        // - In normal operation, sandbox scopes MUST be initialized.
+        // - In some unit tests, sandbox may be uninitialized; fall back to legacy root_path.
+        let safe_wd = if sandbox::get_sandbox_scopes().is_some() {
+            sandbox::validate_path_in_sandbox(std::path::Path::new(working_dir))
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?
+        } else {
+            path_security::validate_path(std::path::Path::new(working_dir), &self.root_path).await?
+        };
 
         let (program, args_vec) = self
             .prepare_command_and_args(command, args.as_ref(), subcommand_config, &safe_wd)
@@ -235,11 +244,6 @@ impl Adapter {
             program,
             args_vec
         );
-
-        // Heuristic check for shell commands (additional layer of defense)
-        if let Some(script) = Self::shell_script_slice(&program, &args_vec) {
-            path_security::validate_command(script, &safe_wd).await?;
-        }
 
         let timeout = timeout_seconds
             .map(Duration::from_secs)
@@ -398,21 +402,21 @@ impl Adapter {
             subcommand_config,
         } = options;
 
-        // Validate working directory
-        let safe_wd =
-            path_security::validate_path(std::path::Path::new(working_dir), &self.root_path)
-                .await?;
+        // Validate working directory against sandbox scope.
+        // - In normal operation, sandbox scopes MUST be initialized.
+        // - In some unit tests, sandbox may be uninitialized; fall back to legacy root_path.
+        let safe_wd = if sandbox::get_sandbox_scopes().is_some() {
+            sandbox::validate_path_in_sandbox(std::path::Path::new(working_dir))
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?
+        } else {
+            path_security::validate_path(std::path::Path::new(working_dir), &self.root_path).await?
+        };
         let safe_wd_str = safe_wd.to_string_lossy().to_string();
 
         // Validate command arguments
         let (program_with_subcommand, args_vec) = self
             .prepare_command_and_args(command, args.as_ref(), subcommand_config, &safe_wd)
             .await?;
-
-        // Heuristic check for shell commands
-        if let Some(script) = Self::shell_script_slice(&program_with_subcommand, &args_vec) {
-            path_security::validate_command(script, &safe_wd).await?;
-        }
 
         let op_id = operation_id.unwrap_or_else(generate_operation_id);
         let op_id_clone = op_id.clone();
@@ -814,11 +818,6 @@ impl Adapter {
         {
             Self::ensure_shell_redirect(script);
         }
-    }
-
-    fn shell_script_slice<'a>(program: &str, args: &'a [String]) -> Option<&'a str> {
-        let idx = Self::shell_script_index(program, args)?;
-        args.get(idx).map(|s| s.as_str())
     }
 
     fn shell_script_index(program: &str, args: &[String]) -> Option<usize> {

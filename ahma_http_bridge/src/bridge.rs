@@ -569,11 +569,6 @@ async fn handle_session_isolated_request(
             Ok(new_session_id) => {
                 info!(session_id = %new_session_id, "Session created, forwarding initialize request");
 
-                // Store the initialize request for potential subprocess restart
-                if let Some(session) = session_manager.get_session(&new_session_id) {
-                    session.store_initialize_request(payload.clone()).await;
-                }
-
                 // Forward the initialize request to the new session
                 // Sandbox will be locked when client responds to roots/list via SSE
                 match session_manager
@@ -655,6 +650,30 @@ async fn handle_session_isolated_request(
                 .unwrap_or_else(|_| (StatusCode::FORBIDDEN, "Session terminated").into_response());
         }
 
+        // Delay tool execution until sandbox is locked from first roots/list response.
+        // This keeps the subprocess in a safe, non-executing state while sandbox initialization completes.
+        if method == Some("tools/call")
+            && let Some(session) = session_manager.get_session(&session_id)
+                && !session.is_sandbox_locked() {
+                    let error_json = serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "error": {
+                            "code": -32001,
+                            "message": "Sandbox initializing from client roots - retry tools/call after roots/list completes"
+                        }
+                    });
+                    return Response::builder()
+                        .status(StatusCode::CONFLICT)
+                        .header("content-type", "application/json")
+                        .header(MCP_SESSION_ID_HEADER, session_id.as_str())
+                        .body(axum::body::Body::from(
+                            serde_json::to_vec(&error_json).unwrap_or_default(),
+                        ))
+                        .unwrap_or_else(|_| {
+                            (StatusCode::CONFLICT, "Sandbox initializing").into_response()
+                        });
+                }
+
         let mut is_initialized_notification = false;
 
         // Check for initialized notification - this completes the MCP handshake
@@ -673,7 +692,6 @@ async fn handle_session_isolated_request(
             debug!(session_id = %session_id, "Received client response, forwarding to subprocess");
 
             // Check if this is a roots/list response - extract roots and lock sandbox
-            let mut subprocess_restarted = false;
             if let Some(result) = payload.get("result")
                 && let Some(roots) = result.get("roots").and_then(|r| r.as_array())
             {
@@ -690,26 +708,19 @@ async fn handle_session_isolated_request(
 
                 match session_manager.lock_sandbox(&session_id, &mcp_roots).await {
                     Ok(true) => {
-                        // Subprocess was restarted with correct sandbox - don't forward the roots response
-                        // The new subprocess hasn't sent a roots/list request and is already configured
-                        subprocess_restarted = true;
-                        info!(session_id = %session_id, "Subprocess restarted, not forwarding roots/list response");
+                        info!(session_id = %session_id, "Sandbox locked from first roots/list response");
                     }
-                    Ok(false) => {
-                        // Sandbox was already locked, proceed normally
-                    }
+                    Ok(false) => {}
                     Err(e) => {
-                        warn!(session_id = %session_id, "Failed to lock sandbox: {}", e);
+                        warn!(session_id = %session_id, "Failed to record sandbox scopes: {}", e)
                     }
                 }
             }
 
-            // Only forward the response if subprocess wasn't restarted
-            if !subprocess_restarted {
-                if let Err(e) = session_manager.send_message(&session_id, &payload).await {
-                    error!(session_id = %session_id, "Failed to forward client response: {}", e);
-                    return error_response(-32603, &format!("Failed to forward response: {}", e));
-                }
+            // Always forward the response to the subprocess so rmcp can resolve the pending request.
+            if let Err(e) = session_manager.send_message(&session_id, &payload).await {
+                error!(session_id = %session_id, "Failed to forward client response: {}", e);
+                return error_response(-32603, &format!("Failed to forward response: {}", e));
             }
 
             // Return 202 Accepted - no response expected
@@ -750,13 +761,11 @@ async fn handle_session_isolated_request(
                         .unwrap_or_else(|_| "invalid".parse().unwrap()),
                 );
 
-                if is_initialized_notification {
-                    if let Some(session) = session_manager.get_session(&session_id) {
-                        if let Err(e) = session.mark_mcp_initialized().await {
+                if is_initialized_notification
+                    && let Some(session) = session_manager.get_session(&session_id)
+                        && let Err(e) = session.mark_mcp_initialized().await {
                             warn!(session_id = %session_id, "Failed to mark MCP initialized: {}", e);
                         }
-                    }
-                }
 
                 http_response
             }
@@ -796,6 +805,8 @@ mod tests {
         body::Body,
         http::{Request, StatusCode},
     };
+    use std::fs;
+    use tempfile::TempDir;
     use tower::ServiceExt;
 
     // ==================== Original tests ====================
@@ -860,6 +871,192 @@ mod tests {
             .route("/mcp", post(handle_mcp_request))
             .layer(CorsLayer::permissive())
             .with_state(state)
+    }
+
+    fn create_session_isolation_state(session_manager: Arc<SessionManager>) -> Arc<BridgeState> {
+        let pending_requests = Arc::new(DashMap::new());
+        Arc::new(BridgeState {
+            sender: None,
+            pending_requests,
+            session_manager: Some(session_manager),
+            session_isolation: true,
+        })
+    }
+
+    fn write_mock_mcp_server_script(temp_dir: &TempDir) -> std::path::PathBuf {
+        let script_path = temp_dir.path().join("mock_mcp_server.py");
+        let script_content = r#"import sys
+import json
+
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+
+    try:
+        msg = json.loads(line)
+    except Exception:
+        continue
+
+    # Ignore client responses (no method)
+    if not isinstance(msg, dict) or "method" not in msg:
+        continue
+
+    method = msg.get("method")
+    msg_id = msg.get("id")
+
+    if method == "initialize":
+        resp = {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "serverInfo": {"name": "mock", "version": "1.0"}
+            }
+        }
+        print(json.dumps(resp))
+        sys.stdout.flush()
+        continue
+
+    if method == "tools/call":
+        resp = {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "result": {
+                "content": [{"type": "text", "text": "tool ok"}]
+            }
+        }
+        print(json.dumps(resp))
+        sys.stdout.flush()
+        continue
+
+    # Generic response for other request methods
+    if msg_id is not None:
+        print(json.dumps({"jsonrpc": "2.0", "id": msg_id, "result": {}}))
+        sys.stdout.flush()
+"#;
+
+        fs::write(&script_path, script_content).expect("Failed to write mock MCP server script");
+        script_path
+    }
+
+    #[tokio::test]
+    async fn test_session_isolation_rejects_tool_calls_until_roots_lock_then_allows() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let script_path = write_mock_mcp_server_script(&temp_dir);
+
+        let session_manager = Arc::new(SessionManager::new(SessionManagerConfig {
+            server_command: "python3".to_string(),
+            server_args: vec![script_path.to_string_lossy().to_string()],
+            default_scope: temp_dir.path().to_path_buf(),
+            enable_colored_output: false,
+        }));
+
+        let state = create_session_isolation_state(Arc::clone(&session_manager));
+        let app = create_app(state);
+
+        let session_id = session_manager
+            .create_session()
+            .await
+            .expect("Should create session");
+
+        // 1) tools/call should be rejected before sandbox is locked.
+        let tool_call = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "dummy",
+                "arguments": {}
+            }
+        });
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/mcp")
+                    .header("content-type", "application/json")
+                    .header(MCP_SESSION_ID_HEADER, session_id.as_str())
+                    .body(Body::from(serde_json::to_vec(&tool_call).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            response
+                .headers()
+                .get(MCP_SESSION_ID_HEADER)
+                .and_then(|h| h.to_str().ok()),
+            Some(session_id.as_str())
+        );
+        let body = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["error"]["code"], -32001);
+
+        // 2) Simulate client response to roots/list (this locks sandbox scope).
+        let client_roots_response = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 999,
+            "result": {
+                "roots": [
+                    {
+                        "uri": format!("file://{}", temp_dir.path().display()),
+                        "name": "root"
+                    }
+                ]
+            }
+        });
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/mcp")
+                    .header("content-type", "application/json")
+                    .header(MCP_SESSION_ID_HEADER, session_id.as_str())
+                    .body(Body::from(
+                        serde_json::to_vec(&client_roots_response).unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+
+        let session = session_manager
+            .get_session(&session_id)
+            .expect("Session should exist");
+        assert!(session.is_sandbox_locked());
+
+        // 3) tools/call should now be forwarded and succeed.
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/mcp")
+                    .header("content-type", "application/json")
+                    .header(MCP_SESSION_ID_HEADER, session_id.as_str())
+                    .body(Body::from(serde_json::to_vec(&tool_call).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        let text = json["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default();
+        assert_eq!(text, "tool ok");
     }
 
     #[tokio::test]
