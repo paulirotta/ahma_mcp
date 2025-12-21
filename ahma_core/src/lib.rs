@@ -45,6 +45,7 @@
 // Public modules
 pub mod adapter;
 pub mod callback_system;
+mod check_service_ext;
 pub mod client;
 pub mod config;
 pub mod constants;
@@ -56,12 +57,12 @@ pub mod path_security;
 pub mod retry;
 pub mod sandbox;
 pub mod schema_validation;
+pub mod shell;
 pub mod shell_pool;
 pub mod terminal_output;
 pub mod tool_availability;
 pub mod tool_hints;
 pub mod utils;
-mod check_service_ext;
 
 // Test utilities
 pub mod test_utils;

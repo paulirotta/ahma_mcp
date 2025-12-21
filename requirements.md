@@ -245,22 +245,17 @@ Tools can declare prerequisites and installation instructions:
 
 ## 4. Development Workflow
 
-For day-to-day AI development instructions (tool usage, TDD workflow, quality checks), see [AGENTS.md](AGENTS.md).
+**For AI agent development instructions**, including:
+- Setup commands
+- Build and test commands
+- Code style and conventions
+- Testing requirements and patterns
+- PR and commit guidelines
+- Tool usage patterns
 
-### 4.1. CLI Testing
+**See [AGENTS.md](AGENTS.md).**
 
-For scripted or non-IDE testing:
-```bash
-ahma_mcp --tool_name cargo --tool_args '{"subcommand": "build"}'
-```
-
-**Note**: The binary rejects launch without `--mode` or `--tool_name`. Interactive terminals are blocked; stdio mode only works when spawned by an MCP client.
-
-### 4.2. Terminal Fallback (Rare)
-
-Only use terminal directly when:
-1. **Coverage**: `cargo llvm-cov` — instrumentation incompatible with sandboxing
-2. **Ahama completely broken** — fix immediately after recovery
+This section previously contained development workflow details but has been moved to AGENTS.md to follow the agents.md standard. The requirements.md file now focuses purely on **what** the product does and **how** it's architected.
 
 ## 5. Implementation Constraints and Architecture Decisions
 
