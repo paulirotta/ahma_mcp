@@ -37,6 +37,7 @@ async fn test_realistic_notification_scenario_with_history() {
         configs,
         Arc::new(None),
         false,
+        false,
     )
     .await
     .unwrap();

@@ -189,6 +189,11 @@
             "description": "Run the test suite.",
             "options": [
                 {
+                    "name": "package",
+                    "type": "string",
+                    "description": "Package to test"
+                },
+                {
                     "name": "workspace",
                     "type": "boolean",
                     "description": "Test all packages in the workspace"

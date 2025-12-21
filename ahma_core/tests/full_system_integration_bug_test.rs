@@ -82,6 +82,7 @@ mod tests {
             configs,
             Arc::new(None),
             false,
+            false,
         )
         .await
         .unwrap();

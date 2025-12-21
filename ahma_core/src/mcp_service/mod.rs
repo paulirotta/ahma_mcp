@@ -73,6 +73,9 @@ pub struct AhmaMcpService {
     /// When true, forces all operations to run synchronously (overrides async-by-default).
     /// This is set when the --sync CLI flag is used.
     pub force_synchronous: bool,
+    /// When true, sandbox initialization is deferred until roots/list_changed notification.
+    /// This is used in HTTP bridge mode where SSE must connect before server→client requests.
+    pub defer_sandbox: bool,
     /// The peer handle for sending notifications to the client.
     /// This is populated by capturing it from the first request context.
     pub peer: Arc<RwLock<Option<Peer<RoleServer>>>>,
@@ -86,6 +89,7 @@ impl AhmaMcpService {
         configs: Arc<HashMap<String, ToolConfig>>,
         guidance: Arc<Option<GuidanceConfig>>,
         force_synchronous: bool,
+        defer_sandbox: bool,
     ) -> Result<Self, anyhow::Error> {
         // Start the background monitor for operation timeouts
         crate::operation_monitor::OperationMonitor::start_background_monitor(
@@ -98,6 +102,7 @@ impl AhmaMcpService {
             configs: Arc::new(RwLock::new((*configs).clone())),
             guidance,
             force_synchronous,
+            defer_sandbox,
             peer: Arc::new(RwLock::new(None)),
         })
     }
@@ -645,6 +650,73 @@ impl AhmaMcpService {
 
         DEFAULT_AWAIT_TIMEOUT.max(max_op_timeout)
     }
+
+    /// Query the client for workspace roots and initialize the sandbox scope.
+    ///
+    /// This implements the MCP roots protocol where the server requests the
+    /// client's workspace roots to establish sandbox boundaries.
+    async fn configure_sandbox_from_roots(&self, peer: &Peer<RoleServer>) {
+        use crate::sandbox::{get_sandbox_scopes, initialize_sandbox_scopes};
+
+        // Check if sandbox is already configured (e.g., via --sandbox-scope CLI arg)
+        if get_sandbox_scopes().is_some() {
+            tracing::debug!("Sandbox already configured via CLI, skipping roots/list");
+            return;
+        }
+
+        tracing::info!("Requesting workspace roots from client via roots/list");
+
+        match peer.list_roots().await {
+            Ok(roots_result) => {
+                let roots = &roots_result.roots;
+                if roots.is_empty() {
+                    tracing::warn!(
+                        "Client returned empty roots list, sandbox will use fallback behavior"
+                    );
+                    return;
+                }
+
+                // Extract file:// URIs and convert to paths
+                let paths: Vec<PathBuf> = roots
+                    .iter()
+                    .filter_map(|root| root.uri.strip_prefix("file://").map(PathBuf::from))
+                    .collect();
+
+                if paths.is_empty() {
+                    tracing::warn!("No file:// roots found in client response, sandbox unchanged");
+                    return;
+                }
+
+                tracing::info!(
+                    "Received {} workspace root(s) from client: {:?}",
+                    paths.len(),
+                    paths
+                );
+
+                // Initialize sandbox with client's workspace roots
+                match initialize_sandbox_scopes(&paths) {
+                    Ok(()) => {
+                        tracing::info!("Sandbox scope initialized from client roots: {:?}", paths);
+                    }
+                    Err(e) => {
+                        // AlreadyInitialized is expected if CLI arg was used
+                        tracing::debug!(
+                            "Could not set sandbox from roots (may already be set): {}",
+                            e
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                // Client may not support roots capability - this is not an error
+                tracing::info!(
+                    "Client does not support roots/list or request failed: {}. \
+                     Sandbox will use fallback behavior.",
+                    e
+                );
+            }
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -687,6 +759,45 @@ impl ServerHandler for AhmaMcpService {
                     );
                 }
             }
+
+            // Query client for workspace roots and configure sandbox
+            // Per MCP spec, server sends roots/list request to client
+            // IMPORTANT: Only do this if sandbox is NOT deferred.
+            // In HTTP bridge mode with --defer-sandbox, we wait for roots/list_changed
+            // notification which is sent by the bridge when SSE connects.
+            if !self.defer_sandbox {
+                let peer_clone = peer.clone();
+                let service_clone = self.clone();
+                tokio::spawn(async move {
+                    service_clone
+                        .configure_sandbox_from_roots(&peer_clone)
+                        .await;
+                });
+            } else {
+                tracing::info!("Sandbox deferred - waiting for roots/list_changed notification");
+            }
+        }
+    }
+
+    fn on_roots_list_changed(
+        &self,
+        context: NotificationContext<RoleServer>,
+    ) -> impl std::future::Future<Output = ()> + Send + '_ {
+        async move {
+            tracing::info!("Received roots/list_changed notification");
+
+            // This notification is sent by the HTTP bridge when SSE connects.
+            // It signals that we can now safely call roots/list.
+            let peer = &context.peer;
+
+            // Spawn as background task to avoid blocking message processing
+            let peer_clone = peer.clone();
+            let service_clone = self.clone();
+            tokio::spawn(async move {
+                service_clone
+                    .configure_sandbox_from_roots(&peer_clone)
+                    .await;
+            });
         }
     }
 
@@ -1186,6 +1297,14 @@ impl ServerHandler for AhmaMcpService {
                     }
                 };
 
+            // Delay tool execution until sandbox is initialized from roots/list.
+            // This is critical in HTTP bridge mode with deferred sandbox initialization.
+            if crate::sandbox::get_sandbox_scopes().is_none() && !crate::sandbox::is_test_mode() {
+                let error_message = "Sandbox initializing from client roots - retry tools/call after roots/list completes".to_string();
+                tracing::warn!("{}", error_message);
+                return Err(McpError::internal_error(error_message, None));
+            }
+
             // Check if the subcommand itself is a sequence
             if subcommand_config.sequence.is_some() {
                 return sequence::handle_subcommand_sequence(
@@ -1204,6 +1323,13 @@ impl ServerHandler for AhmaMcpService {
                 .get("working_directory")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
+                .or_else(|| {
+                    if crate::sandbox::is_test_mode() {
+                        None
+                    } else {
+                        crate::sandbox::get_sandbox_scope().map(|p| p.to_string_lossy().to_string())
+                    }
+                })
                 .unwrap_or_else(|| ".".to_string());
 
             let timeout = arguments.get("timeout_seconds").and_then(|v| v.as_u64());

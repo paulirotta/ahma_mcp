@@ -6,18 +6,25 @@ use axum::{
     Json, Router,
     extract::State,
     http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
+    response::{
+        IntoResponse, Response,
+        sse::{Event, KeepAlive, Sse},
+    },
     routing::{get, post},
 };
 use dashmap::DashMap;
+use futures::stream::StreamExt;
 use owo_colors::OwoColorize;
 use serde_json::Value;
-use std::{net::SocketAddr, path::PathBuf, process::Stdio, sync::Arc, time::Duration};
+use std::{
+    convert::Infallible, net::SocketAddr, path::PathBuf, process::Stdio, sync::Arc, time::Duration,
+};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::Command,
     sync::{mpsc, oneshot},
 };
+use tokio_stream::wrappers::BroadcastStream;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::{debug, error, info, warn};
 
@@ -113,17 +120,18 @@ pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
     };
 
     // Build the router
-    // MCP Streamable HTTP transport: single endpoint supporting POST (requests)
+    // MCP Streamable HTTP transport: single endpoint supporting POST (requests) and GET (SSE)
     // See: https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http
     let app = Router::new()
         .route("/health", get(health_check))
-        .route("/mcp", post(handle_mcp_request))
+        .route("/mcp", post(handle_mcp_request).get(handle_sse_stream))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
     info!("HTTP bridge listening on http://{}", config.bind_addr);
     info!("MCP endpoint (POST): http://{}/mcp", config.bind_addr);
+    info!("MCP endpoint (GET/SSE): http://{}/mcp", config.bind_addr);
 
     // Start the server
     let listener = tokio::net::TcpListener::bind(config.bind_addr)
@@ -298,8 +306,94 @@ async fn health_check() -> impl IntoResponse {
     (StatusCode::OK, "OK")
 }
 
-// /// Handle SSE connections
-// // SSE removed
+/// Handle SSE stream connections for server-to-client messages
+///
+/// This enables the MCP Streamable HTTP transport pattern where:
+/// - POST /mcp sends client→server requests (existing)
+/// - GET /mcp opens SSE stream for server→client messages (this handler)
+///
+/// The server uses SSE to:
+/// 1. Send `roots/list` requests to discover client workspace folders
+/// 2. Send notifications (if any)
+/// 3. Send requests that need client responses
+///
+/// Note: Returns 404 (not 400/501) when session ID is missing or invalid. This prevents
+/// clients from detecting SSE support during initial probing, avoiding OAuth prompts
+/// for servers that don't require authentication.
+async fn handle_sse_stream(State(state): State<Arc<BridgeState>>, headers: HeaderMap) -> Response {
+    // SSE is only supported in session isolation mode
+    // Return 404 to hide SSE from probing clients (prevents OAuth prompts)
+    if !state.session_isolation {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+
+    // Get session ID from header - required for SSE
+    // Return 404 (not 400) to hide SSE from clients without a session
+    let session_id = match headers
+        .get(MCP_SESSION_ID_HEADER)
+        .and_then(|v| v.to_str().ok())
+    {
+        Some(id) => id.to_string(),
+        None => {
+            // 404 makes clients think SSE doesn't exist, avoiding OAuth probes
+            return StatusCode::NOT_FOUND.into_response();
+        }
+    };
+
+    // Get session manager
+    let session_manager = match &state.session_manager {
+        Some(sm) => sm,
+        None => {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+    };
+
+    // Get the session - 404 if not found
+    let session = match session_manager.get_session(&session_id) {
+        Some(s) => s,
+        None => {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+    };
+
+    // Check if session is terminated
+    if session.is_terminated() {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+
+    info!(session_id = %session_id, "SSE stream opened");
+
+    // Mark SSE as connected - if MCP is already initialized, this will trigger roots/list_changed
+    if let Err(e) = session.mark_sse_connected().await {
+        warn!(session_id = %session_id, "Failed to mark SSE connected: {}", e);
+    }
+
+    // Subscribe to the session's broadcast channel
+    let rx = session.subscribe();
+
+    // Convert broadcast receiver to a stream of SSE events
+    let stream = BroadcastStream::new(rx).filter_map(move |result| {
+        let session_id = session_id.clone();
+        async move {
+            match result {
+                Ok(msg) => {
+                    debug!(session_id = %session_id, "Sending SSE event: {}", msg);
+                    Some(Ok::<_, Infallible>(Event::default().data(msg)))
+                }
+                Err(e) => {
+                    warn!(session_id = %session_id, "Broadcast receive error: {}", e);
+                    // Skip errors (lagged receiver)
+                    None
+                }
+            }
+        }
+    });
+
+    // Return SSE response with keep-alive
+    Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
+}
 
 /// Create a JSON response with appropriate headers
 fn json_response(value: Value) -> Response {
@@ -476,6 +570,7 @@ async fn handle_session_isolated_request(
                 info!(session_id = %new_session_id, "Session created, forwarding initialize request");
 
                 // Forward the initialize request to the new session
+                // Sandbox will be locked when client responds to roots/list via SSE
                 match session_manager
                     .send_request(&new_session_id, &payload)
                     .await
@@ -555,6 +650,89 @@ async fn handle_session_isolated_request(
                 .unwrap_or_else(|_| (StatusCode::FORBIDDEN, "Session terminated").into_response());
         }
 
+        // Delay tool execution until sandbox is locked from first roots/list response.
+        // This keeps the subprocess in a safe, non-executing state while sandbox initialization completes.
+        if method == Some("tools/call")
+            && let Some(session) = session_manager.get_session(&session_id)
+            && !session.is_sandbox_locked()
+        {
+            let error_json = serde_json::json!({
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32001,
+                    "message": "Sandbox initializing from client roots - retry tools/call after roots/list completes"
+                }
+            });
+            return Response::builder()
+                .status(StatusCode::CONFLICT)
+                .header("content-type", "application/json")
+                .header(MCP_SESSION_ID_HEADER, session_id.as_str())
+                .body(axum::body::Body::from(
+                    serde_json::to_vec(&error_json).unwrap_or_default(),
+                ))
+                .unwrap_or_else(|_| {
+                    (StatusCode::CONFLICT, "Sandbox initializing").into_response()
+                });
+        }
+
+        let mut is_initialized_notification = false;
+
+        // Check for initialized notification - this completes the MCP handshake
+        // Once both SSE is connected AND initialized is received, we send roots/list_changed
+        if method == Some("notifications/initialized") {
+            is_initialized_notification = true;
+        }
+
+        // Check if this is a CLIENT RESPONSE (has id + result/error, no method)
+        // This happens when server sends a request via SSE and client responds via POST
+        let is_client_response = method.is_none()
+            && payload.get("id").is_some()
+            && (payload.get("result").is_some() || payload.get("error").is_some());
+
+        if is_client_response {
+            debug!(session_id = %session_id, "Received client response, forwarding to subprocess");
+
+            // Check if this is a roots/list response - extract roots and lock sandbox
+            if let Some(result) = payload.get("result")
+                && let Some(roots) = result.get("roots").and_then(|r| r.as_array())
+            {
+                let mcp_roots: Vec<McpRoot> = roots
+                    .iter()
+                    .filter_map(|r| serde_json::from_value(r.clone()).ok())
+                    .collect();
+
+                info!(
+                    session_id = %session_id,
+                    roots = ?mcp_roots,
+                    "Locking sandbox from roots/list response"
+                );
+
+                match session_manager.lock_sandbox(&session_id, &mcp_roots).await {
+                    Ok(true) => {
+                        info!(session_id = %session_id, "Sandbox locked from first roots/list response");
+                    }
+                    Ok(false) => {}
+                    Err(e) => {
+                        warn!(session_id = %session_id, "Failed to record sandbox scopes: {}", e)
+                    }
+                }
+            }
+
+            // Always forward the response to the subprocess so rmcp can resolve the pending request.
+            if let Err(e) = session_manager.send_message(&session_id, &payload).await {
+                error!(session_id = %session_id, "Failed to forward client response: {}", e);
+                return error_response(-32603, &format!("Failed to forward response: {}", e));
+            }
+
+            // Return 202 Accepted - no response expected
+            return Response::builder()
+                .status(StatusCode::ACCEPTED)
+                .header("content-type", "application/json")
+                .header(MCP_SESSION_ID_HEADER, session_id.as_str())
+                .body(axum::body::Body::from("{}"))
+                .unwrap_or_else(|_| StatusCode::ACCEPTED.into_response());
+        }
+
         // Forward request to session
         match session_manager.send_request(&session_id, &payload).await {
             Ok(response) => {
@@ -584,6 +762,13 @@ async fn handle_session_isolated_request(
                         .unwrap_or_else(|_| "invalid".parse().unwrap()),
                 );
 
+                if is_initialized_notification
+                    && let Some(session) = session_manager.get_session(&session_id)
+                    && let Err(e) = session.mark_mcp_initialized().await
+                {
+                    warn!(session_id = %session_id, "Failed to mark MCP initialized: {}", e);
+                }
+
                 http_response
             }
             Err(e) => {
@@ -593,7 +778,8 @@ async fn handle_session_isolated_request(
         }
     } else {
         // No session ID and not an initialize request (R8D.5)
-        warn!(
+        // This is a client error, not a server issue - use debug level
+        debug!(
             "Request without session ID for non-initialize method: {:?}",
             method
         );
@@ -621,6 +807,8 @@ mod tests {
         body::Body,
         http::{Request, StatusCode},
     };
+    use std::fs;
+    use tempfile::TempDir;
     use tower::ServiceExt;
 
     // ==================== Original tests ====================
@@ -685,6 +873,198 @@ mod tests {
             .route("/mcp", post(handle_mcp_request))
             .layer(CorsLayer::permissive())
             .with_state(state)
+    }
+
+    fn create_session_isolation_state(session_manager: Arc<SessionManager>) -> Arc<BridgeState> {
+        let pending_requests = Arc::new(DashMap::new());
+        Arc::new(BridgeState {
+            sender: None,
+            pending_requests,
+            session_manager: Some(session_manager),
+            session_isolation: true,
+        })
+    }
+
+    fn write_mock_mcp_server_script(temp_dir: &TempDir) -> std::path::PathBuf {
+        let script_path = temp_dir.path().join("mock_mcp_server.py");
+        let script_content = r#"import sys
+import json
+
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+
+    try:
+        msg = json.loads(line)
+    except Exception:
+        continue
+
+    # Ignore client responses (no method)
+    if not isinstance(msg, dict) or "method" not in msg:
+        continue
+
+    method = msg.get("method")
+    msg_id = msg.get("id")
+
+    if method == "initialize":
+        resp = {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "serverInfo": {"name": "mock", "version": "1.0"}
+            }
+        }
+        print(json.dumps(resp))
+        sys.stdout.flush()
+        continue
+
+    if method == "tools/call":
+        resp = {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "result": {
+                "content": [{"type": "text", "text": "tool ok"}]
+            }
+        }
+        print(json.dumps(resp))
+        sys.stdout.flush()
+        continue
+
+    # Generic response for other request methods
+    if msg_id is not None:
+        print(json.dumps({"jsonrpc": "2.0", "id": msg_id, "result": {}}))
+        sys.stdout.flush()
+"#;
+
+        fs::write(&script_path, script_content).expect("Failed to write mock MCP server script");
+        script_path
+    }
+
+    #[tokio::test]
+    async fn test_session_isolation_rejects_tool_calls_until_roots_lock_then_allows() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let script_path = write_mock_mcp_server_script(&temp_dir);
+
+        let session_manager = Arc::new(SessionManager::new(SessionManagerConfig {
+            server_command: "python3".to_string(),
+            server_args: vec![script_path.to_string_lossy().to_string()],
+            default_scope: temp_dir.path().to_path_buf(),
+            enable_colored_output: false,
+        }));
+
+        let state = create_session_isolation_state(Arc::clone(&session_manager));
+        let app = create_app(state);
+
+        let session_id = session_manager
+            .create_session()
+            .await
+            .expect("Should create session");
+
+        // 1) tools/call should be rejected before sandbox is locked.
+        let tool_call = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "dummy",
+                "arguments": {}
+            }
+        });
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/mcp")
+                    .header("content-type", "application/json")
+                    .header(MCP_SESSION_ID_HEADER, session_id.as_str())
+                    .body(Body::from(serde_json::to_vec(&tool_call).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            response
+                .headers()
+                .get(MCP_SESSION_ID_HEADER)
+                .and_then(|h| h.to_str().ok()),
+            Some(session_id.as_str())
+        );
+        let body = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["error"]["code"], -32001);
+
+        // 2) Simulate client response to roots/list (this locks sandbox scope).
+        let client_roots_response = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 999,
+            "result": {
+                "roots": [
+                    {
+                        "uri": format!("file://{}", temp_dir.path().display()),
+                        "name": "root"
+                    }
+                ]
+            }
+        });
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/mcp")
+                    .header("content-type", "application/json")
+                    .header(MCP_SESSION_ID_HEADER, session_id.as_str())
+                    .body(Body::from(
+                        serde_json::to_vec(&client_roots_response).unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+
+        let session = session_manager
+            .get_session(&session_id)
+            .expect("Session should exist");
+        assert!(session.is_sandbox_locked());
+
+        let sandbox_scope = session
+            .get_sandbox_scope()
+            .await
+            .expect("Sandbox scope should be set after roots lock");
+        assert_eq!(sandbox_scope, temp_dir.path().to_path_buf());
+
+        // 3) tools/call should now be forwarded and succeed.
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/mcp")
+                    .header("content-type", "application/json")
+                    .header(MCP_SESSION_ID_HEADER, session_id.as_str())
+                    .body(Body::from(serde_json::to_vec(&tool_call).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        let text = json["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default();
+        assert_eq!(text, "tool ok");
     }
 
     #[tokio::test]

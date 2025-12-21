@@ -43,7 +43,7 @@ fn test_sandbox_error_not_initialized_display() {
 fn test_sandbox_error_path_outside_sandbox_display() {
     let err = SandboxError::PathOutsideSandbox {
         path: PathBuf::from("/etc/passwd"),
-        scope: PathBuf::from("/home/user/project"),
+        scopes: vec![PathBuf::from("/home/user/project")],
     };
     let msg = format!("{}", err);
     assert!(msg.contains("/etc/passwd"));
@@ -105,7 +105,7 @@ fn test_sandbox_error_debug_format() {
 
     let err2 = SandboxError::PathOutsideSandbox {
         path: PathBuf::from("/etc"),
-        scope: PathBuf::from("/home"),
+        scopes: vec![PathBuf::from("/home")],
     };
     let debug_str2 = format!("{:?}", err2);
     assert!(debug_str2.contains("PathOutsideSandbox"));

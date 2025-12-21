@@ -149,8 +149,9 @@ struct Cli {
 
     /// Override the sandbox scope (root directory for file system operations).
     /// By default, uses the current working directory for stdio mode.
+    /// Can be specified multiple times for multi-root workspaces.
     #[arg(long, global = true)]
-    sandbox_scope: Option<PathBuf>,
+    sandbox_scope: Vec<PathBuf>,
 
     /// Disable Ahma's kernel-level sandboxing (sandbox-exec on macOS, Landlock on Linux).
     /// Use this when running inside another sandbox (e.g., Cursor, VS Code, Docker) where
@@ -158,6 +159,12 @@ struct Cli {
     /// provides security. Can also be set via AHMA_NO_SANDBOX=1 environment variable.
     #[arg(long, global = true)]
     no_sandbox: bool,
+
+    /// Defer sandbox initialization until the client provides workspace roots via roots/list.
+    /// Used by HTTP bridge to allow clients to specify their own workspace scope.
+    /// The sandbox will be initialized from the roots/list response instead of cwd.
+    #[arg(long, global = true)]
+    defer_sandbox: bool,
 
     /// Log to stderr instead of file (useful for debugging and seeing errors in terminal).
     /// Enables colored output on Mac/Linux.
@@ -238,48 +245,77 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Initialize sandbox scope
+    // Initialize sandbox scope(s)
     // Priority: 1. CLI --sandbox-scope, 2. AHMA_SANDBOX_SCOPE env var, 3. current working directory
-    let sandbox_scope = if let Some(ref scope) = cli.sandbox_scope {
-        // CLI override takes precedence
-        std::fs::canonicalize(scope)
-            .with_context(|| format!("Failed to canonicalize sandbox scope: {:?}", scope))?
+    let sandbox_scopes: Vec<PathBuf> = if !cli.sandbox_scope.is_empty() {
+        // CLI override takes precedence - canonicalize each scope
+        let mut scopes = Vec::with_capacity(cli.sandbox_scope.len());
+        for scope in &cli.sandbox_scope {
+            let canonical = std::fs::canonicalize(scope)
+                .with_context(|| format!("Failed to canonicalize sandbox scope: {:?}", scope))?;
+            scopes.push(canonical);
+        }
+        scopes
     } else if let Ok(env_scope) = std::env::var("AHMA_SANDBOX_SCOPE") {
-        // Environment variable is second priority
-        let env_path = PathBuf::from(&env_scope);
-        std::fs::canonicalize(&env_path).with_context(|| {
-            format!(
-                "Failed to canonicalize AHMA_SANDBOX_SCOPE environment variable: {:?}",
-                env_scope
-            )
-        })?
-    } else {
-        // Default to current working directory
-        std::env::current_dir()
-            .context("Failed to get current working directory for sandbox scope")?
-    };
-
-    // Initialize the global sandbox scope (can only be done once)
-    if let Err(e) = sandbox::initialize_sandbox_scope(&sandbox_scope) {
-        match e {
-            SandboxError::AlreadyInitialized => {
-                // This shouldn't happen in normal operation, but handle gracefully
-                tracing::warn!("Sandbox scope was already initialized");
-            }
-            _ => {
-                return Err(anyhow!("Failed to initialize sandbox scope: {}", e));
+        // Environment variable is second priority (comma-separated for multiple roots)
+        let mut scopes = Vec::new();
+        for scope_str in env_scope.split(',') {
+            let scope_str = scope_str.trim();
+            if !scope_str.is_empty() {
+                let env_path = PathBuf::from(scope_str);
+                let canonical = std::fs::canonicalize(&env_path).with_context(|| {
+                    format!(
+                        "Failed to canonicalize AHMA_SANDBOX_SCOPE path: {:?}",
+                        scope_str
+                    )
+                })?;
+                scopes.push(canonical);
             }
         }
+        if scopes.is_empty() {
+            vec![
+                std::env::current_dir()
+                    .context("Failed to get current working directory for sandbox scope")?,
+            ]
+        } else {
+            scopes
+        }
+    } else {
+        // Default to current working directory
+        vec![
+            std::env::current_dir()
+                .context("Failed to get current working directory for sandbox scope")?,
+        ]
+    };
+
+    // Skip sandbox initialization if deferred (will be set via roots/list)
+    if cli.defer_sandbox {
+        tracing::info!("Sandbox initialization deferred - will be set from client roots/list");
+    } else {
+        // Initialize the global sandbox scope(s) (can only be done once)
+        if let Err(e) = sandbox::initialize_sandbox_scopes(&sandbox_scopes) {
+            match e {
+                SandboxError::AlreadyInitialized => {
+                    // This shouldn't happen in normal operation, but handle gracefully
+                    tracing::warn!("Sandbox scope was already initialized");
+                }
+                _ => {
+                    return Err(anyhow!("Failed to initialize sandbox scope: {}", e));
+                }
+            }
+        }
+        tracing::info!("Sandbox scope(s) initialized: {:?}", sandbox_scopes);
     }
 
-    tracing::info!("Sandbox scope initialized: {:?}", sandbox_scope);
-
-    // Apply kernel-level sandbox restrictions on Linux (skip if disabled)
+    // Apply kernel-level sandbox restrictions on Linux (skip if disabled or deferred)
+    // Note: Landlock only supports a single root, so we use the first scope
     #[cfg(target_os = "linux")]
-    if !no_sandbox {
-        if let Err(e) = sandbox::enforce_landlock_sandbox(&sandbox_scope) {
-            tracing::error!("Failed to enforce Landlock sandbox: {}", e);
-            return Err(e);
+    if !no_sandbox && !cli.defer_sandbox {
+        if let Some(first_scope) = sandbox_scopes.first() {
+            if let Err(e) = sandbox::enforce_landlock_sandbox(first_scope) {
+                tracing::error!("Failed to enforce Landlock sandbox: {}", e);
+                return Err(e);
+            }
         }
     }
 
@@ -643,8 +679,16 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         env!("CARGO_PKG_VERSION")
     );
     if !cli.session_isolation {
-        tracing::info!("HTTP subprocess sandbox scope: {}", sandbox_scope);
+        tracing::info!(
+            "HTTP subprocess sandbox scope: {:?}",
+            sandbox::get_sandbox_scopes()
+        );
     }
+
+    // Get first sandbox scope for default (backwards compatibility)
+    let default_scope = sandbox::get_sandbox_scope()
+        .cloned()
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
     let config = BridgeConfig {
         bind_addr,
@@ -652,7 +696,7 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         server_args,
         enable_colored_output,
         session_isolation: cli.session_isolation,
-        default_sandbox_scope: PathBuf::from(&sandbox_scope),
+        default_sandbox_scope: default_scope,
     };
 
     start_bridge(config).await?;
@@ -816,12 +860,14 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     // Create and start the MCP service
     // With async-by-default, we pass force_synchronous=true when --sync flag is used
     let force_synchronous = cli.sync;
+    let defer_sandbox = cli.defer_sandbox;
     let service_handler = AhmaMcpService::new(
         adapter.clone(),
         operation_monitor.clone(),
         configs,
         Arc::new(guidance_config),
         force_synchronous,
+        defer_sandbox,
     )
     .await?;
 

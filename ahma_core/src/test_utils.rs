@@ -600,7 +600,7 @@ pub mod test_utils {
         let configs = Arc::new(HashMap::new());
         let guidance = Arc::new(None);
 
-        let service = AhmaMcpService::new(adapter, monitor, configs, guidance, false)
+        let service = AhmaMcpService::new(adapter, monitor, configs, guidance, false, false)
             .await
             .unwrap();
 
@@ -625,7 +625,7 @@ pub mod test_utils {
         let configs = Arc::new(HashMap::new());
         let guidance = Arc::new(None);
 
-        let service = AhmaMcpService::new(adapter, monitor, configs, guidance, false)
+        let service = AhmaMcpService::new(adapter, monitor, configs, guidance, false, false)
             .await
             .unwrap();
 
