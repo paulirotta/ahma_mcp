@@ -43,6 +43,7 @@ dependencies = [
  "anyhow",
  "axum",
  "bytes",
+ "clap",
  "dashmap",
  "futures",
  "owo-colors",

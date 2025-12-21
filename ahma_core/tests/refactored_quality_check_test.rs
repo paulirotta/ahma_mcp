@@ -18,7 +18,7 @@ fn test_run_new_quality_check_sequence() {
         .args([
             "run",
             "--package",
-            "ahma_shell",
+            "ahma_core",
             "--bin",
             "ahma_mcp",
             "--",

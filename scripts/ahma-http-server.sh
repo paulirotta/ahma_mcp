@@ -6,17 +6,11 @@
 # sandbox scope derived from its workspace roots.
 #
 # Usage:
-<<<<<<< HEAD
-#   ./scripts/ahma-http-server.sh                         # Session isolation (default)
-#   ./scripts/ahma-http-server.sh --no-session-isolation  # Single shared process
-#   ./scripts/ahma-http-server.sh --bind-addr 0.0.0.0:3000
-=======
 #   ./scripts/ahma-http-server.sh                    # Use current directory as sandbox
 #   ./scripts/ahma-http-server.sh /path/to/project   # Use specified directory as sandbox
 #   ./scripts/ahma-http-server.sh --release          # Build in release mode
 #   ./scripts/ahma-http-server.sh --release /path    # Release mode with custom sandbox
 #   AHMA_SANDBOX_SCOPE=/path/to/project ./scripts/ahma-http-server.sh  # Via env var
->>>>>>> feature/one-binary
 #
 # With session isolation enabled (default), the sandbox is determined per-client
 # from the IDE's workspace roots. This allows multiple projects to safely share
@@ -56,6 +50,9 @@ else
     echo "Sandbox scope from current directory: $SANDBOX_SCOPE"
 fi
 
+# Default tools directory
+TOOLS_DIR="${AHMA_TOOLS_DIR:-$PROJECT_ROOT/.ahma/tools}"
+
 echo
 echo "Starting ahma_mcp HTTP server..."
 echo "  Tools dir:     $TOOLS_DIR"
@@ -71,14 +68,9 @@ ks."
 echo "-----------------------------------------------"
 echo
 
-exec cargo run --bin ahma_http_bridge -- "$@"
-
-<<<<<<< HEAD
-=======
 (cd "$PROJECT_ROOT" && cargo run $RELEASE_FLAG -p ahma_core --bin ahma_mcp -- \
     --mode http \
     --http-port 3000 \
     --tools-dir "$TOOLS_DIR" \
     --sandbox-scope "$SANDBOX_SCOPE" \
 )
->>>>>>> feature/one-binary

@@ -244,33 +244,31 @@ async fn manage_process(
                             continue;
                         }
 
-                        if config.enable_colored_output {
-                            if let Ok(parsed) = serde_json::from_str::<Value>(&line) {
-                                let pretty = serde_json::to_string_pretty(&parsed)
-                                    .unwrap_or_else(|_| line.clone());
-                                eprintln!(
-                                    "{}\n{}",
-                                    "← STDOUT (init response):".green(),
-                                    pretty.green()
-                                );
-                            }
+                        if config.enable_colored_output
+                            && let Ok(parsed) = serde_json::from_str::<Value>(&line)
+                        {
+                            let pretty = serde_json::to_string_pretty(&parsed)
+                                .unwrap_or_else(|_| line.clone());
+                            eprintln!(
+                                "{}\n{}",
+                                "← STDOUT (init response):".green(),
+                                pretty.green()
+                            );
                         }
 
-                        if let Ok(value) = serde_json::from_str::<Value>(&line) {
-                            if let Some(id) = value.get("id") {
-                                if id.as_str() == Some("__internal_init__")
-                                    || id.to_string() == "\"__internal_init__\""
-                                {
-                                    // Got our init response
-                                    if value.get("error").is_some() {
-                                        return Err(std::io::Error::other(format!(
-                                            "Initialize failed: {}",
-                                            line
-                                        )));
-                                    }
-                                    return Ok(());
-                                }
+                        if let Ok(value) = serde_json::from_str::<Value>(&line)
+                            && let Some(id) = value.get("id")
+                            && (id.as_str() == Some("__internal_init__")
+                                || *id == "\"__internal_init__\"")
+                        {
+                            // Got our init response
+                            if value.get("error").is_some() {
+                                return Err(std::io::Error::other(format!(
+                                    "Initialize failed: {}",
+                                    line
+                                )));
                             }
+                            return Ok(());
                         }
                     }
                     Ok(None) => {
@@ -1012,6 +1010,7 @@ mod tests {
             pending_requests,
             session_manager: Some(session_manager),
             session_isolation: true,
+            subprocess_initialized: Arc::new(std::sync::atomic::AtomicBool::new(true)), // Test state assumes initialization is complete
         })
     }
 

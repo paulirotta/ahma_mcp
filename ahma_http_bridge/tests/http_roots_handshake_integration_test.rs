@@ -175,10 +175,10 @@ async fn http_roots_handshake_then_tool_call_defaults_to_root() {
         loop {
             if let Some(msg) = rx.recv().await
                 && msg.get("method").and_then(|m| m.as_str()) == Some("roots/list")
-                    && msg.get("id").is_some()
-                {
-                    return msg;
-                }
+                && msg.get("id").is_some()
+            {
+                return msg;
+            }
         }
     })
     .await

@@ -819,6 +819,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
         configs,
         Arc::new(guidance_config),
         force_synchronous,
+        false, // defer_sandbox: initialize sandbox immediately for CLI mode
     )
     .await?;
 
