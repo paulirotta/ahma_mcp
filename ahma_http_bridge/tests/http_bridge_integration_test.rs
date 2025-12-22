@@ -7,6 +7,10 @@
 //!
 //! These tests reproduce the bug where calling a tool from a different project
 //! (different working_directory) fails with "expect initialized request" error.
+//!
+//! NOTE: These tests spawn their own servers with specific sandbox configurations.
+//! They use dynamic port allocation to avoid conflicts with other tests.
+//! The shared test server singleton (port 5721) is NOT used here.
 
 use reqwest::Client;
 use serde_json::{Value, json};
@@ -17,7 +21,7 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tokio::time::sleep;
 
-/// Find an available port for testing
+/// Find an available port for testing (uses dynamic port allocation)
 fn find_available_port() -> u16 {
     TcpListener::bind("127.0.0.1:0")
         .expect("Failed to bind to any port")
@@ -52,8 +56,8 @@ fn get_ahma_mcp_binary() -> PathBuf {
 /// Start the HTTP bridge server and return the process and URL
 async fn start_http_bridge(
     port: u16,
-    tools_dir: &PathBuf,
-    sandbox_scope: &PathBuf,
+    tools_dir: &std::path::Path,
+    sandbox_scope: &std::path::Path,
 ) -> std::process::Child {
     let binary = get_ahma_mcp_binary();
 
@@ -81,11 +85,16 @@ async fn start_http_bridge(
     for _ in 0..30 {
         sleep(Duration::from_millis(200)).await;
         if let Ok(resp) = client.get(&health_url).send().await
-            && resp.status().is_success() {
-                return child;
-            }
+            && resp.status().is_success()
+        {
+            return child;
+        }
     }
 
+    // Kill and wait for the child to prevent zombie process
+    let mut child = child;
+    let _ = child.kill();
+    let _ = child.wait();
     panic!("HTTP bridge failed to start within timeout");
 }
 

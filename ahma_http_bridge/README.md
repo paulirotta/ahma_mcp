@@ -51,6 +51,28 @@ ahma_mcp --mode http --http-port 8080
 ahma_mcp --mode http --tools-dir ./my-tools
 ```
 
+## Port Configuration
+
+| Environment | Port | Notes |
+| ----------- | ---- | ----- |
+| **Production** | 3000 (default) | Configurable via `--http-port` |
+| **Integration Tests** | 5721 (reserved) | Hardcoded constant, do not change |
+
+### Why Port 5721 for Tests?
+
+Integration tests use a dedicated port (5721) to ensure:
+
+1. **Isolation**: Tests never accidentally connect to a production server on port 3000
+2. **Reproducibility**: All tests use the same port for consistent behavior
+3. **Debugging**: Port collisions immediately reveal concurrent test issues
+
+If port 5721 is already in use when running tests, they will fail loudly. This indicates either:
+
+- Another test process is running concurrently
+- A previous test crashed and left an orphaned process
+
+To fix: Kill any existing ahma_mcp processes using port 5721.
+
 ## Endpoints
 
 ### POST /mcp
@@ -181,6 +203,56 @@ This script:
 
 For production use with server-initiated messages, consider using WebSocket.
 
-## License
+## Security Model
 
-MIT OR Apache-2.0
+The HTTP bridge implements a sandboxing security model to restrict AI-generated commands to the client's workspace.
+
+### What's Protected ✅
+
+1. **File Write Access**: Write operations are restricted to the client's workspace (sandbox scope)
+2. **Per-Session Isolation**: Each client session gets its own sandbox scope derived from workspace roots
+3. **Immutable Sandbox**: Once locked, the sandbox scope cannot be changed (prevents escalation attacks)
+4. **Path Traversal Protection**: Attempts to escape via `../` or symlinks are blocked
+
+### How Sandboxing Works
+
+- **macOS**: Uses `sandbox-exec` with Seatbelt profiles per command
+- **Linux**: Uses Landlock (kernel 5.13+) for process-level restrictions
+
+### High-Security Mode: `--no-temp-files`
+
+For environments requiring stricter security, the `--no-temp-files` flag blocks writes to temp directories:
+
+```bash
+ahma_http_bridge --no-temp-files
+```
+
+This prevents data exfiltration via `/tmp` or `/var/folders` but breaks tools that require temp file access.
+
+### Known Security Limitations ⚠️
+
+These are accepted trade-offs for practical operation:
+
+| Limitation | Risk | Mitigation |
+| ------------ | ------ | ------------ |
+| **Read access unrestricted** | AI can read any file (including `~/.ssh/id_rsa`) | Required for shells to function; outer sandbox recommended |
+| **Network unrestricted** | Data exfiltration via network | Future: optional `--restrict-network` |
+| **Temp dirs writable** | Persistence outside sandbox | Use `--no-temp-files` for high-security |
+| **No authentication** | Localhost access is trusted | Only bind to 127.0.0.1 |
+
+### Trust Model
+
+- **Local Development Only**: The HTTP bridge is designed for local use on developer machines
+- **Trusted Client**: Clients on localhost are trusted (no authentication)
+- **Outer Sandbox**: When running inside Cursor/VS Code, the IDE's sandbox provides additional protection
+
+### Red Team Testing
+
+Security tests verify that sandbox escape attempts fail:
+
+- Path traversal (`../../../etc/passwd`)
+- Symlink escapes (link inside workspace pointing outside)
+- Absolute path escapes (`/etc/passwd`)
+- Command injection via path
+
+See `tests/sandbox_security_test.rs` and `ahma_core/tests/sandbox_security_red_team_test.rs`.

@@ -159,6 +159,12 @@ struct Cli {
     #[arg(long, global = true)]
     no_sandbox: bool,
 
+    /// Block writes to temp directories (/tmp, /var/folders) for higher security.
+    /// This prevents data exfiltration via temp files but breaks tools that require temp access.
+    /// Only use in high-security environments where temp file blocking is acceptable.
+    #[arg(long, global = true)]
+    no_temp_files: bool,
+
     /// Defer sandbox initialization until the client provides workspace roots via roots/list.
     /// Used by HTTP bridge to allow clients to specify their own workspace scope.
     /// The sandbox will be initialized from the roots/list response instead of cwd.
@@ -209,6 +215,13 @@ pub async fn run() -> Result<()> {
     let mut no_sandbox = cli.no_sandbox
         || std::env::var("AHMA_NO_SANDBOX").is_ok()
         || std::env::var("AHMA_TEST_MODE").is_ok();
+
+    // Check if temp file access should be blocked
+    // Can be set via --no-temp-files flag or AHMA_NO_TEMP_FILES=1
+    if cli.no_temp_files || std::env::var("AHMA_NO_TEMP_FILES").is_ok() {
+        tracing::info!("🔒 High-security mode: temp file writes blocked (/tmp, /var/folders)");
+        sandbox::enable_no_temp_files();
+    }
 
     if no_sandbox {
         tracing::warn!("Ahma sandbox disabled via --no-sandbox flag or environment variable");
