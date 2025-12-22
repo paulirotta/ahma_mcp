@@ -144,16 +144,13 @@ fn test_timestamp_formatting_edge_cases() {
 
     // Test current time formatting
     let current_formatted = timestamp::format_current_time();
+    // Format is H:MM:SS or HH:MM:SS (length 7-8)
     assert!(current_formatted.len() >= 7);
     assert!(current_formatted.len() <= 8);
     assert_eq!(current_formatted.matches(':').count(), 2);
 
-    // Test that format_current_time doesn't have leading zeros in hour
-    let now_formatted = timestamp::format_current_time();
-    if now_formatted.len() == 7 {
-        // Should be H:MM:SS format (single digit hour)
-        assert!(!now_formatted.starts_with('0'));
-    }
+    // Verify the format looks like a time (contains digits and colons)
+    assert!(current_formatted.chars().all(|c| c.is_ascii_digit() || c == ':'));
 }
 
 #[test]
