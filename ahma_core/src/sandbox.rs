@@ -30,6 +30,26 @@ static TEST_MODE: AtomicBool = AtomicBool::new(false);
 /// One-time check for test environment
 static TEST_MODE_CHECKED: OnceLock<bool> = OnceLock::new();
 
+/// No temp files mode - when true, blocks writes to /tmp and /var/folders
+/// This is a high-security mode that prevents data exfiltration via temp directories.
+/// Many tools require temp file access, so this is opt-in only.
+static NO_TEMP_FILES: AtomicBool = AtomicBool::new(false);
+
+/// Enable no-temp-files mode, which blocks writes to temp directories.
+/// This strengthens security by preventing data persistence outside the sandbox scope.
+///
+/// # Warning
+/// This breaks tools that require temp file access (which is many of them).
+/// Only use in high-security environments where temp file blocking is acceptable.
+pub fn enable_no_temp_files() {
+    NO_TEMP_FILES.store(true, Ordering::SeqCst);
+}
+
+/// Check if no-temp-files mode is enabled.
+pub fn is_no_temp_files() -> bool {
+    NO_TEMP_FILES.load(Ordering::SeqCst)
+}
+
 /// Enable test mode, which bypasses sandbox requirement.
 /// This should ONLY be used in test environments.
 ///
@@ -558,6 +578,19 @@ fn generate_seatbelt_profile(sandbox_scope: &Path, working_dir: &Path) -> String
         ));
     }
 
+    // Build temp directory rules - only if no-temp-files mode is NOT enabled
+    // When --no-temp-files is set, we don't allow writes to /tmp or /var/folders
+    // This is a high-security mode that breaks tools requiring temp files
+    let temp_rules = if is_no_temp_files() {
+        // No temp directory access - high security mode
+        String::new()
+    } else {
+        // Normal mode: allow temp directories for tools that need them
+        "(allow file-write* (subpath \"/private/tmp\"))\n\
+         (allow file-write* (subpath \"/private/var/folders\"))\n"
+            .to_string()
+    };
+
     // Seatbelt profile using Apple's Sandbox Profile Language (SBPL)
     // NOTE: We allow all file-read* and restrict only file-write* to the sandbox scope.
     // This is because shells and tools need to read from many system locations,
@@ -574,9 +607,7 @@ fn generate_seatbelt_profile(sandbox_scope: &Path, working_dir: &Path) -> String
 (allow file-read*)
 {user_tool_rules}(allow file-write* (subpath "{scope}"))
 (allow file-write* (subpath "{working_dir}"))
-(allow file-write* (subpath "/private/tmp"))
-(allow file-write* (subpath "/private/var/folders"))
-(allow file-write* (literal "/dev/null"))
+{temp_rules}(allow file-write* (literal "/dev/null"))
 (allow file-write* (literal "/dev/tty"))
 (allow file-write* (literal "/dev/zero"))
 (allow network*)
@@ -586,6 +617,7 @@ fn generate_seatbelt_profile(sandbox_scope: &Path, working_dir: &Path) -> String
         scope = scope_str,
         working_dir = wd_str,
         user_tool_rules = user_tool_rules,
+        temp_rules = temp_rules,
     )
 }
 

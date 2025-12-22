@@ -50,8 +50,8 @@ When a session is restarted (e.g., to apply a sandbox lock after receiving `root
 
 ### Initialization Flow
 
-1.  **Deferred Initialization**: The bridge marks a session as "initialized" only after the `initialized` notification has been successfully sent to the MCP server. This prevents race conditions where requests might be sent to an uninitialized server.
-2.  **Restart Handling**: When a session is restarted with a sandbox:
+1. **Deferred Initialization**: The bridge marks a session as "initialized" only after the `initialized` notification has been successfully sent to the MCP server. This prevents race conditions where requests might be sent to an uninitialized server.
+2. **Restart Handling**: When a session is restarted with a sandbox:
     - The bridge sends an `initialize` request to the new subprocess.
     - It waits for the `initialize` response.
     - It sends the `initialized` notification.
@@ -168,3 +168,44 @@ Returns `200 OK` with body `OK` when server is healthy.
 ### Dev Dependencies
 
 - `tower` (util feature) - `ServiceExt::oneshot()` for testing
+
+## Future Security Enhancements (TODOs)
+
+### 1. Optional Sensitive Path Restrictions (TODO)
+
+Currently, the Seatbelt profile allows `file-read*` everywhere because shells and tools need to read from many system locations. This means AI can read sensitive files like `~/.ssh/id_rsa` or `~/.aws/credentials`.
+
+**Future work:**
+
+- Add optional `--deny-sensitive-reads` flag that blocks read access to sensitive paths
+- Sensitive paths to consider: `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gcloud`, browser credential stores
+- Must be opt-in to avoid breaking legitimate tools that need these paths
+- Consider allowing explicit allowlist overrides for specific use cases
+
+### 2. Optional Network Traffic Restrictions (TODO)
+
+Currently, network access is fully unrestricted (`(allow network*)` in Seatbelt profile). This allows potential data exfiltration via network.
+
+**Future work:**
+
+- Add optional `--restrict-network` flag that limits network access
+- Must be coarse-grained (e.g., block all, allow localhost only, allow HTTP/HTTPS only)
+- **Site-by-site allowlisting is security theater** - an attacker can use any allowed site as a proxy
+- Real security requires either: (a) no network access, (b) proxy with content inspection, or (c) full outbound block with explicit exceptions
+- Careful thought needed: many tools (package managers, git, language servers) need network access to function
+- Consider separate profiles: "development" (network allowed) vs "offline" (network blocked)
+
+### 3. Temp Directory Write Restrictions (TODO)
+
+Currently `/tmp` and `/private/var/folders` are writable to support temp files from shells and tools. This creates a data persistence/exfiltration vector.
+
+**Partial solution implemented:**
+
+- `--no-temp-files` flag blocks writes to temp directories for higher security environments
+- This breaks tools that use temp files (many do), so it's opt-in only
+
+**Future investigation:**
+
+- Can we isolate temp to per-session directories?
+- Can we use a tmpfs overlay that's cleaned on session end?
+- Trade-off: Many legitimate tools need temp file access

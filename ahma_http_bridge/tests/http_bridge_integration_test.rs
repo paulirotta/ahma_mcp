@@ -52,8 +52,8 @@ fn get_ahma_mcp_binary() -> PathBuf {
 /// Start the HTTP bridge server and return the process and URL
 async fn start_http_bridge(
     port: u16,
-    tools_dir: &PathBuf,
-    sandbox_scope: &PathBuf,
+    tools_dir: &std::path::Path,
+    sandbox_scope: &std::path::Path,
 ) -> std::process::Child {
     let binary = get_ahma_mcp_binary();
 
@@ -81,11 +81,16 @@ async fn start_http_bridge(
     for _ in 0..30 {
         sleep(Duration::from_millis(200)).await;
         if let Ok(resp) = client.get(&health_url).send().await
-            && resp.status().is_success() {
-                return child;
-            }
+            && resp.status().is_success()
+        {
+            return child;
+        }
     }
 
+    // Kill and wait for the child to prevent zombie process
+    let mut child = child;
+    let _ = child.kill();
+    let _ = child.wait();
     panic!("HTTP bridge failed to start within timeout");
 }
 

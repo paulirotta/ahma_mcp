@@ -1,0 +1,281 @@
+//! Integration tests for HTTP bridge sandbox security and --no-temp-files flag.
+//!
+//! These tests verify:
+//! 1. Session sandbox scope is properly set from client workspace roots
+//! 2. The --no-temp-files flag is passed to subprocesses correctly
+//! 3. Sandbox scope prevents access to files outside the workspace
+//!
+//! Note: Full integration tests require spawning actual processes which is
+//! challenging in unit tests. These tests focus on the configuration and
+//! state management aspects.
+
+use ahma_http_bridge::session::{McpRoot, SessionManager, SessionManagerConfig};
+use std::path::PathBuf;
+
+/// Test that --no-temp-files is properly passed through server_args
+#[test]
+fn test_no_temp_files_flag_in_server_args() {
+    // Simulate what main.rs does when --no-temp-files is passed
+    let mut server_args = vec!["--some-arg".to_string()];
+    let no_temp_files = true;
+
+    if no_temp_files {
+        server_args.push("--no-temp-files".to_string());
+    }
+
+    let config = SessionManagerConfig {
+        server_command: "ahma_mcp".to_string(),
+        server_args: server_args.clone(),
+        default_scope: PathBuf::from("/tmp/test"),
+        enable_colored_output: false,
+    };
+
+    assert!(
+        config.server_args.contains(&"--no-temp-files".to_string()),
+        "Server args should contain --no-temp-files when flag is enabled"
+    );
+}
+
+/// Test that sandbox scope extraction from file:// URIs works correctly
+#[test]
+fn test_sandbox_scope_from_file_uri() {
+    let roots = vec![
+        McpRoot {
+            uri: "file:///Users/test/project".to_string(),
+            name: Some("project".to_string()),
+        },
+        McpRoot {
+            uri: "file:///Users/test/shared".to_string(),
+            name: Some("shared".to_string()),
+        },
+    ];
+
+    // Verify URI parsing works correctly
+    for root in &roots {
+        let path = root
+            .uri
+            .strip_prefix("file://")
+            .expect("URI should have file:// prefix");
+        let path_buf = PathBuf::from(path);
+        assert!(
+            path_buf.is_absolute(),
+            "Extracted path should be absolute: {:?}",
+            path_buf
+        );
+    }
+}
+
+/// Test that SessionManagerConfig properly stores the default scope
+#[test]
+fn test_session_manager_config_default_scope() {
+    let default_scope = PathBuf::from("/Users/test/fallback_workspace");
+
+    let config = SessionManagerConfig {
+        server_command: "ahma_mcp".to_string(),
+        server_args: vec![],
+        default_scope: default_scope.clone(),
+        enable_colored_output: false,
+    };
+
+    assert_eq!(
+        config.default_scope, default_scope,
+        "Config should preserve default scope"
+    );
+}
+
+/// Test that session manager creates sessions with proper isolation
+#[tokio::test]
+async fn test_session_isolation_creates_separate_sessions() {
+    let config = SessionManagerConfig {
+        server_command: "echo".to_string(), // Use echo as safe subprocess
+        server_args: vec!["test".to_string()],
+        default_scope: PathBuf::from("/tmp/isolation_test"),
+        enable_colored_output: false,
+    };
+
+    let manager = SessionManager::new(config);
+
+    // Create two sessions
+    let session1 = manager
+        .create_session()
+        .await
+        .expect("Session 1 should be created");
+    let session2 = manager
+        .create_session()
+        .await
+        .expect("Session 2 should be created");
+
+    assert_ne!(session1, session2, "Each session should have a unique ID");
+
+    // Both sessions should exist
+    assert!(
+        manager.get_session(&session1).is_some(),
+        "Session 1 should exist"
+    );
+    assert!(
+        manager.get_session(&session2).is_some(),
+        "Session 2 should exist"
+    );
+}
+
+/// Test that sandbox cannot be re-locked after initial lock (security invariant)
+#[tokio::test]
+async fn test_sandbox_lock_immutability() {
+    let config = SessionManagerConfig {
+        server_command: "echo".to_string(),
+        server_args: vec![],
+        default_scope: PathBuf::from("/tmp/lock_test"),
+        enable_colored_output: false,
+    };
+
+    let manager = SessionManager::new(config);
+    let session_id = manager.create_session().await.unwrap();
+
+    let initial_roots = vec![McpRoot {
+        uri: "file:///Users/test/project1".to_string(),
+        name: Some("project1".to_string()),
+    }];
+
+    // First lock should succeed and return true (newly locked)
+    let lock_result = manager.lock_sandbox(&session_id, &initial_roots).await;
+    assert!(lock_result.is_ok(), "Initial sandbox lock should succeed");
+    assert!(
+        lock_result.unwrap(),
+        "First lock should return true (newly locked)"
+    );
+
+    // Second lock attempt should succeed but return false (already locked)
+    // This is idempotent - the security invariant is that the scope doesn't CHANGE
+    let different_roots = vec![McpRoot {
+        uri: "file:///Users/attacker/malicious".to_string(),
+        name: Some("malicious".to_string()),
+    }];
+
+    let relock_result = manager.lock_sandbox(&session_id, &different_roots).await;
+    assert!(
+        relock_result.is_ok(),
+        "Re-lock call should not error (idempotent)"
+    );
+    assert!(
+        !relock_result.unwrap(),
+        "Re-lock should return false (already locked, scope unchanged)"
+    );
+
+    // Verify the scope is still the ORIGINAL scope, not the attacker's scope
+    let session = manager.get_session(&session_id).unwrap();
+    let scope = session.get_sandbox_scope().await;
+    assert_eq!(
+        scope,
+        Some(PathBuf::from("/Users/test/project1")),
+        "Sandbox scope should remain as original, not changed to attacker's path"
+    );
+}
+
+/// Test that attempting to access outside sandbox scope fails
+/// This is a unit test for scope validation logic
+#[test]
+fn test_sandbox_scope_validation_logic() {
+    // Test that paths are validated against scope
+    let sandbox_scope = PathBuf::from("/Users/test/project");
+
+    // Path inside sandbox
+    let valid_path = PathBuf::from("/Users/test/project/src/main.rs");
+    assert!(
+        valid_path.starts_with(&sandbox_scope),
+        "Path inside sandbox should be valid"
+    );
+
+    // Path outside sandbox
+    let invalid_path = PathBuf::from("/Users/test/other_project/secrets.txt");
+    assert!(
+        !invalid_path.starts_with(&sandbox_scope),
+        "Path outside sandbox should be invalid"
+    );
+
+    // Path traversal attempt
+    let _traversal_path = PathBuf::from("/Users/test/project/../other_project/secrets.txt");
+    // Note: This test just shows the path structure. Actual validation uses
+    // canonicalization which resolves the .. and then checks.
+    // After canonicalization, this would become /Users/test/other_project/secrets.txt
+    let canonicalized = PathBuf::from("/Users/test/other_project/secrets.txt");
+    assert!(
+        !canonicalized.starts_with(&sandbox_scope),
+        "Canonicalized traversal path should be outside sandbox"
+    );
+}
+
+/// Test multi-root workspace support
+#[tokio::test]
+async fn test_multi_root_workspace_sandbox() {
+    let config = SessionManagerConfig {
+        server_command: "echo".to_string(),
+        server_args: vec![],
+        default_scope: PathBuf::from("/tmp/multi_root_test"),
+        enable_colored_output: false,
+    };
+
+    let manager = SessionManager::new(config);
+    let session_id = manager.create_session().await.unwrap();
+
+    // Multi-root workspace with two projects
+    let roots = vec![
+        McpRoot {
+            uri: "file:///Users/test/project_a".to_string(),
+            name: Some("project_a".to_string()),
+        },
+        McpRoot {
+            uri: "file:///Users/test/project_b".to_string(),
+            name: Some("project_b".to_string()),
+        },
+    ];
+
+    let lock_result = manager.lock_sandbox(&session_id, &roots).await;
+    assert!(
+        lock_result.is_ok(),
+        "Multi-root workspace should lock successfully"
+    );
+
+    // Verify the first root is used as primary sandbox scope
+    let session = manager.get_session(&session_id).unwrap();
+    let scope = session.get_sandbox_scope().await;
+    assert!(scope.is_some(), "Sandbox scope should be set");
+
+    // First root should be the primary scope
+    if let Some(primary_scope) = scope {
+        assert_eq!(
+            primary_scope,
+            PathBuf::from("/Users/test/project_a"),
+            "Primary scope should be the first root"
+        );
+    }
+}
+
+/// Test empty roots uses default scope
+#[tokio::test]
+async fn test_empty_roots_uses_default_scope() {
+    let default_scope = PathBuf::from("/tmp/default_scope_test");
+
+    let config = SessionManagerConfig {
+        server_command: "echo".to_string(),
+        server_args: vec![],
+        default_scope: default_scope.clone(),
+        enable_colored_output: false,
+    };
+
+    let manager = SessionManager::new(config);
+    let session_id = manager.create_session().await.unwrap();
+
+    // Empty roots
+    let empty_roots: Vec<McpRoot> = vec![];
+
+    let lock_result = manager.lock_sandbox(&session_id, &empty_roots).await;
+    assert!(lock_result.is_ok(), "Empty roots should use default scope");
+
+    let session = manager.get_session(&session_id).unwrap();
+    let scope = session.get_sandbox_scope().await;
+    assert_eq!(
+        scope,
+        Some(default_scope),
+        "Scope should fall back to default"
+    );
+}

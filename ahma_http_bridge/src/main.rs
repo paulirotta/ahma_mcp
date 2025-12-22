@@ -44,6 +44,12 @@ struct Args {
     /// Enable colored terminal output for subprocess I/O (debug mode).
     #[arg(long)]
     colored_output: bool,
+
+    /// Block writes to temp directories (/tmp, /var/folders) for higher security.
+    /// This prevents data exfiltration via temp files but breaks tools that require temp access.
+    /// When enabled, passes --no-temp-files to all spawned MCP subprocesses.
+    #[arg(long)]
+    no_temp_files: bool,
 }
 
 #[tokio::main]
@@ -75,10 +81,17 @@ async fn main() -> anyhow::Result<()> {
     // Determine session isolation mode
     let session_isolation = !args.no_session_isolation;
 
+    // Build server args, adding --no-temp-files if enabled
+    let mut server_args = args.server_args;
+    if args.no_temp_files {
+        server_args.push("--no-temp-files".to_string());
+        tracing::info!("🔒 High-security mode: temp file writes will be blocked in subprocesses");
+    }
+
     let config = BridgeConfig {
         bind_addr: args.bind_addr,
         server_command,
-        server_args: args.server_args,
+        server_args,
         enable_colored_output,
         session_isolation,
         default_sandbox_scope: args.default_sandbox_scope,
