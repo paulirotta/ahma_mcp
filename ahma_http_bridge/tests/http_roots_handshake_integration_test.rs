@@ -141,7 +141,8 @@ async fn http_roots_handshake_then_tool_call_defaults_to_root() {
         None => {
             eprintln!(
                 "⚠️  Server at {} did not return mcp-session-id (session isolation likely disabled); skipping test. Response: {}",
-                get_sse_url(), body
+                get_sse_url(),
+                body
             );
             return;
         }
