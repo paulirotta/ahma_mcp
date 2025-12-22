@@ -206,7 +206,8 @@ ahma_mcp --mode http
 ahma_mcp --mode http --http-port 8080 --http-host 127.0.0.1
 ```
 
-**Important**: The sandbox scope is set once when the HTTP server starts and applies to all connections. For per-project isolation, run separate server instances.
+**Important**: In HTTP mode, sandbox scope is bound **per client session** via the MCP `roots/list` protocol.
+`--sandbox-scope` (or `AHMA_SANDBOX_SCOPE`) is used only as a fallback if the client provides no roots.
 
 **Security Note**: HTTP mode is for local development only. Do not expose to untrusted networks.
 

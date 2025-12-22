@@ -17,7 +17,7 @@ AHMA MCP is designed around **async-first, non-blocking workflows** that enable 
 
 The execution mode (sync vs async) follows a clear inheritance hierarchy:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                    EXECUTION MODE RESOLUTION                     │
 ├─────────────────────────────────────────────────────────────────┤
@@ -502,9 +502,10 @@ cargo audit &
 
 ### Sandbox Scope in HTTP Mode
 
-When running AHMA MCP in HTTP mode, the sandbox scope determines which directory the AI can access. The sandbox is set **once at startup** and cannot be changed during the session.
+When running AHMA MCP in HTTP mode, the sandbox scope is bound **per client session** via the MCP `roots/list` protocol.
+Each IDE connection (session) gets its own subprocess and its own immutable sandbox scope.
 
-#### Configuration Priority
+#### Default Scope Priority (fallback only)
 
 1. **Command-line argument** (highest priority): `--sandbox-scope /path/to/project`
 2. **Environment variable**: `AHMA_SANDBOX_SCOPE=/path/to/project`
@@ -544,32 +545,22 @@ ahma_mcp --mode http
 
 #### Multi-Project Development
 
-For working on multiple projects simultaneously, run separate HTTP server instances:
-
-```bash
-# Terminal 1: Project A on port 3001
-ahma_mcp --mode http --http-port 3001 --sandbox-scope /path/to/project-a
-
-# Terminal 2: Project B on port 3002
-ahma_mcp --mode http --http-port 3002 --sandbox-scope /path/to/project-b
-```
-
-Then configure your MCP client to connect to the appropriate port for each project.
+Multi-project usage is supported via per-session isolation: a single HTTP server can safely serve multiple IDE workspaces at once.
 
 #### Security Considerations
 
 - **Local development only**: HTTP mode is designed for local development. Do not expose the HTTP server to untrusted networks.
-- **Immutable sandbox**: Once set, the sandbox scope cannot be changed during the session. This prevents the AI from escaping the sandbox.
-- **Single sandbox per server**: All clients connecting to one HTTP server share the same sandbox scope.
+- **Immutable sandbox**: Once set for a session, the sandbox scope cannot be changed. This prevents the AI from escaping the sandbox.
+- **Per-session isolation**: Each client session gets its own subprocess and sandbox scope derived from `roots/list`.
 
 ### STDIO Mode vs HTTP Mode
 
-| Feature               | STDIO Mode                           | HTTP Mode                     |
-| --------------------- | ------------------------------------ | ----------------------------- |
-| Sandbox scope         | Set by IDE via `cwd` in mcp.json     | Set at server startup         |
-| Per-project isolation | Automatic (IDE spawns per workspace) | Manual (run separate servers) |
-| Configuration         | `mcp.json` in IDE                    | CLI args or env vars          |
-| Use case              | Standard IDE integration             | Debugging, advanced setups    |
+| Feature               | STDIO Mode                           | HTTP Mode                       |
+| --------------------- | ------------------------------------ | ------------------------------- |
+| Sandbox scope         | Set by IDE via `cwd` in mcp.json     | Set per session via `roots/list`|
+| Per-project isolation | Automatic (IDE spawns per workspace) | Automatic (per session).        |
+| Configuration         | `mcp.json` in IDE                    | CLI args or env vars            |
+| Use case              | Standard IDE integration             | Debugging, advanced setups      |
 
 For most users, **STDIO mode is recommended** because the IDE automatically handles sandbox configuration via the `cwd` setting in `mcp.json`.
 

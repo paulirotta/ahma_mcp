@@ -8,10 +8,10 @@
 //!
 //! ## Session Isolation Mode (R8D)
 //!
-//! When session isolation is enabled (`--session-isolation`), each client gets
-//! a separate subprocess with its own sandbox scope derived from the client's
-//! workspace roots. This allows multiple IDE instances (VS Code, Cursor, etc.)
-//! to share a single HTTP server while maintaining security isolation.
+//! Session isolation is always enabled: each client gets a separate subprocess
+//! with its own sandbox scope derived from the client's workspace roots.
+//! This allows multiple IDE instances (VS Code, Cursor, etc.) to share a single
+//! HTTP server while maintaining security isolation.
 //!
 //! ## Example
 //!
@@ -26,7 +26,6 @@
 //!         server_command: "ahma_mcp".to_string(),
 //!         server_args: vec!["--tools-dir".to_string(), "./tools".to_string()],
 //!         enable_colored_output: false,
-//!         session_isolation: false,
 //!         default_sandbox_scope: PathBuf::from("."),
 //!     };
 //!     

@@ -118,12 +118,6 @@ struct Cli {
     #[arg(long, default_value = "127.0.0.1")]
     http_host: String,
 
-    /// Enable session isolation mode for HTTP bridge.
-    /// Each client gets a separate subprocess with its own sandbox scope
-    /// derived from the client's workspace roots.
-    #[arg(long)]
-    session_isolation: bool,
-
     /// Path to the directory containing tool JSON configuration files.
     #[arg(long, global = true, default_value = ".ahma/tools")]
     tools_dir: PathBuf,
@@ -639,9 +633,7 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         .context("Invalid HTTP host/port")?;
 
     tracing::info!("Starting HTTP bridge on {}", bind_addr);
-    if cli.session_isolation {
-        tracing::info!("Session isolation mode ENABLED - each client gets a separate subprocess");
-    }
+    tracing::info!("Session isolation: ENABLED (always-on)");
 
     // Build the command to run the stdio MCP server
     let server_command = env::current_exe()
@@ -659,8 +651,9 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
                 .unwrap_or_else(|_| ".".to_string())
         });
 
-    // In session isolation mode, we don't pass --sandbox-scope to subprocess args
-    // because each session will have its own scope derived from roots/list
+    // Session isolation is always enabled in HTTP mode.
+    // We do NOT pass --sandbox-scope to subprocess args because each session
+    // derives its sandbox scope from roots/list.
     let mut server_args = vec![
         "--mode".to_string(),
         "stdio".to_string(),
@@ -671,12 +664,6 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         "--timeout".to_string(),
         cli.timeout.to_string(),
     ];
-
-    // Only add sandbox-scope for non-session-isolation mode
-    if !cli.session_isolation {
-        server_args.push("--sandbox-scope".to_string());
-        server_args.push(sandbox_scope.clone());
-    }
 
     if cli.debug {
         server_args.push("--debug".to_string());
@@ -693,12 +680,10 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         "HTTP bridge mode - colored terminal output enabled (v{})",
         env!("CARGO_PKG_VERSION")
     );
-    if !cli.session_isolation {
-        tracing::info!(
-            "HTTP subprocess sandbox scope: {:?}",
-            sandbox::get_sandbox_scopes()
-        );
-    }
+    tracing::info!(
+        "HTTP default sandbox scope (used only if client provides no roots): {:?}",
+        sandbox::get_sandbox_scopes()
+    );
 
     // Get first sandbox scope for default (backwards compatibility)
     let default_scope = sandbox::get_sandbox_scope()
@@ -710,7 +695,6 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         server_command,
         server_args,
         enable_colored_output,
-        session_isolation: cli.session_isolation,
         default_sandbox_scope: default_scope,
     };
 

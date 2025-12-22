@@ -246,7 +246,11 @@ pub mod test_client {
             let binary_path = get_binary_path();
             ().serve(TokioChildProcess::new(
                 Command::new(&binary_path).configure(|cmd| {
-                    cmd.env("AHMA_TEST_MODE", "1").current_dir(&workspace_dir);
+                    cmd.env("AHMA_TEST_MODE", "1")
+                        // Keep tests deterministic even if the developer/CI environment sets these.
+                        .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
+                        .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
+                        .current_dir(&workspace_dir);
                     if let Some(dir) = tools_dir {
                         let tools_path = if Path::new(dir).is_absolute() {
                             Path::new(dir).to_path_buf()
@@ -269,6 +273,9 @@ pub mod test_client {
             ().serve(TokioChildProcess::new(Command::new("cargo").configure(
                 |cmd| {
                     cmd.env("AHMA_TEST_MODE", "1")
+                        // Keep tests deterministic even if the developer/CI environment sets these.
+                        .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
+                        .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
                         .current_dir(&workspace_dir)
                         .arg("run")
                         .arg("--package")
@@ -308,7 +315,11 @@ pub mod test_client {
             let binary_path = get_binary_path();
             ().serve(TokioChildProcess::new(
                 Command::new(&binary_path).configure(|cmd| {
-                    cmd.env("AHMA_TEST_MODE", "1").current_dir(working_dir);
+                    cmd.env("AHMA_TEST_MODE", "1")
+                        // Keep tests deterministic even if the developer/CI environment sets these.
+                        .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
+                        .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
+                        .current_dir(working_dir);
                     if let Some(dir) = tools_dir {
                         let tools_path = if Path::new(dir).is_absolute() {
                             Path::new(dir).to_path_buf()
@@ -331,6 +342,9 @@ pub mod test_client {
             ().serve(TokioChildProcess::new(Command::new("cargo").configure(
                 |cmd| {
                     cmd.env("AHMA_TEST_MODE", "1")
+                        // Keep tests deterministic even if the developer/CI environment sets these.
+                        .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
+                        .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
                         .current_dir(working_dir)
                         .arg("run")
                         .arg("--manifest-path")
@@ -340,6 +354,86 @@ pub mod test_client {
                         .arg("--bin")
                         .arg("ahma_mcp")
                         .arg("--");
+                    if let Some(dir) = tools_dir {
+                        let tools_path = if Path::new(dir).is_absolute() {
+                            Path::new(dir).to_path_buf()
+                        } else {
+                            working_dir.join(dir)
+                        };
+                        cmd.arg("--tools-dir").arg(tools_path);
+                    }
+                    for arg in extra_args {
+                        cmd.arg(arg);
+                    }
+                },
+            ))?)
+            .await?
+        };
+
+        Ok(client)
+    }
+
+    #[allow(dead_code)]
+    pub async fn new_client_in_dir_with_env(
+        tools_dir: Option<&str>,
+        extra_args: &[&str],
+        working_dir: &Path,
+        extra_env: &[(&str, &str)],
+    ) -> Result<RunningService<RoleClient, ()>> {
+        let workspace_dir = get_workspace_dir();
+
+        let client = if use_prebuilt_binary() {
+            let binary_path = get_binary_path();
+            ().serve(TokioChildProcess::new(
+                Command::new(&binary_path).configure(|cmd| {
+                    cmd.env("AHMA_TEST_MODE", "1")
+                        // Keep tests deterministic even if the developer/CI environment sets these.
+                        .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
+                        .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
+                        .current_dir(working_dir);
+
+                    for (k, v) in extra_env {
+                        cmd.env(k, v);
+                    }
+
+                    if let Some(dir) = tools_dir {
+                        let tools_path = if Path::new(dir).is_absolute() {
+                            Path::new(dir).to_path_buf()
+                        } else {
+                            working_dir.join(dir)
+                        };
+                        cmd.arg("--tools-dir").arg(tools_path);
+                    }
+                    for arg in extra_args {
+                        cmd.arg(arg);
+                    }
+                }),
+            )?)
+            .await?
+        } else {
+            eprintln!(
+                "Warning: Using slow 'cargo run' path. Run 'cargo build' first for faster tests."
+            );
+            ().serve(TokioChildProcess::new(Command::new("cargo").configure(
+                |cmd| {
+                    cmd.env("AHMA_TEST_MODE", "1")
+                        // Keep tests deterministic even if the developer/CI environment sets these.
+                        .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
+                        .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
+                        .current_dir(working_dir)
+                        .arg("run")
+                        .arg("--manifest-path")
+                        .arg(workspace_dir.join("Cargo.toml"))
+                        .arg("--package")
+                        .arg("ahma_core")
+                        .arg("--bin")
+                        .arg("ahma_mcp")
+                        .arg("--");
+
+                    for (k, v) in extra_env {
+                        cmd.env(k, v);
+                    }
+
                     if let Some(dir) = tools_dir {
                         let tools_path = if Path::new(dir).is_absolute() {
                             Path::new(dir).to_path_buf()

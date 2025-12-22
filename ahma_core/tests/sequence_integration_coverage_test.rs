@@ -8,7 +8,7 @@
 //!
 //! These tests spawn the actual ahma_mcp binary and use real tool configs.
 
-use ahma_core::test_utils::test_client::new_client_in_dir;
+use ahma_core::test_utils::test_client::{new_client_in_dir, new_client_in_dir_with_env};
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParam;
@@ -328,12 +328,13 @@ async fn test_skip_sequence_step_via_env() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_sequence_tool_config().await?;
 
-    // Set environment variable to skip the "echo" tool in sequences
-    unsafe {
-        std::env::set_var("AHMA_SKIP_SEQUENCE_TOOLS", "echo");
-    }
-
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir_with_env(
+        Some(".ahma/tools"),
+        &[],
+        temp_dir.path(),
+        &[("AHMA_SKIP_SEQUENCE_TOOLS", "echo")],
+    )
+    .await?;
 
     let tools = client.list_all_tools().await?;
     let has_sync_seq = tools.iter().any(|t| t.name.as_ref() == "sync_sequence");
@@ -362,11 +363,6 @@ async fn test_skip_sequence_step_via_env() -> Result<()> {
         let _ = found_skipped; // Use the variable
     }
 
-    // Clean up env var
-    unsafe {
-        std::env::remove_var("AHMA_SKIP_SEQUENCE_TOOLS");
-    }
-
     client.cancel().await?;
     Ok(())
 }
@@ -377,12 +373,13 @@ async fn test_skip_subcommand_sequence_step_via_env() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_sequence_tool_config().await?;
 
-    // Set environment variable to skip the "default" subcommand in sequences
-    unsafe {
-        std::env::set_var("AHMA_SKIP_SEQUENCE_SUBCOMMANDS", "default");
-    }
-
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir_with_env(
+        Some(".ahma/tools"),
+        &[],
+        temp_dir.path(),
+        &[("AHMA_SKIP_SEQUENCE_SUBCOMMANDS", "default")],
+    )
+    .await?;
 
     let tools = client.list_all_tools().await?;
     let has_multi_step = tools
@@ -404,11 +401,6 @@ async fn test_skip_subcommand_sequence_step_via_env() -> Result<()> {
 
         // Just ensure it doesn't error out
         assert!(!result.content.is_empty());
-    }
-
-    // Clean up env var
-    unsafe {
-        std::env::remove_var("AHMA_SKIP_SEQUENCE_SUBCOMMANDS");
     }
 
     client.cancel().await?;

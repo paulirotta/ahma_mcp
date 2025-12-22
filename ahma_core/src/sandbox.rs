@@ -746,6 +746,15 @@ pub fn create_sandboxed_command(
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
+
+        // Cargo can be configured (via config or env) to write its target dir outside
+        // the session sandbox. Force it back inside the working directory.
+        if std::path::Path::new(program)
+            .file_name()
+            .is_some_and(|n| n == "cargo")
+        {
+            cmd.env("CARGO_TARGET_DIR", working_dir.join("target"));
+        }
         Ok(cmd)
     }
 
@@ -764,6 +773,15 @@ pub fn create_sandboxed_command(
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
+
+        // Cargo can be configured (via config or env) to write its target dir outside
+        // the session sandbox. Force it back inside the working directory.
+        if std::path::Path::new(program)
+            .file_name()
+            .is_some_and(|n| n == "cargo")
+        {
+            cmd.env("CARGO_TARGET_DIR", working_dir.join("target"));
+        }
         Ok(cmd)
     }
 

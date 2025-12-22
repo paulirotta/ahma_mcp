@@ -12,6 +12,7 @@
 //! They use dynamic port allocation to avoid conflicts with other tests.
 //! The shared test server singleton (port 5721) is NOT used here.
 
+use futures::StreamExt;
 use reqwest::Client;
 use serde_json::{Value, json};
 use std::net::TcpListener;
@@ -61,6 +62,14 @@ async fn start_http_bridge(
 ) -> std::process::Child {
     let binary = get_ahma_mcp_binary();
 
+    // Ensure guidance file exists: the ahma_mcp default is `.ahma/tool_guidance.json`
+    // relative to the current working directory, which is not stable in tests.
+    let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("Failed to get workspace dir")
+        .to_path_buf();
+    let guidance_file = workspace_dir.join(".ahma").join("tool_guidance.json");
+
     let child = Command::new(&binary)
         .args([
             "--mode",
@@ -69,10 +78,25 @@ async fn start_http_bridge(
             &port.to_string(),
             "--tools-dir",
             &tools_dir.to_string_lossy(),
+            "--guidance-file",
+            &guidance_file.to_string_lossy(),
             "--sandbox-scope",
             &sandbox_scope.to_string_lossy(),
+            "--log-to-stderr",
         ])
-        .env("AHMA_TEST_MODE", "1")
+        // IMPORTANT:
+        // These integration tests are explicitly verifying real sandbox-scope behavior.
+        // ahma_mcp auto-enables a permissive "test mode" (sandbox bypass + best-effort scope "/")
+        // when certain env vars are present (e.g. NEXTEST, CARGO_TARGET_DIR, RUST_TEST_THREADS).
+        // That makes tests pass even when real-life behavior fails.
+        //
+        // So we *clear* those env vars for the spawned server process to ensure it behaves
+        // like a real user-launched server.
+        .env_remove("AHMA_TEST_MODE")
+        .env_remove("NEXTEST")
+        .env_remove("NEXTEST_EXECUTION_MODE")
+        .env_remove("CARGO_TARGET_DIR")
+        .env_remove("RUST_TEST_THREADS")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -121,7 +145,7 @@ async fn send_mcp_request(
         .json(request)
         .send()
         .await
-        .map_err(|e| format!("Request failed: {}", e))?;
+        .map_err(|e| format!("Request failed: {:?}", e))?;
 
     // Debug: print all headers
     eprintln!(
@@ -161,31 +185,147 @@ async fn send_mcp_request(
     Ok((body, new_session_id))
 }
 
-/// Test: Calling a tool from a DIFFERENT working directory than the sandbox scope
+/// Wait for a `roots/list` request over SSE and respond with the provided roots.
+async fn answer_roots_list_over_sse(
+    client: &Client,
+    base_url: &str,
+    session_id: &str,
+    roots: &[PathBuf],
+) {
+    let url = format!("{}/mcp", base_url);
+    let resp = client
+        .get(&url)
+        .header("Accept", "text/event-stream")
+        .header("Cache-Control", "no-cache")
+        .header("Mcp-Session-Id", session_id)
+        .send()
+        .await
+        .expect("Failed to open SSE stream");
+
+    assert!(
+        resp.status().is_success(),
+        "SSE stream must be available, got HTTP {}",
+        resp.status()
+    );
+
+    let mut stream = resp.bytes_stream();
+    let mut buffer = String::new();
+
+    // Hard timeout: if session isolation is broken, we may never see roots/list.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+
+    loop {
+        if tokio::time::Instant::now() > deadline {
+            panic!("Timed out waiting for roots/list over SSE (session isolation likely broken)");
+        }
+
+        let chunk = tokio::time::timeout(Duration::from_millis(500), stream.next())
+            .await
+            .ok()
+            .flatten();
+
+        if let Some(next) = chunk {
+            let bytes = next.expect("SSE stream read failed");
+            let text = String::from_utf8_lossy(&bytes);
+            buffer.push_str(&text);
+
+            // SSE events are separated by a blank line.
+            while let Some(idx) = buffer.find("\n\n") {
+                let raw_event = buffer[..idx].to_string();
+                buffer = buffer[idx + 2..].to_string();
+
+                let mut data_lines: Vec<&str> = Vec::new();
+                for line in raw_event.lines() {
+                    let line = line.trim_end_matches('\r');
+                    if let Some(rest) = line.strip_prefix("data:") {
+                        data_lines.push(rest.trim());
+                    }
+                }
+
+                if data_lines.is_empty() {
+                    continue;
+                }
+
+                let data = data_lines.join("\n");
+                let Ok(value) = serde_json::from_str::<Value>(&data) else {
+                    continue;
+                };
+
+                let method = value.get("method").and_then(|m| m.as_str());
+                if method != Some("roots/list") {
+                    continue;
+                }
+
+                let id = value
+                    .get("id")
+                    .cloned()
+                    .expect("roots/list must include id");
+
+                let roots_json: Vec<Value> = roots
+                    .iter()
+                    .map(|p| {
+                        json!({
+                            "uri": format!("file://{}", p.display()),
+                            "name": p.file_name().and_then(|n| n.to_str()).unwrap_or("root")
+                        })
+                    })
+                    .collect();
+
+                let response = json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {
+                        "roots": roots_json
+                    }
+                });
+
+                let _ = send_mcp_request(client, base_url, &response, Some(session_id))
+                    .await
+                    .expect("Failed to send roots/list response");
+                return;
+            }
+        }
+    }
+}
+
+/// REGRESSION TEST (DO NOT WEAKEN): Cross-repo working_directory must succeed.
 ///
-/// This reproduces the bug where:
-/// 1. HTTP server starts with sandbox_scope = /path/to/ahma_mcp  
-/// 2. Client sends tools/call with working_directory = /path/to/different_project
-/// 3. Server should handle this properly (either allowing cross-project calls via
-///    the HTTP bridge's session isolation, or returning a proper sandbox error)
+/// Real-world failure this guards against:
+/// - Start the HTTP server from repo A (e.g. `ahma_mcp` checkout).
+/// - Connect from VS Code opened on repo B.
+/// - VS Code sends `tools/call` with `working_directory` in repo B.
+/// - If the server is incorrectly scoped to repo A, it fails with:
+///   "Path '...' is outside the sandbox root '...'".
 ///
-/// The BUG was: Server returns "expect initialized request" because the MCP
-/// subprocess never received an initialize request.
+/// The correct behavior is **per-session sandbox isolation**:
+/// the sandbox scope must be derived from the client's `roots/list` response,
+/// so repo B is allowed for that session even if the server was started elsewhere.
+///
+/// WARNING TO FUTURE AI/MAINTAINERS:
+/// - Do NOT change this test to accept either success OR sandbox failure.
+/// - Do NOT enable AHMA_TEST_MODE for this test.
+/// - Fix scoping/session isolation if this fails.
 #[tokio::test]
 async fn test_tool_call_with_different_working_directory() {
-    // Create temp directories for tools and sandbox scope
-    let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let tools_dir = temp_dir.path().join("tools");
+    // Create temp directories:
+    // - server_scope: where the HTTP server is started (repo A)
+    // - client_scope: simulated VS Code workspace root (repo B)
+    let server_scope_dir = TempDir::new().expect("Failed to create temp dir (server_scope)");
+    let client_scope_dir = TempDir::new().expect("Failed to create temp dir (client_scope)");
+
+    let tools_dir = server_scope_dir.path().join("tools");
     std::fs::create_dir_all(&tools_dir).expect("Failed to create tools dir");
 
-    // Create a simple echo tool config
+    // Create a simple tool config that proves working_directory is honored.
+    // We use `pwd` so we can assert the output contains the requested working directory.
     let tool_config = json!({
-        "name": "echo",
-        "description": "Echo test tool",
-        "command": "echo",
-        "subcommands": [{
+        "name": "pwd",
+        "description": "Print current working directory",
+        "command": "pwd",
+        "enabled": true,
+        "subcommand": [{
             "name": "default",
-            "description": "Echo a message"
+            "description": "Print working directory"
         }]
     });
     std::fs::write(
@@ -194,12 +334,11 @@ async fn test_tool_call_with_different_working_directory() {
     )
     .expect("Failed to write tool config");
 
-    // Sandbox scope is the temp directory
-    let sandbox_scope = temp_dir.path().to_path_buf();
+    // Server sandbox scope (what used to incorrectly apply to all clients)
+    let sandbox_scope = server_scope_dir.path().to_path_buf();
 
-    // A "different project" directory (still needs to exist for the test)
-    let different_project = TempDir::new().expect("Failed to create different project dir");
-    let different_project_path = different_project.path().to_path_buf();
+    // Client workspace scope (what must apply to THIS session after roots/list)
+    let different_project_path = client_scope_dir.path().to_path_buf();
 
     let port = find_available_port();
     let mut server = start_http_bridge(port, &tools_dir, &sandbox_scope).await;
@@ -233,9 +372,7 @@ async fn test_tool_call_with_different_working_directory() {
     // Session IDs should not be logged verbatim (CodeQL).
     eprintln!("Session ID from header: <redacted>");
 
-    // In single-process mode (no --session-isolation), there's no session ID
-    // Just verify initialize succeeded
-    let session_id_for_requests = session_id;
+    let session_id = session_id.expect("Session isolation must return mcp-session-id header");
 
     // Verify initialize response
     assert!(
@@ -250,56 +387,226 @@ async fn test_tool_call_with_different_working_directory() {
         "method": "notifications/initialized"
     });
 
+    // Open SSE and answer roots/list with the client workspace root.
+    // This is what binds the per-session sandbox scope.
+    let sse_client = client.clone();
+    let sse_base_url = base_url.clone();
+    let sse_session_id = session_id.clone();
+    let sse_root = different_project_path.clone();
+    let sse_task = tokio::spawn(async move {
+        answer_roots_list_over_sse(&sse_client, &sse_base_url, &sse_session_id, &[sse_root]).await;
+    });
+
     let _ = send_mcp_request(
         &client,
         &base_url,
         &initialized_notification,
-        session_id_for_requests.as_deref(),
+        Some(&session_id),
     )
     .await;
     // Notifications don't return responses, that's OK
 
-    // Step 3: Call a tool with working_directory OUTSIDE the sandbox scope
-    // This is the scenario that was failing with "expect initialized request"
+    // Ensure roots/list was observed and answered.
+    sse_task.await.expect("roots/list SSE task panicked");
+
+    // Step 3: Call a tool with working_directory OUTSIDE the server sandbox scope.
+    // This MUST succeed because the session sandbox scope is derived from client roots.
     let tool_call = json!({
         "jsonrpc": "2.0",
         "id": 2,
         "method": "tools/call",
         "params": {
-            "name": "echo_default",
+            "name": "pwd",
             "arguments": {
+                "subcommand": "default",
+                "execution_mode": "Synchronous",
                 "working_directory": different_project_path.to_string_lossy()
             }
         }
     });
 
-    let (tool_response, _) = send_mcp_request(
-        &client,
-        &base_url,
-        &tool_call,
-        session_id_for_requests.as_deref(),
-    )
-    .await
-    .expect("Tool call should not fail with connection error");
-
-    // The response should either:
-    // - Succeed (if session isolation allows cross-project calls)
-    // - Return a proper JSON-RPC error about sandbox violation
-    // It should NOT return "expect initialized request" error
-
-    let error_message = tool_response
-        .get("error")
-        .and_then(|e| e.get("message"))
-        .and_then(|m| m.as_str())
-        .unwrap_or("");
+    let (tool_response, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
+        .await
+        .expect("Tool call should not fail with connection error");
 
     assert!(
-        !error_message.contains("expect initialized request"),
-        "Should NOT get 'expect initialized request' error. Got: {:?}",
+        tool_response.get("error").is_none(),
+        "Cross-repo tool call must succeed; got error: {:?}",
+        tool_response
+    );
+    assert!(
+        tool_response.get("result").is_some(),
+        "Cross-repo tool call must return result; got: {:?}",
+        tool_response
+    );
+
+    // Prove the working_directory was actually used.
+    let output_text = tool_response
+        .get("result")
+        .and_then(|r| r.get("content"))
+        .and_then(|c| c.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|item| item.get("text"))
+        .and_then(|t| t.as_str())
+        .unwrap_or("");
+    let different_project_str = different_project_path.to_string_lossy();
+    assert!(
+        output_text.contains(different_project_str.as_ref()),
+        "pwd output must include the requested working_directory. Output: {:?}",
         tool_response
     );
 
     // Clean up
+    server.kill().expect("Failed to kill server");
+}
+
+/// REGRESSION TEST (DO NOT WEAKEN): Cargo must not write outside session root.
+///
+/// Failure mode this guards against:
+/// - The workspace can configure Cargo `target-dir` outside the workspace root via `.cargo/config.toml`.
+/// - In HTTP mode, the macOS sandbox must prevent writes outside the per-session sandbox root.
+/// - Without forcing Cargo's target dir back under the tool call's `working_directory`, Cargo can fail
+///   with "Operation not permitted" while trying to create `target/debug/.cargo-lock`.
+///
+/// This test makes `target-dir` point OUTSIDE the client root and asserts `cargo check` still succeeds
+/// and produces `.cargo-lock` under `<working_directory>/target/...`.
+#[tokio::test]
+async fn test_cargo_target_dir_is_scoped_to_working_directory() {
+    // Create temp directories:
+    // - server_scope: where the HTTP server is started (repo A)
+    // - client_scope: simulated VS Code workspace root (repo B)
+    let server_scope_dir = TempDir::new().expect("Failed to create temp dir (server_scope)");
+    let client_scope_dir = TempDir::new().expect("Failed to create temp dir (client_scope)");
+
+    // Minimal tools dir (built-in tools like `cargo` are still available).
+    let tools_dir = server_scope_dir.path().join("tools");
+    std::fs::create_dir_all(&tools_dir).expect("Failed to create tools dir");
+
+    // The server only exposes tools that exist in its tools directory.
+    // Copy the workspace cargo tool config so we can run `cargo check`.
+    let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("Failed to get workspace dir")
+        .to_path_buf();
+    std::fs::copy(
+        workspace_dir.join(".ahma/tools/cargo.json"),
+        tools_dir.join("cargo.json"),
+    )
+    .expect("Failed to copy cargo tool config");
+
+    // Create a minimal Rust project under the client scope.
+    let client_root = client_scope_dir.path();
+    tokio::fs::create_dir_all(client_root.join("src"))
+        .await
+        .expect("Failed to create src dir");
+    tokio::fs::write(
+        client_root.join("Cargo.toml"),
+        r#"[package]
+name = "ahma_http_bridge_cargo_target_dir_test"
+version = "0.1.0"
+edition = "2021"
+"#,
+    )
+    .await
+    .expect("Failed to write Cargo.toml");
+    tokio::fs::write(client_root.join("src/main.rs"), "fn main() {}\n")
+        .await
+        .expect("Failed to write src/main.rs");
+
+    // Force Cargo to use an OUT-OF-SCOPE target directory via config.
+    // Without a safeguard, this causes macOS sandbox-exec to deny writes with EPERM.
+    tokio::fs::create_dir_all(client_root.join(".cargo"))
+        .await
+        .expect("Failed to create .cargo dir");
+    tokio::fs::write(
+        client_root.join(".cargo/config.toml"),
+        r#"[build]
+target-dir = "../OUTSIDE_SESSION_TARGET"
+"#,
+    )
+    .await
+    .expect("Failed to write .cargo/config.toml");
+
+    // Server sandbox scope (what used to incorrectly apply to all clients)
+    let sandbox_scope = server_scope_dir.path().to_path_buf();
+
+    let port = find_available_port();
+    let mut server = start_http_bridge(port, &tools_dir, &sandbox_scope).await;
+    let base_url = format!("http://127.0.0.1:{}", port);
+    let client = Client::new();
+
+    // Step 1: Send initialize request (no session ID - creates new session)
+    let init_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "test-client", "version": "1.0.0"}
+        }
+    });
+    let (init_response, session_id) = send_mcp_request(&client, &base_url, &init_request, None)
+        .await
+        .expect("Initialize should succeed");
+    assert!(
+        init_response.get("result").is_some(),
+        "Initialize should return result, got: {:?}",
+        init_response
+    );
+    let session_id = session_id.expect("Session isolation must return mcp-session-id header");
+
+    // Step 2: Send initialized notification and answer roots/list for the client root.
+    let initialized_notification = json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+    });
+    let sse_client = client.clone();
+    let sse_base_url = base_url.clone();
+    let sse_session_id = session_id.clone();
+    let sse_root = client_root.to_path_buf();
+    let sse_task = tokio::spawn(async move {
+        answer_roots_list_over_sse(&sse_client, &sse_base_url, &sse_session_id, &[sse_root]).await;
+    });
+    let _ = send_mcp_request(
+        &client,
+        &base_url,
+        &initialized_notification,
+        Some(&session_id),
+    )
+    .await;
+    sse_task.await.expect("roots/list SSE task panicked");
+
+    // Step 3: Run `cargo check` in the client root.
+    let tool_call = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "cargo",
+            "arguments": {
+                "subcommand": "check",
+                "working_directory": client_root.to_string_lossy(),
+                "execution_mode": "Synchronous"
+            }
+        }
+    });
+    let (tool_response, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
+        .await
+        .expect("cargo tool call should not fail with connection error");
+    assert!(
+        tool_response.get("error").is_none(),
+        "cargo check must succeed under session sandbox; got: {:?}",
+        tool_response
+    );
+
+    // Prove cargo wrote under the session root by checking for `.cargo-lock`.
+    let lock_path = client_root.join("target/debug/.cargo-lock");
+    assert!(
+        lock_path.exists(),
+        "expected cargo lock at {lock_path:?}; cargo must not write outside session root"
+    );
+
     server.kill().expect("Failed to kill server");
 }
 
@@ -310,14 +617,15 @@ async fn test_basic_tool_call_within_sandbox() {
     let tools_dir = temp_dir.path().join("tools");
     std::fs::create_dir_all(&tools_dir).expect("Failed to create tools dir");
 
-    // Create echo tool config
+    // Create pwd tool config
     let tool_config = json!({
-        "name": "echo",
-        "description": "Echo test tool",
-        "command": "echo",
-        "subcommands": [{
+        "name": "pwd",
+        "description": "Print current working directory",
+        "command": "pwd",
+        "enabled": true,
+        "subcommand": [{
             "name": "default",
-            "description": "Echo a message"
+            "description": "Print working directory"
         }]
     });
     std::fs::write(
@@ -358,21 +666,28 @@ async fn test_basic_tool_call_within_sandbox() {
         init_response
     );
 
-    // In single-process mode, no session ID is returned - that's OK
-    let session_id_for_requests = session_id;
+    let session_id_for_requests = session_id.expect("Session isolation must return mcp-session-id header");
 
     // Send initialized notification
     let initialized = json!({
         "jsonrpc": "2.0",
         "method": "notifications/initialized"
     });
-    let _ = send_mcp_request(
-        &client,
-        &base_url,
-        &initialized,
-        session_id_for_requests.as_deref(),
-    )
-    .await;
+    // Open SSE and answer roots/list with the sandbox scope.
+    // In always-on session isolation, the subprocess runs with --defer-sandbox and
+    // tool execution is blocked until roots/list has been answered.
+    let sse_client = client.clone();
+    let sse_base_url = base_url.clone();
+    let sse_session_id = session_id_for_requests.clone();
+    let sse_root = sandbox_scope.clone();
+    let sse_task = tokio::spawn(async move {
+        answer_roots_list_over_sse(&sse_client, &sse_base_url, &sse_session_id, &[sse_root]).await;
+    });
+
+    let _ = send_mcp_request(&client, &base_url, &initialized, Some(&session_id_for_requests)).await;
+
+    // Ensure roots/list was observed and answered.
+    sse_task.await.expect("roots/list SSE task panicked");
 
     // Call tool WITHIN sandbox scope
     let tool_call = json!({
@@ -380,8 +695,9 @@ async fn test_basic_tool_call_within_sandbox() {
         "id": 2,
         "method": "tools/call",
         "params": {
-            "name": "echo_default",
+            "name": "pwd",
             "arguments": {
+                "subcommand": "default",
                 "working_directory": sandbox_scope.to_string_lossy()
             }
         }
@@ -391,7 +707,7 @@ async fn test_basic_tool_call_within_sandbox() {
         &client,
         &base_url,
         &tool_call,
-        session_id_for_requests.as_deref(),
+        Some(&session_id_for_requests),
     )
     .await
     .expect("Tool call should succeed");
@@ -424,14 +740,15 @@ async fn test_tool_call_without_initialize_returns_proper_error() {
     let tools_dir = temp_dir.path().join("tools");
     std::fs::create_dir_all(&tools_dir).expect("Failed to create tools dir");
 
-    // Create echo tool config
+    // Create pwd tool config
     let tool_config = json!({
-        "name": "echo",
-        "description": "Echo test tool",
-        "command": "echo",
-        "subcommands": [{
+        "name": "pwd",
+        "description": "Print current working directory",
+        "command": "pwd",
+        "enabled": true,
+        "subcommand": [{
             "name": "default",
-            "description": "Echo a message"
+            "description": "Print working directory"
         }]
     });
     std::fs::write(
@@ -453,8 +770,9 @@ async fn test_tool_call_without_initialize_returns_proper_error() {
         "id": 1,
         "method": "tools/call",
         "params": {
-            "name": "echo_default",
+            "name": "pwd",
             "arguments": {
+                "subcommand": "default",
                 "working_directory": sandbox_scope.to_string_lossy()
             }
         }

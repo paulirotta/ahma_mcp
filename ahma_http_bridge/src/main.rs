@@ -12,17 +12,6 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 #[command(name = "ahma_http_bridge")]
 #[command(version, about)]
 struct Args {
-    /// Enable session isolation mode (separate subprocess per client).
-    /// Each client gets its own sandbox scope derived from its workspace roots.
-    /// Recommended for multi-project usage.
-    #[arg(long, default_value_t = true)]
-    session_isolation: bool,
-
-    /// Disable session isolation (single shared subprocess for all clients).
-    /// Use this if all clients share the same project directory.
-    #[arg(long, conflicts_with = "session_isolation")]
-    no_session_isolation: bool,
-
     /// Address to bind the HTTP server.
     #[arg(long, default_value = "127.0.0.1:3000")]
     bind_addr: SocketAddr,
@@ -78,8 +67,6 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    // Determine session isolation mode
-    let session_isolation = !args.no_session_isolation;
 
     // Build server args, adding --no-temp-files if enabled
     let mut server_args = args.server_args;
@@ -93,20 +80,12 @@ async fn main() -> anyhow::Result<()> {
         server_command,
         server_args,
         enable_colored_output,
-        session_isolation,
         default_sandbox_scope: args.default_sandbox_scope,
     };
 
     tracing::info!("Starting Ahma HTTP Bridge on {}", config.bind_addr);
     tracing::info!("Proxying to command: {}", config.server_command);
-    tracing::info!(
-        "Session isolation: {} (each client gets separate sandbox)",
-        if config.session_isolation {
-            "enabled"
-        } else {
-            "disabled"
-        }
-    );
+    tracing::info!("Session isolation: ENABLED (always-on)");
 
     start_bridge(config).await?;
     Ok(())

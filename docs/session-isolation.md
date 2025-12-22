@@ -1,16 +1,17 @@
 # Session Isolation for HTTP Mode
 
-This document describes the architecture for implementing per-session sandbox isolation in HTTP mode. Session isolation allows multiple VS Code, Cursor, or other MCP clients on the same machine to connect to a single HTTP server instance, each with their own isolated sandbox scope.
+This document describes the architecture for per-session sandbox isolation in HTTP mode.
+In current ahma_mcp behavior, HTTP mode is always session-isolated: each MCP session gets its own subprocess and its own sandbox scope derived from the client's workspace roots.
 
 ## Overview
 
-When `--session-isolation` is passed to the HTTP bridge, the server spawns a separate `ahma_mcp` subprocess per MCP session. Each subprocess has its own sandbox scope derived from the client's workspace roots, providing complete isolation between concurrent sessions.
+In HTTP mode, the server spawns a separate `ahma_mcp` subprocess per MCP session. Each subprocess has its own sandbox scope derived from the client's workspace roots, providing complete isolation between concurrent sessions.
 
 ## How It Works
 
 ### Protocol Flow
 
-```
+```text
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │  VS Code #1     │     │  VS Code #2     │     │  Cursor         │
 │  Project: /foo  │     │  Project: /bar  │     │  Project: /baz  │
@@ -20,7 +21,7 @@ When `--session-isolation` is passed to the HTTP bridge, the server spawns a sep
          ▼                       ▼                       ▼
 ┌────────────────────────────────────────────────────────────────────┐
 │                    ahma_mcp HTTP Bridge                            │
-│                    (--session-isolation mode)                      │
+│                    (session-isolated, always-on)                   │
 │                                                                    │
 │  1. Receive initialize request                                     │
 │  2. Generate session ID (UUID)                                     │
@@ -107,14 +108,10 @@ Since each IDE window is a separate process with its own MCP client, they natura
 
 ## Implementation
 
-### CLI Flag
+### CLI
 
 ```bash
-# Single-session mode (default, current behavior)
 ahma_mcp --mode http --http-port 3000
-
-# Multi-session isolation mode
-ahma_mcp --mode http --http-port 3000 --session-isolation
 ```
 
 ### SessionManager Structure
