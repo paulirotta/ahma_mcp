@@ -1,3 +1,12 @@
+//! Gradlew integration tests
+//!
+//! IMPORTANT: All tests in this module that invoke gradlew should be feature-gated with
+//! `#[cfg(feature = "android")]` to ensure they only run in the job-android CI job,
+//! not in job-nextest. This prevents duplicate execution and unnecessary Gradle setup overhead.
+//!
+//! Tests that only check tool availability or validate parameters without invoking Gradle
+//! do not need the feature gate.
+
 use ahma_core::test_utils::get_workspace_dir;
 use ahma_core::test_utils::test_client::new_client;
 use anyhow::Result;
@@ -15,6 +24,7 @@ fn get_android_test_project_path() -> String {
 /// Test gradlew synchronous commands (quick operations)
 /// Note: These tests are slow (~10s each) because Gradle has high startup time.
 /// Consider running with `cargo nextest run --test gradlew_interactive_test` separately.
+#[cfg(feature = "android")]
 #[tokio::test]
 #[ignore = "Slow test: Gradle startup takes ~10s per command. Run separately with --run-ignored"]
 async fn test_gradlew_sync_commands_interactive() -> Result<()> {
@@ -84,10 +94,7 @@ async fn test_gradlew_sync_commands_interactive() -> Result<()> {
 /// Note: This test only runs ONE Gradle command to keep CI time reasonable (~30s).
 /// Error cases (non-existent dir, missing param) are tested in test_gradlew_error_handling
 /// which doesn't actually invoke Gradle.
-#[cfg_attr(
-    not(target_os = "macos"),
-    ignore = "Runs in the macOS Android CI job where Gradle tooling is available"
-)]
+#[cfg(feature = "android")]
 #[tokio::test]
 async fn test_gradlew_working_directory_handling() -> Result<()> {
     let client = new_client(Some(".ahma/tools")).await?;
@@ -125,6 +132,7 @@ async fn test_gradlew_working_directory_handling() -> Result<()> {
 
 /// Test gradlew subcommand parameter validation
 /// Note: Slow test due to Gradle startup time.
+#[cfg(feature = "android")]
 #[tokio::test]
 #[ignore = "Slow test: Gradle startup takes ~10s per command. Run separately with --run-ignored"]
 async fn test_gradlew_subcommand_validation() -> Result<()> {
@@ -221,6 +229,7 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
 
 /// Test gradlew commands with optional parameters
 /// Note: Slow test due to Gradle startup time.
+#[cfg(feature = "android")]
 #[tokio::test]
 #[ignore = "Slow test: Gradle startup takes ~10s per command. Run separately with --run-ignored"]
 async fn test_gradlew_optional_parameters() -> Result<()> {

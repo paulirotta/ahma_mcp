@@ -360,8 +360,8 @@ jobs:
             echo "cargo-nextest already installed"
           fi
 
-      - name: Run macOS-only gradlew integration test
-        run: cargo nextest run --locked -p ahma_core gradlew_interactive_test::test_gradlew_working_directory_handling
+      - name: Run Android/Gradle tests
+        run: cargo nextest run --locked -p ahma_core --features android
 
       - name: Show sccache stats
         run: sccache --show-stats
