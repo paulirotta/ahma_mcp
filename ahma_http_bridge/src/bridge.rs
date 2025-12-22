@@ -59,6 +59,9 @@ struct BridgeState {
 const MCP_SESSION_ID_HEADER: &str = "mcp-session-id";
 
 /// Start the HTTP bridge server
+///
+/// If `config.bind_addr` uses port 0, the OS will assign an available port.
+/// The actual bound address is printed to stderr as `AHMA_BOUND_PORT=<port>` for test infrastructure.
 pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
     info!("Starting HTTP bridge on {}", config.bind_addr);
 
@@ -82,14 +85,21 @@ pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
-    info!("HTTP bridge listening on http://{}", config.bind_addr);
-    info!("MCP endpoint (POST): http://{}/mcp", config.bind_addr);
-    info!("MCP endpoint (GET/SSE): http://{}/mcp", config.bind_addr);
-
-    // Start the server
+    // Start the server - bind first to get actual port (important when port 0 is used)
     let listener = tokio::net::TcpListener::bind(config.bind_addr)
         .await
         .map_err(|e| BridgeError::HttpServer(format!("Failed to bind: {}", e)))?;
+
+    let local_addr = listener
+        .local_addr()
+        .map_err(|e| BridgeError::HttpServer(format!("Failed to get local addr: {}", e)))?;
+
+    info!("HTTP bridge listening on http://{}", local_addr);
+    info!("MCP endpoint (POST): http://{}/mcp", local_addr);
+    info!("MCP endpoint (GET/SSE): http://{}/mcp", local_addr);
+
+    // Print machine-readable bound port for test infrastructure (always print, tests parse it)
+    eprintln!("AHMA_BOUND_PORT={}", local_addr.port());
 
     axum::serve(listener, app)
         .await

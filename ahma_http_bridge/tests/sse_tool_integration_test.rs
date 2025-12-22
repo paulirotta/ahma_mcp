@@ -7,8 +7,7 @@
 //!
 //! ## Running Tests
 //!
-//! These tests use a shared test server on port 5721 (NOT the production port 3000).
-//! The server is automatically started when tests run.
+//! Each test spawns its own server with a dynamic port to avoid conflicts.
 //!
 //! ```bash
 //! cargo nextest run --test sse_tool_integration_test
@@ -16,12 +15,12 @@
 //!
 //! To use a custom server URL (e.g., for debugging):
 //! ```bash
-//! AHMA_TEST_SSE_URL=http://localhost:5721 cargo nextest run --test sse_tool_integration_test
+//! AHMA_TEST_SSE_URL=http://localhost:3000 cargo nextest run --test sse_tool_integration_test
 //! ```
 
 mod common;
 
-use common::{AHMA_INTEGRATION_TEST_SERVER_PORT, get_test_server};
+use common::{TestServerInstance, spawn_test_server};
 use futures::future::join_all;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -31,35 +30,58 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
-/// Get the SSE server URL from environment or use the test server port.
-/// NOTE: Tests should use the shared test server on port 5721, NOT port 3000.
-fn get_sse_url() -> String {
-    env::var("AHMA_TEST_SSE_URL")
-        .unwrap_or_else(|_| format!("http://127.0.0.1:{}", AHMA_INTEGRATION_TEST_SERVER_PORT))
+// Thread-local storage for the current test's server URL
+std::thread_local! {
+    static CURRENT_SERVER_URL: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
 }
 
-/// Ensure the test server is running and return whether it's available.
-/// If AHMA_TEST_SSE_URL is set, it just checks that URL.
-/// Otherwise, it starts the shared test server on port 5721.
-async fn ensure_server_available() -> bool {
+/// Get the SSE server URL from thread-local storage or environment.
+fn get_sse_url() -> String {
+    if let Ok(url) = env::var("AHMA_TEST_SSE_URL") {
+        return url;
+    }
+    CURRENT_SERVER_URL.with(|url| {
+        url.borrow()
+            .clone()
+            .unwrap_or_else(|| "http://127.0.0.1:5721".to_string())
+    })
+}
+
+/// Ensure the test server is running and return the server instance.
+/// The returned value MUST be kept alive for the duration of the test.
+/// If AHMA_TEST_SSE_URL is set, returns None and uses that URL.
+async fn ensure_server_available() -> Option<TestServerInstance> {
     // If user specified a custom URL, just check if it's available
-    if env::var("AHMA_TEST_SSE_URL").is_ok() {
-        let url = format!("{}/health", get_sse_url());
+    if let Ok(url) = env::var("AHMA_TEST_SSE_URL") {
+        let health_url = format!("{}/health", url);
         let client = Client::new();
-        return match client
-            .get(&url)
+        match client
+            .get(&health_url)
             .timeout(Duration::from_secs(2))
             .send()
             .await
         {
-            Ok(resp) => resp.status().is_success(),
-            Err(_) => false,
-        };
+            Ok(resp) if resp.status().is_success() => return None,
+            _ => {
+                eprintln!("⚠️  Custom server at {} not available", url);
+                return None;
+            }
+        }
     }
 
-    // Start the shared test server
-    let _server = get_test_server().await;
-    true
+    // Spawn our own server with dynamic port
+    match spawn_test_server().await {
+        Ok(server) => {
+            CURRENT_SERVER_URL.with(|url| {
+                *url.borrow_mut() = Some(server.base_url());
+            });
+            Some(server)
+        }
+        Err(e) => {
+            eprintln!("⚠️  Failed to spawn test server: {}", e);
+            None
+        }
+    }
 }
 
 /// Check if a specific tool is available on the server
@@ -244,13 +266,7 @@ async fn call_tool(client: &Client, name: &str, arguments: Value) -> ToolCallRes
 
 #[tokio::test]
 async fn test_list_tools_returns_all_expected_tools() {
-    if !ensure_server_available().await {
-        eprintln!(
-            "⚠️  SSE server not available at {}, skipping test",
-            get_sse_url()
-        );
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
     let request = JsonRpcRequest::list_tools();
@@ -407,10 +423,7 @@ async fn test_list_tools_returns_all_expected_tools() {
 
 #[tokio::test]
 async fn test_file_tools_pwd() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
 
@@ -432,10 +445,7 @@ async fn test_file_tools_pwd() {
 
 #[tokio::test]
 async fn test_file_tools_ls() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
 
@@ -461,10 +471,7 @@ async fn test_file_tools_ls() {
 
 #[tokio::test]
 async fn test_file_tools_ls_with_options() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
 
@@ -502,10 +509,7 @@ async fn test_file_tools_ls_with_options() {
 
 #[tokio::test]
 async fn test_file_tools_cat() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
 
@@ -529,10 +533,7 @@ async fn test_file_tools_cat() {
 
 #[tokio::test]
 async fn test_file_tools_head() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
 
@@ -558,10 +559,7 @@ async fn test_file_tools_head() {
 
 #[tokio::test]
 async fn test_file_tools_tail() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
 
@@ -587,10 +585,7 @@ async fn test_file_tools_tail() {
 
 #[tokio::test]
 async fn test_file_tools_grep() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
 
@@ -617,10 +612,7 @@ async fn test_file_tools_grep() {
 
 #[tokio::test]
 async fn test_file_tools_find() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
 
@@ -657,10 +649,7 @@ async fn test_file_tools_find() {
 
 #[tokio::test]
 async fn test_sandboxed_shell_echo() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
 
@@ -711,10 +700,7 @@ async fn test_sandboxed_shell_echo() {
 
 #[tokio::test]
 async fn test_sandboxed_shell_pipe() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
 
@@ -761,10 +747,7 @@ async fn test_sandboxed_shell_pipe() {
 
 #[tokio::test]
 async fn test_sandboxed_shell_variable_substitution() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
 
@@ -815,10 +798,7 @@ async fn test_sandboxed_shell_variable_substitution() {
 
 #[tokio::test]
 async fn test_python_version() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
 
@@ -844,10 +824,7 @@ async fn test_python_version() {
 
 #[tokio::test]
 async fn test_python_code() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
 
@@ -880,10 +857,7 @@ async fn test_python_code() {
 
 #[tokio::test]
 async fn test_cargo_check() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
     // This is a read-only operation that just type-checks
@@ -910,10 +884,7 @@ async fn test_cargo_check() {
 #[tokio::test]
 #[ignore]
 async fn test_concurrent_tool_calls() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
     let start = Instant::now();
@@ -1002,10 +973,7 @@ async fn test_concurrent_tool_calls() {
 #[tokio::test]
 #[ignore]
 async fn test_high_volume_concurrent_requests() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
     let num_requests = 50;
@@ -1057,10 +1025,7 @@ async fn test_high_volume_concurrent_requests() {
 
 #[tokio::test]
 async fn test_file_tools_touch_and_rm() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
 
@@ -1128,10 +1093,7 @@ async fn test_file_tools_touch_and_rm() {
 
 #[tokio::test]
 async fn test_file_tools_cp_and_mv() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
 
@@ -1212,10 +1174,7 @@ async fn test_file_tools_cp_and_mv() {
 
 #[tokio::test]
 async fn test_file_tools_diff() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
 
@@ -1272,10 +1231,7 @@ async fn test_file_tools_diff() {
 
 #[tokio::test]
 async fn test_file_tools_sed() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
 
@@ -1335,10 +1291,7 @@ async fn test_file_tools_sed() {
 
 #[tokio::test]
 async fn test_git_status() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
     let result = call_tool(&client, "git_status", json!({})).await;
@@ -1361,10 +1314,7 @@ async fn test_git_status() {
 
 #[tokio::test]
 async fn test_git_log() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
     let result = call_tool(&client, "git_log", json!({"oneline": true})).await;
@@ -1382,10 +1332,7 @@ async fn test_git_log() {
 
 #[tokio::test]
 async fn test_gh_workflow_list() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
     let result = call_tool(
@@ -1408,10 +1355,7 @@ async fn test_gh_workflow_list() {
 
 #[tokio::test]
 async fn test_invalid_tool_returns_error() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
     let result = call_tool(&client, "nonexistent_tool", json!({})).await;
@@ -1426,10 +1370,7 @@ async fn test_invalid_tool_returns_error() {
 
 #[tokio::test]
 async fn test_missing_required_arg_returns_error() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
     // file_tools_cat requires 'files' argument
@@ -1448,10 +1389,7 @@ async fn test_missing_required_arg_returns_error() {
 
 #[tokio::test]
 async fn test_all_tools_comprehensive() {
-    if !ensure_server_available().await {
-        eprintln!("⚠️  SSE server not available, skipping comprehensive test");
-        return;
-    }
+    let _server = ensure_server_available().await;
 
     let client = Client::new();
 

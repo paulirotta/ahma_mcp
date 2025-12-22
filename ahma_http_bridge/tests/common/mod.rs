@@ -2,27 +2,19 @@
 //!
 //! This module provides utilities for integration tests that need a running HTTP server.
 //!
-//! ## Port Assignment
+//! ## Dynamic Port Allocation
 //!
-//! - **Production default**: Port 3000
-//! - **Integration tests**: Port 5721 (reserved for shared test server)
+//! Tests use dynamic port allocation (port 0) to avoid port conflicts when running
+//! in parallel. Each test gets its own isolated server instance.
 //!
-//! ## Usage Patterns
+//! ## Usage
 //!
-//! 1. **Tests using the shared singleton** (sse_tool_integration_test, http_roots_handshake_test):
-//!    Call `get_test_server().await` to get a shared server on port 5721.
-//!
-//! 2. **Tests needing custom configurations** (http_bridge_integration_test):
-//!    Use dynamic port allocation via `find_available_port()` and spawn their own server.
-//!
-//! ## MCP Protocol Helpers
-//!
-//! Use `McpTestClient` for proper MCP protocol handling:
 //! ```ignore
-//! let _server = get_test_server().await;
-//! let mut client = McpTestClient::new();
+//! let server = spawn_test_server().await.expect("Failed to spawn server");
+//! let mut client = McpTestClient::with_url(&server.base_url());
 //! client.initialize().await.expect("handshake failed");
 //! let result = client.call_tool("python", json!({"subcommand": "version"})).await;
+//! // Server is automatically cleaned up when `server` is dropped
 //! ```
 
 // Allow dead_code - these are test utilities, and rustc can't see usage across test crates
@@ -31,118 +23,45 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use tokio::time::sleep;
 
-/// Reserved port for integration tests. DO NOT use port 3000 in tests.
+/// Legacy constant for backward compatibility. Prefer using `spawn_test_server()` instead.
+#[deprecated(note = "Use spawn_test_server() for dynamic port allocation")]
 pub const AHMA_INTEGRATION_TEST_SERVER_PORT: u16 = 5721;
 
-/// A running test server instance
-struct TestServerInstance {
+/// A running test server instance with dynamic port
+pub struct TestServerInstance {
     child: Child,
+    port: u16,
     _temp_dir: TempDir, // Keep alive for the duration of the server
+}
+
+impl TestServerInstance {
+    /// Get the base URL for this server
+    pub fn base_url(&self) -> String {
+        format!("http://127.0.0.1:{}", self.port)
+    }
+
+    /// Get the port this server is listening on
+    pub fn port(&self) -> u16 {
+        self.port
+    }
 }
 
 impl Drop for TestServerInstance {
     fn drop(&mut self) {
         eprintln!(
             "[TestServer] Shutting down test server on port {}",
-            AHMA_INTEGRATION_TEST_SERVER_PORT
+            self.port
         );
         let _ = self.child.kill();
         let _ = self.child.wait();
-    }
-}
-
-/// Guard that provides access to the test server
-pub struct TestServerGuard {
-    _inner: Arc<Mutex<Option<TestServerInstance>>>,
-}
-
-impl TestServerGuard {
-    pub fn base_url(&self) -> String {
-        format!("http://127.0.0.1:{}", AHMA_INTEGRATION_TEST_SERVER_PORT)
-    }
-
-    pub fn port(&self) -> u16 {
-        AHMA_INTEGRATION_TEST_SERVER_PORT
-    }
-}
-
-/// Global singleton for the test server (within this process)
-static TEST_SERVER: OnceLock<Arc<Mutex<Option<TestServerInstance>>>> = OnceLock::new();
-
-/// Install panic hook to clean up server on panic
-fn install_panic_hook() {
-    static HOOK_INSTALLED: OnceLock<()> = OnceLock::new();
-    HOOK_INSTALLED.get_or_init(|| {
-        let default_hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(move |info| {
-            // Try to clean up the test server
-            if let Some(server) = TEST_SERVER.get()
-                && let Ok(mut guard) = server.lock()
-                && let Some(mut instance) = guard.take()
-            {
-                eprintln!("[TestServer] Panic detected! Cleaning up test server...");
-                let _ = instance.child.kill();
-                let _ = instance.child.wait();
-            }
-            default_hook(info);
-        }));
-    });
-}
-
-/// Check if the test server is already running (started by another test process)
-async fn is_server_running() -> bool {
-    let client = Client::new();
-    let health_url = format!(
-        "http://127.0.0.1:{}/health",
-        AHMA_INTEGRATION_TEST_SERVER_PORT
-    );
-
-    let ok = match client
-        .get(&health_url)
-        .timeout(Duration::from_millis(500))
-        .send()
-        .await
-    {
-        Ok(resp) => resp.status().is_success(),
-        Err(_) => false,
-    };
-
-    if !ok {
-        return false;
-    }
-
-    // Health can be OK while /mcp is wedged (e.g. stuck session subprocess / I/O handler).
-    // Probe initialize with a short timeout to ensure the server is actually usable.
-    let init_url = format!("http://127.0.0.1:{}/mcp", AHMA_INTEGRATION_TEST_SERVER_PORT);
-    let init_req = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {"roots": {}},
-            "clientInfo": {"name": "health-probe", "version": "0"}
-        }
-    });
-    match client
-        .post(&init_url)
-        .header("content-type", "application/json")
-        .header("accept", "application/json")
-        .json(&init_req)
-        .timeout(Duration::from_millis(800))
-        .send()
-        .await
-    {
-        Ok(resp) => resp.status().is_success(),
-        Err(_) => false,
     }
 }
 
@@ -169,8 +88,19 @@ fn get_ahma_mcp_binary() -> PathBuf {
     workspace_dir.join("target/debug/ahma_mcp")
 }
 
-/// Start the test server
-async fn start_test_server() -> Result<TestServerInstance, String> {
+/// Spawn a new test server with dynamic port allocation.
+///
+/// Each call creates an isolated server instance on a randomly assigned port.
+/// The server is automatically killed when the returned `TestServerInstance` is dropped.
+///
+/// # Example
+/// ```ignore
+/// let server = spawn_test_server().await.expect("Failed to spawn server");
+/// println!("Server running on port {}", server.port());
+/// // Use server.base_url() to connect
+/// // Server stops when `server` goes out of scope
+/// ```
+pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
     let binary = get_ahma_mcp_binary();
 
     // Get the workspace directory
@@ -189,12 +119,12 @@ async fn start_test_server() -> Result<TestServerInstance, String> {
     let temp_dir = TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
     let sandbox_scope = temp_dir.path().to_path_buf();
 
-    // Build command args
+    // Build command args - use port 0 for dynamic allocation
     let args = vec![
         "--mode".to_string(),
         "http".to_string(),
         "--http-port".to_string(),
-        AHMA_INTEGRATION_TEST_SERVER_PORT.to_string(),
+        "0".to_string(), // Dynamic port allocation
         "--sync".to_string(),
         "--tools-dir".to_string(),
         tools_dir.to_string_lossy().to_string(),
@@ -205,12 +135,10 @@ async fn start_test_server() -> Result<TestServerInstance, String> {
         "--log-to-stderr".to_string(),
     ];
 
-    eprintln!(
-        "[TestServer] Starting test server on port {}",
-        AHMA_INTEGRATION_TEST_SERVER_PORT
-    );
+    eprintln!("[TestServer] Starting test server with dynamic port");
 
-    let child = Command::new(&binary)
+    // Spawn with piped stderr to capture the bound port
+    let mut child = Command::new(&binary)
         .args(&args)
         .current_dir(&workspace_dir)
         // SECURITY:
@@ -221,18 +149,69 @@ async fn start_test_server() -> Result<TestServerInstance, String> {
         .env_remove("NEXTEST_EXECUTION_MODE")
         .env_remove("CARGO_TARGET_DIR")
         .env_remove("RUST_TEST_THREADS")
-        // Avoid deadlock: do not pipe output unless we actively drain it.
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("Failed to spawn test server: {}", e))?;
 
-    // Wait for server to be ready
+    // Read stderr to find the bound port (AHMA_BOUND_PORT=<port>)
+    let stderr = child.stderr.take().expect("Failed to capture stderr");
+    let mut reader = BufReader::new(stderr);
+    let mut port: Option<u16>;
+
+    let start = Instant::now();
+    let timeout = Duration::from_secs(10);
+
+    loop {
+        if start.elapsed() > timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("Timeout waiting for server to start".to_string());
+        }
+
+        let mut line = String::new();
+        match reader.read_line(&mut line) {
+            Ok(0) => {
+                // EOF - process likely exited
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("Server process exited before reporting port".to_string());
+            }
+            Ok(_) => {
+                // Print server output for debugging
+                eprint!("{}", line);
+
+                // Look for the bound port marker
+                if let Some(port_str) = line.strip_prefix("AHMA_BOUND_PORT=") {
+                    port = port_str.trim().parse().ok();
+                    if port.is_some() {
+                        break;
+                    }
+                }
+            }
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("Error reading server stderr: {}", e));
+            }
+        }
+    }
+
+    let bound_port = port.ok_or("Failed to parse bound port from server output")?;
+    eprintln!("[TestServer] Server bound to port {}", bound_port);
+
+    // Spawn a task to drain remaining stderr (prevent blocking)
+    std::thread::spawn(move || {
+        for line in reader.lines() {
+            if let Ok(line) = line {
+                eprintln!("{}", line);
+            }
+        }
+    });
+
+    // Wait for server to be ready (health check)
     let client = Client::new();
-    let health_url = format!(
-        "http://127.0.0.1:{}/health",
-        AHMA_INTEGRATION_TEST_SERVER_PORT
-    );
+    let health_url = format!("http://127.0.0.1:{}/health", bound_port);
 
     for i in 0..50 {
         sleep(Duration::from_millis(100)).await;
@@ -242,71 +221,24 @@ async fn start_test_server() -> Result<TestServerInstance, String> {
             eprintln!("[TestServer] Server ready after {}ms", (i + 1) * 100);
             return Ok(TestServerInstance {
                 child,
+                port: bound_port,
                 _temp_dir: temp_dir,
             });
         }
     }
 
     // Failed to start - clean up
-    let mut child = child;
     let _ = child.kill();
     let _ = child.wait();
-    Err("Test server failed to start within 5 seconds".to_string())
+    Err("Test server failed to respond to health check within 5 seconds".to_string())
 }
 
-/// Get or start the shared test server.
-///
-/// This function ensures a test server is running on port 5721:
-/// 1. If a server is already running (from this or another process), use it
-/// 2. If not, start one and keep it running for subsequent tests
-///
-/// Note: Due to nextest running tests in separate processes, each process
-/// may start its own server. This is OK - the first one to bind wins.
-///
-/// For cargo test (single process, multiple threads), we use a tokio OnceCell
-/// to ensure server startup happens only once.
-pub async fn get_test_server() -> TestServerGuard {
-    install_panic_hook();
-
-    // Use a static OnceCell to ensure we only try to start once per process
-    static INIT: tokio::sync::OnceCell<Arc<Mutex<Option<TestServerInstance>>>> =
-        tokio::sync::OnceCell::const_new();
-
-    let server_arc = INIT
-        .get_or_init(|| async {
-            // First check if a server is already running (from another process)
-            if is_server_running().await {
-                eprintln!(
-                    "[TestServer] Server already running on port {}, reusing",
-                    AHMA_INTEGRATION_TEST_SERVER_PORT
-                );
-                return Arc::new(Mutex::new(None));
-            }
-
-            // Try to start a new server
-            match start_test_server().await {
-                Ok(instance) => Arc::new(Mutex::new(Some(instance))),
-                Err(e) => {
-                    // If we failed because the port is in use, another process grabbed it
-                    // Check if a server is now running
-                    sleep(Duration::from_millis(500)).await;
-                    if is_server_running().await {
-                        eprintln!(
-                            "[TestServer] Another process started server on port {}, reusing",
-                            AHMA_INTEGRATION_TEST_SERVER_PORT
-                        );
-                        Arc::new(Mutex::new(None))
-                    } else {
-                        panic!("Failed to start test server: {}", e);
-                    }
-                }
-            }
-        })
-        .await;
-
-    TestServerGuard {
-        _inner: server_arc.clone(),
-    }
+/// Legacy function for backward compatibility. Spawns a new server each time.
+#[deprecated(note = "Use spawn_test_server() directly")]
+pub async fn get_test_server() -> TestServerInstance {
+    spawn_test_server()
+        .await
+        .expect("Failed to spawn test server")
 }
 
 // =============================================================================
@@ -450,7 +382,7 @@ pub struct ToolCallResult {
 /// # Example
 /// ```ignore
 /// let _server = get_test_server().await;
-/// let mut client = McpTestClient::new();
+/// let mut client = McpTestClient::with_url(&server.base_url());
 /// client.initialize().await.expect("handshake failed");
 /// let result = client.call_tool("file_tools", json!({"subcommand": "pwd"})).await;
 /// assert!(result.success);
@@ -462,22 +394,19 @@ pub struct McpTestClient {
 }
 
 impl McpTestClient {
-    /// Create a new MCP test client for the shared test server
-    pub fn new() -> Self {
-        Self {
-            client: Client::new(),
-            base_url: format!("http://127.0.0.1:{}", AHMA_INTEGRATION_TEST_SERVER_PORT),
-            session_id: None,
-        }
-    }
-
-    /// Create a new MCP test client for a custom URL
+    /// Create a new MCP test client for a specific server URL.
+    /// Use `with_url(&server.base_url())` where `server` is from `spawn_test_server()`.
     pub fn with_url(base_url: &str) -> Self {
         Self {
             client: Client::new(),
             base_url: base_url.to_string(),
             session_id: None,
         }
+    }
+
+    /// Create a new MCP test client from a TestServerInstance
+    pub fn for_server(server: &TestServerInstance) -> Self {
+        Self::with_url(&server.base_url())
     }
 
     /// Get the MCP endpoint URL
@@ -651,11 +580,5 @@ impl McpTestClient {
     /// Check if the client has been initialized
     pub fn is_initialized(&self) -> bool {
         self.session_id.is_some()
-    }
-}
-
-impl Default for McpTestClient {
-    fn default() -> Self {
-        Self::new()
     }
 }

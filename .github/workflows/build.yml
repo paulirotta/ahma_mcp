@@ -219,12 +219,13 @@ jobs:
             echo "cargo-nextest already installed"
           fi
 
-      - name: Cargo Nextest (without Android tests)
+      - name: Cargo Nextest (excluding Android/Gradle tests)
         run: |
           echo "--- cargo --version" && cargo --version
           echo "--- cargo --help (first 40 lines)" && cargo --help | head -n 40 || true
           echo "--- cargo --list (first 40 lines)" && cargo --list | head -n 40 || true
-          cargo nextest run --locked --no-default-features
+          # Exclude gradle/android tests - they run in job-android only
+          cargo nextest run --locked --no-default-features -E 'not test(gradlew) & not test(android)'
 
       - name: Show sccache stats
         run: sccache --show-stats
@@ -360,8 +361,10 @@ jobs:
             echo "cargo-nextest already installed"
           fi
 
-      - name: Run Android/Gradle tests
-        run: cargo nextest run --locked -p ahma_core --features android
+      - name: Run Android/Gradle tests only
+        run: |
+          # Run ONLY gradle/android tests (feature-gated and name-filtered for clarity)
+          cargo nextest run --locked -p ahma_core --features android -E 'test(gradlew) | test(android)'
 
       - name: Show sccache stats
         run: sccache --show-stats

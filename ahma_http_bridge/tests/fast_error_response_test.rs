@@ -15,7 +15,7 @@
 
 mod common;
 
-use common::{AHMA_INTEGRATION_TEST_SERVER_PORT, get_test_server};
+use common::spawn_test_server;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -25,9 +25,15 @@ use std::time::{Duration, Instant};
 /// If any request takes longer than this, the server has a hang bug.
 const MAX_ERROR_RESPONSE_MS: u128 = 2000;
 
-/// Get the test server URL
+// Thread-local storage for the current test's server URL
+std::thread_local! {
+    static CURRENT_SERVER_URL: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Get the test server URL from thread-local storage
 fn get_test_url() -> String {
-    format!("http://127.0.0.1:{}/mcp", AHMA_INTEGRATION_TEST_SERVER_PORT)
+    CURRENT_SERVER_URL
+        .with(|url| format!("{}/mcp", url.borrow().as_ref().expect("Server URL not set")))
 }
 
 #[derive(Debug, Serialize)]
@@ -207,7 +213,8 @@ async fn timed_request_with_session(
 
 #[tokio::test]
 async fn test_missing_session_id_returns_fast_error() {
-    let _server = get_test_server().await;
+    let _server = spawn_test_server().await.expect("Failed to spawn server");
+    CURRENT_SERVER_URL.with(|u| *u.borrow_mut() = Some(_server.base_url()));
     let client = Client::new();
 
     // Call tools/call without session ID - should return 400 immediately
@@ -252,7 +259,8 @@ async fn test_missing_session_id_returns_fast_error() {
 
 #[tokio::test]
 async fn test_invalid_tool_name_returns_fast_error() {
-    let _server = get_test_server().await;
+    let _server = spawn_test_server().await.expect("Failed to spawn server");
+    CURRENT_SERVER_URL.with(|u| *u.borrow_mut() = Some(_server.base_url()));
     let client = Client::new();
 
     // Wait a moment for the server to stabilize if it just started
@@ -321,7 +329,8 @@ async fn test_invalid_tool_name_returns_fast_error() {
 
 #[tokio::test]
 async fn test_invalid_subcommand_returns_fast_error() {
-    let _server = get_test_server().await;
+    let _server = spawn_test_server().await.expect("Failed to spawn server");
+    CURRENT_SERVER_URL.with(|u| *u.borrow_mut() = Some(_server.base_url()));
     let client = Client::new();
 
     // Wait a moment for the server to stabilize if it just started
@@ -384,7 +393,8 @@ async fn test_invalid_subcommand_returns_fast_error() {
 
 #[tokio::test]
 async fn test_invalid_method_returns_fast_error() {
-    let _server = get_test_server().await;
+    let _server = spawn_test_server().await.expect("Failed to spawn server");
+    CURRENT_SERVER_URL.with(|u| *u.borrow_mut() = Some(_server.base_url()));
     let client = Client::new();
 
     // Wait a moment for the server to stabilize if it just started
@@ -442,7 +452,8 @@ async fn test_invalid_method_returns_fast_error() {
 
 #[tokio::test]
 async fn test_malformed_json_returns_fast_error() {
-    let _server = get_test_server().await;
+    let _server = spawn_test_server().await.expect("Failed to spawn server");
+    CURRENT_SERVER_URL.with(|u| *u.borrow_mut() = Some(_server.base_url()));
     let client = Client::new();
 
     let url = get_test_url();
@@ -482,7 +493,8 @@ async fn test_malformed_json_returns_fast_error() {
 
 #[tokio::test]
 async fn test_missing_required_args_returns_fast_error() {
-    let _server = get_test_server().await;
+    let _server = spawn_test_server().await.expect("Failed to spawn server");
+    CURRENT_SERVER_URL.with(|u| *u.borrow_mut() = Some(_server.base_url()));
     let client = Client::new();
 
     // Wait a moment for the server to stabilize if it just started

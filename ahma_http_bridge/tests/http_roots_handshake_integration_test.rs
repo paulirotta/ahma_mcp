@@ -8,15 +8,15 @@
 //! - Respond with a temp workspace root
 //! - Call a tool without providing working_directory and verify it runs inside the root
 //!
-//! Running (uses shared test server on port 5721):
+//! Running (spawns its own server with dynamic port):
 //!   cargo test -p ahma_http_bridge --test http_roots_handshake_integration_test
 //!
 //! Or with a custom server URL:
-//!   AHMA_TEST_SSE_URL=http://localhost:5721 cargo test -p ahma_http_bridge --test http_roots_handshake_integration_test
+//!   AHMA_TEST_SSE_URL=http://localhost:3000 cargo test -p ahma_http_bridge --test http_roots_handshake_integration_test
 
 mod common;
 
-use common::{AHMA_INTEGRATION_TEST_SERVER_PORT, get_test_server};
+use common::{TestServerInstance, spawn_test_server};
 use futures::StreamExt;
 use reqwest::Client;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderMap, HeaderValue};
@@ -29,33 +29,31 @@ use tokio::time::{Instant, sleep, timeout};
 
 const MCP_SESSION_ID_HEADER: &str = "mcp-session-id";
 
-/// Get the SSE server URL from environment or use the test server port.
-/// NOTE: Tests should use the shared test server on port 5721, NOT port 3000.
-fn get_sse_url() -> String {
-    env::var("AHMA_TEST_SSE_URL")
-        .unwrap_or_else(|_| format!("http://127.0.0.1:{}", AHMA_INTEGRATION_TEST_SERVER_PORT))
-}
-
-/// Ensure the test server is running and return whether it's available.
-async fn ensure_server_available() -> bool {
-    // If user specified a custom URL, just check if it's available
-    if env::var("AHMA_TEST_SSE_URL").is_ok() {
-        let url = format!("{}/health", get_sse_url());
+/// Spawn a test server or use environment variable URL.
+/// Returns (base_url, Option<server_instance>).
+/// The server instance must be kept alive for the duration of the test.
+async fn get_server_url() -> (String, Option<TestServerInstance>) {
+    if let Ok(url) = env::var("AHMA_TEST_SSE_URL") {
+        // User specified a custom URL, verify it's available
         let client = Client::new();
-        return match client
-            .get(&url)
+        let health_url = format!("{}/health", url);
+        match client
+            .get(&health_url)
             .timeout(Duration::from_secs(2))
             .send()
             .await
         {
-            Ok(resp) => resp.status().is_success(),
-            Err(_) => false,
-        };
+            Ok(resp) if resp.status().is_success() => return (url, None),
+            _ => panic!("Custom server URL {} is not available", url),
+        }
     }
 
-    // Start the shared test server
-    let _server = get_test_server().await;
-    true
+    // Spawn our own server with dynamic port
+    let server = spawn_test_server()
+        .await
+        .expect("Failed to spawn test server");
+    let url = server.base_url();
+    (url, Some(server))
 }
 
 fn extract_text_content(result: &Value) -> String {
@@ -75,13 +73,8 @@ fn extract_text_content(result: &Value) -> String {
 async fn http_roots_handshake_then_tool_call_defaults_to_root() {
     let client = Client::new();
 
-    if !ensure_server_available().await {
-        eprintln!(
-            "⚠️  SSE server not available at {}, skipping test",
-            get_sse_url()
-        );
-        return;
-    }
+    let (base_url, _server) = get_server_url().await;
+    eprintln!("Using server at {}", base_url);
 
     let temp_root = TempDir::new().expect("Failed to create temp root");
     let root_path = temp_root.path().to_path_buf();
@@ -99,7 +92,7 @@ async fn http_roots_handshake_then_tool_call_defaults_to_root() {
         }
     });
 
-    let init_url = format!("{}/mcp", get_sse_url());
+    let init_url = format!("{}/mcp", base_url);
     let init_resp = client
         .post(&init_url)
         .header(CONTENT_TYPE, "application/json")
@@ -115,17 +108,6 @@ async fn http_roots_handshake_then_tool_call_defaults_to_root() {
     let body = init_resp.text().await.unwrap_or_default();
 
     if !status.is_success() {
-        // The shared test server doesn't support session isolation, so skip this test
-        // when running against it. This test requires a server with --session-isolation.
-        if std::env::var("AHMA_TEST_SSE_URL").is_err() {
-            eprintln!(
-                "⚠️  Shared test server returned error (session isolation likely not supported). \
-                 This test requires a server with --session-isolation. Skipping. \
-                 Error: {} {}",
-                status, body
-            );
-            return;
-        }
         panic!(
             "Initialize request failed with status {}: {}. URL: {}",
             status, body, init_url
@@ -141,15 +123,14 @@ async fn http_roots_handshake_then_tool_call_defaults_to_root() {
         None => {
             eprintln!(
                 "⚠️  Server at {} did not return mcp-session-id (session isolation likely disabled); skipping test. Response: {}",
-                get_sse_url(),
-                body
+                base_url, body
             );
             return;
         }
     };
 
     // 2) Open SSE stream
-    let sse_url = format!("{}/mcp", get_sse_url());
+    let sse_url = format!("{}/mcp", base_url);
     let mut sse_headers = HeaderMap::new();
     sse_headers.insert(ACCEPT, HeaderValue::from_static("text/event-stream"));
     sse_headers.insert(
@@ -206,7 +187,7 @@ async fn http_roots_handshake_then_tool_call_defaults_to_root() {
     });
 
     let _ = client
-        .post(format!("{}/mcp", get_sse_url()))
+        .post(format!("{}/mcp", base_url))
         .header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "application/json")
         .header(MCP_SESSION_ID_HEADER, session_id.as_str())
@@ -244,7 +225,7 @@ async fn http_roots_handshake_then_tool_call_defaults_to_root() {
     });
 
     let roots_resp = client
-        .post(format!("{}/mcp", get_sse_url()))
+        .post(format!("{}/mcp", base_url))
         .header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "application/json")
         .header(MCP_SESSION_ID_HEADER, session_id.as_str())
@@ -276,7 +257,7 @@ async fn http_roots_handshake_then_tool_call_defaults_to_root() {
         }
 
         let resp = client
-            .post(format!("{}/mcp", get_sse_url()))
+            .post(format!("{}/mcp", base_url))
             .header(CONTENT_TYPE, "application/json")
             .header(ACCEPT, "application/json")
             .header(MCP_SESSION_ID_HEADER, session_id.as_str())
