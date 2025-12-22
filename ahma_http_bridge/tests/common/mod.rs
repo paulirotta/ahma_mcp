@@ -500,7 +500,7 @@ impl McpTestClient {
         let init_request = JsonRpcRequest::initialize(client_name);
         let response = self
             .client
-            .post(&self.mcp_url())
+            .post(self.mcp_url())
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
             .json(&init_request)
@@ -539,7 +539,7 @@ impl McpTestClient {
         let initialized_notification = JsonRpcRequest::initialized();
         let _ = self
             .client
-            .post(&self.mcp_url())
+            .post(self.mcp_url())
             .header("Content-Type", "application/json")
             .header("Mcp-Session-Id", self.session_id.as_deref().unwrap_or(""))
             .json(&initialized_notification)
@@ -554,7 +554,7 @@ impl McpTestClient {
     pub async fn send_request(&self, request: &JsonRpcRequest) -> Result<JsonRpcResponse, String> {
         let mut req_builder = self
             .client
-            .post(&self.mcp_url())
+            .post(self.mcp_url())
             .header("Content-Type", "application/json")
             .header("Accept", "application/json");
 
