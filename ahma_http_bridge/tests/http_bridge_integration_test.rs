@@ -16,6 +16,7 @@ use futures::StreamExt;
 use reqwest::Client;
 use serde_json::{Value, json};
 use std::net::TcpListener;
+use std::os::unix::fs as unix_fs;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -76,6 +77,7 @@ async fn start_http_bridge(
             "http",
             "--http-port",
             &port.to_string(),
+            "--sync",
             "--tools-dir",
             &tools_dir.to_string_lossy(),
             "--guidance-file",
@@ -267,6 +269,134 @@ async fn answer_roots_list_over_sse(
                         json!({
                             "uri": format!("file://{}", p.display()),
                             "name": p.file_name().and_then(|n| n.to_str()).unwrap_or("root")
+                        })
+                    })
+                    .collect();
+
+                let response = json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {
+                        "roots": roots_json
+                    }
+                });
+
+                let _ = send_mcp_request(client, base_url, &response, Some(session_id))
+                    .await
+                    .expect("Failed to send roots/list response");
+                return;
+            }
+        }
+    }
+}
+
+fn percent_encode_path_for_file_uri(path: &std::path::Path) -> String {
+    // Percent-encode path characters commonly present in IDE roots (spaces/unicode).
+    // We keep '/' and unreserved characters. This is sufficient for file:// URIs.
+    let s = path.to_string_lossy();
+    let mut out = String::with_capacity(s.len());
+    for &b in s.as_bytes() {
+        let keep = matches!(
+            b,
+            b'a'..=b'z'
+                | b'A'..=b'Z'
+                | b'0'..=b'9'
+                | b'-'
+                | b'.'
+                | b'_'
+                | b'~'
+                | b'/'
+        );
+        if keep {
+            out.push(b as char);
+        } else {
+            out.push('%');
+            out.push_str(&format!("{:02X}", b));
+        }
+    }
+    out
+}
+
+/// Wait for a `roots/list` request over SSE and respond with provided URI strings.
+async fn answer_roots_list_over_sse_with_uris(
+    client: &Client,
+    base_url: &str,
+    session_id: &str,
+    root_uris: &[String],
+) {
+    let url = format!("{}/mcp", base_url);
+    let resp = client
+        .get(&url)
+        .header("Accept", "text/event-stream")
+        .header("Cache-Control", "no-cache")
+        .header("Mcp-Session-Id", session_id)
+        .send()
+        .await
+        .expect("Failed to open SSE stream");
+
+    assert!(
+        resp.status().is_success(),
+        "SSE stream must be available, got HTTP {}",
+        resp.status()
+    );
+
+    let mut stream = resp.bytes_stream();
+    let mut buffer = String::new();
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+
+    loop {
+        if tokio::time::Instant::now() > deadline {
+            panic!("Timed out waiting for roots/list over SSE (session isolation likely broken)");
+        }
+
+        let chunk = tokio::time::timeout(Duration::from_millis(500), stream.next())
+            .await
+            .ok()
+            .flatten();
+
+        if let Some(next) = chunk {
+            let bytes = next.expect("SSE stream read failed");
+            let text = String::from_utf8_lossy(&bytes);
+            buffer.push_str(&text);
+
+            while let Some(idx) = buffer.find("\n\n") {
+                let raw_event = buffer[..idx].to_string();
+                buffer = buffer[idx + 2..].to_string();
+
+                let mut data_lines: Vec<&str> = Vec::new();
+                for line in raw_event.lines() {
+                    let line = line.trim_end_matches('\r');
+                    if let Some(rest) = line.strip_prefix("data:") {
+                        data_lines.push(rest.trim());
+                    }
+                }
+
+                if data_lines.is_empty() {
+                    continue;
+                }
+
+                let data = data_lines.join("\n");
+                let Ok(value) = serde_json::from_str::<Value>(&data) else {
+                    continue;
+                };
+
+                let method = value.get("method").and_then(|m| m.as_str());
+                if method != Some("roots/list") {
+                    continue;
+                }
+
+                let id = value
+                    .get("id")
+                    .cloned()
+                    .expect("roots/list must include id");
+
+                let roots_json: Vec<Value> = root_uris
+                    .iter()
+                    .map(|uri| {
+                        json!({
+                            "uri": uri,
+                            "name": "root"
                         })
                     })
                     .collect();
@@ -729,6 +859,432 @@ async fn test_basic_tool_call_within_sandbox() {
             response
         );
     }
+
+    server.kill().expect("Failed to kill server");
+}
+
+/// Roots URIs may be percent-encoded (spaces/unicode) by real IDE clients.
+/// Session isolation must decode these correctly so sandbox scope matches the workspace.
+#[tokio::test]
+async fn test_roots_uri_parsing_percent_encoded_path() {
+    let server_scope_dir = TempDir::new().expect("Failed to create temp dir (server_scope)");
+    let client_scope_dir = TempDir::new().expect("Failed to create temp dir (client_scope)");
+
+    let tools_dir = server_scope_dir.path().join("tools");
+    std::fs::create_dir_all(&tools_dir).expect("Failed to create tools dir");
+
+    // Create pwd tool config
+    let tool_config = json!({
+        "name": "pwd",
+        "description": "Print current working directory",
+        "command": "pwd",
+        "enabled": true,
+        "subcommand": [{
+            "name": "default",
+            "description": "Print working directory"
+        }]
+    });
+    std::fs::write(
+        tools_dir.join("pwd.json"),
+        serde_json::to_string_pretty(&tool_config).unwrap(),
+    )
+    .expect("Failed to write tool config");
+
+    // Make a workspace root with space + unicode in the path.
+    let client_root = client_scope_dir.path().join("my proj ✓");
+    tokio::fs::create_dir_all(&client_root)
+        .await
+        .expect("Failed to create client root");
+
+    let port = find_available_port();
+    let mut server = start_http_bridge(port, &tools_dir, server_scope_dir.path()).await;
+    let base_url = format!("http://127.0.0.1:{}", port);
+    let client = Client::new();
+
+    let init_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "test-client", "version": "1.0.0"}
+        }
+    });
+    let (_, session_id) = send_mcp_request(&client, &base_url, &init_request, None)
+        .await
+        .expect("Initialize should succeed");
+    let session_id = session_id.expect("Session isolation must return mcp-session-id header");
+
+    let encoded_path = percent_encode_path_for_file_uri(&client_root);
+    let uri = format!("file://{}", encoded_path);
+
+    let sse_client = client.clone();
+    let sse_base_url = base_url.clone();
+    let sse_session_id = session_id.clone();
+    let sse_uri = uri.clone();
+    let sse_task = tokio::spawn(async move {
+        answer_roots_list_over_sse_with_uris(
+            &sse_client,
+            &sse_base_url,
+            &sse_session_id,
+            &[sse_uri],
+        )
+        .await;
+    });
+
+    let initialized = json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+    });
+    let _ = send_mcp_request(&client, &base_url, &initialized, Some(&session_id)).await;
+    sse_task.await.expect("roots/list SSE task panicked");
+
+    let tool_call = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "pwd",
+            "arguments": {
+                "subcommand": "default",
+                "working_directory": client_root.to_string_lossy()
+            }
+        }
+    });
+    let (resp, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
+        .await
+        .expect("Tool call should succeed");
+    assert!(
+        resp.get("error").is_none(),
+        "pwd must succeed, got: {resp:?}"
+    );
+
+    let output_text = resp
+        .get("result")
+        .and_then(|r| r.get("content"))
+        .and_then(|c| c.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|item| item.get("text"))
+        .and_then(|t| t.as_str())
+        .unwrap_or("");
+    assert!(
+        output_text.contains(client_root.to_string_lossy().as_ref()),
+        "pwd output must include decoded client root path; got: {resp:?}"
+    );
+
+    server.kill().expect("Failed to kill server");
+}
+
+/// Some clients send file URIs in host form: file://localhost/abs/path
+#[tokio::test]
+async fn test_roots_uri_parsing_file_localhost() {
+    let server_scope_dir = TempDir::new().expect("Failed to create temp dir (server_scope)");
+    let client_scope_dir = TempDir::new().expect("Failed to create temp dir (client_scope)");
+
+    let tools_dir = server_scope_dir.path().join("tools");
+    std::fs::create_dir_all(&tools_dir).expect("Failed to create tools dir");
+
+    let tool_config = json!({
+        "name": "pwd",
+        "description": "Print current working directory",
+        "command": "pwd",
+        "enabled": true,
+        "subcommand": [{
+            "name": "default",
+            "description": "Print working directory"
+        }]
+    });
+    std::fs::write(
+        tools_dir.join("pwd.json"),
+        serde_json::to_string_pretty(&tool_config).unwrap(),
+    )
+    .expect("Failed to write tool config");
+
+    let client_root = client_scope_dir.path().join("my proj ✓");
+    tokio::fs::create_dir_all(&client_root)
+        .await
+        .expect("Failed to create client root");
+
+    let port = find_available_port();
+    let mut server = start_http_bridge(port, &tools_dir, server_scope_dir.path()).await;
+    let base_url = format!("http://127.0.0.1:{}", port);
+    let client = Client::new();
+
+    let init_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "test-client", "version": "1.0.0"}
+        }
+    });
+    let (_, session_id) = send_mcp_request(&client, &base_url, &init_request, None)
+        .await
+        .expect("Initialize should succeed");
+    let session_id = session_id.expect("Session isolation must return mcp-session-id header");
+
+    let encoded_path = percent_encode_path_for_file_uri(&client_root);
+    let uri = format!("file://localhost{}", encoded_path);
+
+    let sse_client = client.clone();
+    let sse_base_url = base_url.clone();
+    let sse_session_id = session_id.clone();
+    let sse_uri = uri.clone();
+    let sse_task = tokio::spawn(async move {
+        answer_roots_list_over_sse_with_uris(
+            &sse_client,
+            &sse_base_url,
+            &sse_session_id,
+            &[sse_uri],
+        )
+        .await;
+    });
+
+    let initialized = json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+    });
+    let _ = send_mcp_request(&client, &base_url, &initialized, Some(&session_id)).await;
+    sse_task.await.expect("roots/list SSE task panicked");
+
+    let tool_call = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "pwd",
+            "arguments": {
+                "subcommand": "default",
+                "working_directory": client_root.to_string_lossy()
+            }
+        }
+    });
+    let (resp, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
+        .await
+        .expect("Tool call should succeed");
+    assert!(
+        resp.get("error").is_none(),
+        "pwd must succeed, got: {resp:?}"
+    );
+
+    server.kill().expect("Failed to kill server");
+}
+
+/// Red-team: working_directory with '..' that resolves outside root must be rejected.
+#[tokio::test]
+async fn test_rejects_working_directory_path_traversal_outside_root() {
+    let server_scope_dir = TempDir::new().expect("Failed to create temp dir (server_scope)");
+    let sandbox_parent = TempDir::new().expect("Failed to create temp dir (sandbox_parent)");
+
+    let client_root = sandbox_parent.path().join("root");
+    let outside_dir = sandbox_parent.path().join("outside");
+    tokio::fs::create_dir_all(&client_root)
+        .await
+        .expect("Failed to create client root");
+    tokio::fs::create_dir_all(&outside_dir)
+        .await
+        .expect("Failed to create outside dir");
+
+    let tools_dir = server_scope_dir.path().join("tools");
+    std::fs::create_dir_all(&tools_dir).expect("Failed to create tools dir");
+
+    let tool_config = json!({
+        "name": "pwd",
+        "description": "Print current working directory",
+        "command": "pwd",
+        "enabled": true,
+        "subcommand": [{
+            "name": "default",
+            "description": "Print working directory"
+        }]
+    });
+    std::fs::write(
+        tools_dir.join("pwd.json"),
+        serde_json::to_string_pretty(&tool_config).unwrap(),
+    )
+    .expect("Failed to write tool config");
+
+    let port = find_available_port();
+    let mut server = start_http_bridge(port, &tools_dir, server_scope_dir.path()).await;
+    let base_url = format!("http://127.0.0.1:{}", port);
+    let client = Client::new();
+
+    let init_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "test-client", "version": "1.0.0"}
+        }
+    });
+    let (_, session_id) = send_mcp_request(&client, &base_url, &init_request, None)
+        .await
+        .expect("Initialize should succeed");
+    let session_id = session_id.expect("Session isolation must return mcp-session-id header");
+
+    let sse_client = client.clone();
+    let sse_base_url = base_url.clone();
+    let sse_session_id = session_id.clone();
+    let sse_root = client_root.clone();
+    let sse_task = tokio::spawn(async move {
+        answer_roots_list_over_sse(&sse_client, &sse_base_url, &sse_session_id, &[sse_root]).await;
+    });
+
+    let initialized = json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+    });
+    let _ = send_mcp_request(&client, &base_url, &initialized, Some(&session_id)).await;
+    sse_task.await.expect("roots/list SSE task panicked");
+
+    let traversal = client_root
+        .join("subdir")
+        .join("..")
+        .join("..")
+        .join("outside");
+
+    let tool_call = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "pwd",
+            "arguments": {
+                "subcommand": "default",
+                "working_directory": traversal.to_string_lossy()
+            }
+        }
+    });
+
+    let (resp, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
+        .await
+        .expect("Request should succeed at transport layer");
+
+    assert!(
+        resp.get("error").is_some(),
+        "Expected sandbox rejection, got: {resp:?}"
+    );
+    let msg = resp
+        .get("error")
+        .and_then(|e| e.get("message"))
+        .and_then(|m| m.as_str())
+        .unwrap_or("");
+    assert!(
+        msg.contains("outside") && msg.contains("sandbox"),
+        "Expected sandbox boundary error message, got: {msg:?}"
+    );
+
+    server.kill().expect("Failed to kill server");
+}
+
+/// Red-team: symlink inside root pointing outside must not allow writes outside root.
+#[tokio::test]
+async fn test_symlink_escape_attempt_is_blocked() {
+    let server_scope_dir = TempDir::new().expect("Failed to create temp dir (server_scope)");
+    let sandbox_parent = TempDir::new().expect("Failed to create temp dir (sandbox_parent)");
+
+    let client_root = sandbox_parent.path().join("root");
+    let outside_dir = sandbox_parent.path().join("outside");
+    tokio::fs::create_dir_all(&client_root)
+        .await
+        .expect("Failed to create client root");
+    tokio::fs::create_dir_all(&outside_dir)
+        .await
+        .expect("Failed to create outside dir");
+
+    // Symlink inside root -> outside
+    let escape_link = client_root.join("escape");
+    unix_fs::symlink(&outside_dir, &escape_link).expect("Failed to create symlink");
+
+    let tools_dir = server_scope_dir.path().join("tools");
+    std::fs::create_dir_all(&tools_dir).expect("Failed to create tools dir");
+
+    // Copy the workspace file_tools config so we can attempt a write.
+    let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("Failed to get workspace dir")
+        .to_path_buf();
+    std::fs::copy(
+        workspace_dir.join(".ahma/tools/file_tools.json"),
+        tools_dir.join("file_tools.json"),
+    )
+    .expect("Failed to copy file_tools tool config");
+
+    let port = find_available_port();
+    let mut server = start_http_bridge(port, &tools_dir, server_scope_dir.path()).await;
+    let base_url = format!("http://127.0.0.1:{}", port);
+    let client = Client::new();
+
+    let init_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "test-client", "version": "1.0.0"}
+        }
+    });
+    let (_, session_id) = send_mcp_request(&client, &base_url, &init_request, None)
+        .await
+        .expect("Initialize should succeed");
+    let session_id = session_id.expect("Session isolation must return mcp-session-id header");
+
+    let sse_client = client.clone();
+    let sse_base_url = base_url.clone();
+    let sse_session_id = session_id.clone();
+    let sse_root = client_root.clone();
+    let sse_task = tokio::spawn(async move {
+        answer_roots_list_over_sse(&sse_client, &sse_base_url, &sse_session_id, &[sse_root]).await;
+    });
+
+    let initialized = json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+    });
+    let _ = send_mcp_request(&client, &base_url, &initialized, Some(&session_id)).await;
+    sse_task.await.expect("roots/list SSE task panicked");
+
+    // Attempt to create a file that would resolve outside the sandbox via symlink.
+    let tool_call = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "file_tools",
+            "arguments": {
+                "subcommand": "touch",
+                "working_directory": client_root.to_string_lossy(),
+                "files": ["escape/owned.txt"]
+            }
+        }
+    });
+
+    let (resp, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
+        .await
+        .expect("Request should succeed at transport layer");
+
+    assert!(
+        !outside_dir.join("owned.txt").exists(),
+        "Symlink escape must not create files outside sandbox root"
+    );
+
+    // file_tools failures may be represented either as a JSON-RPC error or as result.isError=true.
+    let is_jsonrpc_error = resp.get("error").is_some();
+    let is_tool_error = resp
+        .get("result")
+        .and_then(|r| r.get("isError"))
+        .and_then(|b| b.as_bool())
+        .unwrap_or(false);
+    assert!(
+        is_jsonrpc_error || is_tool_error,
+        "Expected sandbox/tool rejection signal, got: {resp:?}"
+    );
 
     server.kill().expect("Failed to kill server");
 }

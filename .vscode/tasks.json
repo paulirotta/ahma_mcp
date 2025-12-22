@@ -1,23 +1,30 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "Rust Quality Check",
-            "type": "shell",
-            "command": "cargo fmt && cargo clippy --fix --allow-dirty && cargo clippy --fix --tests --allow-dirty && cargo nextest run && cargo build",
-            "problemMatcher": [],
-            "group": {
-                "kind": "test",
-                "isDefault": true
-            },
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared",
-                "showReuseMessage": false,
-                "clear": true
-            }
-        }
-    ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Rust Quality Check",
+			"type": "shell",
+			"command": "cargo fmt && cargo clippy --fix --allow-dirty && cargo clippy --fix --tests --allow-dirty && cargo nextest run && cargo build",
+			"problemMatcher": [],
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared",
+				"showReuseMessage": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "Nextest: SSE slow subset",
+			"type": "shell",
+			"command": "cargo nextest run -p ahma_http_bridge --test sse_tool_integration_test -E \"test(test_python_version)|test(test_python_code)|test(test_sandboxed_shell_pipe)|test(test_sandboxed_shell_variable_substitution)\"",
+			"isBackground": false,
+			"group": "test"
+		}
+	]
 }

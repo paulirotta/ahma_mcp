@@ -1,0 +1,525 @@
+//! Fast Error Response Tests
+//!
+//! These tests verify that the server NEVER hangs on invalid input.
+//! All error responses must complete within a strict timeout (2 seconds).
+//!
+//! This is a critical safety test - a hanging server can block CI and cause
+//! poor user experience.
+//!
+//! ## Test Scenarios
+//!
+//! 1. Invalid tool name → Error in < 2s
+//! 2. Invalid subcommand → Error in < 2s
+//! 3. Missing session ID → 400 error in < 2s
+//! 4. Invalid JSON-RPC method → Error in < 2s
+
+mod common;
+
+use common::{AHMA_INTEGRATION_TEST_SERVER_PORT, get_test_server};
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use std::time::{Duration, Instant};
+
+/// Maximum allowed response time for ANY error case.
+/// If any request takes longer than this, the server has a hang bug.
+const MAX_ERROR_RESPONSE_MS: u128 = 2000;
+
+/// Get the test server URL
+fn get_test_url() -> String {
+    format!("http://127.0.0.1:{}/mcp", AHMA_INTEGRATION_TEST_SERVER_PORT)
+}
+
+#[derive(Debug, Serialize)]
+struct JsonRpcRequest {
+    jsonrpc: String,
+    id: u64,
+    method: String,
+    params: Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct JsonRpcResponse {
+    jsonrpc: String,
+    id: Option<u64>,
+    #[serde(default)]
+    result: Option<Value>,
+    #[serde(default)]
+    error: Option<JsonRpcError>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct JsonRpcError {
+    code: i32,
+    message: String,
+    #[serde(default)]
+    data: Option<Value>,
+}
+
+/// Send a request and return (response/error, duration_ms)
+async fn timed_request(
+    client: &Client,
+    request: &JsonRpcRequest,
+) -> (Result<JsonRpcResponse, String>, u128) {
+    let url = get_test_url();
+    let start = Instant::now();
+
+    let result = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .json(request)
+        .timeout(Duration::from_secs(5))
+        .send()
+        .await;
+
+    let duration_ms = start.elapsed().as_millis();
+
+    match result {
+        Ok(response) => {
+            let status = response.status();
+            if !status.is_success() {
+                let text = response.text().await.unwrap_or_default();
+                (Err(format!("HTTP {}: {}", status, text)), duration_ms)
+            } else {
+                match response.json::<JsonRpcResponse>().await {
+                    Ok(resp) => (Ok(resp), duration_ms),
+                    Err(e) => (Err(format!("Parse error: {}", e)), duration_ms),
+                }
+            }
+        }
+        Err(e) => (Err(format!("Request failed: {}", e)), duration_ms),
+    }
+}
+
+/// Initialize a session and return the session ID.
+/// Retries a few times since the shared test server may still be starting.
+/// This function properly completes the MCP handshake by sending:
+/// 1. initialize request
+/// 2. notifications/initialized notification
+async fn initialize_session(client: &Client) -> Option<String> {
+    let url = get_test_url();
+    let init_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {"roots": {}},
+            "clientInfo": {"name": "fast-error-test", "version": "1.0"}
+        }
+    });
+
+    // Retry a few times - the shared server may still be starting
+    for attempt in 0..5 {
+        if attempt > 0 {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+
+        let response = match client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .json(&init_request)
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await
+        {
+            Ok(resp) => resp,
+            Err(_) => continue,
+        };
+
+        if !response.status().is_success() {
+            continue;
+        }
+
+        let session_id = response
+            .headers()
+            .get("mcp-session-id")
+            .or_else(|| response.headers().get("Mcp-Session-Id"))
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        if let Some(ref sid) = session_id {
+            // Complete MCP handshake by sending initialized notification
+            let initialized_notification = json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized"
+            });
+
+            let _ = client
+                .post(&url)
+                .header("Content-Type", "application/json")
+                .header("Mcp-Session-Id", sid)
+                .json(&initialized_notification)
+                .timeout(Duration::from_secs(5))
+                .send()
+                .await;
+
+            return session_id;
+        }
+    }
+
+    None
+}
+
+/// Send a request WITH session ID
+async fn timed_request_with_session(
+    client: &Client,
+    session_id: &str,
+    request: &JsonRpcRequest,
+) -> (Result<JsonRpcResponse, String>, u128) {
+    let url = get_test_url();
+    let start = Instant::now();
+
+    let result = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("Mcp-Session-Id", session_id)
+        .json(request)
+        .timeout(Duration::from_secs(5))
+        .send()
+        .await;
+
+    let duration_ms = start.elapsed().as_millis();
+
+    match result {
+        Ok(response) => {
+            if !response.status().is_success() {
+                let text = response.text().await.unwrap_or_default();
+                (Err(format!("HTTP error: {}", text)), duration_ms)
+            } else {
+                match response.json::<JsonRpcResponse>().await {
+                    Ok(resp) => (Ok(resp), duration_ms),
+                    Err(e) => (Err(format!("Parse error: {}", e)), duration_ms),
+                }
+            }
+        }
+        Err(e) => (Err(format!("Request failed: {}", e)), duration_ms),
+    }
+}
+
+// =============================================================================
+// Test: Missing Session ID returns fast 400
+// =============================================================================
+
+#[tokio::test]
+async fn test_missing_session_id_returns_fast_error() {
+    let _server = get_test_server().await;
+    let client = Client::new();
+
+    // Call tools/call without session ID - should return 400 immediately
+    let request = JsonRpcRequest {
+        jsonrpc: "2.0".to_string(),
+        id: 1,
+        method: "tools/call".to_string(),
+        params: json!({
+            "name": "python",
+            "arguments": {"subcommand": "version"}
+        }),
+    };
+
+    let (result, duration_ms) = timed_request(&client, &request).await;
+
+    println!(
+        "Missing session ID: duration={}ms, result={:?}",
+        duration_ms, result
+    );
+
+    // MUST return fast - if this fails, server has a hang bug
+    assert!(
+        duration_ms < MAX_ERROR_RESPONSE_MS,
+        "Server took {}ms to respond to missing session ID (max: {}ms). HANG BUG!",
+        duration_ms,
+        MAX_ERROR_RESPONSE_MS
+    );
+
+    // Should be an error (400 status, which becomes Err)
+    assert!(result.is_err(), "Missing session ID should return an error");
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("400") || err.contains("session"),
+        "Error should mention session ID: {}",
+        err
+    );
+}
+
+// =============================================================================
+// Test: Invalid tool name returns fast error
+// =============================================================================
+
+#[tokio::test]
+async fn test_invalid_tool_name_returns_fast_error() {
+    let _server = get_test_server().await;
+    let client = Client::new();
+
+    // Wait a moment for the server to stabilize if it just started
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // First establish a session
+    let session_id = match initialize_session(&client).await {
+        Some(id) => id,
+        None => {
+            eprintln!("⚠️  Could not initialize session, skipping test");
+            return;
+        }
+    };
+
+    // Call a nonexistent tool
+    let request = JsonRpcRequest {
+        jsonrpc: "2.0".to_string(),
+        id: 2,
+        method: "tools/call".to_string(),
+        params: json!({
+            "name": "nonexistent_tool_xyz_123",
+            "arguments": {}
+        }),
+    };
+
+    let (result, duration_ms) = timed_request_with_session(&client, &session_id, &request).await;
+
+    println!(
+        "Invalid tool name: duration={}ms, result={:?}",
+        duration_ms, result
+    );
+
+    // MUST return fast
+    assert!(
+        duration_ms < MAX_ERROR_RESPONSE_MS,
+        "Server took {}ms to respond to invalid tool name (max: {}ms). HANG BUG!",
+        duration_ms,
+        MAX_ERROR_RESPONSE_MS
+    );
+
+    // Should be a JSON-RPC error response
+    match result {
+        Ok(resp) => {
+            assert!(
+                resp.error.is_some(),
+                "Should return JSON-RPC error for invalid tool"
+            );
+            let err = resp.error.unwrap();
+            println!("Error code: {}, message: {}", err.code, err.message);
+            assert!(
+                err.message.to_lowercase().contains("not found") || err.message.contains("Tool"),
+                "Error should mention tool not found: {}",
+                err.message
+            );
+        }
+        Err(e) => {
+            // HTTP-level error is also acceptable
+            println!("HTTP error (acceptable): {}", e);
+        }
+    }
+}
+
+// =============================================================================
+// Test: Invalid subcommand returns fast error
+// =============================================================================
+
+#[tokio::test]
+async fn test_invalid_subcommand_returns_fast_error() {
+    let _server = get_test_server().await;
+    let client = Client::new();
+
+    // Wait a moment for the server to stabilize if it just started
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // First establish a session
+    let session_id = match initialize_session(&client).await {
+        Some(id) => id,
+        None => {
+            eprintln!("⚠️  Could not initialize session, skipping test");
+            return;
+        }
+    };
+
+    // Call a valid tool with invalid subcommand
+    let request = JsonRpcRequest {
+        jsonrpc: "2.0".to_string(),
+        id: 3,
+        method: "tools/call".to_string(),
+        params: json!({
+            "name": "python",
+            "arguments": {"subcommand": "nonexistent_subcommand_xyz"}
+        }),
+    };
+
+    let (result, duration_ms) = timed_request_with_session(&client, &session_id, &request).await;
+
+    println!(
+        "Invalid subcommand: duration={}ms, result={:?}",
+        duration_ms, result
+    );
+
+    // MUST return fast
+    assert!(
+        duration_ms < MAX_ERROR_RESPONSE_MS,
+        "Server took {}ms to respond to invalid subcommand (max: {}ms). HANG BUG!",
+        duration_ms,
+        MAX_ERROR_RESPONSE_MS
+    );
+
+    // Should be a JSON-RPC error response
+    match result {
+        Ok(resp) => {
+            assert!(
+                resp.error.is_some(),
+                "Should return JSON-RPC error for invalid subcommand"
+            );
+            let err = resp.error.unwrap();
+            println!("Error code: {}, message: {}", err.code, err.message);
+        }
+        Err(e) => {
+            println!("HTTP error (acceptable): {}", e);
+        }
+    }
+}
+
+// =============================================================================
+// Test: Invalid JSON-RPC method returns fast error
+// =============================================================================
+
+#[tokio::test]
+async fn test_invalid_method_returns_fast_error() {
+    let _server = get_test_server().await;
+    let client = Client::new();
+
+    // Wait a moment for the server to stabilize if it just started
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // First establish a session
+    let session_id = match initialize_session(&client).await {
+        Some(id) => id,
+        None => {
+            eprintln!("⚠️  Could not initialize session, skipping test");
+            return;
+        }
+    };
+
+    // Call an invalid method
+    let request = JsonRpcRequest {
+        jsonrpc: "2.0".to_string(),
+        id: 4,
+        method: "nonexistent/method".to_string(),
+        params: json!({}),
+    };
+
+    let (result, duration_ms) = timed_request_with_session(&client, &session_id, &request).await;
+
+    println!(
+        "Invalid method: duration={}ms, result={:?}",
+        duration_ms, result
+    );
+
+    // MUST return fast
+    assert!(
+        duration_ms < MAX_ERROR_RESPONSE_MS,
+        "Server took {}ms to respond to invalid method (max: {}ms). HANG BUG!",
+        duration_ms,
+        MAX_ERROR_RESPONSE_MS
+    );
+
+    // Should be a JSON-RPC error response
+    match result {
+        Ok(resp) => {
+            assert!(
+                resp.error.is_some(),
+                "Should return JSON-RPC error for invalid method"
+            );
+        }
+        Err(e) => {
+            println!("HTTP error (acceptable): {}", e);
+        }
+    }
+}
+
+// =============================================================================
+// Test: Malformed JSON returns fast error
+// =============================================================================
+
+#[tokio::test]
+async fn test_malformed_json_returns_fast_error() {
+    let _server = get_test_server().await;
+    let client = Client::new();
+
+    let url = get_test_url();
+    let start = Instant::now();
+
+    // Send malformed JSON
+    let result = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .body("{invalid json")
+        .timeout(Duration::from_secs(5))
+        .send()
+        .await;
+
+    let duration_ms = start.elapsed().as_millis();
+
+    println!("Malformed JSON: duration={}ms", duration_ms);
+
+    // MUST return fast
+    assert!(
+        duration_ms < MAX_ERROR_RESPONSE_MS,
+        "Server took {}ms to respond to malformed JSON (max: {}ms). HANG BUG!",
+        duration_ms,
+        MAX_ERROR_RESPONSE_MS
+    );
+
+    // Should return some response (error is fine)
+    assert!(
+        result.is_ok(),
+        "Server should respond to malformed JSON, not hang"
+    );
+}
+
+// =============================================================================
+// Test: Missing tool arguments returns fast error
+// =============================================================================
+
+#[tokio::test]
+async fn test_missing_required_args_returns_fast_error() {
+    let _server = get_test_server().await;
+    let client = Client::new();
+
+    // Wait a moment for the server to stabilize if it just started
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // First establish a session
+    let session_id = match initialize_session(&client).await {
+        Some(id) => id,
+        None => {
+            eprintln!("⚠️  Could not initialize session, skipping test");
+            return;
+        }
+    };
+
+    // Call a tool that requires subcommand, without providing one
+    let request = JsonRpcRequest {
+        jsonrpc: "2.0".to_string(),
+        id: 5,
+        method: "tools/call".to_string(),
+        params: json!({
+            "name": "python",
+            "arguments": {}  // Missing required "subcommand"
+        }),
+    };
+
+    let (result, duration_ms) = timed_request_with_session(&client, &session_id, &request).await;
+
+    println!(
+        "Missing required args: duration={}ms, result={:?}",
+        duration_ms, result
+    );
+
+    // MUST return fast
+    assert!(
+        duration_ms < MAX_ERROR_RESPONSE_MS,
+        "Server took {}ms to respond to missing args (max: {}ms). HANG BUG!",
+        duration_ms,
+        MAX_ERROR_RESPONSE_MS
+    );
+}

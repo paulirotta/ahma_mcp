@@ -420,10 +420,10 @@ async fn test_uri_parsing_edge_cases() {
         ),
         // Without trailing slash
         ("file:///path/to/dir", PathBuf::from("/path/to/dir")),
-        // With encoded spaces (URL encoding is preserved, not decoded)
+        // With encoded spaces (percent-decoded to a real filesystem path)
         (
             "file:///path/with%20space",
-            PathBuf::from("/path/with%20space"),
+            PathBuf::from("/path/with space"),
         ),
         // Root path
         ("file:///", PathBuf::from("/")),

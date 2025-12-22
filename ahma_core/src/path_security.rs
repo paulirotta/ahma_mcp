@@ -16,15 +16,27 @@ pub async fn validate_path(path: &Path, root: &Path) -> Result<PathBuf> {
         root_canonical.join(path)
     };
 
-    // Try to canonicalize the full path to handle symlinks correctly
+    // Try to canonicalize the full path to handle symlinks correctly.
+    // If the file does not exist yet, canonicalize the parent directory (which should exist)
+    // so symlink escapes are still detected for create/write operations.
     let resolved_path = match fs::canonicalize(&path_to_check).await {
         Ok(p) => p,
         Err(_) => {
-            // If the file doesn't exist, we fall back to lexical normalization.
-            // This is less secure against symlink attacks (e.g. if a component is a symlink to outside)
-            // but necessary for creating new files.
-            // A stricter approach would be to canonicalize the parent, but let's start here.
-            normalize_path(&path_to_check)
+            if let Some(parent) = path_to_check.parent() {
+                if let Ok(parent_canonical) = fs::canonicalize(parent).await {
+                    if let Some(name) = path_to_check.file_name() {
+                        parent_canonical.join(name)
+                    } else {
+                        parent_canonical
+                    }
+                } else {
+                    // If even the parent cannot be canonicalized, fall back to lexical normalization.
+                    // This should be rare and is primarily for deeply-nested create flows.
+                    normalize_path(&path_to_check)
+                }
+            } else {
+                normalize_path(&path_to_check)
+            }
         }
     };
 
