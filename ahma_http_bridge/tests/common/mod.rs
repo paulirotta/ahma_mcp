@@ -202,10 +202,8 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
 
     // Spawn a task to drain remaining stderr (prevent blocking)
     std::thread::spawn(move || {
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                eprintln!("{}", line);
-            }
+        for line in reader.lines().map_while(Result::ok) {
+            eprintln!("{}", line);
         }
     });
 
