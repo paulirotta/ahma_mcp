@@ -150,7 +150,11 @@ fn test_timestamp_formatting_edge_cases() {
     assert_eq!(current_formatted.matches(':').count(), 2);
 
     // Verify the format looks like a time (contains digits and colons)
-    assert!(current_formatted.chars().all(|c| c.is_ascii_digit() || c == ':'));
+    assert!(
+        current_formatted
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == ':')
+    );
 }
 
 #[test]
