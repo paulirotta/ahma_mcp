@@ -7,18 +7,21 @@
 //!
 //! ## Running Tests
 //!
-//! These tests require an SSE server to be running. Set the environment variable:
-//! ```
-//! export AHMA_TEST_SSE_URL=http://localhost:3000
+//! These tests use a shared test server on port 5721 (NOT the production port 3000).
+//! The server is automatically started when tests run.
+//!
+//! ```bash
 //! cargo nextest run --test sse_tool_integration_test
 //! ```
 //!
-//! Or start the HTTP bridge and run tests:
-//! ```
-//! ./scripts/ahma-http-server.sh &
-//! AHMA_TEST_SSE_URL=http://localhost:3000 cargo nextest run --test sse_tool_integration_test
+//! To use a custom server URL (e.g., for debugging):
+//! ```bash
+//! AHMA_TEST_SSE_URL=http://localhost:5721 cargo nextest run --test sse_tool_integration_test
 //! ```
 
+mod common;
+
+use common::{AHMA_INTEGRATION_TEST_SERVER_PORT, get_test_server};
 use futures::future::join_all;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -28,27 +31,35 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
-/// Default SSE server URL for tests
-const DEFAULT_SSE_URL: &str = "http://localhost:3000";
-
-/// Get the SSE server URL from environment or use default
+/// Get the SSE server URL from environment or use the test server port.
+/// NOTE: Tests should use the shared test server on port 5721, NOT port 3000.
 fn get_sse_url() -> String {
-    env::var("AHMA_TEST_SSE_URL").unwrap_or_else(|_| DEFAULT_SSE_URL.to_string())
+    env::var("AHMA_TEST_SSE_URL")
+        .unwrap_or_else(|_| format!("http://127.0.0.1:{}", AHMA_INTEGRATION_TEST_SERVER_PORT))
 }
 
-/// Check if SSE server is available
-async fn is_server_available() -> bool {
-    let url = format!("{}/health", get_sse_url());
-    let client = Client::new();
-    match client
-        .get(&url)
-        .timeout(Duration::from_secs(2))
-        .send()
-        .await
-    {
-        Ok(resp) => resp.status().is_success(),
-        Err(_) => false,
+/// Ensure the test server is running and return whether it's available.
+/// If AHMA_TEST_SSE_URL is set, it just checks that URL.
+/// Otherwise, it starts the shared test server on port 5721.
+async fn ensure_server_available() -> bool {
+    // If user specified a custom URL, just check if it's available
+    if env::var("AHMA_TEST_SSE_URL").is_ok() {
+        let url = format!("{}/health", get_sse_url());
+        let client = Client::new();
+        return match client
+            .get(&url)
+            .timeout(Duration::from_secs(2))
+            .send()
+            .await
+        {
+            Ok(resp) => resp.status().is_success(),
+            Err(_) => false,
+        };
     }
+
+    // Start the shared test server
+    let _server = get_test_server().await;
+    true
 }
 
 /// Check if a specific tool is available on the server
@@ -233,7 +244,7 @@ async fn call_tool(client: &Client, name: &str, arguments: Value) -> ToolCallRes
 
 #[tokio::test]
 async fn test_list_tools_returns_all_expected_tools() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!(
             "⚠️  SSE server not available at {}, skipping test",
             get_sse_url()
@@ -396,7 +407,7 @@ async fn test_list_tools_returns_all_expected_tools() {
 
 #[tokio::test]
 async fn test_file_tools_pwd() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -421,7 +432,7 @@ async fn test_file_tools_pwd() {
 
 #[tokio::test]
 async fn test_file_tools_ls() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -450,7 +461,7 @@ async fn test_file_tools_ls() {
 
 #[tokio::test]
 async fn test_file_tools_ls_with_options() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -491,7 +502,7 @@ async fn test_file_tools_ls_with_options() {
 
 #[tokio::test]
 async fn test_file_tools_cat() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -518,7 +529,7 @@ async fn test_file_tools_cat() {
 
 #[tokio::test]
 async fn test_file_tools_head() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -547,7 +558,7 @@ async fn test_file_tools_head() {
 
 #[tokio::test]
 async fn test_file_tools_tail() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -576,7 +587,7 @@ async fn test_file_tools_tail() {
 
 #[tokio::test]
 async fn test_file_tools_grep() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -606,7 +617,7 @@ async fn test_file_tools_grep() {
 
 #[tokio::test]
 async fn test_file_tools_find() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -646,7 +657,7 @@ async fn test_file_tools_find() {
 
 #[tokio::test]
 async fn test_sandboxed_shell_echo() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -700,7 +711,7 @@ async fn test_sandboxed_shell_echo() {
 
 #[tokio::test]
 async fn test_sandboxed_shell_pipe() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -750,7 +761,7 @@ async fn test_sandboxed_shell_pipe() {
 
 #[tokio::test]
 async fn test_sandboxed_shell_variable_substitution() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -804,7 +815,7 @@ async fn test_sandboxed_shell_variable_substitution() {
 
 #[tokio::test]
 async fn test_python_version() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -825,7 +836,7 @@ async fn test_python_version() {
 
 #[tokio::test]
 async fn test_python_code() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -854,7 +865,7 @@ async fn test_python_code() {
 
 #[tokio::test]
 async fn test_cargo_check() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -884,7 +895,7 @@ async fn test_cargo_check() {
 #[tokio::test]
 #[ignore]
 async fn test_concurrent_tool_calls() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -976,7 +987,7 @@ async fn test_concurrent_tool_calls() {
 #[tokio::test]
 #[ignore]
 async fn test_high_volume_concurrent_requests() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -1031,7 +1042,7 @@ async fn test_high_volume_concurrent_requests() {
 
 #[tokio::test]
 async fn test_file_tools_touch_and_rm() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -1102,7 +1113,7 @@ async fn test_file_tools_touch_and_rm() {
 
 #[tokio::test]
 async fn test_file_tools_cp_and_mv() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -1186,7 +1197,7 @@ async fn test_file_tools_cp_and_mv() {
 
 #[tokio::test]
 async fn test_file_tools_diff() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -1246,7 +1257,7 @@ async fn test_file_tools_diff() {
 
 #[tokio::test]
 async fn test_file_tools_sed() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -1309,7 +1320,7 @@ async fn test_file_tools_sed() {
 
 #[tokio::test]
 async fn test_git_status() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -1335,7 +1346,7 @@ async fn test_git_status() {
 
 #[tokio::test]
 async fn test_git_log() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -1356,7 +1367,7 @@ async fn test_git_log() {
 
 #[tokio::test]
 async fn test_gh_workflow_list() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -1382,7 +1393,7 @@ async fn test_gh_workflow_list() {
 
 #[tokio::test]
 async fn test_invalid_tool_returns_error() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -1400,7 +1411,7 @@ async fn test_invalid_tool_returns_error() {
 
 #[tokio::test]
 async fn test_missing_required_arg_returns_error() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping test");
         return;
     }
@@ -1422,7 +1433,7 @@ async fn test_missing_required_arg_returns_error() {
 
 #[tokio::test]
 async fn test_all_tools_comprehensive() {
-    if !is_server_available().await {
+    if !ensure_server_available().await {
         eprintln!("⚠️  SSE server not available, skipping comprehensive test");
         return;
     }

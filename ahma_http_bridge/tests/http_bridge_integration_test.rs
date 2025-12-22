@@ -7,6 +7,10 @@
 //!
 //! These tests reproduce the bug where calling a tool from a different project
 //! (different working_directory) fails with "expect initialized request" error.
+//!
+//! NOTE: These tests spawn their own servers with specific sandbox configurations.
+//! They use dynamic port allocation to avoid conflicts with other tests.
+//! The shared test server singleton (port 5721) is NOT used here.
 
 use reqwest::Client;
 use serde_json::{Value, json};
@@ -17,7 +21,7 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tokio::time::sleep;
 
-/// Find an available port for testing
+/// Find an available port for testing (uses dynamic port allocation)
 fn find_available_port() -> u16 {
     TcpListener::bind("127.0.0.1:0")
         .expect("Failed to bind to any port")

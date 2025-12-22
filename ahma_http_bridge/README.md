@@ -51,6 +51,28 @@ ahma_mcp --mode http --http-port 8080
 ahma_mcp --mode http --tools-dir ./my-tools
 ```
 
+## Port Configuration
+
+| Environment | Port | Notes |
+| ----------- | ---- | ----- |
+| **Production** | 3000 (default) | Configurable via `--http-port` |
+| **Integration Tests** | 5721 (reserved) | Hardcoded constant, do not change |
+
+### Why Port 5721 for Tests?
+
+Integration tests use a dedicated port (5721) to ensure:
+
+1. **Isolation**: Tests never accidentally connect to a production server on port 3000
+2. **Reproducibility**: All tests use the same port for consistent behavior
+3. **Debugging**: Port collisions immediately reveal concurrent test issues
+
+If port 5721 is already in use when running tests, they will fail loudly. This indicates either:
+
+- Another test process is running concurrently
+- A previous test crashed and left an orphaned process
+
+To fix: Kill any existing ahma_mcp processes using port 5721.
+
 ## Endpoints
 
 ### POST /mcp
