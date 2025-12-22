@@ -9,9 +9,9 @@
 //! - Platform-specific sandbox functions
 
 use ahma_core::sandbox::{
-    self, SandboxConfig, SandboxError, build_sandboxed_command, check_sandbox_prerequisites,
-    create_sandboxed_command, create_sandboxed_shell_command, enable_test_mode, get_sandbox_scope,
-    is_test_mode,
+    SandboxConfig, SandboxError, build_sandboxed_command, check_sandbox_prerequisites,
+    create_sandboxed_command, create_sandboxed_shell_command, enable_test_mode,
+    enforce_landlock_sandbox, get_sandbox_scope, is_test_mode,
 };
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -573,7 +573,7 @@ fn test_enforce_landlock_sandbox_noop_on_non_linux() {
     #[cfg(not(target_os = "linux"))]
     {
         let temp = TempDir::new().unwrap();
-        let result = sandbox::enforce_landlock_sandbox(temp.path());
+        let result = enforce_landlock_sandbox(temp.path());
         // On non-Linux, this is a no-op and should succeed
         assert!(result.is_ok());
     }

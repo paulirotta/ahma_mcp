@@ -666,7 +666,8 @@ async fn test_basic_tool_call_within_sandbox() {
         init_response
     );
 
-    let session_id_for_requests = session_id.expect("Session isolation must return mcp-session-id header");
+    let session_id_for_requests =
+        session_id.expect("Session isolation must return mcp-session-id header");
 
     // Send initialized notification
     let initialized = json!({
@@ -684,7 +685,13 @@ async fn test_basic_tool_call_within_sandbox() {
         answer_roots_list_over_sse(&sse_client, &sse_base_url, &sse_session_id, &[sse_root]).await;
     });
 
-    let _ = send_mcp_request(&client, &base_url, &initialized, Some(&session_id_for_requests)).await;
+    let _ = send_mcp_request(
+        &client,
+        &base_url,
+        &initialized,
+        Some(&session_id_for_requests),
+    )
+    .await;
 
     // Ensure roots/list was observed and answered.
     sse_task.await.expect("roots/list SSE task panicked");

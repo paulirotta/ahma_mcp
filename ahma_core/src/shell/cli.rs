@@ -194,6 +194,7 @@ pub async fn run() -> Result<()> {
 
     // Check if sandbox should be disabled
     // Can be set via --no-sandbox flag, AHMA_NO_SANDBOX=1, or AHMA_TEST_MODE (legacy)
+    #[allow(unused_mut)] // mut needed for macOS nested sandbox detection
     let mut no_sandbox = cli.no_sandbox
         || std::env::var("AHMA_NO_SANDBOX").is_ok()
         || std::env::var("AHMA_TEST_MODE").is_ok();

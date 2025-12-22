@@ -130,15 +130,18 @@ fn get_ahma_mcp_binary() -> PathBuf {
 async fn start_test_server() -> Result<TestServerInstance, String> {
     let binary = get_ahma_mcp_binary();
 
-    // Create temp directory for tools and sandbox scope
+    // Get the workspace directory
+    let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("Failed to get workspace dir")
+        .to_path_buf();
+
+    // Use the workspace .ahma/tools directory
+    let tools_dir = workspace_dir.join(".ahma/tools");
+
+    // Create temp directory for sandbox scope
     let temp_dir = TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
-
-    let tools_dir = temp_dir.path().join("tools");
     let sandbox_scope = temp_dir.path().to_path_buf();
-
-    // Create tools dir if it doesn't exist
-    std::fs::create_dir_all(&tools_dir)
-        .map_err(|e| format!("Failed to create tools dir: {}", e))?;
 
     // Build command args
     let args = vec![

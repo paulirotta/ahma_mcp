@@ -67,7 +67,6 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-
     // Build server args, adding --no-temp-files if enabled
     let mut server_args = args.server_args;
     if args.no_temp_files {

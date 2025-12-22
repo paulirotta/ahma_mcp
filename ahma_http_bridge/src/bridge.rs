@@ -14,9 +14,7 @@ use axum::{
 };
 use futures::stream::StreamExt;
 use serde_json::Value;
-use std::{
-    convert::Infallible, net::SocketAddr, path::PathBuf, sync::Arc,
-};
+use std::{convert::Infallible, net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio_stream::wrappers::BroadcastStream;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::{debug, error, info, warn};
