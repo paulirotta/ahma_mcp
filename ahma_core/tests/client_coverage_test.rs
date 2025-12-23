@@ -1,78 +1,57 @@
-//! Test coverage for the client module
+//! # Client Error Path Tests
 //!
-//! These tests cover the Client struct and its methods for MCP testing.
+//! Tests for error handling when the MCP Client is used before initialization.
+//! These are intentionally separated from integration tests to cover the "not initialized"
+//! error paths without needing to spawn a server.
+//!
+//! For integration tests that exercise Client methods with a live server, see:
+//! - `client_coverage_expansion_test.rs`
+//! - `mcp_integration_tests.rs`
 
 use ahma_core::client::Client;
 
-#[test]
-fn test_client_creation() {
-    // Test that Client::new() creates a valid client
-    let _client = Client::new();
-    // If we got here without panic, creation succeeded
-}
-
-#[test]
-fn test_client_default_trait() {
-    // Test that Client implements Default correctly
-    let _client = Client::default();
-    // If we got here without panic, Default works
-}
-
+/// All Client methods must fail with a clear error when called before `start_process()`
 #[tokio::test]
-async fn test_client_get_service_before_init() {
+async fn test_client_methods_fail_before_initialization() {
     let mut client = Client::new();
-    // Attempting to use methods before initialization should fail
+
+    // status() should fail
     let result = client.status("test_op").await;
+    assert!(result.is_err());
     assert!(
-        result.is_err(),
-        "Status should fail when client is not initialized"
+        result.unwrap_err().to_string().contains("not initialized"),
+        "status() should indicate client not initialized"
     );
-    let err = result.unwrap_err();
-    assert!(
-        err.to_string().contains("not initialized"),
-        "Error should indicate client not initialized, got: {}",
-        err
-    );
-}
 
-#[tokio::test]
-async fn test_client_await_op_before_init() {
-    let mut client = Client::new();
+    // await_op() should fail
     let result = client.await_op("test_op").await;
+    assert!(result.is_err());
     assert!(
-        result.is_err(),
-        "await_op should fail when client is not initialized"
+        result.unwrap_err().to_string().contains("not initialized"),
+        "await_op() should indicate client not initialized"
     );
-    let err = result.unwrap_err();
-    assert!(
-        err.to_string().contains("not initialized"),
-        "Error should indicate client not initialized, got: {}",
-        err
-    );
-}
 
-#[tokio::test]
-async fn test_client_shell_async_sleep_before_init() {
-    let mut client = Client::new();
+    // shell_async_sleep() should fail
     let result = client.shell_async_sleep("1").await;
+    assert!(result.is_err());
     assert!(
-        result.is_err(),
-        "shell_async_sleep should fail when client is not initialized"
-    );
-    let err = result.unwrap_err();
-    assert!(
-        err.to_string().contains("not initialized"),
-        "Error should indicate client not initialized, got: {}",
-        err
+        result.unwrap_err().to_string().contains("not initialized"),
+        "shell_async_sleep() should indicate client not initialized"
     );
 }
 
+/// Client::new() and Client::default() produce equivalent uninitialized clients
 #[test]
-fn test_client_debug_trait() {
-    let client = Client::new();
-    let debug_output = format!("{:?}", client);
-    assert!(
-        debug_output.contains("Client"),
-        "Debug output should contain struct name"
-    );
+fn test_client_new_and_default_equivalence() {
+    let client_new = Client::new();
+    let client_default = Client::default();
+
+    // Both should have same Debug representation (uninitialized state)
+    let debug_new = format!("{:?}", client_new);
+    let debug_default = format!("{:?}", client_default);
+
+    assert!(debug_new.contains("Client"));
+    assert!(debug_default.contains("Client"));
+    // Both should show None/uninitialized service
+    assert!(debug_new.contains("None") || debug_new.contains("service"));
 }

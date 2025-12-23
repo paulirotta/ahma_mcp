@@ -268,13 +268,7 @@ async fn test_sandboxed_shell_pipe_execution() {
 
 // ==================== git integration tests (read-only) ====================
 
-// NOTE: Git tests are disabled because the macOS sandbox blocks access to /dev/null,
-// which git requires for certain operations. Error: "fatal: could not open '/dev/null'
-// for reading and writing: Operation not permitted"
-// These tests work outside of sandbox mode.
-
 #[tokio::test]
-#[ignore = "git requires /dev/null access which sandbox blocks"]
 async fn test_git_status_execution() {
     let client = new_client(Some(".ahma/tools"))
         .await
@@ -311,7 +305,6 @@ async fn test_git_status_execution() {
 }
 
 #[tokio::test]
-#[ignore = "git requires /dev/null access which sandbox blocks"]
 async fn test_git_log_oneline_execution() {
     let client = new_client(Some(".ahma/tools"))
         .await
