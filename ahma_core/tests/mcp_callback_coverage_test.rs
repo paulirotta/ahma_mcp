@@ -179,6 +179,7 @@ async fn test_cancelled_operation_callback() -> Result<()> {
         }
     }
 
+    client.cancel().await?;
     Ok(())
 }
 

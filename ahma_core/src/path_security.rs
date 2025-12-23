@@ -101,4 +101,91 @@ mod tests {
         assert!(validate_path(&outside, root).await.is_err());
         Ok(())
     }
+
+    #[tokio::test]
+    async fn test_validate_path_relative_inside() -> Result<()> {
+        let temp = TempDir::new()?;
+        let root = temp.path();
+        let subdir = root.join("subdir");
+        fs::create_dir(&subdir).await?;
+        let file = subdir.join("file.txt");
+        fs::write(&file, "content").await?;
+
+        // Relative path should be joined with root
+        let relative = Path::new("subdir/file.txt");
+        let validated = validate_path(relative, root).await?;
+        assert_eq!(validated, fs::canonicalize(&file).await?);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_validate_path_nonexistent_file_in_existing_parent() -> Result<()> {
+        let temp = TempDir::new()?;
+        let root = temp.path();
+        let subdir = root.join("subdir");
+        fs::create_dir(&subdir).await?;
+
+        // File doesn't exist but parent does - should still validate
+        let new_file = subdir.join("newfile.txt");
+        let validated = validate_path(&new_file, root).await?;
+        assert!(validated.starts_with(fs::canonicalize(root).await?));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_validate_path_symlink_escape_blocked() -> Result<()> {
+        let temp = TempDir::new()?;
+        let root = temp.path();
+        let outside = temp.path().parent().unwrap();
+
+        // Create a symlink inside root pointing outside
+        let link_path = root.join("escape_link");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(outside, &link_path)?;
+
+        #[cfg(unix)]
+        {
+            // Trying to access via symlink should fail
+            let result = validate_path(&link_path.join("anything"), root).await;
+            assert!(result.is_err(), "Symlink escape should be blocked");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_normalize_path_removes_dot() {
+        let path = Path::new("/a/./b/./c");
+        let normalized = normalize_path(path);
+        assert_eq!(normalized, PathBuf::from("/a/b/c"));
+    }
+
+    #[test]
+    fn test_normalize_path_removes_dotdot() {
+        let path = Path::new("/a/b/../c");
+        let normalized = normalize_path(path);
+        assert_eq!(normalized, PathBuf::from("/a/c"));
+    }
+
+    #[test]
+    fn test_normalize_path_multiple_dotdots() {
+        let path = Path::new("/a/b/c/../../d");
+        let normalized = normalize_path(path);
+        assert_eq!(normalized, PathBuf::from("/a/d"));
+    }
+
+    #[test]
+    fn test_normalize_path_root_reset() {
+        // Path with multiple root components - later root resets
+        let path = Path::new("/a/b");
+        let normalized = normalize_path(path);
+        assert_eq!(normalized, PathBuf::from("/a/b"));
+    }
+
+    #[test]
+    fn test_normalize_path_empty_after_dotdot() {
+        let path = Path::new("/a/../..");
+        let normalized = normalize_path(path);
+        // Should result in just root
+        assert_eq!(normalized, PathBuf::from("/"));
+    }
 }

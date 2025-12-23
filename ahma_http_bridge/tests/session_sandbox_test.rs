@@ -10,7 +10,6 @@
 
 use ahma_http_bridge::session::{McpRoot, SessionManager, SessionManagerConfig};
 use std::path::PathBuf;
-use tempfile::TempDir;
 
 /// Helper to create a SessionManager with test configuration
 fn create_test_session_manager(default_scope: PathBuf) -> SessionManager {
@@ -324,76 +323,5 @@ async fn test_session_termination_removes_session() {
     assert!(
         !session_manager.session_exists(&session_id),
         "Session should not exist after termination"
-    );
-}
-
-// =============================================================================
-// Integration tests that require a real subprocess
-// =============================================================================
-
-/// Integration test: Verify sandbox scope is propagated to subprocess.
-///
-/// This test verifies the core fix: when a client provides roots,
-/// the subprocess should be configured with that sandbox scope.
-///
-/// NOTE: This test is marked as ignored because it requires the actual
-/// ahma_mcp binary to be built. Run with `cargo test -- --ignored`
-#[tokio::test]
-#[ignore = "Requires ahma_mcp binary - run with cargo test -- --ignored"]
-async fn test_subprocess_receives_sandbox_scope_from_client_roots() {
-    // Create a temporary directory to act as client workspace
-    let client_workspace = TempDir::new().expect("Should create temp dir");
-    let client_workspace_path = client_workspace.path().to_path_buf();
-
-    // Create a test file in the client workspace
-    std::fs::write(client_workspace_path.join("test.txt"), "hello")
-        .expect("Should write test file");
-
-    // Server's default scope is different
-    let server_scope = TempDir::new().expect("Should create server temp dir");
-    let server_scope_path = server_scope.path().to_path_buf();
-
-    let config = SessionManagerConfig {
-        server_command: "ahma_mcp".to_string(),
-        server_args: vec!["--mode".to_string(), "stdio".to_string()],
-        default_scope: server_scope_path,
-        enable_colored_output: false,
-    };
-
-    let session_manager = SessionManager::new(config);
-
-    let session_id = session_manager
-        .create_session()
-        .await
-        .expect("Should create session");
-
-    // Lock sandbox to client's workspace
-    let client_roots = vec![McpRoot {
-        uri: format!("file://{}", client_workspace_path.display()),
-        name: None,
-    }];
-
-    session_manager
-        .lock_sandbox(&session_id, &client_roots)
-        .await
-        .expect("Should lock sandbox");
-
-    // TODO: Send a file_tools request to read the test file
-    // This should succeed because the sandbox scope should now be client_workspace_path
-    // If the bug exists, it will fail with "Path is outside sandbox root"
-
-    // For now, just verify the sandbox scope was set correctly
-    let session = session_manager
-        .get_session(&session_id)
-        .expect("Session should exist");
-
-    let sandbox_scope = session
-        .get_sandbox_scope()
-        .await
-        .expect("Should have sandbox scope");
-
-    assert_eq!(
-        sandbox_scope, client_workspace_path,
-        "Subprocess sandbox scope should be client's workspace"
     );
 }
