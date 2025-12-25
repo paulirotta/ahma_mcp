@@ -940,6 +940,7 @@ async fn test_roots_uri_parsing_percent_encoded_path() {
     let _ = send_mcp_request(&client, &base_url, &initialized, Some(&session_id)).await;
     sse_task.await.expect("roots/list SSE task panicked");
 
+    // Retry loop for tool call - sandbox lock may take a moment after roots/list response
     let tool_call = json!({
         "jsonrpc": "2.0",
         "id": 2,
@@ -952,9 +953,26 @@ async fn test_roots_uri_parsing_percent_encoded_path() {
             }
         }
     });
-    let (resp, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
-        .await
-        .expect("Tool call should succeed");
+
+    let mut resp = None;
+    for attempt in 0..10 {
+        let (r, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
+            .await
+            .expect("Tool call should succeed");
+
+        // Check if we got a "sandbox initializing" retry error
+        if let Some(err) = r.get("error") {
+            let msg = err.get("message").and_then(|m| m.as_str()).unwrap_or("");
+            if msg.contains("Sandbox initializing") {
+                sleep(Duration::from_millis(50 * (attempt + 1) as u64)).await;
+                continue;
+            }
+        }
+        resp = Some(r);
+        break;
+    }
+    let resp = resp.expect("Tool call should eventually succeed");
+
     assert!(
         resp.get("error").is_none(),
         "pwd must succeed, got: {resp:?}"
@@ -1050,6 +1068,7 @@ async fn test_roots_uri_parsing_file_localhost() {
     let _ = send_mcp_request(&client, &base_url, &initialized, Some(&session_id)).await;
     sse_task.await.expect("roots/list SSE task panicked");
 
+    // Retry loop for tool call - sandbox lock may take a moment after roots/list response
     let tool_call = json!({
         "jsonrpc": "2.0",
         "id": 2,
@@ -1062,9 +1081,26 @@ async fn test_roots_uri_parsing_file_localhost() {
             }
         }
     });
-    let (resp, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
-        .await
-        .expect("Tool call should succeed");
+
+    let mut resp = None;
+    for attempt in 0..10 {
+        let (r, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
+            .await
+            .expect("Tool call should succeed");
+
+        // Check if we got a "sandbox initializing" retry error
+        if let Some(err) = r.get("error") {
+            let msg = err.get("message").and_then(|m| m.as_str()).unwrap_or("");
+            if msg.contains("Sandbox initializing") {
+                sleep(Duration::from_millis(50 * (attempt + 1) as u64)).await;
+                continue;
+            }
+        }
+        resp = Some(r);
+        break;
+    }
+    let resp = resp.expect("Tool call should eventually succeed");
+
     assert!(
         resp.get("error").is_none(),
         "pwd must succeed, got: {resp:?}"
