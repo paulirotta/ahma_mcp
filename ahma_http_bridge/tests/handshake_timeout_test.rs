@@ -245,7 +245,7 @@ edition = "2021"
 
     // This performs the full handshake: initialize → SSE → initialized → roots/list response
     client
-        .initialize_with_roots("vscode-handshake-test", &[root_path.clone()])
+        .initialize_with_roots("vscode-handshake-test", std::slice::from_ref(&root_path))
         .await
         .expect("Handshake should complete successfully");
 
