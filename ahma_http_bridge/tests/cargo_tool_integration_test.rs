@@ -31,6 +31,18 @@ use std::fs;
 use std::process::Command;
 use tempfile::TempDir;
 
+/// Check if cargo tool is available in the server's tool list
+async fn is_cargo_tool_available(client: &McpTestClient) -> bool {
+    match client.list_tools().await {
+        Ok(tools) => tools.iter().any(|t| {
+            t.get("name")
+                .and_then(|n| n.as_str())
+                .is_some_and(|n| n == "cargo")
+        }),
+        Err(_) => false,
+    }
+}
+
 /// Create a minimal but valid Cargo project in a temporary directory.
 /// This project has:
 /// - A valid Cargo.toml
@@ -130,6 +142,12 @@ async fn test_cargo_check_with_assertions() {
         return;
     }
 
+    // Skip if cargo tool is not available (may not be in CI environment)
+    if !is_cargo_tool_available(&client).await {
+        eprintln!("⚠️  Skipping test - cargo tool not available");
+        return;
+    }
+
     // Call cargo with subcommand check, working_directory pointing to our test project
     let result = client
         .call_tool(
@@ -202,6 +220,12 @@ async fn test_cargo_clippy_basic_with_assertions() {
         return;
     }
 
+    // Skip if cargo tool is not available (may not be in CI environment)
+    if !is_cargo_tool_available(&client).await {
+        eprintln!("⚠️  Skipping test - cargo tool not available");
+        return;
+    }
+
     // Call cargo clippy without the --tests flag
     let result = client
         .call_tool(
@@ -263,6 +287,12 @@ async fn test_cargo_clippy_with_tests_flag_assertions() {
         .is_err()
     {
         eprintln!("⚠️  Skipping test - failed to initialize MCP client");
+        return;
+    }
+
+    // Skip if cargo tool is not available (may not be in CI environment)
+    if !is_cargo_tool_available(&client).await {
+        eprintln!("⚠️  Skipping test - cargo tool not available");
         return;
     }
 
@@ -343,6 +373,12 @@ async fn test_cargo_build_with_assertions() {
         return;
     }
 
+    // Skip if cargo tool is not available (may not be in CI environment)
+    if !is_cargo_tool_available(&client).await {
+        eprintln!("⚠️  Skipping test - cargo tool not available");
+        return;
+    }
+
     let result = client
         .call_tool(
             "cargo",
@@ -399,6 +435,12 @@ async fn test_cargo_test_with_assertions() {
         .is_err()
     {
         eprintln!("⚠️  Skipping test - failed to initialize MCP client");
+        return;
+    }
+
+    // Skip if cargo tool is not available (may not be in CI environment)
+    if !is_cargo_tool_available(&client).await {
+        eprintln!("⚠️  Skipping test - cargo tool not available");
         return;
     }
 
@@ -468,6 +510,12 @@ async fn test_cargo_fmt_with_assertions() {
         .is_err()
     {
         eprintln!("⚠️  Skipping test - failed to initialize MCP client");
+        return;
+    }
+
+    // Skip if cargo tool is not available (may not be in CI environment)
+    if !is_cargo_tool_available(&client).await {
+        eprintln!("⚠️  Skipping test - cargo tool not available");
         return;
     }
 

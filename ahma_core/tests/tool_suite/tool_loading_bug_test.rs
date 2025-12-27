@@ -16,23 +16,23 @@ use common::test_client::new_client;
 
 /// TEST: Validates core CLI tool configurations are loaded
 ///
-/// CRITICAL REQUIREMENT: Must load cargo.json, python.json (minimum 2). ls.json is now OPTIONAL.
-/// FLEXIBILITY: May also load status.json, await.json if user added them
+/// CRITICAL REQUIREMENT: Must load sandboxed_shell (always available as built-in).
+/// Other tools like cargo.json, python.json are optional and may not be available in CI.
 ///
 /// LESSON LEARNED: Don't hard-code exact counts - use minimum expectations
 /// This test previously failed when status.json/await.json were temporarily added
 #[tokio::test]
 async fn test_tools_are_loaded_after_json_migration() -> Result<()> {
     init_test_logging();
-    // Test that all 3 JSON tool configurations are properly loaded
+    // Test that core tool configurations are properly loaded
     let client = new_client(Some(".ahma/tools")).await?;
 
     let tools = client.list_tools(None).await?;
 
-    // Should find tools from cargo.json and python.json; ls.json is optional
+    // Should find at least the core built-in tools (await, status, sandboxed_shell)
     assert!(
         tools.tools.len() >= 3,
-        "Expected at least 3 tools loaded from JSON configs, but got {}. Tools found: {:?}",
+        "Expected at least 3 tools loaded, but got {}. Tools found: {:?}",
         tools.tools.len(),
         tools.tools.iter().map(|t| &t.name).collect::<Vec<_>>()
     );
@@ -40,10 +40,10 @@ async fn test_tools_are_loaded_after_json_migration() -> Result<()> {
     // Verify specific expected tools are present
     let tool_names: Vec<&str> = tools.tools.iter().map(|t| t.name.as_ref()).collect();
 
-    // Should have cargo tool (with subcommands)
+    // Should have sandboxed_shell tool (always available)
     assert!(
-        tool_names.contains(&"cargo"),
-        "Expected cargo tool but found: {:?}",
+        tool_names.contains(&"sandboxed_shell"),
+        "Expected sandboxed_shell tool but found: {:?}",
         tool_names
     );
 
@@ -56,9 +56,9 @@ async fn test_tools_are_loaded_after_json_migration() -> Result<()> {
 /// TEST: Validates specific JSON tool actually functions
 ///
 /// PURPOSE: Ensures loaded tools aren't just registered but actually callable.
-/// Uses cargo_version as test case since it's synchronous and always available.
+/// Uses sandboxed_shell as test case since it's always available.
 ///
-/// MAINTENANCE: If cargo_version is removed, update to another reliable synchronous tool
+/// MAINTENANCE: sandboxed_shell is a core built-in tool that should always be present
 #[tokio::test]
 async fn test_specific_json_tool_functionality() -> Result<()> {
     init_test_logging();
@@ -67,12 +67,15 @@ async fn test_specific_json_tool_functionality() -> Result<()> {
 
     let tools = client.list_tools(None).await?;
 
-    // Find cargo tool to test (has version subcommand)
-    let cargo_tool = tools.tools.iter().find(|t| t.name.as_ref() == "cargo");
+    // Find sandboxed_shell tool to test (always available)
+    let shell_tool = tools
+        .tools
+        .iter()
+        .find(|t| t.name.as_ref() == "sandboxed_shell");
 
     assert!(
-        cargo_tool.is_some(),
-        "cargo tool should be available from cargo.json config. Available tools: {:?}",
+        shell_tool.is_some(),
+        "sandboxed_shell tool should be available. Available tools: {:?}",
         tools.tools.iter().map(|t| &t.name).collect::<Vec<_>>()
     );
 

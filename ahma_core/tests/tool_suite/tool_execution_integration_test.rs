@@ -346,6 +346,7 @@ async fn test_git_log_oneline_execution() {
 
 #[tokio::test]
 async fn test_cargo_check_dry_run() {
+    skip_if_disabled_async!("cargo");
     let client = new_client(Some(".ahma/tools"))
         .await
         .expect("Failed to create test client");

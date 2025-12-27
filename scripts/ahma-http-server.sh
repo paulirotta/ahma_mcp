@@ -63,8 +63,7 @@ if [[ -n "$RELEASE_FLAG" ]]; then
 fi
 echo "-----------------------------------------------"
 echo "⚠️  Security: HTTP mode is for local development only."
-echo "    Do not expose to untrusted networ
-ks."
+echo "    Do not expose to untrusted networks."
 echo "-----------------------------------------------"
 echo
 

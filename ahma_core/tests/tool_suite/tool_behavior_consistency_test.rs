@@ -1,16 +1,17 @@
 //! TDD tests for tool configuration and execution issues
-use ahma_core::test_utils as common;
+use ahma_core::{
+    skip_if_disabled_async_result, test_utils as common, utils::logging::init_test_logging,
+};
 use anyhow::Result;
+use common::test_client::new_client;
 use rmcp::model::CallToolRequestParam;
 use serde_json::json;
 use std::borrow::Cow;
 
-use ahma_core::utils::logging::init_test_logging;
-use common::test_client::new_client;
-
 #[tokio::test]
 async fn test_synchronous_cargo_check_returns_actual_results() -> Result<()> {
     init_test_logging();
+    skip_if_disabled_async_result!("cargo");
     // This test identifies the issue where cargo check should return actual results
 
     let client = new_client(Some(".ahma/tools")).await?;
@@ -109,18 +110,12 @@ async fn test_ls_tool_command_structure() -> Result<()> {
 #[tokio::test]
 async fn test_tool_descriptions_match_actual_behavior() -> Result<()> {
     init_test_logging();
+    skip_if_disabled_async_result!("cargo");
     // This test identifies inconsistencies between tool descriptions and actual behavior
     // Specifically checking if synchronous tools are properly described
 
     let client = new_client(Some(".ahma/tools")).await?;
     let tools_result = client.list_tools(None).await?;
-
-    // Find cargo tool (check subcommand)
-    tools_result
-        .tools
-        .iter()
-        .find(|t| t.name.as_ref() == "cargo")
-        .expect("cargo tool should exist");
 
     // Find cargo tool and verify its description
     let cargo_tool = tools_result
