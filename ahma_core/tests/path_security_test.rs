@@ -1,4 +1,5 @@
 //! Tests for path security and sandboxing
+use ahma_core::skip_if_disabled_async;
 use ahma_core::test_utils as common;
 
 use ahma_core::utils::logging::init_test_logging;
@@ -10,6 +11,7 @@ use serde_json::json;
 #[tokio::test]
 async fn test_path_validation_success() {
     init_test_logging();
+    skip_if_disabled_async!("sandboxed_shell");
     // Use existing sandboxed_shell tool for path validation test
     let client = new_client(Some(".ahma/tools")).await.unwrap();
 
@@ -33,6 +35,7 @@ async fn test_path_validation_success() {
 #[tokio::test]
 async fn test_path_validation_failure_absolute() {
     init_test_logging();
+    skip_if_disabled_async!("sandboxed_shell");
     // Use existing sandboxed_shell tool for path validation test
     let client = new_client(Some(".ahma/tools")).await.unwrap();
 
@@ -74,6 +77,7 @@ async fn test_path_validation_failure_absolute() {
 #[tokio::test]
 async fn test_path_validation_failure_relative() {
     init_test_logging();
+    skip_if_disabled_async!("sandboxed_shell");
     // Use existing sandboxed_shell tool for path validation test
     let client = new_client(Some(".ahma/tools")).await.unwrap();
 

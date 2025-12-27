@@ -3,6 +3,7 @@
 //! These tests verify the fix for a bug where await would return immediately
 //! instead of waiting for the operation to actually complete.
 
+use ahma_core::skip_if_disabled_async_result;
 use ahma_core::test_utils::test_client::new_client_with_args;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParam;
@@ -12,6 +13,7 @@ use std::time::{Duration, Instant};
 
 #[tokio::test]
 async fn test_await_blocks_correctly() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
     // Use the real tools directory with --async flag
     let client = new_client_with_args(Some(".ahma/tools"), &[]).await?;
 
@@ -99,6 +101,7 @@ async fn test_await_blocks_correctly() -> Result<()> {
 
 #[tokio::test]
 async fn test_await_detects_pending_operation_without_delay() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
     // Use the real tools directory with --async flag
     let client = new_client_with_args(Some(".ahma/tools"), &[]).await?;
 

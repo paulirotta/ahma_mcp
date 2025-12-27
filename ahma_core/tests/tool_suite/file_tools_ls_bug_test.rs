@@ -7,6 +7,7 @@
 /// The root cause appears to be incorrect handling of boolean flags
 /// where "--long" is being passed as a path argument instead of being
 /// converted to the "-l" flag format.
+use ahma_core::skip_if_disabled_async;
 use ahma_core::test_utils as common;
 
 use common::test_client::new_client;
@@ -16,6 +17,7 @@ use std::borrow::Cow;
 
 #[tokio::test]
 async fn test_ls_command_with_long_flag() {
+    skip_if_disabled_async!("file_tools");
     // Setup: Create a test client with file_tools
     let client = new_client(Some(".ahma/tools"))
         .await
@@ -71,6 +73,7 @@ async fn test_ls_command_with_long_flag() {
 
 #[tokio::test]
 async fn test_ls_command_without_flags() {
+    skip_if_disabled_async!("file_tools");
     // Setup
     let client = new_client(Some(".ahma/tools"))
         .await
@@ -110,6 +113,7 @@ async fn test_ls_command_without_flags() {
 
 #[tokio::test]
 async fn test_ls_command_with_all_flag() {
+    skip_if_disabled_async!("file_tools");
     // Setup
     let client = new_client(Some(".ahma/tools"))
         .await
@@ -150,6 +154,7 @@ async fn test_ls_command_with_all_flag() {
 
 #[tokio::test]
 async fn test_ls_command_with_multiple_flags() {
+    skip_if_disabled_async!("file_tools");
     // Setup
     let client = new_client(Some(".ahma/tools"))
         .await

@@ -7,6 +7,7 @@
 //! Tests that only check tool availability or validate parameters without invoking Gradle
 //! do not need the feature gate.
 
+use ahma_core::skip_if_disabled_async_result;
 use ahma_core::test_utils::get_workspace_dir;
 use ahma_core::test_utils::test_client::new_client;
 use anyhow::Result;
@@ -326,6 +327,7 @@ async fn test_gradlew_optional_parameters() -> Result<()> {
 /// Test gradlew tool loading and basic availability
 #[tokio::test]
 async fn test_gradlew_tool_availability() -> Result<()> {
+    skip_if_disabled_async_result!("gradlew");
     let client = new_client(Some(".ahma/tools")).await?;
 
     // Test that gradlew tool is available

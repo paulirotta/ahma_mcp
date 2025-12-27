@@ -224,6 +224,7 @@ All tools are defined in `.json` files in the `tools/` directory. This is the MC
 
 - `command`: The base command-line executable (e.g., `git`, `cargo`).
 - `subcommand`: An array of subcommands exposed as individual MCP tools. The final tool name will be `{command}_{name}` (e.g., `git_commit`).
+- `enabled`: Controls whether the tool is active. Defaults to `true`. When set to `false`, the tool is **completely excluded** from the server: no availability probe is run, and it is not listed to MCP clients. Use this to disable tools that are not needed in the current environment without removing their definition.
 - `synchronous`: Can be set at tool level or subcommand level. Subcommand-level overrides tool-level. Set to `true` for commands that must complete before dependent operations (e.g., `cargo add`). Omit or set to `false` for long-running commands that run asynchronously (the default).
 - `options`: An array of command-line flags (e.g., `--release`).
 - `positional_args`: An array of positional arguments.

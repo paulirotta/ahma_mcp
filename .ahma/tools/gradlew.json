@@ -2,7 +2,7 @@
     "name": "gradlew",
     "description": "Android Gradle Wrapper for building and managing Android projects",
     "command": "./gradlew",
-    "enabled": true,
+    "enabled": false,
     "timeout_seconds": 600,
     "hints": {
         "custom": {

@@ -754,3 +754,129 @@ pub mod test_utils {
         }
     }
 }
+
+/// Check if a tool is enabled in its JSON configuration file.
+/// Loads the tool config from `.ahma/tools/<tool_name>.json` and returns true if enabled.
+/// Returns false if the file doesn't exist, can't be parsed, or has `enabled: false`.
+pub fn is_tool_enabled(tool_name: &str) -> bool {
+    let workspace_dir = get_workspace_dir();
+    let tool_path = workspace_dir
+        .join(".ahma/tools")
+        .join(format!("{}.json", tool_name));
+
+    if !tool_path.exists() {
+        return false;
+    }
+
+    match std::fs::read_to_string(&tool_path) {
+        Ok(contents) => match serde_json::from_str::<serde_json::Value>(&contents) {
+            Ok(json) => json
+                .get("enabled")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true),
+            Err(_) => false,
+        },
+        Err(_) => false,
+    }
+}
+
+/// Macro to skip a test if the specified tool is disabled.
+///
+/// Usage for tests that return `()`:
+/// ```ignore
+/// #[test]
+/// fn test_something() {
+///     skip_if_disabled!("file_tools");
+///     // ... rest of test
+/// }
+/// ```
+///
+/// For tests that return `Result<()>`, use `skip_if_disabled_result!` instead.
+///
+/// This macro checks if the tool's JSON config has `"enabled": false` and if so,
+/// prints a skip message and returns early from the test.
+#[macro_export]
+macro_rules! skip_if_disabled {
+    ($tool_name:expr) => {
+        if !$crate::test_utils::is_tool_enabled($tool_name) {
+            eprintln!(
+                "[SKIPPED] Test skipped: tool '{}' is disabled in .ahma/tools/{}.json",
+                $tool_name, $tool_name
+            );
+            return;
+        }
+    };
+}
+
+/// Macro to skip a test that returns `Result<()>` if the specified tool is disabled.
+///
+/// Usage:
+/// ```ignore
+/// #[test]
+/// fn test_something() -> Result<()> {
+///     skip_if_disabled_result!("file_tools");
+///     // ... rest of test
+///     Ok(())
+/// }
+/// ```
+#[macro_export]
+macro_rules! skip_if_disabled_result {
+    ($tool_name:expr) => {
+        if !$crate::test_utils::is_tool_enabled($tool_name) {
+            eprintln!(
+                "[SKIPPED] Test skipped: tool '{}' is disabled in .ahma/tools/{}.json",
+                $tool_name, $tool_name
+            );
+            return Ok(());
+        }
+    };
+}
+
+/// Async version of skip_if_disabled for async tests that return `()`.
+///
+/// Usage:
+/// ```ignore
+/// #[tokio::test]
+/// async fn test_something() {
+///     skip_if_disabled_async!("git");
+///     // ... rest of test
+/// }
+/// ```
+///
+/// For async tests that return `Result<()>`, use `skip_if_disabled_async_result!` instead.
+#[macro_export]
+macro_rules! skip_if_disabled_async {
+    ($tool_name:expr) => {
+        if !$crate::test_utils::is_tool_enabled($tool_name) {
+            eprintln!(
+                "[SKIPPED] Test skipped: tool '{}' is disabled in .ahma/tools/{}.json",
+                $tool_name, $tool_name
+            );
+            return;
+        }
+    };
+}
+
+/// Async version of skip_if_disabled for async tests that return `Result<()>`.
+///
+/// Usage:
+/// ```ignore
+/// #[tokio::test]
+/// async fn test_something() -> Result<()> {
+///     skip_if_disabled_async_result!("git");
+///     // ... rest of test
+///     Ok(())
+/// }
+/// ```
+#[macro_export]
+macro_rules! skip_if_disabled_async_result {
+    ($tool_name:expr) => {
+        if !$crate::test_utils::is_tool_enabled($tool_name) {
+            eprintln!(
+                "[SKIPPED] Test skipped: tool '{}' is disabled in .ahma/tools/{}.json",
+                $tool_name, $tool_name
+            );
+            return Ok(());
+        }
+    };
+}

@@ -1,3 +1,4 @@
+use ahma_core::skip_if_disabled;
 use ahma_core::test_utils as common;
 
 use common::get_workspace_dir;
@@ -5,6 +6,8 @@ use std::process::Command;
 
 #[test]
 fn test_run_new_quality_check_sequence() {
+    skip_if_disabled!("ahma_quality_check");
+    
     // This test runs the ahma_quality_check sequence which includes
     // schema generation and validation specific to the ahma_mcp project.
     let output = Command::new("cargo")

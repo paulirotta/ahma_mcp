@@ -80,6 +80,17 @@ async fn http_roots_handshake_then_tool_call_defaults_to_root() {
     let root_path = temp_root.path().to_path_buf();
     let root_uri = format!("file://{}", root_path.display());
 
+    // Create a minimal Cargo.toml so `cargo locate-project` works
+    std::fs::write(
+        root_path.join("Cargo.toml"),
+        r#"[package]
+name = "test-root"
+version = "0.1.0"
+edition = "2021"
+"#,
+    )
+    .expect("Failed to create Cargo.toml");
+
     // 1) initialize (no session header)
     let init_req = json!({
         "jsonrpc": "2.0",
@@ -237,15 +248,16 @@ async fn http_roots_handshake_then_tool_call_defaults_to_root() {
 
     assert!(roots_resp.status().is_success() || roots_resp.status().as_u16() == 202);
 
-    // 6) Call file_tools/pwd without working_directory, retrying if the bridge still says initializing.
+    // 6) Call cargo/locate-project without working_directory, retrying if the bridge still says initializing.
+    // We use cargo instead of file_tools because file_tools has enabled:false in the JSON definition.
     let tool_call = json!({
         "jsonrpc": "2.0",
         "id": 2,
         "method": "tools/call",
         "params": {
-            "name": "file_tools",
+            "name": "cargo",
             "arguments": {
-                "subcommand": "pwd"
+                "subcommand": "locate-project"
             }
         }
     });

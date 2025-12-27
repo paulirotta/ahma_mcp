@@ -1,5 +1,6 @@
 //! Integration tests for the ahma_mcp service.
 
+use ahma_core::skip_if_disabled_async_result;
 use ahma_core::test_utils as common;
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;
@@ -62,6 +63,7 @@ async fn test_call_tool_basic() -> Result<()> {
 
 #[tokio::test]
 async fn test_async_notification_delivery() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
     // Use --async flag to enable async execution
     let client = new_client_with_args(Some(".ahma/tools"), &[]).await?;

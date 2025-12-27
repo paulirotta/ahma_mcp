@@ -8,6 +8,7 @@
 //!
 //! These tests spawn the actual ahma_mcp binary and communicate via MCP protocol.
 
+use ahma_core::skip_if_disabled_async_result;
 use ahma_core::test_utils::test_client::{new_client, new_client_in_dir};
 use ahma_core::test_utils::test_project::{TestProjectOptions, create_rust_test_project};
 use ahma_core::utils::logging::init_test_logging;
@@ -56,6 +57,7 @@ async fn test_status_tool_no_filters() -> Result<()> {
 /// Test status tool with tool filter parameter
 #[tokio::test]
 async fn test_status_tool_with_tool_filter() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
@@ -242,6 +244,7 @@ async fn test_await_tool_with_tool_filter() -> Result<()> {
 /// Test await for an async operation that actually completes
 #[tokio::test]
 async fn test_await_for_completed_async_operation() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
@@ -528,6 +531,7 @@ async fn test_list_tools_status_schema() -> Result<()> {
 /// Test full async operation lifecycle: start -> status -> await
 #[tokio::test]
 async fn test_async_operation_full_lifecycle() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 

@@ -6,7 +6,9 @@
 //! Test philosophy:
 //! - Tests use temp directories as per R13.5 (Test File Isolation)
 //! - Tests verify exit codes and output content
+//! - Tests skip gracefully if the tool is disabled (enabled: false in JSON config)
 
+use ahma_core::skip_if_disabled;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -51,6 +53,8 @@ mod file_tools_tests {
 
     #[test]
     fn test_file_tools_pwd() {
+        skip_if_disabled!("file_tools");
+
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
@@ -84,6 +88,8 @@ mod file_tools_tests {
 
     #[test]
     fn test_file_tools_touch_and_ls() {
+        skip_if_disabled!("file_tools");
+
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
@@ -142,6 +148,8 @@ mod file_tools_tests {
 
     #[test]
     fn test_file_tools_cp_and_mv() {
+        skip_if_disabled!("file_tools");
+
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
@@ -210,6 +218,8 @@ mod file_tools_tests {
 
     #[test]
     fn test_file_tools_rm() {
+        skip_if_disabled!("file_tools");
+
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
@@ -245,6 +255,8 @@ mod file_tools_tests {
 
     #[test]
     fn test_file_tools_cat_and_grep() {
+        skip_if_disabled!("file_tools");
+
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
@@ -313,6 +325,7 @@ mod sandboxed_shell_tests {
 
     #[test]
     fn test_sandboxed_shell_echo() {
+        skip_if_disabled!("sandboxed_shell");
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
@@ -343,6 +356,7 @@ mod sandboxed_shell_tests {
 
     #[test]
     fn test_sandboxed_shell_write_file() {
+        skip_if_disabled!("sandboxed_shell");
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");

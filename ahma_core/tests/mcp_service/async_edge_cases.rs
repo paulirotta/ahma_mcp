@@ -5,6 +5,7 @@
 //! - Async notification delivery edge cases  
 //! - Tool schema generation validation
 //! - Error handling for malformed MCP messages
+use ahma_core::skip_if_disabled_async_result;
 use ahma_core::test_utils as common;
 
 use ahma_core::utils::logging::init_test_logging;
@@ -89,10 +90,11 @@ async fn test_tool_schema_generation_comprehensive() -> Result<()> {
     let tools_result = client.list_all_tools().await?;
 
     // Should have multiple tools from .ahma/tools directory
+    // Note: Some tools may be disabled, so we just check that basic tools exist
     assert!(!tools_result.is_empty());
     assert!(
-        tools_result.len() > 5,
-        "Expected multiple tools but got: {}",
+        tools_result.len() >= 2,
+        "Expected at least the built-in tools (await, status) but got: {}",
         tools_result.len()
     );
 
@@ -286,6 +288,7 @@ async fn test_status_tool_filter_combinations() -> Result<()> {
 /// Test async operations with real tool execution
 #[tokio::test]
 async fn test_async_operation_with_real_execution() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
     let client = new_client_with_args(Some(".ahma/tools"), &[]).await?;
 

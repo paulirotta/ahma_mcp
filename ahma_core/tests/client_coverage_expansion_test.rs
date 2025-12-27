@@ -10,6 +10,7 @@
 //!
 //! These tests use the real ahma_mcp binary to ensure full integration coverage.
 
+use ahma_core::skip_if_disabled_async_result;
 use ahma_core::test_utils::test_client::{new_client, new_client_with_args};
 use ahma_core::test_utils::test_project::{TestProjectOptions, create_rust_test_project};
 use ahma_core::utils::logging::init_test_logging;
@@ -205,6 +206,7 @@ async fn test_client_await_nonexistent_operation() -> Result<()> {
 /// Test full async operation lifecycle: start, status, await
 #[tokio::test]
 async fn test_async_operation_lifecycle() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
@@ -263,6 +265,7 @@ async fn test_async_operation_lifecycle() -> Result<()> {
 /// Test multiple async operations can be tracked
 #[tokio::test]
 async fn test_multiple_async_operations() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
@@ -318,6 +321,7 @@ async fn test_multiple_async_operations() -> Result<()> {
 /// Test sandboxed_shell tool execution (covers shell-related paths in client)
 #[tokio::test]
 async fn test_sandboxed_shell_execution() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
@@ -342,6 +346,7 @@ async fn test_sandboxed_shell_execution() -> Result<()> {
 #[tokio::test]
 async fn test_sandboxed_shell_with_working_dir() -> Result<()> {
     use ahma_core::test_utils::test_client::get_workspace_tools_dir;
+    skip_if_disabled_async_result!("sandboxed_shell");
 
     init_test_logging();
 

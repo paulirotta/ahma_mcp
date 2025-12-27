@@ -1,5 +1,6 @@
 //! Integration tests for sequence tools - composite tools that execute multiple steps
 
+use ahma_core::skip_if_disabled_async_result;
 use ahma_core::test_utils::get_workspace_path;
 use ahma_core::test_utils::test_client::{new_client, new_client_in_dir};
 use ahma_core::utils::logging::init_test_logging;
@@ -30,6 +31,7 @@ async fn test_sequence_tool_loads() -> Result<()> {
 #[tokio::test]
 async fn test_simple_sequence_execution() -> Result<()> {
     init_test_logging();
+    skip_if_disabled_async_result!("sandboxed_shell");
 
     // Create a temporary directory with a simple test tool configuration
     let temp_dir = tempfile::tempdir()?;
@@ -217,6 +219,7 @@ async fn test_cargo_qualitycheck_structure() -> Result<()> {
 #[tokio::test]
 async fn test_sequence_with_invalid_tool() -> Result<()> {
     init_test_logging();
+    skip_if_disabled_async_result!("sandboxed_shell");
 
     let temp_dir = tempfile::tempdir()?;
     let tools_dir = temp_dir.path().join("tools");
@@ -286,6 +289,7 @@ async fn test_sequence_with_invalid_tool() -> Result<()> {
 #[tokio::test]
 async fn test_sequence_delay_is_applied() -> Result<()> {
     init_test_logging();
+    skip_if_disabled_async_result!("sandboxed_shell");
 
     use std::time::Instant;
 

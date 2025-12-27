@@ -2,7 +2,7 @@
     "name": "git",
     "description": "Reliable access to the Git command-line client for repository operations.",
     "command": "git",
-    "enabled": true,
+    "enabled": false,
     "timeout_seconds": 180,
     "hints": {
         "custom": {

@@ -16,6 +16,7 @@
 //! - ProgressUpdate::Cancelled notification
 //! - ProgressUpdate::FinalResult notification
 
+use ahma_core::skip_if_disabled_async_result;
 use ahma_core::test_utils::test_client::new_client;
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;
@@ -31,6 +32,7 @@ use std::borrow::Cow;
 /// This exercises Started, Progress, Output, and Completed/FinalResult paths
 #[tokio::test]
 async fn test_async_operation_triggers_callbacks() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
@@ -77,6 +79,7 @@ async fn test_async_operation_triggers_callbacks() -> Result<()> {
 /// Test that failed operations trigger the Failed callback path
 #[tokio::test]
 async fn test_failed_operation_callback() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
@@ -117,6 +120,7 @@ async fn test_failed_operation_callback() -> Result<()> {
 /// Test cancel operation which triggers the Cancelled callback path
 #[tokio::test]
 async fn test_cancelled_operation_callback() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
@@ -186,6 +190,7 @@ async fn test_cancelled_operation_callback() -> Result<()> {
 /// Test stderr output handling (covers Output variant with is_stderr=true)
 #[tokio::test]
 async fn test_stderr_output_callback() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 
@@ -230,6 +235,7 @@ async fn test_stderr_output_callback() -> Result<()> {
 /// Test multiple concurrent operations exercising callback system
 #[tokio::test]
 async fn test_concurrent_operations_callbacks() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
     let client = new_client(Some(".ahma/tools")).await?;
 

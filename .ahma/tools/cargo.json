@@ -370,6 +370,11 @@
             "install_instructions": "Install with `cargo install cargo-audit`."
         },
         {
+            "name": "locate-project",
+            "description": "Print a JSON object with the path to the Cargo.toml manifest. Useful for verifying working directory context.",
+            "synchronous": true
+        },
+        {
             "name": "nextest",
             "description": "Run tests using cargo nextest.",
             "install_instructions": "Install with `cargo install cargo-nextest`.",

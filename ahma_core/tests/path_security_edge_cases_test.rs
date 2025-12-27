@@ -1,4 +1,5 @@
 //! Expanded path security edge case tests (See agent-plan.md Phase A)
+use ahma_core::skip_if_disabled_async;
 use ahma_core::test_utils as common;
 use ahma_core::utils::logging::init_test_logging;
 use common::test_client::{get_workspace_tools_dir, new_client_in_dir};
@@ -9,6 +10,7 @@ use std::{fs, path::Path};
 #[tokio::test]
 async fn test_path_validation_nested_parent_segments() {
     init_test_logging();
+    skip_if_disabled_async!("sandboxed_shell");
     let temp_dir = tempfile::tempdir().unwrap();
     let tools_dir = get_workspace_tools_dir();
     let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
@@ -36,6 +38,7 @@ async fn test_path_validation_nested_parent_segments() {
 #[tokio::test]
 async fn test_path_validation_unicode_directory() {
     init_test_logging();
+    skip_if_disabled_async!("sandboxed_shell");
     let temp_dir = tempfile::tempdir().unwrap();
     let tools_dir = get_workspace_tools_dir();
     let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
@@ -69,6 +72,7 @@ async fn test_path_validation_unicode_directory() {
 #[tokio::test]
 async fn test_path_validation_symlink_escape() {
     init_test_logging();
+    skip_if_disabled_async!("sandboxed_shell");
     #[cfg(unix)]
     {
         use std::os::unix::fs::symlink;
@@ -104,6 +108,7 @@ async fn test_path_validation_symlink_escape() {
 #[tokio::test]
 async fn test_path_validation_symlink_internal() {
     init_test_logging();
+    skip_if_disabled_async!("sandboxed_shell");
     #[cfg(unix)]
     {
         use std::os::unix::fs::symlink;
@@ -140,6 +145,7 @@ async fn test_path_validation_symlink_internal() {
 #[tokio::test]
 async fn test_path_validation_reserved_names() {
     init_test_logging();
+    skip_if_disabled_async!("sandboxed_shell");
     let temp_dir = tempfile::tempdir().unwrap();
     let tools_dir = get_workspace_tools_dir();
     let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
