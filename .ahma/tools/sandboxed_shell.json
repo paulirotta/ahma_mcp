@@ -1,6 +1,6 @@
 {
     "name": "sandboxed_shell",
-    "description": "Execute shell commands within a secure sandbox. This tool must **ALWAYS** be used instead of direct shell invocation. Synchronous execution is default and recommended for tasks completing in less than about 10 seconds.",
+    "description": "Execute shell commands within a secure sandbox. This tool must **ALWAYS** be used instead of direct shell invocation. Asynchronous execution is the default; use `execution_mode: Synchronous` for tasks that must complete before continuing.",
     "command": "bash -c",
     "enabled": true,
     "timeout_seconds": 300,

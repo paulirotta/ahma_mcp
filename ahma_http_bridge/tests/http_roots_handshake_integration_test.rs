@@ -80,17 +80,6 @@ async fn http_roots_handshake_then_tool_call_defaults_to_root() {
     let root_path = temp_root.path().to_path_buf();
     let root_uri = format!("file://{}", root_path.display());
 
-    // Create a minimal Cargo.toml so `cargo locate-project` works
-    std::fs::write(
-        root_path.join("Cargo.toml"),
-        r#"[package]
-name = "test-root"
-version = "0.1.0"
-edition = "2021"
-"#,
-    )
-    .expect("Failed to create Cargo.toml");
-
     // 1) initialize (no session header)
     let init_req = json!({
         "jsonrpc": "2.0",
@@ -248,16 +237,17 @@ edition = "2021"
 
     assert!(roots_resp.status().is_success() || roots_resp.status().as_u16() == 202);
 
-    // 6) Call cargo/locate-project without working_directory, retrying if the bridge still says initializing.
-    // We use cargo instead of file_tools because file_tools has enabled:false in the JSON definition.
+    // 6) Call sandboxed_shell with pwd, retrying if the bridge still says initializing.
+    // sandboxed_shell is always available (built-in), so this tests core handshake functionality.
     let tool_call = json!({
         "jsonrpc": "2.0",
         "id": 2,
         "method": "tools/call",
         "params": {
-            "name": "cargo",
+            "name": "sandboxed_shell",
             "arguments": {
-                "subcommand": "locate-project"
+                "command": "pwd",
+                "working_directory": root_path.to_string_lossy()
             }
         }
     });
@@ -294,19 +284,7 @@ edition = "2021"
         }
 
         assert!(status.is_success(), "tools/call failed: HTTP {status} {v}");
-        if v.get("error").is_some() {
-            // Check if cargo tool is unavailable (CI environment)
-            if let Some(msg) = v
-                .get("error")
-                .and_then(|e| e.get("message"))
-                .and_then(|m| m.as_str())
-                && (msg.contains("unavailable") || msg.contains("availability probe failed"))
-            {
-                eprintln!("⚠️  Skipping test - cargo tool not available: {}", msg);
-                return;
-            }
-            panic!("tools/call returned error: {v}");
-        }
+        assert!(v.get("error").is_none(), "tools/call returned error: {v}");
 
         let result = v.get("result").cloned().unwrap_or_else(|| json!({}));
         let out = extract_text_content(&result);

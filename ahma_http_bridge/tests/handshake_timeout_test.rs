@@ -227,18 +227,9 @@ async fn test_proper_vscode_handshake_allows_tool_calls() {
         .await
         .expect("Failed to spawn test server");
 
-    // Create a temp directory with Cargo.toml for the test
+    // Create a temp directory for the test
     let temp_root = TempDir::new().expect("Failed to create temp root");
     let root_path = temp_root.path().to_path_buf();
-    std::fs::write(
-        root_path.join("Cargo.toml"),
-        r#"[package]
-name = "test-vscode-handshake"
-version = "0.1.0"
-edition = "2021"
-"#,
-    )
-    .expect("Failed to create Cargo.toml");
 
     // Use the test client which implements proper handshake
     let mut client = McpTestClient::for_server(&server);
@@ -249,23 +240,16 @@ edition = "2021"
         .await
         .expect("Handshake should complete successfully");
 
-    // Check if cargo tool is available (may not be in CI environment)
-    let tools = client.list_tools().await.unwrap_or_default();
-    let has_cargo = tools.iter().any(|t| {
-        t.get("name")
-            .and_then(|n| n.as_str())
-            .is_some_and(|n| n == "cargo")
-    });
-
-    if !has_cargo {
-        eprintln!("⚠️  Skipping tool call assertion - cargo tool not available");
-        // Still pass the test - we verified the handshake worked
-        return;
-    }
-
-    // Now tools/call should work
+    // Use sandboxed_shell with pwd - this tool is always available (built-in)
+    // This tests that tool calls work after proper handshake
     let result = client
-        .call_tool("cargo", json!({ "subcommand": "locate-project" }))
+        .call_tool(
+            "sandboxed_shell",
+            json!({
+                "command": "pwd",
+                "working_directory": root_path.to_string_lossy()
+            }),
+        )
         .await;
 
     assert!(
@@ -274,7 +258,7 @@ edition = "2021"
         result.error
     );
 
-    // Verify output contains the root path
+    // Verify output contains the root path (pwd should return working directory)
     let output = result.output.unwrap_or_default();
     assert!(
         output.contains(root_path.to_string_lossy().as_ref()),

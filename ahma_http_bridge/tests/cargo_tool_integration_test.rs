@@ -1,12 +1,14 @@
-//! Cargo Tool Integration Tests with Real Assertions
+//! Tool Integration Tests with Real Assertions
 //!
-//! These tests verify that cargo tools work correctly end-to-end via the HTTP bridge.
-//! Unlike other integration tests, these tests:
-//! 1. Create real temporary cargo projects
-//! 2. Execute actual cargo commands
-//! 3. **Assert on success and validate output**
+//! These tests verify that tools work correctly end-to-end via the HTTP bridge.
 //!
-//! This addresses the gap where tests were "passing" by printing results without assertions.
+//! ## Core Tests (Always Run)
+//! Tests using `sandboxed_shell` validate core MCP functionality and always run
+//! because sandboxed_shell is a built-in tool that's always available.
+//!
+//! ## Cargo Tests (Optional)
+//! Tests using `cargo` are skipped if the cargo tool is unavailable.
+//! They test cargo-specific behavior but depend on cargo.json being enabled.
 //!
 //! ## Protocol Flow
 //!
@@ -591,4 +593,117 @@ fn test_cancellation_detection_patterns() {
             pattern
         );
     }
+}
+
+// =============================================================================
+// Test: Core Tool Execution with sandboxed_shell (Always Available)
+// =============================================================================
+
+/// This test validates core MCP tool execution functionality using sandboxed_shell,
+/// which is always available as a built-in tool. This ensures that the HTTP bridge
+/// tool execution path is always tested, regardless of which optional tools are enabled.
+#[tokio::test]
+async fn test_sandboxed_shell_execution_with_assertions() {
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp directory");
+    let project_dir = temp_dir.path();
+
+    // Create a test file to verify we're in the right directory
+    fs::write(project_dir.join("test_marker.txt"), "hello from test")
+        .expect("Failed to write test file");
+
+    let server = match spawn_test_server().await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("⚠️  Skipping test - failed to spawn server: {}", e);
+            return;
+        }
+    };
+
+    let mut client = McpTestClient::with_url(&server.base_url());
+
+    if client
+        .initialize_with_roots("shell-test-client", &[project_dir.to_path_buf()])
+        .await
+        .is_err()
+    {
+        eprintln!("⚠️  Skipping test - failed to initialize MCP client");
+        return;
+    }
+
+    // Test 1: pwd returns the working directory
+    let result = client
+        .call_tool(
+            "sandboxed_shell",
+            json!({
+                "command": "pwd",
+                "working_directory": project_dir.to_string_lossy()
+            }),
+        )
+        .await;
+
+    assert!(
+        result.success,
+        "sandboxed_shell pwd should succeed. Error: {:?}",
+        result.error
+    );
+
+    if let Some(output) = &result.output {
+        assert!(
+            output.contains(project_dir.to_string_lossy().as_ref()),
+            "pwd should return working directory path: got '{}'",
+            output
+        );
+    }
+
+    // Test 2: echo returns expected output
+    let result = client
+        .call_tool(
+            "sandboxed_shell",
+            json!({
+                "command": "echo 'MCP tool execution works'",
+                "working_directory": project_dir.to_string_lossy()
+            }),
+        )
+        .await;
+
+    assert!(
+        result.success,
+        "sandboxed_shell echo should succeed. Error: {:?}",
+        result.error
+    );
+
+    if let Some(output) = &result.output {
+        assert!(
+            output.contains("MCP tool execution works"),
+            "echo should return expected output: got '{}'",
+            output
+        );
+    }
+
+    // Test 3: ls can see files in sandbox
+    let result = client
+        .call_tool(
+            "sandboxed_shell",
+            json!({
+                "command": "ls -la",
+                "working_directory": project_dir.to_string_lossy()
+            }),
+        )
+        .await;
+
+    assert!(
+        result.success,
+        "sandboxed_shell ls should succeed. Error: {:?}",
+        result.error
+    );
+
+    if let Some(output) = &result.output {
+        assert!(
+            output.contains("test_marker.txt"),
+            "ls should show test file: got '{}'",
+            output
+        );
+    }
+
+    println!("✓ sandboxed_shell core tests passed");
 }

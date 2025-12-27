@@ -140,3 +140,50 @@ async fn test_tool_descriptions_match_actual_behavior() -> Result<()> {
     client.cancel().await?;
     Ok(())
 }
+
+/// Test that sandboxed_shell (always available) returns actual results.
+/// This ensures core tool execution functionality is always tested.
+#[tokio::test]
+async fn test_sandboxed_shell_returns_actual_results() -> Result<()> {
+    init_test_logging();
+    // sandboxed_shell is always available - no skip needed
+
+    let client = new_client(Some(".ahma/tools")).await?;
+
+    let call_param = CallToolRequestParam {
+        name: Cow::Borrowed("sandboxed_shell"),
+        arguments: Some(
+            serde_json::from_value(json!({
+                "command": "echo 'test output from sandboxed_shell'",
+                "execution_mode": "Synchronous"
+            }))
+            .unwrap(),
+        ),
+    };
+
+    let result = client.call_tool(call_param).await?;
+
+    // Should return actual results
+    assert!(
+        !result.content.is_empty(),
+        "sandboxed_shell should return non-empty results"
+    );
+
+    // Check that we get actual shell output
+    let content_text = result
+        .content
+        .iter()
+        .find_map(|c| c.as_text())
+        .expect("Should have text content");
+
+    assert!(
+        content_text
+            .text
+            .contains("test output from sandboxed_shell"),
+        "sandboxed_shell should return expected output, got: {}",
+        content_text.text
+    );
+
+    client.cancel().await?;
+    Ok(())
+}
