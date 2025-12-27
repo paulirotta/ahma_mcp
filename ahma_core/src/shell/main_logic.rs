@@ -387,7 +387,6 @@ pub fn find_matching_tool<'a>(
 ) -> Result<(&'a str, &'a ToolConfig)> {
     configs
         .iter()
-        .filter(|(_, config)| config.enabled)
         .filter_map(|(key, config)| {
             if tool_name.starts_with(key) {
                 Some((key.as_str(), config))
@@ -1053,6 +1052,16 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     let configs_ref = configs.as_ref();
     let (config_key, config) = find_matching_tool(configs_ref, &tool_name)?;
 
+    // Check if tool is disabled
+    if !config.enabled {
+        let msg = if let Some(install) = &config.install_instructions {
+            format!("Tool '{}' is disabled. {}", config.name, install.trim())
+        } else {
+            format!("Tool '{}' is disabled", config.name)
+        };
+        anyhow::bail!("{}", msg);
+    }
+
     // Check if this is a top-level sequence tool (no subcommands, just sequence)
     let is_top_level_sequence = config.command == "sequence" && config.sequence.is_some();
 
@@ -1390,7 +1399,7 @@ mod tests {
         }
 
         #[test]
-        fn returns_error_when_all_matching_tools_disabled() {
+        fn finds_disabled_tool() {
             let mut configs = HashMap::new();
             configs.insert(
                 "cargo".to_string(),
@@ -1399,7 +1408,9 @@ mod tests {
 
             let result = find_matching_tool(&configs, "cargo_test");
 
-            assert!(result.is_err());
+            // Should find the disabled tool (execution will reject it)
+            assert!(result.is_ok());
+            assert!(!result.unwrap().1.enabled);
         }
     }
 

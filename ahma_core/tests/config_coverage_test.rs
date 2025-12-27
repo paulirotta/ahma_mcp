@@ -524,7 +524,7 @@ fn test_load_tool_configs_multiple_tools() {
 }
 
 #[test]
-fn test_load_tool_configs_skips_disabled_tools() {
+fn test_load_tool_configs_includes_disabled_tools() {
     let temp_dir = tempdir().unwrap();
 
     std::fs::write(
@@ -534,7 +534,9 @@ fn test_load_tool_configs_skips_disabled_tools() {
     .unwrap();
 
     let configs = load_tool_configs_sync(temp_dir.path()).unwrap();
-    assert!(configs.is_empty());
+    assert_eq!(configs.len(), 1);
+    assert!(configs.contains_key("disabled_tool"));
+    assert!(!configs.get("disabled_tool").unwrap().enabled);
 }
 
 #[test]
@@ -801,7 +803,7 @@ async fn test_async_load_tool_configs_multiple_tools() {
 }
 
 #[tokio::test]
-async fn test_async_load_tool_configs_skips_disabled_tools() {
+async fn test_async_load_tool_configs_includes_disabled_tools() {
     use ahma_core::config::load_tool_configs;
     let temp_dir = tempdir().unwrap();
     let tool_json = json!({
@@ -817,7 +819,9 @@ async fn test_async_load_tool_configs_skips_disabled_tools() {
     .unwrap();
 
     let configs = load_tool_configs(temp_dir.path()).await.unwrap();
-    assert!(configs.is_empty());
+    assert_eq!(configs.len(), 1);
+    assert!(configs.contains_key("disabled_async"));
+    assert!(!configs.get("disabled_async").unwrap().enabled);
 }
 
 #[tokio::test]

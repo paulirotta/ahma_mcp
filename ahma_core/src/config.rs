@@ -323,10 +323,9 @@ pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<Strin
                             );
                         }
 
-                        // Only include enabled tools
-                        if config.enabled {
-                            configs.insert(config.name.clone(), config);
-                        }
+                        // Include all tools (enabled or disabled)
+                        // Disabled tools will be rejected at execution time with a helpful message
+                        configs.insert(config.name.clone(), config);
                     }
                     Err(e) => {
                         tracing::warn!("Failed to parse {}: {}", path.display(), e);
@@ -386,10 +385,9 @@ pub fn load_tool_configs_sync(tools_dir: &Path) -> anyhow::Result<HashMap<String
                             );
                         }
 
-                        // Only include enabled tools
-                        if config.enabled {
-                            configs.insert(config.name.clone(), config);
-                        }
+                        // Include all tools (enabled or disabled)
+                        // Disabled tools will be rejected at execution time with a helpful message
+                        configs.insert(config.name.clone(), config);
                     }
                     Err(e) => {
                         tracing::warn!("Failed to parse {}: {}", path.display(), e);
