@@ -18,6 +18,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
+    time::Instant,
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -35,6 +36,15 @@ pub struct McpRoot {
     /// Optional human-readable name
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+}
+
+/// Get the handshake timeout in seconds from AHMA_HANDSHAKE_TIMEOUT_SECS env var.
+/// Defaults to 30 seconds if not set or invalid.
+pub fn handshake_timeout_secs() -> u64 {
+    std::env::var("AHMA_HANDSHAKE_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(30)
 }
 
 /// Session termination reason
@@ -74,6 +84,8 @@ pub struct Session {
     sse_connected: AtomicBool,
     /// Whether initialized notification was received (MCP handshake complete)
     mcp_initialized: AtomicBool,
+    /// When the session was created (for handshake timeout tracking)
+    created_at: Instant,
 }
 
 impl Session {
@@ -90,6 +102,26 @@ impl Session {
     /// Check if the SSE stream is connected (client opened GET /mcp)
     pub fn is_sse_connected(&self) -> bool {
         self.sse_connected.load(Ordering::SeqCst)
+    }
+
+    /// Check if MCP initialized notification was received
+    pub fn is_mcp_initialized(&self) -> bool {
+        self.mcp_initialized.load(Ordering::SeqCst)
+    }
+
+    /// Check if the handshake has timed out (sandbox not locked within timeout).
+    /// Returns Some(elapsed_secs) if timed out, None otherwise.
+    pub fn is_handshake_timed_out(&self) -> Option<u64> {
+        if self.is_sandbox_locked() {
+            return None;
+        }
+        let timeout = handshake_timeout_secs();
+        let elapsed = self.created_at.elapsed().as_secs();
+        if elapsed >= timeout {
+            Some(elapsed)
+        } else {
+            None
+        }
     }
 
     /// Get the first sandbox scope (for backwards compatibility)
@@ -114,8 +146,14 @@ impl Session {
     /// Mark SSE as connected and trigger roots/list_changed if MCP is already initialized.
     /// Returns true if roots/list_changed was sent.
     pub async fn mark_sse_connected(&self) -> Result<bool> {
+        let elapsed_ms = self.created_at.elapsed().as_millis();
         self.sse_connected.store(true, Ordering::SeqCst);
-        debug!(session_id = %self.id, "SSE marked as connected");
+        info!(
+            session_id = %self.id,
+            elapsed_ms = elapsed_ms,
+            mcp_initialized = self.mcp_initialized.load(Ordering::SeqCst),
+            "SSE marked as connected"
+        );
 
         // If MCP is already initialized, send roots/list_changed now
         if self.mcp_initialized.load(Ordering::SeqCst) {
@@ -128,8 +166,14 @@ impl Session {
     /// Mark MCP as initialized (handshake complete) and trigger roots/list_changed if SSE is already connected.
     /// Returns true if roots/list_changed was sent.
     pub async fn mark_mcp_initialized(&self) -> Result<bool> {
+        let elapsed_ms = self.created_at.elapsed().as_millis();
         self.mcp_initialized.store(true, Ordering::SeqCst);
-        debug!(session_id = %self.id, "MCP marked as initialized");
+        info!(
+            session_id = %self.id,
+            elapsed_ms = elapsed_ms,
+            sse_connected = self.sse_connected.load(Ordering::SeqCst),
+            "MCP marked as initialized"
+        );
 
         // If SSE is already connected, send roots/list_changed now
         if self.sse_connected.load(Ordering::SeqCst) {
@@ -314,6 +358,7 @@ impl SessionManager {
             child_handle: Mutex::new(Some(child)),
             sse_connected: AtomicBool::new(false),
             mcp_initialized: AtomicBool::new(false),
+            created_at: Instant::now(),
         });
 
         // Spawn the I/O handler task
@@ -371,12 +416,14 @@ impl SessionManager {
             ));
         }
 
-        // Get request ID
-        let id_opt = request.get("id").map(|id| {
-            if id.is_string() {
-                id.as_str().unwrap().to_string()
+        // Get request ID - treat null as absent (notification)
+        let id_opt = request.get("id").and_then(|id| {
+            if id.is_null() {
+                None
+            } else if id.is_string() {
+                Some(id.as_str().unwrap().to_string())
             } else {
-                id.to_string()
+                Some(id.to_string())
             }
         });
 
@@ -672,6 +719,36 @@ impl SessionManager {
 
         // Mark session as terminated if not already
         session.terminated.store(true, Ordering::SeqCst);
-        session.pending_requests.clear();
+
+        // Send explicit error responses to all pending requests before clearing.
+        // This prevents "Response channel closed" errors that manifest as cryptic
+        // "Canceled: canceled" messages in clients.
+        let pending_count = session.pending_requests.len();
+        if pending_count > 0 {
+            warn!(
+                session_id = %session.id,
+                pending_count = pending_count,
+                "Session terminated with pending requests - sending error responses"
+            );
+            // Drain all pending requests and send error response
+            let pending: Vec<_> = session
+                .pending_requests
+                .iter()
+                .map(|entry| entry.key().clone())
+                .collect();
+            for id in pending {
+                if let Some((_, sender)) = session.pending_requests.remove(&id) {
+                    let error_response = serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "error": {
+                            "code": -32603,
+                            "message": "Session terminated unexpectedly - subprocess may have crashed or handshake failed"
+                        }
+                    });
+                    let _ = sender.send(error_response);
+                }
+            }
+        }
     }
 }

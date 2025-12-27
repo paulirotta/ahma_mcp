@@ -2,7 +2,7 @@
     "name": "cargo",
     "description": "Rust's build tool and package manager",
     "command": "cargo",
-    "enabled": true,
+    "enabled": false,
     "timeout_seconds": 600,
     "subcommand": [
         {

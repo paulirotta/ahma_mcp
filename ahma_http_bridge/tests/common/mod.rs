@@ -256,6 +256,7 @@ fn next_request_id() -> u64 {
 #[derive(Debug, Serialize)]
 pub struct JsonRpcRequest {
     pub jsonrpc: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<u64>,
     pub method: String,
     pub params: Value,
@@ -468,37 +469,43 @@ impl McpTestClient {
             ));
         }
 
-        // Step 2: Send initialized notification (required by MCP protocol)
+        let session_id = self.session_id.as_deref().ok_or_else(|| {
+            "Initialize response did not include Mcp-Session-Id header".to_string()
+        })?;
+
+        // Step 2: Open the SSE stream BEFORE sending the initialized notification.
+        //
+        // Rationale:
+        // - Real MCP clients keep an SSE connection open early in the handshake.
+        // - The bridge intentionally avoids locking the sandbox from empty roots while SSE
+        //   is not connected ([ahma_http_bridge/src/bridge.rs]).
+        // - Connecting SSE first prevents subtle race conditions that can make tests pass
+        //   while real clients fail.
+        let sse_resp = self.open_sse_stream(session_id).await?;
+
+        // Step 3: Send initialized notification (required by MCP protocol)
         let initialized_notification = JsonRpcRequest::initialized();
         let _ = self
             .client
             .post(self.mcp_url())
             .header("Content-Type", "application/json")
-            .header("Mcp-Session-Id", self.session_id.as_deref().unwrap_or(""))
+            .header("Mcp-Session-Id", session_id)
             .json(&initialized_notification)
             .timeout(Duration::from_secs(5))
             .send()
             .await;
 
-        // Step 3: Handle roots/list request from server via SSE
-        // The server sends roots/list to establish sandbox scope
-        if let Some(ref session_id) = self.session_id {
-            self.handle_roots_list_handshake(session_id, roots).await?;
-        }
+        // Step 4: Handle roots/list request from server via SSE.
+        // The server sends roots/list to establish sandbox scope.
+        self.handle_roots_list_handshake_with_response(session_id, roots, sse_resp)
+            .await?;
 
         Ok(init_response)
     }
 
-    /// Handle the roots/list handshake over SSE.
-    /// This listens for the server's roots/list request and responds with client roots.
-    async fn handle_roots_list_handshake(
-        &self,
-        session_id: &str,
-        roots: &[std::path::PathBuf],
-    ) -> Result<(), String> {
+    async fn open_sse_stream(&self, session_id: &str) -> Result<reqwest::Response, String> {
         let url = format!("{}/mcp", self.base_url);
 
-        // Open SSE stream to receive server requests
         let resp = self
             .client
             .get(&url)
@@ -513,6 +520,17 @@ impl McpTestClient {
             return Err(format!("SSE stream HTTP {}", resp.status()));
         }
 
+        Ok(resp)
+    }
+
+    /// Handle the roots/list handshake over SSE.
+    /// This listens for the server's roots/list request and responds with client roots.
+    async fn handle_roots_list_handshake_with_response(
+        &self,
+        session_id: &str,
+        roots: &[std::path::PathBuf],
+        resp: reqwest::Response,
+    ) -> Result<(), String> {
         let mut stream = resp.bytes_stream();
         let mut buffer = String::new();
 

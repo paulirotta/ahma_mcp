@@ -290,9 +290,12 @@ pub fn format_cancellation_message(
 
     // Detect the type of cancellation
     let cancellation_type = if lower.contains("canceled: canceled") || lower == "canceled" {
-        "MCP client (IDE) cancelled the request"
+        // IMPORTANT:
+        // We cannot reliably attribute this to the IDE/client. It may also be triggered by
+        // internal cancellation, handshake rejection, sandbox initialization gating, etc.
+        "Operation was cancelled (source: unknown)"
     } else if lower.contains("task cancelled for reason") {
-        "MCP protocol cancellation received"
+        "MCP cancellation received"
     } else if lower.contains("timeout") {
         "Operation timed out"
     } else if lower.contains("user") || lower.contains("request") {
@@ -314,9 +317,12 @@ pub fn format_cancellation_message(
         parts.push(format!("Operation: {}", op_id));
     }
 
+    // Preserve the original message for debugging.
+    parts.push(format!("Raw: {}", raw_message));
+
     // Add actionable suggestions
     parts.push(
-        "Suggestions: retry the command, or check 'status' to verify no operations are stuck"
+        "Suggestions: retry the command; capture server logs with `2>&1`; if this happened immediately, verify MCP roots/list handshake completed before tools/call"
             .to_string(),
     );
 

@@ -181,7 +181,9 @@ pub async fn run() -> Result<()> {
 
     // Initialize logging
     let log_level = if cli.debug { "debug" } else { "info" };
-    let log_to_file = !cli.log_to_stderr;
+    // In HTTP server mode, default to stderr so users see logs in the terminal.
+    // (File logging is still the default for CLI/stdio usage.)
+    let log_to_file = !cli.log_to_stderr && cli.mode != "http";
 
     init_logging(log_level, log_to_file)?;
 

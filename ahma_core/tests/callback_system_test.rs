@@ -589,8 +589,13 @@ fn test_format_cancellation_message_canceled_canceled() {
     // The infamous "Canceled: canceled" pattern from VS Code
     let result = format_cancellation_message("Canceled: canceled", Some("cargo"), Some("op_123"));
     assert!(
-        result.contains("MCP client (IDE) cancelled the request"),
-        "Expected MCP client cancellation message, got: {}",
+        result.contains("Operation was cancelled (source: unknown)"),
+        "Expected unknown-source cancellation message, got: {}",
+        result
+    );
+    assert!(
+        result.contains("Raw: Canceled: canceled"),
+        "Expected raw cancellation message to be preserved, got: {}",
         result
     );
     assert!(
@@ -617,8 +622,13 @@ fn test_format_cancellation_message_lowercase_canceled() {
     // Just "canceled" without the prefix
     let result = format_cancellation_message("canceled", None, None);
     assert!(
-        result.contains("MCP client (IDE) cancelled the request"),
-        "Expected MCP client cancellation message, got: {}",
+        result.contains("Operation was cancelled (source: unknown)"),
+        "Expected unknown-source cancellation message, got: {}",
+        result
+    );
+    assert!(
+        result.contains("Raw: canceled"),
+        "Expected raw cancellation message to be preserved, got: {}",
         result
     );
 }
@@ -631,8 +641,13 @@ fn test_format_cancellation_message_task_cancelled() {
     let result =
         format_cancellation_message("task cancelled for reason timeout", Some("clippy"), None);
     assert!(
-        result.contains("MCP protocol cancellation"),
-        "Expected MCP protocol message, got: {}",
+        result.contains("MCP cancellation received"),
+        "Expected MCP cancellation message, got: {}",
+        result
+    );
+    assert!(
+        result.contains("Raw: task cancelled for reason timeout"),
+        "Expected raw cancellation message to be preserved, got: {}",
         result
     );
     assert!(

@@ -136,10 +136,13 @@ async fn handle_sse_stream(State(state): State<Arc<BridgeState>>, headers: Heade
     {
         Some(id) => id.to_string(),
         None => {
+            debug!("SSE request without session ID header - returning 404");
             // 404 makes clients think SSE doesn't exist, avoiding OAuth probes
             return StatusCode::NOT_FOUND.into_response();
         }
     };
+
+    debug!(session_id = %session_id, "SSE GET request received with session header");
 
     // Get the session - 404 if not found
     let session = match state.session_manager.get_session(&session_id) {
@@ -268,8 +271,33 @@ async fn handle_session_isolated_request(
 
     let method = payload.get("method").and_then(|m| m.as_str());
 
+    // Trace all incoming requests for debugging
+    debug!(
+        method = ?method,
+        session_id = ?session_id,
+        has_id = payload.get("id").is_some(),
+        "Incoming MCP request"
+    );
+
     // Handle session creation on initialize request (R8D.2)
     if method == Some("initialize") && session_id.is_none() {
+        debug!("Processing initialize request (no session ID)");
+        // Fail fast on obviously invalid initialize requests.
+        // Without protocolVersion, the downstream stdio MCP server may never reply,
+        // which turns into a confusing 60s bridge timeout.
+        let protocol_version_ok = payload
+            .get("params")
+            .and_then(|p| p.get("protocolVersion"))
+            .and_then(|v| v.as_str())
+            .is_some();
+
+        if !protocol_version_ok {
+            return error_response(
+                -32602,
+                "Invalid initialize params: missing params.protocolVersion",
+            );
+        }
+
         info!("Creating new session for initialize request");
 
         match session_manager.create_session().await {
@@ -359,10 +387,58 @@ async fn handle_session_isolated_request(
 
         // Delay tool execution until sandbox is locked from first roots/list response.
         // This keeps the subprocess in a safe, non-executing state while sandbox initialization completes.
+        // Also check for handshake timeout to provide actionable error messages.
         if method == Some("tools/call")
             && let Some(session) = session_manager.get_session(&session_id)
             && !session.is_sandbox_locked()
         {
+            let sse_connected = session.is_sse_connected();
+            let mcp_initialized = session.is_mcp_initialized();
+            debug!(
+                session_id = %session_id,
+                sse_connected = sse_connected,
+                mcp_initialized = mcp_initialized,
+                sandbox_locked = false,
+                "tools/call blocked - sandbox not yet locked"
+            );
+
+            // Check if handshake has timed out
+            if let Some(elapsed_secs) = session.is_handshake_timed_out() {
+                let sse_connected = session.is_sse_connected();
+                let mcp_initialized = session.is_mcp_initialized();
+
+                let error_msg = format!(
+                    "Handshake timeout after {}s - sandbox not locked. \
+                    SSE connected: {}, MCP initialized: {}. \
+                    Ensure client: 1) opens SSE stream (GET /mcp with session header), \
+                    2) sends notifications/initialized, \
+                    3) responds to roots/list request over SSE. \
+                    Set AHMA_HANDSHAKE_TIMEOUT_SECS to adjust timeout.",
+                    elapsed_secs, sse_connected, mcp_initialized
+                );
+
+                error!(session_id = %session_id, "Handshake timeout: SSE={}, initialized={}", sse_connected, mcp_initialized);
+
+                let error_json = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "error": {
+                        "code": -32002,
+                        "message": error_msg
+                    }
+                });
+                return Response::builder()
+                    .status(StatusCode::GATEWAY_TIMEOUT)
+                    .header("content-type", "application/json")
+                    .header(MCP_SESSION_ID_HEADER, session_id.as_str())
+                    .body(axum::body::Body::from(
+                        serde_json::to_vec(&error_json).unwrap_or_default(),
+                    ))
+                    .unwrap_or_else(|_| {
+                        (StatusCode::GATEWAY_TIMEOUT, "Handshake timeout").into_response()
+                    });
+            }
+
+            // Still initializing - return 409 Conflict
             let error_json = serde_json::json!({
                 "jsonrpc": "2.0",
                 "error": {
@@ -387,6 +463,7 @@ async fn handle_session_isolated_request(
         // Check for initialized notification - this completes the MCP handshake
         // Once both SSE is connected AND initialized is received, we send roots/list_changed
         if method == Some("notifications/initialized") {
+            debug!(session_id = %session_id, "Received notifications/initialized");
             is_initialized_notification = true;
         }
 
@@ -397,7 +474,16 @@ async fn handle_session_isolated_request(
             && (payload.get("result").is_some() || payload.get("error").is_some());
 
         if is_client_response {
-            debug!(session_id = %session_id, "Received client response, forwarding to subprocess");
+            let response_id = payload.get("id");
+            let has_result = payload.get("result").is_some();
+            let has_error = payload.get("error").is_some();
+            debug!(
+                session_id = %session_id,
+                response_id = ?response_id,
+                has_result = has_result,
+                has_error = has_error,
+                "Received client response (SSE callback), forwarding to subprocess"
+            );
 
             // Check if this is a roots/list response - extract roots and lock sandbox
             if let Some(result) = payload.get("result")

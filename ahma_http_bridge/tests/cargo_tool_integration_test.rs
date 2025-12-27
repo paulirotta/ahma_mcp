@@ -130,11 +130,12 @@ async fn test_cargo_check_with_assertions() {
         return;
     }
 
-    // Call cargo_check with working_directory pointing to our test project
+    // Call cargo with subcommand check, working_directory pointing to our test project
     let result = client
         .call_tool(
-            "cargo_check",
+            "cargo",
             json!({
+                "subcommand": "check",
                 "working_directory": project.path().to_string_lossy()
             }),
         )
@@ -201,11 +202,12 @@ async fn test_cargo_clippy_basic_with_assertions() {
         return;
     }
 
-    // Call cargo_clippy without the --tests flag
+    // Call cargo clippy without the --tests flag
     let result = client
         .call_tool(
-            "cargo_clippy",
+            "cargo",
             json!({
+                "subcommand": "clippy",
                 "working_directory": project.path().to_string_lossy()
             }),
         )
@@ -264,10 +266,10 @@ async fn test_cargo_clippy_with_tests_flag_assertions() {
         return;
     }
 
-    // Call cargo_clippy WITH the --tests flag (this is what was failing!)
+    // Call cargo clippy WITH the --tests flag (this is what was failing!)
     let result = client
         .call_tool(
-            "cargo_clippy",
+            "cargo",
             json!({
                 "subcommand": "clippy",
                 "tests": true,
@@ -343,8 +345,9 @@ async fn test_cargo_build_with_assertions() {
 
     let result = client
         .call_tool(
-            "cargo_build",
+            "cargo",
             json!({
+                "subcommand": "build",
                 "working_directory": project.path().to_string_lossy()
             }),
         )
@@ -353,7 +356,7 @@ async fn test_cargo_build_with_assertions() {
     // CRITICAL: Assert success
     assert!(
         result.success,
-        "cargo_build should succeed. Error: {:?}",
+        "cargo build should succeed. Error: {:?}",
         result.error
     );
 
@@ -401,8 +404,9 @@ async fn test_cargo_test_with_assertions() {
 
     let result = client
         .call_tool(
-            "cargo_test",
+            "cargo",
             json!({
+                "subcommand": "test",
                 "working_directory": project.path().to_string_lossy()
             }),
         )
@@ -411,7 +415,7 @@ async fn test_cargo_test_with_assertions() {
     // CRITICAL: Assert success
     assert!(
         result.success,
-        "cargo_test should succeed. Error: {:?}",
+        "cargo test should succeed. Error: {:?}",
         result.error
     );
 
@@ -469,8 +473,9 @@ async fn test_cargo_fmt_with_assertions() {
 
     let result = client
         .call_tool(
-            "cargo_fmt",
+            "cargo",
             json!({
+                "subcommand": "fmt",
                 "working_directory": project.path().to_string_lossy()
             }),
         )
@@ -479,7 +484,7 @@ async fn test_cargo_fmt_with_assertions() {
     // CRITICAL: Assert success
     assert!(
         result.success,
-        "cargo_fmt should succeed. Error: {:?}",
+        "cargo fmt should succeed. Error: {:?}",
         result.error
     );
 
