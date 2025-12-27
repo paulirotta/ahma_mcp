@@ -1216,19 +1216,18 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         }
         Err(e) => {
             let error_message = e.to_string();
-            if error_message.contains("Canceled: Canceled") {
-                eprintln!(
-                    "Operation cancelled by user request (was: {})",
-                    error_message
-                );
-            } else if error_message.contains("task cancelled for reason") {
-                eprintln!(
-                    "Operation cancelled by user request or system signal (detected MCP cancellation)"
-                );
-            } else if error_message.to_lowercase().contains("cancel") {
-                eprintln!("Operation cancelled: {}", error_message);
+            // Use centralized cancellation formatter for clear, actionable error messages
+            let formatted = ahma_core::callback_system::format_cancellation_message(
+                &error_message,
+                Some(tool_name),
+                None, // No operation_id in CLI mode
+            );
+            
+            // If the formatter returned a different message, it was a cancellation
+            if formatted != error_message {
+                eprintln!("{}", formatted);
             } else {
-                eprintln!("Error executing tool: {}", e);
+                eprintln!("Error executing tool '{}': {}", tool_name, e);
             }
             Err(anyhow::anyhow!("Tool execution failed"))
         }

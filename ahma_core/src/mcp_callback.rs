@@ -151,18 +151,12 @@ impl CallbackSender for McpCallbackSender {
             } => {
                 tracing::warn!("Cancelled operation {}: {}", operation_id, message);
 
-                // Enhanced cancellation message formatting to avoid "Cancelled: Canceled" repetition
-                let formatted_message = if message.to_lowercase().starts_with("cancel") {
-                    // Message already indicates cancellation, don't prepend "Cancelled:"
-                    if message == "Canceled" {
-                        "Operation cancelled by user request".to_string()
-                    } else {
-                        message.clone()
-                    }
-                } else {
-                    // Message doesn't indicate cancellation, prepend "Cancelled:"
-                    format!("Cancelled: {message}")
-                };
+                // Use the centralized cancellation message formatter for clear, actionable messages
+                let formatted_message = crate::callback_system::format_cancellation_message(
+                    &message,
+                    None, // Tool name not available in this context
+                    Some(&operation_id),
+                );
 
                 ProgressNotificationParam {
                     progress_token: progress_token.clone(),

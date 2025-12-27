@@ -269,6 +269,60 @@ pub enum CallbackError {
     Timeout(String),
 }
 
+/// Format a cancellation error message to be more informative.
+///
+/// This converts cryptic messages like "Canceled: canceled" into actionable messages
+/// that explain what happened and what the user can do next.
+///
+/// # Arguments
+/// * `raw_message` - The raw error/cancellation message from rmcp or the MCP client
+/// * `tool_name` - Optional tool name that was being executed
+/// * `operation_id` - Optional operation ID for reference
+///
+/// # Returns
+/// A user-friendly cancellation message with context
+pub fn format_cancellation_message(
+    raw_message: &str,
+    tool_name: Option<&str>,
+    operation_id: Option<&str>,
+) -> String {
+    let lower = raw_message.to_lowercase();
+
+    // Detect the type of cancellation
+    let cancellation_type = if lower.contains("canceled: canceled") || lower == "canceled" {
+        "MCP client (IDE) cancelled the request"
+    } else if lower.contains("task cancelled for reason") {
+        "MCP protocol cancellation received"
+    } else if lower.contains("timeout") {
+        "Operation timed out"
+    } else if lower.contains("user") || lower.contains("request") {
+        "User-initiated cancellation"
+    } else if lower.contains("cancel") {
+        "Operation was cancelled"
+    } else {
+        return raw_message.to_string(); // Not a cancellation, return as-is
+    };
+
+    // Build an informative message
+    let mut parts = vec![cancellation_type.to_string()];
+
+    if let Some(tool) = tool_name {
+        parts.push(format!("Tool: {}", tool));
+    }
+
+    if let Some(op_id) = operation_id {
+        parts.push(format!("Operation: {}", op_id));
+    }
+
+    // Add actionable suggestions
+    parts.push(
+        "Suggestions: retry the command, or check 'status' to verify no operations are stuck"
+            .to_string(),
+    );
+
+    parts.join(". ")
+}
+
 impl CallbackError {
     /// Check if this error represents a potentially recoverable condition
     pub fn is_recoverable(&self) -> bool {

@@ -578,3 +578,103 @@ async fn test_utility_functions() {
         .unwrap();
     assert_eq!(received.operation_id(), update.operation_id());
 }
+// =========================================================================
+// Tests for format_cancellation_message helper
+// =========================================================================
+
+#[test]
+fn test_format_cancellation_message_canceled_canceled() {
+    use ahma_core::callback_system::format_cancellation_message;
+
+    // The infamous "Canceled: canceled" pattern from VS Code
+    let result = format_cancellation_message("Canceled: canceled", Some("cargo"), Some("op_123"));
+    assert!(
+        result.contains("MCP client (IDE) cancelled the request"),
+        "Expected MCP client cancellation message, got: {}",
+        result
+    );
+    assert!(
+        result.contains("cargo"),
+        "Expected tool name in message, got: {}",
+        result
+    );
+    assert!(
+        result.contains("op_123"),
+        "Expected operation ID in message, got: {}",
+        result
+    );
+    assert!(
+        result.contains("Suggestions"),
+        "Expected actionable suggestions, got: {}",
+        result
+    );
+}
+
+#[test]
+fn test_format_cancellation_message_lowercase_canceled() {
+    use ahma_core::callback_system::format_cancellation_message;
+
+    // Just "canceled" without the prefix
+    let result = format_cancellation_message("canceled", None, None);
+    assert!(
+        result.contains("MCP client (IDE) cancelled the request"),
+        "Expected MCP client cancellation message, got: {}",
+        result
+    );
+}
+
+#[test]
+fn test_format_cancellation_message_task_cancelled() {
+    use ahma_core::callback_system::format_cancellation_message;
+
+    // rmcp ServiceError::Cancelled format
+    let result =
+        format_cancellation_message("task cancelled for reason timeout", Some("clippy"), None);
+    assert!(
+        result.contains("MCP protocol cancellation"),
+        "Expected MCP protocol message, got: {}",
+        result
+    );
+    assert!(
+        result.contains("clippy"),
+        "Expected tool name in message, got: {}",
+        result
+    );
+}
+
+#[test]
+fn test_format_cancellation_message_timeout() {
+    use ahma_core::callback_system::format_cancellation_message;
+
+    let result = format_cancellation_message("Operation timed out after 30s", Some("build"), None);
+    assert!(
+        result.contains("timed out"),
+        "Expected timeout message, got: {}",
+        result
+    );
+}
+
+#[test]
+fn test_format_cancellation_message_non_cancellation() {
+    use ahma_core::callback_system::format_cancellation_message;
+
+    // Non-cancellation error should be returned as-is
+    let original = "Command failed with exit code 1";
+    let result = format_cancellation_message(original, Some("test"), Some("op_456"));
+    assert_eq!(
+        result, original,
+        "Non-cancellation messages should be returned unchanged"
+    );
+}
+
+#[test]
+fn test_format_cancellation_message_user_initiated() {
+    use ahma_core::callback_system::format_cancellation_message;
+
+    let result = format_cancellation_message("User requested cancellation", None, None);
+    assert!(
+        result.contains("User-initiated cancellation"),
+        "Expected user cancellation message, got: {}",
+        result
+    );
+}
