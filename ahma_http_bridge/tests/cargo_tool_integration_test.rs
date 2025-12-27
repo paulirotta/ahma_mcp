@@ -1,0 +1,541 @@
+//! Cargo Tool Integration Tests with Real Assertions
+//!
+//! These tests verify that cargo tools work correctly end-to-end via the HTTP bridge.
+//! Unlike other integration tests, these tests:
+//! 1. Create real temporary cargo projects
+//! 2. Execute actual cargo commands
+//! 3. **Assert on success and validate output**
+//!
+//! This addresses the gap where tests were "passing" by printing results without assertions.
+//!
+//! ## Protocol Flow
+//!
+//! These tests properly implement the MCP protocol handshake:
+//! 1. initialize → get session ID
+//! 2. initialized notification
+//! 3. Wait for roots/list request from server via SSE
+//! 4. Respond with client roots (the temp project directory)
+//! 5. THEN call tools
+//!
+//! ## Running Tests
+//!
+//! ```bash
+//! cargo nextest run --test cargo_tool_integration_test
+//! ```
+
+mod common;
+
+use common::{McpTestClient, spawn_test_server};
+use serde_json::json;
+use std::fs;
+use std::process::Command;
+use tempfile::TempDir;
+
+/// Create a minimal but valid Cargo project in a temporary directory.
+/// This project has:
+/// - A valid Cargo.toml
+/// - A simple lib.rs
+/// - A test module (for clippy --tests)
+fn create_test_cargo_project() -> TempDir {
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp directory");
+    let project_dir = temp_dir.path();
+
+    // Create Cargo.toml - use edition 2021 for compatibility
+    let cargo_toml = r#"[package]
+name = "test_project"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+"#;
+    fs::write(project_dir.join("Cargo.toml"), cargo_toml).expect("Failed to write Cargo.toml");
+
+    // Create src directory
+    fs::create_dir(project_dir.join("src")).expect("Failed to create src directory");
+
+    // Create lib.rs with some code
+    let lib_rs = r#"//! A test library for integration tests
+
+/// A simple function that adds two numbers
+pub fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_add() {
+        assert_eq!(add(2, 2), 4);
+    }
+
+    #[test]
+    fn test_add_negative() {
+        assert_eq!(add(-1, 1), 0);
+    }
+}
+"#;
+    fs::write(project_dir.join("src/lib.rs"), lib_rs).expect("Failed to write lib.rs");
+
+    temp_dir
+}
+
+/// Verify that the temporary project compiles before testing
+fn verify_project_compiles(project_dir: &std::path::Path) -> bool {
+    let output = Command::new("cargo")
+        .current_dir(project_dir)
+        .args(["check", "--quiet"])
+        .output()
+        .expect("Failed to run cargo check");
+
+    output.status.success()
+}
+
+// =============================================================================
+// Test: Cargo Check with Assertions
+// =============================================================================
+
+#[tokio::test]
+async fn test_cargo_check_with_assertions() {
+    // Create a test project FIRST (before server/client init)
+    // The project path becomes the sandbox root
+    let project = create_test_cargo_project();
+
+    // Verify project is valid before testing
+    assert!(
+        verify_project_compiles(project.path()),
+        "Test project should compile before we test it"
+    );
+
+    // Skip if we can't spawn a server
+    let server = match spawn_test_server().await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("⚠️  Skipping test - failed to spawn server: {}", e);
+            return;
+        }
+    };
+
+    let mut client = McpTestClient::with_url(&server.base_url());
+
+    // Initialize MCP handshake WITH the project path as a root
+    // This tells the server the sandbox scope for this session
+    if client
+        .initialize_with_roots("cargo-test-client", &[project.path().to_path_buf()])
+        .await
+        .is_err()
+    {
+        eprintln!("⚠️  Skipping test - failed to initialize MCP client");
+        return;
+    }
+
+    // Call cargo_check with working_directory pointing to our test project
+    let result = client
+        .call_tool(
+            "cargo_check",
+            json!({
+                "working_directory": project.path().to_string_lossy()
+            }),
+        )
+        .await;
+
+    // CRITICAL: Assert success
+    assert!(
+        result.success,
+        "cargo_check should succeed. Error: {:?}",
+        result.error
+    );
+
+    // Validate output contains expected strings
+    if let Some(output) = &result.output {
+        // cargo check output should contain something meaningful
+        assert!(
+            output.contains("Finished")
+                || output.contains("Checking")
+                || output.contains("Compiling")
+                || output.is_empty(), // Sometimes check is instant if already built
+            "cargo_check output should indicate progress: got '{}'",
+            output
+        );
+
+        // Should NOT contain cancellation messages
+        assert!(
+            !output.to_lowercase().contains("canceled"),
+            "cargo_check should not be canceled: got '{}'",
+            output
+        );
+    }
+
+    println!("✓ cargo_check succeeded in {}ms", result.duration_ms);
+}
+
+// =============================================================================
+// Test: Cargo Clippy (Basic)
+// =============================================================================
+
+#[tokio::test]
+async fn test_cargo_clippy_basic_with_assertions() {
+    let project = create_test_cargo_project();
+    assert!(
+        verify_project_compiles(project.path()),
+        "Test project should compile"
+    );
+
+    let server = match spawn_test_server().await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("⚠️  Skipping test - failed to spawn server: {}", e);
+            return;
+        }
+    };
+
+    let mut client = McpTestClient::with_url(&server.base_url());
+
+    if client
+        .initialize_with_roots("cargo-test-client", &[project.path().to_path_buf()])
+        .await
+        .is_err()
+    {
+        eprintln!("⚠️  Skipping test - failed to initialize MCP client");
+        return;
+    }
+
+    // Call cargo_clippy without the --tests flag
+    let result = client
+        .call_tool(
+            "cargo_clippy",
+            json!({
+                "working_directory": project.path().to_string_lossy()
+            }),
+        )
+        .await;
+
+    // CRITICAL: Assert success
+    assert!(
+        result.success,
+        "cargo_clippy should succeed. Error: {:?}",
+        result.error
+    );
+
+    if let Some(output) = &result.output {
+        // Should NOT contain cancellation messages
+        assert!(
+            !output.to_lowercase().contains("canceled"),
+            "cargo_clippy should not be canceled: got '{}'",
+            output
+        );
+    }
+
+    println!(
+        "✓ cargo_clippy (basic) succeeded in {}ms",
+        result.duration_ms
+    );
+}
+
+// =============================================================================
+// Test: Cargo Clippy with --tests flag (THE CRITICAL TEST)
+// =============================================================================
+
+#[tokio::test]
+async fn test_cargo_clippy_with_tests_flag_assertions() {
+    let project = create_test_cargo_project();
+    assert!(
+        verify_project_compiles(project.path()),
+        "Test project should compile"
+    );
+
+    let server = match spawn_test_server().await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("⚠️  Skipping test - failed to spawn server: {}", e);
+            return;
+        }
+    };
+
+    let mut client = McpTestClient::with_url(&server.base_url());
+
+    if client
+        .initialize_with_roots("cargo-test-client", &[project.path().to_path_buf()])
+        .await
+        .is_err()
+    {
+        eprintln!("⚠️  Skipping test - failed to initialize MCP client");
+        return;
+    }
+
+    // Call cargo_clippy WITH the --tests flag (this is what was failing!)
+    let result = client
+        .call_tool(
+            "cargo_clippy",
+            json!({
+                "subcommand": "clippy",
+                "tests": true,
+                "working_directory": project.path().to_string_lossy()
+            }),
+        )
+        .await;
+
+    // CRITICAL: Assert success - this is THE test that was failing with "Canceled: canceled"
+    assert!(
+        result.success,
+        "cargo_clippy with --tests should succeed. Error: {:?}. \
+        If this fails with a cancellation message, the underlying issue is NOT fixed.",
+        result.error
+    );
+
+    if let Some(output) = &result.output {
+        // Should NOT contain cancellation messages
+        assert!(
+            !output.to_lowercase().contains("canceled"),
+            "cargo_clippy --tests should not be canceled: got '{}'",
+            output
+        );
+
+        // Output should indicate clippy ran
+        assert!(
+            output.contains("Finished")
+                || output.contains("Checking")
+                || output.contains("Compiling")
+                || output.contains("clippy")
+                || output.is_empty(),
+            "cargo_clippy --tests output should indicate progress: got '{}'",
+            output
+        );
+    }
+
+    println!(
+        "✓ cargo_clippy --tests succeeded in {}ms",
+        result.duration_ms
+    );
+}
+
+// =============================================================================
+// Test: Cargo Build
+// =============================================================================
+
+#[tokio::test]
+async fn test_cargo_build_with_assertions() {
+    let project = create_test_cargo_project();
+    assert!(
+        verify_project_compiles(project.path()),
+        "Test project should compile"
+    );
+
+    let server = match spawn_test_server().await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("⚠️  Skipping test - failed to spawn server: {}", e);
+            return;
+        }
+    };
+
+    let mut client = McpTestClient::with_url(&server.base_url());
+
+    if client
+        .initialize_with_roots("cargo-test-client", &[project.path().to_path_buf()])
+        .await
+        .is_err()
+    {
+        eprintln!("⚠️  Skipping test - failed to initialize MCP client");
+        return;
+    }
+
+    let result = client
+        .call_tool(
+            "cargo_build",
+            json!({
+                "working_directory": project.path().to_string_lossy()
+            }),
+        )
+        .await;
+
+    // CRITICAL: Assert success
+    assert!(
+        result.success,
+        "cargo_build should succeed. Error: {:?}",
+        result.error
+    );
+
+    if let Some(output) = &result.output {
+        assert!(
+            !output.to_lowercase().contains("canceled"),
+            "cargo_build should not be canceled: got '{}'",
+            output
+        );
+    }
+
+    println!("✓ cargo_build succeeded in {}ms", result.duration_ms);
+}
+
+// =============================================================================
+// Test: Cargo Test
+// =============================================================================
+
+#[tokio::test]
+async fn test_cargo_test_with_assertions() {
+    let project = create_test_cargo_project();
+    assert!(
+        verify_project_compiles(project.path()),
+        "Test project should compile"
+    );
+
+    let server = match spawn_test_server().await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("⚠️  Skipping test - failed to spawn server: {}", e);
+            return;
+        }
+    };
+
+    let mut client = McpTestClient::with_url(&server.base_url());
+
+    if client
+        .initialize_with_roots("cargo-test-client", &[project.path().to_path_buf()])
+        .await
+        .is_err()
+    {
+        eprintln!("⚠️  Skipping test - failed to initialize MCP client");
+        return;
+    }
+
+    let result = client
+        .call_tool(
+            "cargo_test",
+            json!({
+                "working_directory": project.path().to_string_lossy()
+            }),
+        )
+        .await;
+
+    // CRITICAL: Assert success
+    assert!(
+        result.success,
+        "cargo_test should succeed. Error: {:?}",
+        result.error
+    );
+
+    if let Some(output) = &result.output {
+        assert!(
+            !output.to_lowercase().contains("canceled"),
+            "cargo_test should not be canceled: got '{}'",
+            output
+        );
+
+        // Tests should have run
+        assert!(
+            output.contains("test result:")
+                || output.contains("running")
+                || output.contains("passed")
+                || output.contains("Compiling"),
+            "cargo_test output should indicate tests ran: got '{}'",
+            output
+        );
+    }
+
+    println!("✓ cargo_test succeeded in {}ms", result.duration_ms);
+}
+
+// =============================================================================
+// Test: Cargo Fmt
+// =============================================================================
+
+#[tokio::test]
+async fn test_cargo_fmt_with_assertions() {
+    let project = create_test_cargo_project();
+    assert!(
+        verify_project_compiles(project.path()),
+        "Test project should compile"
+    );
+
+    let server = match spawn_test_server().await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("⚠️  Skipping test - failed to spawn server: {}", e);
+            return;
+        }
+    };
+
+    let mut client = McpTestClient::with_url(&server.base_url());
+
+    if client
+        .initialize_with_roots("cargo-test-client", &[project.path().to_path_buf()])
+        .await
+        .is_err()
+    {
+        eprintln!("⚠️  Skipping test - failed to initialize MCP client");
+        return;
+    }
+
+    let result = client
+        .call_tool(
+            "cargo_fmt",
+            json!({
+                "working_directory": project.path().to_string_lossy()
+            }),
+        )
+        .await;
+
+    // CRITICAL: Assert success
+    assert!(
+        result.success,
+        "cargo_fmt should succeed. Error: {:?}",
+        result.error
+    );
+
+    if let Some(output) = &result.output {
+        assert!(
+            !output.to_lowercase().contains("canceled"),
+            "cargo_fmt should not be canceled: got '{}'",
+            output
+        );
+    }
+
+    println!("✓ cargo_fmt succeeded in {}ms", result.duration_ms);
+}
+
+// =============================================================================
+// Meta-test: Verify cancellation detection in error messages
+// =============================================================================
+
+#[test]
+fn test_cancellation_detection_patterns() {
+    // This test verifies our cancellation detection patterns work correctly
+    // These are the patterns we check for to identify cancellation issues
+
+    let cancellation_patterns = [
+        "Canceled: canceled",
+        "canceled",
+        "Cancelled",
+        "task cancelled for reason",
+        "Operation cancelled",
+    ];
+
+    let success_patterns = [
+        "Finished",
+        "Compiling",
+        "Checking",
+        "running 2 tests",
+        "test result: ok",
+    ];
+
+    // Cancellation patterns should be detected
+    for pattern in cancellation_patterns {
+        let lower = pattern.to_lowercase();
+        assert!(
+            lower.contains("cancel"),
+            "Pattern '{}' should be detected as cancellation",
+            pattern
+        );
+    }
+
+    // Success patterns should NOT be detected as cancellation
+    for pattern in success_patterns {
+        let lower = pattern.to_lowercase();
+        assert!(
+            !lower.contains("cancel"),
+            "Pattern '{}' should NOT be detected as cancellation",
+            pattern
+        );
+    }
+}

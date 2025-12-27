@@ -20,6 +20,7 @@
 // Allow dead_code - these are test utilities, and rustc can't see usage across test crates
 #![allow(dead_code)]
 
+use futures::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -412,16 +413,21 @@ impl McpTestClient {
         format!("{}/mcp", self.base_url)
     }
 
-    /// Complete the MCP handshake: initialize + initialized notification.
+    /// Complete the MCP handshake: initialize + initialized notification + roots/list response.
     /// This MUST be called before any other MCP operations.
+    ///
+    /// Note: This uses a default empty roots list. For tests that need specific roots,
+    /// use `initialize_with_roots()`.
     pub async fn initialize(&mut self) -> Result<JsonRpcResponse, String> {
-        self.initialize_with_name("mcp-test-client").await
+        self.initialize_with_roots("mcp-test-client", &[]).await
     }
 
-    /// Complete the MCP handshake with a custom client name
-    pub async fn initialize_with_name(
+    /// Complete the MCP handshake with specific workspace roots.
+    /// The roots are provided to the server in response to its roots/list request.
+    pub async fn initialize_with_roots(
         &mut self,
         client_name: &str,
+        roots: &[std::path::PathBuf],
     ) -> Result<JsonRpcResponse, String> {
         // Step 1: Send initialize request
         let init_request = JsonRpcRequest::initialize(client_name);
@@ -474,7 +480,128 @@ impl McpTestClient {
             .send()
             .await;
 
+        // Step 3: Handle roots/list request from server via SSE
+        // The server sends roots/list to establish sandbox scope
+        if let Some(ref session_id) = self.session_id {
+            self.handle_roots_list_handshake(session_id, roots).await?;
+        }
+
         Ok(init_response)
+    }
+
+    /// Handle the roots/list handshake over SSE.
+    /// This listens for the server's roots/list request and responds with client roots.
+    async fn handle_roots_list_handshake(
+        &self,
+        session_id: &str,
+        roots: &[std::path::PathBuf],
+    ) -> Result<(), String> {
+        let url = format!("{}/mcp", self.base_url);
+
+        // Open SSE stream to receive server requests
+        let resp = self
+            .client
+            .get(&url)
+            .header("Accept", "text/event-stream")
+            .header("Cache-Control", "no-cache")
+            .header("Mcp-Session-Id", session_id)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to open SSE stream: {}", e))?;
+
+        if !resp.status().is_success() {
+            return Err(format!("SSE stream HTTP {}", resp.status()));
+        }
+
+        let mut stream = resp.bytes_stream();
+        let mut buffer = String::new();
+
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+
+        loop {
+            if tokio::time::Instant::now() > deadline {
+                return Err("Timeout waiting for roots/list from server".to_string());
+            }
+
+            let chunk = tokio::time::timeout(Duration::from_millis(500), stream.next())
+                .await
+                .ok()
+                .flatten();
+
+            if let Some(next) = chunk {
+                let bytes = next.map_err(|e| format!("SSE read error: {}", e))?;
+                let text = String::from_utf8_lossy(&bytes);
+                buffer.push_str(&text);
+
+                // SSE events are separated by blank lines
+                while let Some(idx) = buffer.find("\n\n") {
+                    let raw_event = buffer[..idx].to_string();
+                    buffer = buffer[idx + 2..].to_string();
+
+                    // Extract data lines from SSE event
+                    let mut data_lines: Vec<&str> = Vec::new();
+                    for line in raw_event.lines() {
+                        let line = line.trim_end_matches('\r');
+                        if let Some(rest) = line.strip_prefix("data:") {
+                            data_lines.push(rest.trim());
+                        }
+                    }
+
+                    if data_lines.is_empty() {
+                        continue;
+                    }
+
+                    let data = data_lines.join("\n");
+                    let Ok(value) = serde_json::from_str::<Value>(&data) else {
+                        continue;
+                    };
+
+                    let method = value.get("method").and_then(|m| m.as_str());
+                    if method != Some("roots/list") {
+                        continue;
+                    }
+
+                    // Found roots/list request - respond with client roots
+                    let id = value.get("id").cloned().ok_or("roots/list must have id")?;
+
+                    let roots_json: Vec<Value> = roots
+                        .iter()
+                        .map(|p| {
+                            json!({
+                                "uri": format!("file://{}", p.display()),
+                                "name": p.file_name()
+                                    .and_then(|n| n.to_str())
+                                    .unwrap_or("root")
+                            })
+                        })
+                        .collect();
+
+                    let response = json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": {
+                            "roots": roots_json
+                        }
+                    });
+
+                    // Send the roots/list response
+                    let _ = self
+                        .client
+                        .post(self.mcp_url())
+                        .header("Content-Type", "application/json")
+                        .header("Mcp-Session-Id", session_id)
+                        .json(&response)
+                        .timeout(Duration::from_secs(5))
+                        .send()
+                        .await
+                        .map_err(|e| format!("Failed to send roots/list response: {}", e))?;
+
+                    // Small delay to let server process roots
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    return Ok(());
+                }
+            }
+        }
     }
 
     /// Send a raw JSON-RPC request with session handling

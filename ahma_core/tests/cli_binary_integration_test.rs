@@ -174,7 +174,9 @@ mod ahma_mcp_tests {
         } else {
             // If tool doesn't exist or is disabled, that's also acceptable for this test
             assert!(
-                stderr.contains("not found") || stderr.contains("No matching") || stderr.contains("disabled"),
+                stderr.contains("not found")
+                    || stderr.contains("No matching")
+                    || stderr.contains("disabled"),
                 "Should fail with meaningful error. Got: {}",
                 stderr
             );
