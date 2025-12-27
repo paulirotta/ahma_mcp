@@ -23,7 +23,7 @@ use std::{
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::{Child, Command},
-    sync::{Mutex, broadcast, mpsc, oneshot},
+    sync::{Mutex, Notify, broadcast, mpsc, oneshot},
 };
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -84,6 +84,8 @@ pub struct Session {
     sse_connected: AtomicBool,
     /// Whether initialized notification was received (MCP handshake complete)
     mcp_initialized: AtomicBool,
+    /// Notify for waiting on MCP initialization (signals when mcp_initialized becomes true)
+    mcp_initialized_notify: Notify,
     /// When the session was created (for handshake timeout tracking)
     created_at: Instant,
 }
@@ -107,6 +109,15 @@ impl Session {
     /// Check if MCP initialized notification was received
     pub fn is_mcp_initialized(&self) -> bool {
         self.mcp_initialized.load(Ordering::SeqCst)
+    }
+
+    /// Wait for MCP initialization.
+    /// Returns immediately if already initialized, otherwise waits for notification.
+    pub async fn wait_for_mcp_initialized(&self) {
+        if self.is_mcp_initialized() {
+            return;
+        }
+        self.mcp_initialized_notify.notified().await;
     }
 
     /// Check if the handshake has timed out (sandbox not locked within timeout).
@@ -168,6 +179,8 @@ impl Session {
     pub async fn mark_mcp_initialized(&self) -> Result<bool> {
         let elapsed_ms = self.created_at.elapsed().as_millis();
         self.mcp_initialized.store(true, Ordering::SeqCst);
+        // Wake up any waiters blocked on initialization
+        self.mcp_initialized_notify.notify_waiters();
         info!(
             session_id = %self.id,
             elapsed_ms = elapsed_ms,
@@ -358,6 +371,7 @@ impl SessionManager {
             child_handle: Mutex::new(Some(child)),
             sse_connected: AtomicBool::new(false),
             mcp_initialized: AtomicBool::new(false),
+            mcp_initialized_notify: Notify::new(),
             created_at: Instant::now(),
         });
 

@@ -14,7 +14,7 @@ use axum::{
 };
 use futures::stream::StreamExt;
 use serde_json::Value;
-use std::{convert::Infallible, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{convert::Infallible, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 use tokio_stream::wrappers::BroadcastStream;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::{debug, error, info, warn};
@@ -473,6 +473,56 @@ async fn handle_session_isolated_request(
             && payload.get("id").is_some()
             && (payload.get("result").is_some() || payload.get("error").is_some());
 
+        // RACE CONDITION FIX: Wait for MCP initialization before forwarding requests.
+        // Some clients (e.g., VS Code) may send requests like tools/list before notifications/initialized.
+        // The MCP protocol (rmcp) requires the initialized notification to come first.
+        // We gate non-init requests here with a timeout to ensure proper ordering.
+        if !is_initialized_notification
+            && !is_client_response
+            && let Some(session) = session_manager.get_session(&session_id)
+            && !session.is_mcp_initialized()
+        {
+            debug!(
+                session_id = %session_id,
+                method = ?method,
+                "Waiting for MCP initialization before forwarding request"
+            );
+            // Wait for initialization with a reasonable timeout
+            let init_timeout = Duration::from_secs(5);
+            let wait_result =
+                tokio::time::timeout(init_timeout, session.wait_for_mcp_initialized()).await;
+
+            if wait_result.is_err() {
+                warn!(
+                    session_id = %session_id,
+                    method = ?method,
+                    "Timeout waiting for MCP initialization"
+                );
+                let error_json = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "error": {
+                        "code": -32002,
+                        "message": "Timeout waiting for MCP initialization - client must send notifications/initialized first"
+                    }
+                });
+                return Response::builder()
+                    .status(StatusCode::GATEWAY_TIMEOUT)
+                    .header("content-type", "application/json")
+                    .header(MCP_SESSION_ID_HEADER, session_id.as_str())
+                    .body(axum::body::Body::from(
+                        serde_json::to_vec(&error_json).unwrap_or_default(),
+                    ))
+                    .unwrap_or_else(|_| {
+                        (StatusCode::GATEWAY_TIMEOUT, "Initialization timeout").into_response()
+                    });
+            }
+            debug!(
+                session_id = %session_id,
+                method = ?method,
+                "MCP initialized, proceeding with request"
+            );
+        }
+
         if is_client_response {
             let response_id = payload.get("id");
             let has_result = payload.get("result").is_some();
@@ -769,6 +819,33 @@ for line in sys.stdin:
             .create_session()
             .await
             .expect("Should create session");
+
+        // 0) Send notifications/initialized to complete MCP handshake
+        // (without this, the bridge will block waiting for initialization)
+        let init_notification = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        });
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/mcp")
+                    .header("content-type", "application/json")
+                    .header(MCP_SESSION_ID_HEADER, session_id.as_str())
+                    .body(Body::from(serde_json::to_vec(&init_notification).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Verify MCP is now initialized
+        let session = session_manager
+            .get_session(&session_id)
+            .expect("Session should exist");
+        assert!(session.is_mcp_initialized());
 
         // 1) tools/call should be rejected before sandbox is locked.
         let tool_call = serde_json::json!({

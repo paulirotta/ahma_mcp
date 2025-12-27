@@ -284,14 +284,12 @@ async fn http_roots_handshake_then_tool_call_defaults_to_root() {
         }
 
         // Also retry if JSON-RPC error indicates sandbox is still initializing
-        if let Some(error) = v.get("error") {
-            if let Some(msg) = error.get("message").and_then(|m| m.as_str()) {
-                if msg.contains("initializing") || msg.contains("roots/list") {
+        if let Some(error) = v.get("error")
+            && let Some(msg) = error.get("message").and_then(|m| m.as_str())
+                && (msg.contains("initializing") || msg.contains("roots/list")) {
                     sleep(Duration::from_millis(100)).await;
                     continue;
                 }
-            }
-        }
 
         assert!(status.is_success(), "tools/call failed: HTTP {status} {v}");
         assert!(v.get("error").is_none(), "tools/call returned error: {v}");
