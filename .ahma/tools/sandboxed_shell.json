@@ -1,35 +1,35 @@
 {
-  "name": "sandboxed_shell",
-  "description": "Execute shell commands within a secure sandbox. This tool must **ALWAYS** be used instead of direct shell invocation. Synchronous execution is default and recommended for tasks completing in less than about 10 seconds.",
-  "command": "bash -c",
-  "enabled": true,
-  "timeout_seconds": 300,
-  "hints": {
-    "custom": {
-      "default": "**IMPORTANT**: Use this tool instead of run_in_terminal to avoid GUI permission dialogs and work faster. All paths are sandboxed to the current working directory for security."
-    }
-  },
-  "subcommand": [
-    {
-      "name": "default",
-      "guidance_key": "async_behavior",
-      "description": "Execute a shell command using bash in a sandbox. Supports all standard shell features: pipes (|), redirects (>, >>), variables ($VAR), command substitution ($()), etc. Use this instead of run_in_terminal for faster execution without GUI interruptions.",
-      "positional_args": [
-        {
-          "name": "command",
-          "type": "string",
-          "description": "The shell command to execute (supports pipes, redirects, variables, etc.)",
-          "required": true
+    "name": "sandboxed_shell",
+    "description": "Execute shell commands within a secure sandbox. This tool must **ALWAYS** be used instead of direct shell invocation. Synchronous execution is default and recommended for tasks completing in less than about 10 seconds.",
+    "command": "bash -c",
+    "enabled": true,
+    "timeout_seconds": 300,
+    "hints": {
+        "custom": {
+            "default": "**IMPORTANT**: Use this tool instead of run_in_terminal to avoid GUI permission dialogs and work faster. All paths are sandboxed to the current working directory for security."
         }
-      ],
-      "options": [
+    },
+    "subcommand": [
         {
-          "name": "working_directory",
-          "type": "string",
-          "description": "Working directory for command execution",
-          "format": "path"
+            "name": "default",
+            "guidance_key": "async_behavior",
+            "description": "Execute a shell command using bash in a sandbox. Supports all standard shell features: pipes (|), redirects (>, >>), variables ($VAR), command substitution ($()), etc. Use this instead of run_in_terminal for faster execution without GUI interruptions.",
+            "positional_args": [
+                {
+                    "name": "command",
+                    "type": "string",
+                    "description": "The shell command to execute (supports pipes, redirects, variables, etc.)",
+                    "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ]
         }
-      ]
-    }
-  ]
+    ]
 }

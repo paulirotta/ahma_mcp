@@ -39,6 +39,15 @@ pub fn format_current_time() -> String {
     format_time(SystemTime::now())
 }
 
+/// Format the current time as HH:MM:SS.mmm (24-hour format with milliseconds) in local time
+///
+/// This format provides consistent width output suitable for log timestamps
+/// where precise timing and visual alignment are important.
+pub fn format_current_time_millis() -> String {
+    let datetime: DateTime<Local> = SystemTime::now().into();
+    datetime.format("%H:%M:%S%.3f").to_string()
+}
+
 /// Format a SystemTime as H:MM:SS (24-hour format) in local time
 pub fn format_time(time: SystemTime) -> String {
     let datetime: DateTime<Local> = time.into();
@@ -121,6 +130,34 @@ mod tests {
         // Should have exactly 2 colons and no decimal points
         assert_eq!(formatted.matches(':').count(), 2);
         assert_eq!(formatted.matches('.').count(), 0);
+    }
+
+    #[test]
+    fn test_format_current_time_millis_is_valid_format() {
+        init_test_logging();
+        let formatted = format_current_time_millis();
+
+        // Length should be exactly 12 (HH:MM:SS.mmm)
+        assert_eq!(
+            formatted.len(),
+            12,
+            "Expected HH:MM:SS.mmm format, got: {}",
+            formatted
+        );
+
+        // Should contain colons and a decimal point
+        assert!(formatted.contains(':'));
+        assert!(formatted.contains('.'));
+
+        // Should have exactly 2 colons and 1 decimal point
+        assert_eq!(formatted.matches(':').count(), 2);
+        assert_eq!(formatted.matches('.').count(), 1);
+
+        // Verify format with regex pattern: HH:MM:SS.mmm
+        let parts: Vec<&str> = formatted.split('.').collect();
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[0].len(), 8); // HH:MM:SS
+        assert_eq!(parts[1].len(), 3); // mmm (milliseconds)
     }
 
     #[test]

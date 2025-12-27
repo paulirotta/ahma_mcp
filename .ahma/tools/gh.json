@@ -2,7 +2,7 @@
   "name": "gh",
   "description": "GitHub CLI wrapper exposing curated subcommands for repository management.",
   "command": "gh",
-  "enabled": true,
+  "enabled": false,
   "timeout_seconds": 180,
   "hints": {
     "custom": {

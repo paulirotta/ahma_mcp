@@ -2,7 +2,7 @@
   "name": "python",
   "description": "Python interpreter for running Python scripts and modules",
   "command": "python",
-  "enabled": true,
+  "enabled": false,
   "timeout_seconds": 300,
   "guidance_key": "python_async",
   "synchronous": true,

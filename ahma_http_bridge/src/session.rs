@@ -6,6 +6,7 @@
 //! workspace roots.
 
 use crate::error::{BridgeError, Result};
+use chrono::Local;
 use dashmap::DashMap;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
@@ -570,11 +571,12 @@ impl SessionManager {
 
                     // Echo STDIN in cyan if colored output is enabled
                     if colored_output {
+                        let timestamp = format!("[{}]", Local::now().format("%H:%M:%S%.3f"));
                         if let Ok(parsed) = serde_json::from_str::<Value>(&msg) {
                             let pretty = serde_json::to_string_pretty(&parsed).unwrap_or_else(|_| msg.clone());
-                            eprintln!("{} {}\n{}", format!("[{}]", &session.id[..8]).cyan(), "→ STDIN:".cyan(), pretty.cyan());
+                            eprintln!("{} {} {}\n{}", timestamp, format!("[{}]", &session.id[..8]).cyan(), "→ STDIN:".cyan(), pretty.cyan());
                         } else {
-                            eprintln!("{} {}\n{}", format!("[{}]", &session.id[..8]).cyan(), "→ STDIN:".cyan(), msg.cyan());
+                            eprintln!("{} {} {}\n{}", timestamp, format!("[{}]", &session.id[..8]).cyan(), "→ STDIN:".cyan(), msg.cyan());
                         }
                     }
 
@@ -599,11 +601,12 @@ impl SessionManager {
 
                     // Echo STDOUT in green if colored output is enabled
                     if colored_output {
+                        let timestamp = format!("[{}]", Local::now().format("%H:%M:%S%.3f"));
                         if let Ok(parsed) = serde_json::from_str::<Value>(&line) {
                             let pretty = serde_json::to_string_pretty(&parsed).unwrap_or_else(|_| line.clone());
-                            eprintln!("{} {}\n{}", format!("[{}]", &session.id[..8]).green(), "← STDOUT:".green(), pretty.green());
+                            eprintln!("{} {} {}\n{}", timestamp, format!("[{}]", &session.id[..8]).green(), "← STDOUT:".green(), pretty.green());
                         } else {
-                            eprintln!("{} {}\n{}", format!("[{}]", &session.id[..8]).green(), "← STDOUT:".green(), line.green());
+                            eprintln!("{} {} {}\n{}", timestamp, format!("[{}]", &session.id[..8]).green(), "← STDOUT:".green(), line.green());
                         }
                     }
 
@@ -639,11 +642,12 @@ impl SessionManager {
                 } => {
                     match result {
                         Ok(Some(line)) if !line.is_empty() => {
+                            let timestamp = format!("[{}]", Local::now().format("%H:%M:%S%.3f"));
                             if let Ok(parsed) = serde_json::from_str::<Value>(&line) {
                                 let pretty = serde_json::to_string_pretty(&parsed).unwrap_or_else(|_| line.clone());
-                                eprintln!("{} {}\n{}", format!("[{}]", &session.id[..8]).red(), "⚠ STDERR:".red(), pretty.red());
+                                eprintln!("{} {} {}\n{}", timestamp, format!("[{}]", &session.id[..8]).red(), "⚠ STDERR:".red(), pretty.red());
                             } else {
-                                eprintln!("{} {}\n{}", format!("[{}]", &session.id[..8]).red(), "⚠ STDERR:".red(), line.red());
+                                eprintln!("{} {} {}\n{}", timestamp, format!("[{}]", &session.id[..8]).red(), "⚠ STDERR:".red(), line.red());
                             }
                         }
                         Ok(Some(_)) => {} // Empty line
