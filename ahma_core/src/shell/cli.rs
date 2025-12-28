@@ -422,9 +422,6 @@ pub fn resolve_cli_subcommand<'a>(
         {
             if sub.name == "default" && is_default_call {
                 // Logic to derive subcommand from tool name (e.g. cargo_build -> cargo build)
-                // is removed because it causes issues for tools like bash (bash -c async).
-                // If a tool needs a subcommand, it should be explicit in the config or the command.
-            } else if sub.name != "default" {
                 command_parts.push(sub.name.clone());
             }
 
@@ -746,8 +743,15 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     let tools_dir = cli.tools_dir.clone();
     let raw_configs = load_tool_configs(&tools_dir)
         .await
-        .context("Failed to load tool configurations")?;
-    let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        .with_context(|| format!("Failed to load tool configurations from {:?}", tools_dir))?;
+    // Under Linux Landlock, the process current working directory may be outside the sandbox
+    // scope (e.g., test harness starts the server from the repo root but sets sandbox scope to
+    // a temp dir). Tool availability checks spawn shells in this directory, so prefer the
+    // sandbox scope when it is initialized.
+    let working_dir = crate::sandbox::get_sandbox_scope()
+        .cloned()
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    tracing::info!("Availability probes working directory: {:?}", working_dir);
     let availability_summary = evaluate_tool_availability(
         shell_pool_manager.clone(),
         raw_configs,

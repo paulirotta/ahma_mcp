@@ -112,6 +112,13 @@ pub async fn evaluate_tool_availability(
     configs: HashMap<String, ToolConfig>,
     default_working_dir: &Path,
 ) -> Result<AvailabilitySummary> {
+    // If a sandbox scope is initialized, prefer it for availability probes.
+    // This matters on Linux Landlock where the process current working directory may be outside
+    // the enforced scope (e.g., integration tests start the server from the repo root but set
+    // sandbox scope to a temp directory).
+    let sandbox_default = crate::sandbox::get_sandbox_scope().cloned();
+    let default_working_dir = sandbox_default.as_deref().unwrap_or(default_working_dir);
+
     if configs.is_empty() {
         return Ok(AvailabilitySummary {
             filtered_configs: configs,

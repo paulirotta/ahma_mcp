@@ -788,6 +788,13 @@ pub fn enforce_landlock_sandbox_with_readonly_paths(
         ))
         .context("Failed to add Landlock rule for sandbox scope")?;
 
+    if !readonly_paths.is_empty() {
+        tracing::info!(
+            "Landlock extra read-only paths requested: {}",
+            readonly_paths.len()
+        );
+    }
+
     // Allow read access to additional paths (e.g., tools directory) that may live outside
     // the primary scope.
     for path in readonly_paths {
@@ -796,6 +803,10 @@ pub fn enforce_landlock_sandbox_with_readonly_paths(
         }
 
         if !path.exists() {
+            tracing::debug!(
+                "Landlock read-only path does not exist (skipping): {:?}",
+                path
+            );
             continue;
         }
 
@@ -804,11 +815,26 @@ pub fn enforce_landlock_sandbox_with_readonly_paths(
             continue;
         }
 
-        if let Ok(fd) = PathFd::new(path) {
-            if let Err(e) = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read)) {
+        // Canonicalize to reduce surprises with symlinks/mounts.
+        let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        match PathFd::new(&canonical) {
+            Ok(fd) => match ruleset.add_rule(PathBeneath::new(fd, access_read)) {
+                Ok(updated) => {
+                    ruleset = updated;
+                    tracing::info!("Added Landlock read-only rule for: {:?}", canonical);
+                }
+                Err(e) => {
+                    tracing::debug!(
+                        "Could not add Landlock read-only rule for {:?}: {:?}, continuing without it",
+                        canonical,
+                        e
+                    );
+                }
+            },
+            Err(e) => {
                 tracing::debug!(
-                    "Could not add Landlock read-only rule for {:?}: {:?}, continuing without it",
-                    path,
+                    "Could not open Landlock read-only path {:?}: {:?}, continuing without it",
+                    canonical,
                     e
                 );
             }

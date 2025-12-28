@@ -422,9 +422,6 @@ pub fn resolve_cli_subcommand<'a>(
     tool_name: &str,
     subcommand_override: Option<&str>,
 ) -> Result<(&'a SubcommandConfig, Vec<String>)> {
-    let subcommand_source =
-        subcommand_override.unwrap_or_else(|| tool_name.strip_prefix(config_key).unwrap_or(""));
-    let trimmed = subcommand_source.trim();
     let is_default_call = trimmed.is_empty() || trimmed == "default";
 
     let subcommand_parts: Vec<&str> = if is_default_call {
@@ -789,7 +786,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     let tools_dir = cli.tools_dir.clone();
     let raw_configs = load_tool_configs(&tools_dir)
         .await
-        .context("Failed to load tool configurations")?;
+        .with_context(|| format!("Failed to load tool configurations from {:?}", tools_dir))?;
     let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let availability_summary = evaluate_tool_availability(
         shell_pool_manager.clone(),
