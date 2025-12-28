@@ -1,0 +1,167 @@
+{
+    "name": "test_fixtures",
+    "description": "Test fixture tools for integration testing async/timeout/error scenarios",
+    "command": "/bin/sh",
+    "enabled": true,
+    "timeout_seconds": 60,
+    "synchronous": false,
+    "subcommand": [
+        {
+            "name": "slow",
+            "description": "Execute a command that takes a configurable amount of time to complete. Useful for testing async operation lifecycle, progress notifications, and timeout handling.",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "seconds",
+                    "type": "integer",
+                    "description": "Number of seconds to sleep before returning. Default: 5",
+                    "default": 5
+                },
+                {
+                    "name": "message",
+                    "type": "string",
+                    "description": "Message to output after completing the sleep. Default: 'Slow operation completed'"
+                }
+            ],
+            "args_template": "-c 'echo \"Starting slow operation ({{seconds}}s)\"; sleep {{seconds}}; echo \"{{message|default:Slow operation completed}}\"'"
+        },
+        {
+            "name": "slow_with_progress",
+            "description": "Execute a slow operation that outputs progress updates. Useful for testing SSE progress notification streaming.",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "steps",
+                    "type": "integer",
+                    "description": "Number of progress steps to output. Default: 5",
+                    "default": 5
+                },
+                {
+                    "name": "step_delay",
+                    "type": "integer",
+                    "description": "Delay in seconds between each step. Default: 1",
+                    "default": 1
+                }
+            ],
+            "args_template": "-c 'for i in $(seq 1 {{steps}}); do echo \"Progress: step $i of {{steps}}\"; sleep {{step_delay}}; done; echo \"All {{steps}} steps completed\"'"
+        },
+        {
+            "name": "fail",
+            "description": "Execute a command that fails with a configurable exit code. Useful for testing error handling and error response formatting.",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "exit_code",
+                    "type": "integer",
+                    "description": "Exit code to return. Default: 1",
+                    "default": 1
+                },
+                {
+                    "name": "error_message",
+                    "type": "string",
+                    "description": "Error message to output to stderr before failing. Default: 'Simulated failure'"
+                }
+            ],
+            "args_template": "-c 'echo \"{{error_message|default:Simulated failure}}\" >&2; exit {{exit_code}}'"
+        },
+        {
+            "name": "large_output",
+            "description": "Generate a large amount of output. Useful for testing output truncation and buffer handling.",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "lines",
+                    "type": "integer",
+                    "description": "Number of lines to output. Default: 1000",
+                    "default": 1000
+                },
+                {
+                    "name": "line_length",
+                    "type": "integer",
+                    "description": "Approximate length of each line in characters. Default: 80",
+                    "default": 80
+                }
+            ],
+            "args_template": "-c 'for i in $(seq 1 {{lines}}); do printf \"Line %05d: \" $i; head -c {{line_length}} /dev/urandom | base64 | head -c {{line_length}}; echo; done'"
+        },
+        {
+            "name": "timeout_prone",
+            "description": "A command that runs longer than typical timeouts. Useful for testing cancellation and timeout error handling. WARNING: This will run for the full duration unless cancelled.",
+            "synchronous": true,
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "duration",
+                    "type": "integer",
+                    "description": "Duration in seconds (should exceed expected timeout). Default: 120",
+                    "default": 120
+                }
+            ],
+            "args_template": "-c 'echo \"Starting long-running operation (${duration}s timeout test)\"; for i in $(seq 1 {{duration}}); do sleep 1; echo \"Still running... $i/{{duration}}\"; done; echo \"Completed (timeout did not trigger)\"'"
+        },
+        {
+            "name": "echo",
+            "description": "Simple echo command for quick sanity checks. Returns immediately with the provided message.",
+            "synchronous": true,
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "message",
+                    "type": "string",
+                    "description": "Message to echo back",
+                    "required": true
+                }
+            ],
+            "args_template": "-c 'echo \"{{message}}\"'"
+        },
+        {
+            "name": "mixed_output",
+            "description": "Produce interleaved stdout and stderr output. Useful for testing output stream handling.",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "iterations",
+                    "type": "integer",
+                    "description": "Number of stdout/stderr pairs to output. Default: 5",
+                    "default": 5
+                }
+            ],
+            "args_template": "-c 'for i in $(seq 1 {{iterations}}); do echo \"stdout line $i\"; echo \"stderr line $i\" >&2; done'"
+        }
+    ]
+}

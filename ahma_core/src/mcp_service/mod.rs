@@ -179,23 +179,21 @@ impl AhmaMcpService {
             *configs_lock = new_configs;
         }
 
-        // Notify clients that the tool list has changed
-        let peer_lock = self.peer.read().unwrap();
-        if let Some(_peer) = peer_lock.as_ref() {
-            // TODO: Fix ServerNotification construction for rmcp 0.11.0
-            /*
-            let notification = ServerNotification::Notification(Notification {
-                jsonrpc: "2.0".into(),
-                method: "notifications/tools/list_changed".into(),
-                params: None,
-            });
-            if let Err(e) = peer.send_notification(notification).await {
+        // Notify clients that the tool list has changed.
+        // Clone peer outside the lock before async call to avoid holding guard across .await
+        let peer_opt = {
+            let peer_lock = self.peer.read().unwrap();
+            peer_lock.clone()
+        };
+
+        if let Some(peer) = peer_opt {
+            if let Err(e) = peer.notify_tool_list_changed().await {
                 tracing::error!("Failed to send tools/list_changed notification: {}", e);
             } else {
-                tracing::info!("Sent tools/list_changed notification");
+                tracing::info!("Sent tools/list_changed notification to client");
             }
-            */
-            tracing::warn!("Skipping tools/list_changed notification due to compilation error");
+        } else {
+            tracing::debug!("No peer connected, skipping tools/list_changed notification");
         }
     }
 

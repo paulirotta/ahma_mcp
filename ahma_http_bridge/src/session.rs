@@ -16,7 +16,7 @@ use std::{
     process::Stdio,
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU8, Ordering},
     },
     time::Instant,
 };
@@ -27,6 +27,47 @@ use tokio::{
 };
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+
+/// Handshake state machine for MCP session coordination.
+///
+/// The MCP Streamable HTTP protocol requires a specific sequence:
+/// 1. Client sends `initialize` request → server creates session
+/// 2. Client opens SSE stream (GET /mcp with session header)
+/// 3. Client sends `notifications/initialized` notification
+/// 4. Server sends `notifications/roots/list_changed` to subprocess
+/// 5. Subprocess sends `roots/list` request back through SSE
+/// 6. Client responds with roots → sandbox is locked
+///
+/// This enum tracks the state to ensure `roots/list_changed` is sent
+/// exactly once, only when both SSE and MCP initialized are complete.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum HandshakeState {
+    /// Initial state: session created, waiting for SSE and MCP initialized
+    AwaitingBoth = 0,
+    /// SSE connected, waiting for MCP initialized notification
+    AwaitingSseOnly = 1,
+    /// MCP initialized received, waiting for SSE connection
+    AwaitingMcpOnly = 2,
+    /// Both SSE and MCP initialized, roots/list_changed sent, awaiting sandbox lock
+    RootsRequested = 3,
+    /// Sandbox locked, handshake complete
+    Complete = 4,
+}
+
+impl HandshakeState {
+    /// Convert from u8 to HandshakeState. Invalid values fall back to AwaitingBoth.
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            0 => Self::AwaitingBoth,
+            1 => Self::AwaitingSseOnly,
+            2 => Self::AwaitingMcpOnly,
+            3 => Self::RootsRequested,
+            4 => Self::Complete,
+            _ => Self::AwaitingBoth, // Fallback to initial state
+        }
+    }
+}
 
 /// MCP Root as defined in the protocol
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,11 +121,9 @@ pub struct Session {
     termination_reason: Mutex<Option<SessionTerminationReason>>,
     /// Handle to the subprocess (for cleanup)
     child_handle: Mutex<Option<Child>>,
-    /// Whether SSE is connected (client opened GET /mcp)
-    sse_connected: AtomicBool,
-    /// Whether initialized notification was received (MCP handshake complete)
-    mcp_initialized: AtomicBool,
-    /// Notify for waiting on MCP initialization (signals when mcp_initialized becomes true)
+    /// Handshake state machine for SSE/MCP coordination (replaces separate AtomicBools)
+    handshake_state: AtomicU8,
+    /// Notify for waiting on MCP initialization (signals when handshake advances past AwaitingMcpOnly)
     mcp_initialized_notify: Notify,
     /// When the session was created (for handshake timeout tracking)
     created_at: Instant,
@@ -101,14 +140,29 @@ impl Session {
         self.sandbox_locked.load(Ordering::SeqCst)
     }
 
+    /// Get the current handshake state
+    pub fn handshake_state(&self) -> HandshakeState {
+        HandshakeState::from_u8(self.handshake_state.load(Ordering::SeqCst))
+    }
+
     /// Check if the SSE stream is connected (client opened GET /mcp)
     pub fn is_sse_connected(&self) -> bool {
-        self.sse_connected.load(Ordering::SeqCst)
+        matches!(
+            self.handshake_state(),
+            HandshakeState::AwaitingSseOnly
+                | HandshakeState::RootsRequested
+                | HandshakeState::Complete
+        )
     }
 
     /// Check if MCP initialized notification was received
     pub fn is_mcp_initialized(&self) -> bool {
-        self.mcp_initialized.load(Ordering::SeqCst)
+        matches!(
+            self.handshake_state(),
+            HandshakeState::AwaitingMcpOnly
+                | HandshakeState::RootsRequested
+                | HandshakeState::Complete
+        )
     }
 
     /// Wait for MCP initialization.
@@ -155,45 +209,130 @@ impl Session {
     }
 
     /// Mark SSE as connected and trigger roots/list_changed if MCP is already initialized.
+    ///
+    /// State machine transitions:
+    /// - AwaitingBoth → AwaitingSseOnly (SSE connected first, wait for MCP)
+    /// - AwaitingMcpOnly → RootsRequested (MCP was already initialized, send roots/list_changed)
+    ///
     /// Returns true if roots/list_changed was sent.
     pub async fn mark_sse_connected(&self) -> Result<bool> {
         let elapsed_ms = self.created_at.elapsed().as_millis();
-        self.sse_connected.store(true, Ordering::SeqCst);
-        info!(
-            session_id = %self.id,
-            elapsed_ms = elapsed_ms,
-            mcp_initialized = self.mcp_initialized.load(Ordering::SeqCst),
-            "SSE marked as connected"
-        );
 
-        // If MCP is already initialized, send roots/list_changed now
-        if self.mcp_initialized.load(Ordering::SeqCst) {
+        // Atomically transition state and determine if we should send roots/list_changed
+        let should_send = loop {
+            let current = self.handshake_state.load(Ordering::SeqCst);
+            let current_state = HandshakeState::from_u8(current);
+
+            let (new_state, send_notification) = match current_state {
+                HandshakeState::AwaitingBoth => (HandshakeState::AwaitingSseOnly, false),
+                HandshakeState::AwaitingMcpOnly => (HandshakeState::RootsRequested, true),
+                // Already in a later state, no-op
+                _ => {
+                    info!(
+                        session_id = %self.id,
+                        elapsed_ms = elapsed_ms,
+                        state = ?current_state,
+                        "SSE connect called but state already advanced"
+                    );
+                    return Ok(false);
+                }
+            };
+
+            match self.handshake_state.compare_exchange(
+                current,
+                new_state as u8,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
+                Ok(_) => {
+                    info!(
+                        session_id = %self.id,
+                        elapsed_ms = elapsed_ms,
+                        from = ?current_state,
+                        to = ?new_state,
+                        "SSE connected, state transition"
+                    );
+                    break send_notification;
+                }
+                Err(_) => continue, // State changed, retry
+            }
+        };
+
+        if should_send {
             self.send_roots_list_changed().await?;
-            return Ok(true);
         }
-        Ok(false)
+        Ok(should_send)
     }
 
     /// Mark MCP as initialized (handshake complete) and trigger roots/list_changed if SSE is already connected.
+    ///
+    /// State machine transitions:
+    /// - AwaitingBoth → AwaitingMcpOnly (MCP initialized first, wait for SSE)
+    /// - AwaitingSseOnly → RootsRequested (SSE was already connected, send roots/list_changed)
+    ///
     /// Returns true if roots/list_changed was sent.
     pub async fn mark_mcp_initialized(&self) -> Result<bool> {
         let elapsed_ms = self.created_at.elapsed().as_millis();
-        self.mcp_initialized.store(true, Ordering::SeqCst);
-        // Wake up any waiters blocked on initialization
-        self.mcp_initialized_notify.notify_waiters();
-        info!(
-            session_id = %self.id,
-            elapsed_ms = elapsed_ms,
-            sse_connected = self.sse_connected.load(Ordering::SeqCst),
-            "MCP marked as initialized"
-        );
 
-        // If SSE is already connected, send roots/list_changed now
-        if self.sse_connected.load(Ordering::SeqCst) {
+        // Atomically transition state and determine if we should send roots/list_changed
+        let should_send = loop {
+            let current = self.handshake_state.load(Ordering::SeqCst);
+            let current_state = HandshakeState::from_u8(current);
+
+            let (new_state, send_notification) = match current_state {
+                HandshakeState::AwaitingBoth => (HandshakeState::AwaitingMcpOnly, false),
+                HandshakeState::AwaitingSseOnly => (HandshakeState::RootsRequested, true),
+                // Already in a later state, no-op
+                _ => {
+                    info!(
+                        session_id = %self.id,
+                        elapsed_ms = elapsed_ms,
+                        state = ?current_state,
+                        "MCP initialized called but state already advanced"
+                    );
+                    // Still notify waiters in case someone is waiting
+                    self.mcp_initialized_notify.notify_waiters();
+                    return Ok(false);
+                }
+            };
+
+            match self.handshake_state.compare_exchange(
+                current,
+                new_state as u8,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
+                Ok(_) => {
+                    // Wake up any waiters blocked on initialization
+                    self.mcp_initialized_notify.notify_waiters();
+                    info!(
+                        session_id = %self.id,
+                        elapsed_ms = elapsed_ms,
+                        from = ?current_state,
+                        to = ?new_state,
+                        "MCP initialized, state transition"
+                    );
+                    break send_notification;
+                }
+                Err(_) => continue, // State changed, retry
+            }
+        };
+
+        if should_send {
             self.send_roots_list_changed().await?;
-            return Ok(true);
         }
-        Ok(false)
+        Ok(should_send)
+    }
+
+    /// Mark handshake as complete (sandbox locked).
+    /// This is called after roots/list response is processed.
+    pub fn mark_handshake_complete(&self) {
+        let current = self.handshake_state.load(Ordering::SeqCst);
+        if current == HandshakeState::RootsRequested as u8 {
+            self.handshake_state
+                .store(HandshakeState::Complete as u8, Ordering::SeqCst);
+            info!(session_id = %self.id, "Handshake complete");
+        }
     }
 
     /// Send roots/list_changed notification to subprocess.
@@ -369,8 +508,7 @@ impl SessionManager {
             terminated: AtomicBool::new(false),
             termination_reason: Mutex::new(None),
             child_handle: Mutex::new(Some(child)),
-            sse_connected: AtomicBool::new(false),
-            mcp_initialized: AtomicBool::new(false),
+            handshake_state: AtomicU8::new(HandshakeState::AwaitingBoth as u8),
             mcp_initialized_notify: Notify::new(),
             created_at: Instant::now(),
         });
@@ -530,6 +668,9 @@ impl SessionManager {
         // Store the sandbox scopes
         *session.sandbox_scopes.lock().await = Some(scopes.clone());
         session.sandbox_locked.store(true, Ordering::SeqCst);
+
+        // Transition handshake state to Complete
+        session.mark_handshake_complete();
 
         Ok(true)
     }
