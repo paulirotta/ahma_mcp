@@ -169,7 +169,7 @@ pub fn strip_ansi(input: &str) -> String {
 // Test client module
 pub mod test_client {
     use super::{get_workspace_dir, get_workspace_path};
-    use anyhow::Result;
+    use anyhow::{Context, Result};
     use rmcp::{
         ServiceExt,
         service::{RoleClient, RunningService},
@@ -387,41 +387,65 @@ pub mod test_client {
 
         let client = if use_prebuilt_binary() {
             let binary_path = get_binary_path();
-            ().serve(TokioChildProcess::new(
-                Command::new(&binary_path).configure(|cmd| {
-                    cmd
-                        // IMPORTANT: do not set AHMA_TEST_MODE here.
-                        // Keep behavior aligned with real user runs.
-                        .env_remove("AHMA_TEST_MODE")
-                        // Keep tests deterministic even if the developer/CI environment sets these.
-                        .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
-                        .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
-                        // Prevent auto-permissive sandbox behavior in test environments.
-                        .env_remove("NEXTEST")
-                        .env_remove("NEXTEST_EXECUTION_MODE")
-                        .env_remove("CARGO_TARGET_DIR")
-                        .env_remove("RUST_TEST_THREADS")
-                        .current_dir(working_dir);
-                    if let Some(dir) = tools_dir {
-                        let tools_path = if Path::new(dir).is_absolute() {
-                            Path::new(dir).to_path_buf()
-                        } else {
-                            working_dir.join(dir)
-                        };
-                        cmd.arg("--tools-dir").arg(tools_path);
-                    }
-                    for arg in extra_args {
-                        cmd.arg(arg);
-                    }
-                }),
-            )?)
-            .await?
+            let args_for_error = extra_args.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+            let tools_dir_for_error = tools_dir.map(|s| s.to_string());
+
+            ().serve(
+                TokioChildProcess::new(
+                    Command::new(&binary_path).configure(|cmd| {
+                        cmd
+                            // IMPORTANT: do not set AHMA_TEST_MODE here.
+                            // Keep behavior aligned with real user runs.
+                            .env_remove("AHMA_TEST_MODE")
+                            // Keep tests deterministic even if the developer/CI environment sets these.
+                            .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
+                            .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
+                            // Prevent auto-permissive sandbox behavior in test environments.
+                            .env_remove("NEXTEST")
+                            .env_remove("NEXTEST_EXECUTION_MODE")
+                            .env_remove("CARGO_TARGET_DIR")
+                            .env_remove("RUST_TEST_THREADS")
+                            .current_dir(working_dir)
+                            // Surface server startup logs in test output (critical for CI debugging
+                            // when the handshake fails and we only see EOF).
+                            .stderr(std::process::Stdio::inherit());
+                        if let Some(dir) = tools_dir {
+                            let tools_path = if Path::new(dir).is_absolute() {
+                                Path::new(dir).to_path_buf()
+                            } else {
+                                working_dir.join(dir)
+                            };
+                            cmd.arg("--tools-dir").arg(tools_path);
+                        }
+                        for arg in extra_args {
+                            cmd.arg(arg);
+                        }
+                    }),
+                )
+                .with_context(|| {
+                    format!(
+                        "Failed to start ahma_mcp stdio process (binary={:?}, tools_dir={:?}, args={:?})",
+                        binary_path, tools_dir_for_error, args_for_error
+                    )
+                })?,
+            )
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to connect to ahma_mcp via stdio (binary={:?}, tools_dir={:?}, args={:?})",
+                    binary_path, tools_dir_for_error, args_for_error
+                )
+            })?
         } else {
             eprintln!(
                 "Warning: Using slow 'cargo run' path. Run 'cargo build' first for faster tests."
             );
-            ().serve(TokioChildProcess::new(Command::new("cargo").configure(
-                |cmd| {
+            let args_for_error = extra_args.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+            let tools_dir_for_error = tools_dir.map(|s| s.to_string());
+            let manifest_path = workspace_dir.join("Cargo.toml");
+
+            ().serve(
+                TokioChildProcess::new(Command::new("cargo").configure(|cmd| {
                     cmd.env_remove("AHMA_TEST_MODE")
                         .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
                         .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
@@ -430,9 +454,10 @@ pub mod test_client {
                         .env_remove("CARGO_TARGET_DIR")
                         .env_remove("RUST_TEST_THREADS")
                         .current_dir(working_dir)
+                        .stderr(std::process::Stdio::inherit())
                         .arg("run")
                         .arg("--manifest-path")
-                        .arg(workspace_dir.join("Cargo.toml"))
+                        .arg(&manifest_path)
                         .arg("--package")
                         .arg("ahma_core")
                         .arg("--bin")
@@ -449,9 +474,21 @@ pub mod test_client {
                     for arg in extra_args {
                         cmd.arg(arg);
                     }
-                },
-            ))?)
-            .await?
+                }))
+                .with_context(|| {
+                    format!(
+                        "Failed to start ahma_mcp via cargo run (manifest={:?}, tools_dir={:?}, args={:?})",
+                        manifest_path, tools_dir_for_error, args_for_error
+                    )
+                })?,
+            )
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to connect to ahma_mcp via stdio (cargo run, manifest={:?}, tools_dir={:?}, args={:?})",
+                    manifest_path, tools_dir_for_error, args_for_error
+                )
+            })?
         };
 
         Ok(client)
