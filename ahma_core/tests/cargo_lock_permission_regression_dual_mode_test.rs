@@ -292,7 +292,9 @@ fn assert_cargo_writes_scoped_to_working_directory(root: &Path) {
 
 async fn run_stdio_mode(client_root: &Path, tools_dir: &Path) -> anyhow::Result<()> {
     // Start stdio server with *real* sandbox enforcement.
-    let workspace_dir = get_workspace_dir();
+    // IMPORTANT: Under Landlock, the subprocess CWD must be inside the sandbox scope.
+    // If we set CWD to the repo workspace, the process cannot even stat its own CWD
+    // after restrict_self() and will fail immediately.
     let client = new_client_in_dir_real(
         Some(tools_dir.to_str().unwrap()),
         &[
@@ -303,7 +305,7 @@ async fn run_stdio_mode(client_root: &Path, tools_dir: &Path) -> anyhow::Result<
             client_root.to_str().unwrap(),
             "--log-to-stderr",
         ],
-        &workspace_dir,
+        client_root, // CWD must be inside sandbox scope for Landlock
     )
     .await
     .context("Failed to start stdio client")?;
@@ -400,6 +402,11 @@ async fn run_http_mode(client_root: &Path, tools_dir: &Path) -> anyhow::Result<(
     .await;
 
     sse_task.await.expect("roots/list SSE task panicked");
+
+    // Give the server a moment to complete sandbox locking after receiving roots/list response.
+    // Under high load (e.g., parallel nextest), there can be a race between the POST return
+    // and the server's internal sandbox lock completion.
+    sleep(Duration::from_millis(100)).await;
 
     let tool_call = json!({
         "jsonrpc": "2.0",
