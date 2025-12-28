@@ -818,19 +818,19 @@ pub fn enforce_landlock_sandbox_with_readonly_paths(
         // Canonicalize to reduce surprises with symlinks/mounts.
         let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
         match PathFd::new(&canonical) {
-            Ok(fd) => match ruleset.add_rule(PathBeneath::new(fd, access_read)) {
-                Ok(updated) => {
-                    ruleset = updated;
-                    tracing::info!("Added Landlock read-only rule for: {:?}", canonical);
-                }
-                Err(e) => {
+            Ok(fd) => {
+                // IMPORTANT: Use `&mut ruleset` to avoid consuming the ruleset.
+                // The landlock crate implements `RulesetCreatedAttr` for `&mut RulesetCreated`.
+                if let Err(e) = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read)) {
                     tracing::debug!(
                         "Could not add Landlock read-only rule for {:?}: {:?}, continuing without it",
                         canonical,
                         e
                     );
+                } else {
+                    tracing::info!("Added Landlock read-only rule for: {:?}", canonical);
                 }
-            },
+            }
             Err(e) => {
                 tracing::debug!(
                     "Could not open Landlock read-only path {:?}: {:?}, continuing without it",

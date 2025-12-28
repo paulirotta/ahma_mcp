@@ -420,8 +420,9 @@ pub fn resolve_cli_subcommand<'a>(
             .iter()
             .find(|candidate| candidate.name == *part && candidate.enabled)
         {
-            if sub.name == "default" && is_default_call {
-                // Logic to derive subcommand from tool name (e.g. cargo_build -> cargo build)
+            // Build the executable command path for CLI tools.
+            // The synthetic "default" subcommand should *not* become part of the command.
+            if sub.name != "default" {
                 command_parts.push(sub.name.clone());
             }
 
