@@ -6,7 +6,6 @@ default-members = [
   "ahma_http_bridge",
   "ahma_http_mcp_client",
 ]
-# exclude = ["ahma_http_mcp_server"]
 members = ["ahma_core", "ahma_validate", "generate_tool_schema", "ahma_http_bridge", "ahma_http_mcp_client"]
 resolver = "2"
 
