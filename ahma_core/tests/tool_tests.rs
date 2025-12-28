@@ -23,9 +23,6 @@ mod cancel_tool_message_test;
 #[path = "tool_suite/cancellation_reason_test.rs"]
 mod cancellation_reason_test;
 
-#[path = "tool_suite/cargo_quality_check_subcommand_test.rs"]
-mod cargo_quality_check_subcommand_test;
-
 #[path = "tool_suite/clippy_test.rs"]
 mod clippy_test;
 

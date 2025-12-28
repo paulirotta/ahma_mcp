@@ -383,78 +383,27 @@ AHMA MCP provides intelligent timeout remediation:
    - Manual cleanup instead of trusting automatic lifecycle management
    - Manual timeout calculation instead of using progressive warnings
 
-## Sequence Tools: Streamlined Workflows
+## Multi-Step Workflows (Preferred)
 
-Sequence tools provide a simplified interface for multi-step workflows. Instead of manually executing and coordinating multiple commands, a single sequence tool handles the entire process with proper timing and error handling.
+In this repo, the preferred way to run multi-step workflows is to execute a single shell pipeline via `sandboxed_shell`.
+
+Most other tool configs in `.ahma/tools/` (especially those marked `"enabled": false`) are considered deprecated.
 
 ### Rust Quality Check
 
-The `cargo_qualitycheck` subcommand executes a comprehensive code quality pipeline:
+Run a comprehensive Rust quality pipeline via `sandboxed_shell`:
 
 ```bash
-# Single command for complete quality check
-cargo_qualitycheck
-
-# Executes in sequence:
-# 1. cargo fmt        - Format code
-# 2. cargo clippy     - Lint with auto-fixes
-# 3. cargo nextest    - Run all tests
-# 4. cargo build      - Verify compilation
+ahma_mcp sandboxed_shell --working_directory . -- \
+   "cargo fmt --all && cargo clippy --all-targets && cargo test"
 ```
 
-**Key Benefits:**
-
-- **Consistent execution**: Same quality checks every time
-- **Automatic delays**: Prevents Cargo.lock file conflicts (100ms between steps)
-- **Error handling**: Stops at first failure, reports all completed steps
-- **Comprehensive output**: Aggregated results from all successful steps
-
-**When to Use:**
-
-- **Pre-commit validation**: Ensure all quality checks pass before committing
-- **PR preparation**: Verify code meets quality standards
-- **CI simulation**: Run the same checks locally as CI will run
-- **Code review prep**: Ensure consistent formatting and passing tests
-
-**Example Workflow:**
+If you use `nextest`, replace the test step with:
 
 ```bash
-# Make code changes
-vim src/main.rs
-
-# Run comprehensive quality check
-cargo_qualitycheck --working_directory .
-
-# Review aggregated output from all steps
-# If any step fails, see exactly which step and why
-# All prior successful steps still show their output
-
-# Once all checks pass, proceed with git commit
-git add .
-git commit -m "feature: implement new functionality"
+ahma_mcp sandboxed_shell --working_directory . -- \
+   "cargo fmt --all && cargo clippy --all-targets && cargo nextest run"
 ```
-
-**Working Directory Support:**
-
-```bash
-# Check different project
-cargo_qualitycheck --working_directory /path/to/project
-
-# Check current directory (default)
-cargo_qualitycheck
-```
-
-**Understanding Sequence Tool Behavior:**
-
-- Each step executes fully before the next begins
-- 100ms delay between steps prevents file lock conflicts
-- Synchronous execution ensures results available before return
-- Failures stop the sequence but preserve output from completed steps
-- Total timeout: 600 seconds (configurable in tool definition)
-
-### Creating Custom Sequences
-
-Sequence tools can be created for any multi-step workflow. See `docs/tool-schema-guide.md` for details on defining custom sequence tools for your specific needs.
 
 ## Integration with Development Tools
 

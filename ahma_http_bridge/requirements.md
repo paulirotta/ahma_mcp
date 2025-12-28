@@ -120,19 +120,16 @@ The following require integration testing with a real subprocess:
 
 ### Running Tests
 
-**Always use Ahma MCP tools for Rust development** instead of running terminal commands directly:
+**Preferred for development in this repo**: run commands via `sandboxed_shell`.
 
-- `mcp_ahma_cargo fmt` - Format code
-- `mcp_ahma_cargo nextest_run` - Run tests
-- `mcp_ahma_cargo clippy` - Lint code
-- `mcp_ahma_cargo build` - Build project
-- `mcp_ahma_ahma_quality_check` - Run full quality pipeline
-
-The Ahma tools provide sandboxed execution, proper async handling, and integrated error reporting.
+Most other tool configs in `.ahma/tools/` (especially those marked `"enabled": false`) are considered deprecated; use the shell directly through the sandbox.
 
 ```bash
-# Only use terminal directly for operations not supported by Ahma, such as:
-cargo llvm-cov nextest --html  # Coverage (incompatible with sandboxing)
+# Example quality pipeline
+ahma_mcp sandboxed_shell --working-directory . -- \
+    "cargo fmt --all && cargo clippy --all-targets && cargo test"
+
+# You can also run tooling directly in a terminal if you prefer.
 ```
 
 ## API Reference

@@ -601,8 +601,8 @@ async fn test_tool_call_with_different_working_directory() {
 /// This test makes `target-dir` point OUTSIDE the client root and asserts `cargo check` still succeeds
 /// and produces `.cargo-lock` under `<working_directory>/target/...`.
 ///
-/// NOTE: This test requires the cargo tool to be available. It will be skipped in CI
-/// environments where the cargo tool probe fails.
+/// NOTE: This test runs Cargo via `sandboxed_shell` (preferred) instead of the deprecated
+/// `cargo` tool configuration.
 #[tokio::test]
 async fn test_cargo_target_dir_is_scoped_to_working_directory() {
     // Check if cargo is available on the system first
@@ -622,21 +622,20 @@ async fn test_cargo_target_dir_is_scoped_to_working_directory() {
     let server_scope_dir = TempDir::new().expect("Failed to create temp dir (server_scope)");
     let client_scope_dir = TempDir::new().expect("Failed to create temp dir (client_scope)");
 
-    // Minimal tools dir (built-in tools like `cargo` are still available).
+    // Minimal tools dir. The server only exposes tools present in this directory.
     let tools_dir = server_scope_dir.path().join("tools");
     std::fs::create_dir_all(&tools_dir).expect("Failed to create tools dir");
 
-    // The server only exposes tools that exist in its tools directory.
-    // Copy the workspace cargo tool config so we can run `cargo check`.
+    // Prefer sandboxed_shell: copy its config so we can run `cargo check` through the shell.
     let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("Failed to get workspace dir")
         .to_path_buf();
     std::fs::copy(
-        workspace_dir.join(".ahma/tools/cargo.json"),
-        tools_dir.join("cargo.json"),
+        workspace_dir.join(".ahma/tools/sandboxed_shell.json"),
+        tools_dir.join("sandboxed_shell.json"),
     )
-    .expect("Failed to copy cargo tool config");
+    .expect("Failed to copy sandboxed_shell tool config");
 
     // Create a minimal Rust project under the client scope.
     let client_root = client_scope_dir.path();
@@ -721,49 +720,53 @@ target-dir = "../OUTSIDE_SESSION_TARGET"
     .await;
     sse_task.await.expect("roots/list SSE task panicked");
 
-    // Step 3: Run `cargo check` in the client root.
+    // Step 3: Run `cargo check` in the client root via sandboxed_shell.
     let tool_call = json!({
         "jsonrpc": "2.0",
         "id": 2,
         "method": "tools/call",
         "params": {
-            "name": "cargo",
+            "name": "sandboxed_shell",
             "arguments": {
-                "subcommand": "check",
-                "working_directory": client_root.to_string_lossy(),
-                "execution_mode": "Synchronous"
+                "command": "cargo check -q",
+                "working_directory": client_root.to_string_lossy()
             }
         }
     });
     let (tool_response, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
         .await
-        .expect("cargo tool call should not fail with connection error");
-
-    // Skip if cargo tool is not available in server context (CI environment)
-    if let Some(error) = tool_response.get("error")
-        && let Some(msg) = error.get("message").and_then(|m| m.as_str())
-        && (msg.contains("unavailable") || msg.contains("availability probe failed"))
-    {
-        eprintln!(
-            "⚠️  Skipping test - cargo tool not available in server: {}",
-            msg
-        );
-        server.kill().expect("Failed to kill server");
-        return;
-    }
+        .expect("sandboxed_shell tool call should not fail with connection error");
 
     assert!(
         tool_response.get("error").is_none(),
-        "cargo check must succeed under session sandbox; got: {:?}",
+        "cargo check (via sandboxed_shell) must succeed under session sandbox; got: {:?}",
         tool_response
     );
 
-    // Prove cargo wrote under the session root by checking for `.cargo-lock`.
-    let lock_path = client_root.join("target/debug/.cargo-lock");
+    // Prove cargo wrote under the session root by checking for build artifacts under
+    // `<working_directory>/target`, and proving it did NOT write into the configured
+    // `../OUTSIDE_SESSION_TARGET`.
+    let in_scope_target = client_root.join("target");
     assert!(
-        lock_path.exists(),
-        "expected cargo lock at {lock_path:?}; cargo must not write outside session root"
+        in_scope_target.exists(),
+        "expected in-scope target dir at {in_scope_target:?}"
     );
+
+    let out_of_scope_target = client_root
+        .parent()
+        .expect("client_root must have parent")
+        .join("OUTSIDE_SESSION_TARGET");
+
+    if out_of_scope_target.exists() {
+        let entries: Vec<_> = std::fs::read_dir(&out_of_scope_target)
+            .unwrap_or_else(|_| panic!("Failed to read {out_of_scope_target:?}"))
+            .filter_map(|e| e.ok())
+            .collect();
+        assert!(
+            entries.is_empty(),
+            "cargo must not write outside session root; found out-of-scope artifacts in {out_of_scope_target:?}: {entries:?}"
+        );
+    }
 
     server.kill().expect("Failed to kill server");
 }

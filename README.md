@@ -25,7 +25,7 @@ This project is actively used and still undergoing rapid evolution. http MCP is 
 - **Sandboxed Execution**: Strict path validation prevents accessing files outside the workspace.
 - **Asynchronous By Default with Sync Override**: Operations run asynchronously by default, allowing the LLM to continue work while awaiting results. Use `--sync` flag or set `"synchronous": true` in tool config for operations that must complete before proceeding. Supports multiple concurrent long-running operations (builds, tests).
 - **Easy Tool Definition**: Add any command-line tool to your AI's arsenal by creating a single JSON file. No recompilation needed.
-- **Sequence Tools**: Chain multiple commands into a single, powerful workflow (e.g., `cargo_qualitycheck` runs format → lint → test → build).
+- **Multi-Step Workflows (Preferred)**: Run multi-command pipelines via `sandboxed_shell` (e.g., `cargo fmt --all && cargo clippy --all-targets && cargo test`).
 
 ## Security Sandbox
 

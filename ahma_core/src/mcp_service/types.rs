@@ -12,7 +12,7 @@ use crate::config::ToolConfig;
 /// tool/config lookup and message formatting.
 #[derive(Clone)]
 pub enum SequenceKind<'a> {
-    /// Top-level sequence: each step specifies a different tool (e.g., `ahma_quality_check`)
+    /// Top-level sequence: each step specifies a different tool (e.g., `test_sequence`)
     TopLevel,
     /// Subcommand sequence: all steps use the same base tool config (e.g., `cargo qualitycheck`)
     #[allow(dead_code)] // base_config reserved for future use

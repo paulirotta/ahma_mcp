@@ -17,10 +17,10 @@ async fn test_sequence_tool_loads() -> Result<()> {
     let tools = client.list_tools(None).await?;
     let tool_names: Vec<_> = tools.tools.iter().map(|t| t.name.as_ref()).collect();
 
-    // Verify cargo tool is loaded (it now contains the quality-check subcommand sequence)
-    // In CI environments, the .ahma/tools may not be available, so skip gracefully
-    if !tool_names.contains(&"cargo") {
-        eprintln!("Skipping test: cargo tool not available (may be CI environment)");
+    // Verify sandboxed_shell is loaded (preferred built-in tool for running CLI commands).
+    // In CI environments, the .ahma/tools may not be available, so skip gracefully.
+    if !tool_names.contains(&"sandboxed_shell") {
+        eprintln!("Skipping test: sandboxed_shell tool not available (may be CI environment)");
         eprintln!("Available tools: {:?}", tool_names);
         client.cancel().await?;
         return Ok(());
@@ -133,88 +133,6 @@ async fn test_simple_sequence_execution() -> Result<()> {
     );
 
     client.cancel().await?;
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_cargo_qualitycheck_structure() -> Result<()> {
-    init_test_logging();
-
-    // Test that the cargo.json file contains the qualitycheck subcommand sequence
-    let config_path = get_workspace_path(".ahma/tools/cargo.json");
-    assert!(config_path.exists(), "cargo.json should exist");
-
-    let config_content = std::fs::read_to_string(config_path)?;
-    let config: serde_json::Value = serde_json::from_str(&config_content)?;
-
-    // Verify top-level structure
-    assert_eq!(
-        config["name"].as_str(),
-        Some("cargo"),
-        "Tool name should be cargo"
-    );
-    assert_eq!(
-        config["command"].as_str(),
-        Some("cargo"),
-        "cargo should use cargo command"
-    );
-
-    // Find the qualitycheck subcommand
-    let subcommands = config["subcommand"]
-        .as_array()
-        .expect("cargo should have subcommands array");
-
-    let qualitycheck = subcommands
-        .iter()
-        .find(|s| s["name"].as_str() == Some("qualitycheck"))
-        .expect("cargo should have qualitycheck subcommand");
-
-    // Subcommand sequences are at the subcommand level, not top-level
-    assert!(
-        qualitycheck["sequence"].is_array(),
-        "Should have subcommand-level sequence array within qualitycheck"
-    );
-
-    let sequence = qualitycheck["sequence"].as_array().unwrap();
-    assert_eq!(
-        sequence.len(),
-        5,
-        "Generic qualitycheck should have 5 steps: fmt, clippy, clippy tests, nextest, build (no schema generation or validation)"
-    );
-
-    // Verify each step
-    assert_eq!(sequence[0]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[0]["subcommand"].as_str(), Some("fmt"));
-    assert_eq!(sequence[0]["args"]["all"].as_bool(), Some(true));
-
-    assert_eq!(sequence[1]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[1]["subcommand"].as_str(), Some("clippy"));
-    assert_eq!(sequence[1]["args"]["fix"].as_bool(), Some(true));
-    assert_eq!(sequence[1]["args"]["allow-dirty"].as_bool(), Some(true));
-    assert_eq!(sequence[1]["args"]["workspace"].as_bool(), Some(true));
-
-    assert_eq!(sequence[2]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[2]["subcommand"].as_str(), Some("clippy"));
-    assert_eq!(sequence[2]["args"]["fix"].as_bool(), Some(true));
-    assert_eq!(sequence[2]["args"]["tests"].as_bool(), Some(true));
-    assert_eq!(sequence[2]["args"]["allow-dirty"].as_bool(), Some(true));
-    assert_eq!(sequence[2]["args"]["workspace"].as_bool(), Some(true));
-
-    assert_eq!(sequence[3]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[3]["subcommand"].as_str(), Some("nextest_run"));
-    assert_eq!(sequence[3]["args"]["workspace"].as_bool(), Some(true));
-
-    assert_eq!(sequence[4]["tool"].as_str(), Some("cargo"));
-    assert_eq!(sequence[4]["subcommand"].as_str(), Some("build"));
-    assert_eq!(sequence[4]["args"]["workspace"].as_bool(), Some(true));
-
-    // Verify delay
-    assert_eq!(
-        qualitycheck["step_delay_ms"].as_u64(),
-        Some(500),
-        "Step delay should be 500ms"
-    );
-
     Ok(())
 }
 

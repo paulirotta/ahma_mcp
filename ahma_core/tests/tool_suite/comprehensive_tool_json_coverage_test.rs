@@ -25,7 +25,6 @@ async fn test_all_expected_tools_present() {
         .expect("Should load tools config");
 
     let expected_tools = vec![
-        "ahma_quality_check",
         "cargo",
         "file_tools",
         "gh",
@@ -699,78 +698,6 @@ async fn test_sandboxed_shell_has_working_directory_option() {
         wd_opt.format.as_deref(),
         Some("path"),
         "working_directory should have format=path for security validation"
-    );
-}
-
-// ==================== ahma_quality_check.json comprehensive tests ====================
-
-#[tokio::test]
-async fn test_ahma_quality_check_is_sequence_tool() {
-    init_test_logging();
-    let tools_dir = get_tools_dir();
-    let configs = load_tool_configs(&tools_dir)
-        .await
-        .expect("Should load tools config");
-
-    let quality_check = configs
-        .get("ahma_quality_check")
-        .expect("Should find ahma_quality_check tool");
-
-    // Should be a sequence tool
-    assert_eq!(
-        quality_check.command, "sequence",
-        "ahma_quality_check should be a sequence tool"
-    );
-
-    // Should have sequence steps
-    let sequence = quality_check
-        .sequence
-        .as_ref()
-        .expect("ahma_quality_check should have sequence steps");
-
-    assert!(
-        !sequence.is_empty(),
-        "ahma_quality_check should have at least one sequence step"
-    );
-
-    // Should be synchronous
-    assert_eq!(
-        quality_check.synchronous,
-        Some(true),
-        "ahma_quality_check should be force_synchronous=true"
-    );
-}
-
-#[tokio::test]
-async fn test_ahma_quality_check_sequence_includes_schema_generation() {
-    init_test_logging();
-    let tools_dir = get_tools_dir();
-    let configs = load_tool_configs(&tools_dir)
-        .await
-        .expect("Should load tools config");
-
-    let quality_check = configs
-        .get("ahma_quality_check")
-        .expect("Should find ahma_quality_check tool");
-
-    let sequence = quality_check
-        .sequence
-        .as_ref()
-        .expect("ahma_quality_check should have sequence steps");
-
-    // Should include schema generation step
-    let has_schema_gen = sequence.iter().any(|step| {
-        step.tool == "cargo"
-            && step.subcommand == "run"
-            && step
-                .args
-                .get("bin")
-                .is_some_and(|v| v == "generate_tool_schema")
-    });
-
-    assert!(
-        has_schema_gen,
-        "ahma_quality_check sequence should include schema generation step"
     );
 }
 

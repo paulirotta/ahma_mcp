@@ -15,7 +15,7 @@ These are the non-negotiable principles of the project.
 ### R0: Runtime Terminology Alignment
 
 - **R0.1**: The running MCP server that Cursor/VS Code connects to is now named **"Ahama"** in `mcp.json` (e.g., `servers.Ahama`). This naming is reserved for conversations about the live MCP experience.
-- **R0.2**: The Git repository, source code, and compiled binary remain `ahma_mcp`. When referencing build steps, code changes, or CLI invocations (e.g., `ahma_mcp cargo_qualitycheck`), always use `ahma_mcp`.
+- **R0.2**: The Git repository, source code, and compiled binary remain `ahma_mcp`. When referencing build steps, code changes, or CLI invocations (e.g., `ahma_mcp --mode http --http-port 3000`), always use `ahma_mcp`.
 - **R0.3**: All written guidance and AI conversations **must** explicitly distinguish whether they are referring to `Ahama` (the running MCP service) or `ahma_mcp` (the project used to build it) to avoid ambiguity.
 - **R0.4**: Any instruction that restarts the MCP experience **must** frame it as: "build the `ahma_mcp` binary, which restarts the `Ahama` entry defined in `mcp.json`".
 
@@ -60,7 +60,7 @@ These are the non-negotiable principles of the project.
 - **R6.3**: The main MCP server logic **must** live in the `ahma_shell` binary crate, which depends on `ahma_core`.
 - **R6.4**: Tool configuration validation logic **must** be implemented in the `ahma_validate` binary crate. This provides a fast, focused way to check tool definitions for correctness without starting the full server.
 - **R6.5**: The MTDF JSON Schema generation logic **must** be implemented in the `generate_tool_schema` binary crate.
-- **R6.6**: Project-specific quality assurance tools (e.g., `ahma_quality_check`) **may** include schema generation and validation steps as part of their workflow, while generic tools (e.g., `cargo qualitycheck` subcommand) **must** remain reusable across projects.
+- **R6.6**: Project-specific quality assurance workflows **should** be expressed as shell command pipelines executed via the built-in `sandboxed_shell` tool (preferred). Tool configs that are marked `"enabled": false` are considered deprecated in this repo.
 - **R6.7**: The core library **must** expose a clean public API that allows other crates (like future `ahma_web` or `ahma_okta` components) to leverage the tool execution engine without tight coupling.
 - **R6.8**: This separation ensures that adding new interfaces (web, authentication) or changing the CLI does not require modifications to core business logic.
 - **R6.9**: The root `Cargo.toml` **must** define `default-members = ["ahma_shell"]` so that `cargo run` executes the main MCP server binary by default.
@@ -232,7 +232,7 @@ All tools are defined in `.json` files in the `tools/` directory. This is the MC
 
 ### 3.3. Sequence Tools
 
-Sequence tools chain multiple commands into a single workflow. See `cargo qualitycheck` subcommand in `.ahma/tools/cargo.json` for a subcommand-level example, or `.ahma/tools/ahma_quality_check.json` for a top-level sequence tool.
+Sequence tools chain multiple commands into a single workflow. In this repo, the preferred way to run multi-step workflows is to execute a shell pipeline via `sandboxed_shell`.
 
 - Sequences are defined with `"command": "sequence"` and a `sequence` array.
 - A configurable `step_delay_ms` prevents resource conflicts (e.g., `Cargo.lock` contention).
@@ -280,19 +280,19 @@ This section documents critical implementation details discovered through analys
 
 #### Top-Level Sequences (Cross-Tool Orchestration)
 
-- **R10.4.1**: Tools that orchestrate multiple different tools (e.g., `ahma_quality_check` calling `cargo run` to generate schemas, `cargo fmt`, `cargo clippy`, etc.) **must** define their sequence at the top level of the tool configuration.
+- **R10.4.1**: Tools that orchestrate multiple different tools (e.g., a `project_sequence` tool calling `sandboxed_shell` plus other tools) **must** define their sequence at the top level of the tool configuration.
 - **R10.4.2**: Structure: `{"command": "sequence", "sequence": [{...}], "step_delay_ms": 500}`
 - **R10.4.3**: Each sequence step specifies `tool` and `subcommand` to invoke.
 - **R10.4.4**: Handled by `handle_sequence_tool()` in `mcp_service.rs`.
-- **R10.4.5**: Sequence tools **must** be generic and reusable across projects. Project-specific validation or generation steps belong in dedicated project-specific sequence tools (like `ahma_quality_check`), not in generic quality check tools.
+- **R10.4.5**: Sequence tools **must** be generic and reusable across projects. Project-specific validation or generation steps belong in dedicated project-specific sequence tools, not in generic tools.
 
 #### Subcommand Sequences (Intra-Tool Workflows)
 
-- **R10.4.6**: Subcommands that need to execute multiple steps within the same tool context **may** define a sequence at the subcommand level (e.g., `cargo qualitycheck` subcommand).
+- **R10.4.6**: Subcommands that need to execute multiple steps within the same tool context **may** define a sequence at the subcommand level.
 - **R10.4.7**: Structure: `{"subcommand": [{"name": "qualitycheck", "sequence": [{...}], "step_delay_ms": 500}]}`
-- **R10.4.8**: Used for complex workflows within a single tool, invoked as `tool_subcommand` (e.g., `cargo_qualitycheck`).
+- **R10.4.8**: Used for complex workflows within a single tool, invoked as `tool_subcommand` (e.g., `git_status`).
 - **R10.4.9**: Handled by `handle_subcommand_sequence()` in `mcp_service.rs`.
-- **R10.4.10**: **CRITICAL**: Subcommand names **must not** contain underscores, as underscores are used as hierarchical separators in the tool invocation system. For example, `cargo_qualitycheck` maps to the `cargo` tool's `qualitycheck` subcommand. Using `quality_check` would cause parsing issues.
+- **R10.4.10**: **CRITICAL**: Subcommand names **must not** contain underscores, as underscores are used as hierarchical separators in the tool invocation system. For example, `git_status` maps to the `git` tool's `status` subcommand. Using `status_check` would cause parsing issues.
 
 **R10.5**: The choice between top-level and subcommand-level sequences is architectural, not configuration preference. Cross-tool orchestration requires top-level sequences. Intra-tool workflows use subcommand sequences.
 
@@ -366,7 +366,11 @@ This section documents critical implementation details discovered through analys
 - **Deterministic**: Same input always produces same output
 - **Documented**: Test names describe what they verify
 
-**R13.4**: The `cargo_qualitycheck` tool runs the full test suite and must pass before committing.
+**R13.4**: Before committing, the full quality pipeline must pass. Prefer running via `sandboxed_shell`:
+
+- `cargo fmt --all`
+- `cargo clippy --all-targets`
+- `cargo test` (or `cargo nextest run` if installed)
 
 **R13.5**: Test File Isolation (CRITICAL):
 

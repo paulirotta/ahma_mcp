@@ -26,6 +26,8 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::env;
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
@@ -315,7 +317,6 @@ async fn test_list_tools_returns_all_expected_tools() {
         "cargo_fmt",
         "cargo_doc",
         "cargo_clippy",
-        "cargo_qualitycheck",
         "cargo_audit",
         "cargo_nextest_run",
         // From file_tools.json
@@ -363,8 +364,6 @@ async fn test_list_tools_returns_all_expected_tools() {
         "python_help",
         "python_interactive",
         "python_check",
-        // From ahma_quality_check.json
-        "ahma_quality_check",
     ];
 
     let tool_names: Vec<&str> = tools
@@ -402,12 +401,7 @@ async fn test_list_tools_returns_all_expected_tools() {
     );
 
     // Log which core tools are available for informational purposes
-    let core_tools = [
-        "sandboxed_shell",
-        "file_tools_ls",
-        "file_tools_pwd",
-        "cargo_build",
-    ];
+    let core_tools = ["sandboxed_shell", "file_tools_ls", "file_tools_pwd"];
     for tool in &core_tools {
         if tool_names.contains(tool) {
             println!("✓ Core tool available: {}", tool);
@@ -886,7 +880,13 @@ async fn test_cargo_check() {
 async fn test_concurrent_tool_calls() {
     let _server = ensure_server_available().await;
 
-    let client = Client::new();
+    let base_url = get_sse_url();
+    let mut mcp = common::McpTestClient::with_url(&base_url);
+    let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    mcp.initialize_with_roots("stress-client", &[root])
+        .await
+        .expect("handshake failed");
+    let mcp = Arc::new(mcp);
     let start = Instant::now();
 
     // Create a batch of concurrent requests
@@ -917,8 +917,8 @@ async fn test_concurrent_tool_calls() {
     let futures: Vec<_> = requests
         .into_iter()
         .map(|(name, args)| {
-            let client = client.clone();
-            async move { call_tool(&client, name, args).await }
+            let mcp = Arc::clone(&mcp);
+            async move { mcp.call_tool(name, args).await }
         })
         .collect();
 
@@ -975,17 +975,22 @@ async fn test_concurrent_tool_calls() {
 async fn test_high_volume_concurrent_requests() {
     let _server = ensure_server_available().await;
 
-    let client = Client::new();
+    let base_url = get_sse_url();
+    let mut mcp = common::McpTestClient::with_url(&base_url);
+    let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    mcp.initialize_with_roots("stress-client", &[root])
+        .await
+        .expect("handshake failed");
+    let mcp = Arc::new(mcp);
     let num_requests = 50;
     let start = Instant::now();
 
     // Create many concurrent echo requests
     let futures: Vec<_> = (0..num_requests)
         .map(|i| {
-            let client = client.clone();
+            let mcp = Arc::clone(&mcp);
             async move {
-                call_tool(
-                    &client,
+                mcp.call_tool(
                     "sandboxed_shell",
                     json!({"command": format!("echo 'Request {}'", i)}),
                 )

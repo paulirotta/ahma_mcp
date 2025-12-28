@@ -19,6 +19,15 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[cfg(unix)]
+use std::collections::hash_map::DefaultHasher;
+
+#[cfg(unix)]
+use std::hash::{Hash, Hasher};
+
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 /// Global sandbox scopes - set once at initialization, immutable thereafter
 /// Multiple scopes are supported to allow multi-root workspaces
 static SANDBOX_SCOPES: OnceLock<Vec<PathBuf>> = OnceLock::new();
@@ -97,6 +106,111 @@ fn format_scopes(scopes: &[PathBuf]) -> String {
             .map(|s| format!("'{}'", s.display()))
             .collect();
         format!("s [{}]", scope_list.join(", "))
+    }
+}
+
+#[cfg(unix)]
+fn resolve_executable_from_path(exe_name: &str) -> Option<PathBuf> {
+    let path_var = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path_var) {
+        let candidate = dir.join(exe_name);
+        if let Ok(meta) = std::fs::metadata(&candidate)
+            && meta.is_file()
+            && (meta.permissions().mode() & 0o111) != 0
+        {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+#[cfg(unix)]
+fn shell_escape_single_quotes(input: &str) -> String {
+    // Safe single-quote escaping for POSIX sh: close ', add '\'', reopen '.
+    input.replace("'", "'\"'\"'")
+}
+
+#[cfg(unix)]
+fn ensure_cargo_target_dir_wrapper_dir(working_dir: &Path) -> Result<Option<PathBuf>> {
+    // Cargo's config key `[build] target-dir = ...` can override env vars.
+    // To enforce that Cargo writes under the tool call's working_directory, we
+    // wrap `cargo` in PATH and inject `--target-dir "$CARGO_TARGET_DIR"`.
+    let real_cargo = match resolve_executable_from_path("cargo") {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    let mut hasher = DefaultHasher::new();
+    working_dir.to_string_lossy().hash(&mut hasher);
+    let hash = hasher.finish();
+
+    // Prefer temp dir to avoid polluting user workspaces.
+    // If no-temp-files is enabled, fall back to a directory under working_dir.
+    let base_dir = if is_no_temp_files() {
+        working_dir.join(".ahma_wrappers")
+    } else {
+        std::env::temp_dir().join("ahma_mcp_wrappers")
+    };
+
+    let wrapper_dir = base_dir.join(format!("wd_{hash:x}"));
+    std::fs::create_dir_all(&wrapper_dir)
+        .with_context(|| format!("Failed to create wrapper dir at {}", wrapper_dir.display()))?;
+
+    let wrapper_path = wrapper_dir.join("cargo");
+    let real_cargo_escaped = shell_escape_single_quotes(&real_cargo.to_string_lossy());
+
+    let wrapper_contents = format!(
+        "#!/bin/sh\n\
+REAL_CARGO='{}'\n\
+for arg in \"$@\"; do\n\
+  case \"$arg\" in\n\
+    --target-dir|--target-dir=*)\n\
+      exec \"$REAL_CARGO\" \"$@\"\n\
+      ;;\n\
+  esac\n\
+done\n\
+if [ -n \"$CARGO_TARGET_DIR\" ]; then\n\
+  exec \"$REAL_CARGO\" \"$@\" --target-dir \"$CARGO_TARGET_DIR\"\n\
+else\n\
+  exec \"$REAL_CARGO\" \"$@\"\n\
+fi\n",
+        real_cargo_escaped
+    );
+
+    // Best-effort: rewrite if missing or different.
+    let should_write = match std::fs::read_to_string(&wrapper_path) {
+        Ok(existing) => existing != wrapper_contents,
+        Err(_) => true,
+    };
+    if should_write {
+        std::fs::write(&wrapper_path, wrapper_contents).with_context(|| {
+            format!(
+                "Failed to write cargo wrapper at {}",
+                wrapper_path.display()
+            )
+        })?;
+        let mut perms = std::fs::metadata(&wrapper_path)
+            .with_context(|| format!("Failed to stat cargo wrapper at {}", wrapper_path.display()))?
+            .permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&wrapper_path, perms).with_context(|| {
+            format!(
+                "Failed to chmod cargo wrapper at {}",
+                wrapper_path.display()
+            )
+        })?;
+    }
+
+    Ok(Some(wrapper_dir))
+}
+
+fn prepend_path_env(cmd: &mut tokio::process::Command, dir: &Path) {
+    let existing = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths = Vec::new();
+    paths.push(dir.to_path_buf());
+    paths.extend(std::env::split_paths(&existing));
+    if let Ok(joined) = std::env::join_paths(paths) {
+        cmd.env("PATH", joined);
     }
 }
 
@@ -748,12 +862,16 @@ pub fn create_sandboxed_command(
             .stderr(std::process::Stdio::piped());
 
         // Cargo can be configured (via config or env) to write its target dir outside
-        // the session sandbox. Force it back inside the working directory.
-        if std::path::Path::new(program)
-            .file_name()
-            .is_some_and(|n| n == "cargo")
-        {
-            cmd.env("CARGO_TARGET_DIR", working_dir.join("target"));
+        // the sandbox scope. Force it back inside the working directory.
+        //
+        // This must apply even when Cargo is invoked indirectly (e.g. via `bash -c "cargo ..."`).
+        let target_dir = working_dir.join("target");
+        cmd.env("CARGO_TARGET_DIR", &target_dir);
+        cmd.env("CARGO_BUILD_TARGET_DIR", &target_dir);
+
+        #[cfg(unix)]
+        if let Ok(Some(wrapper_dir)) = ensure_cargo_target_dir_wrapper_dir(working_dir) {
+            prepend_path_env(&mut cmd, &wrapper_dir);
         }
         Ok(cmd)
     }
@@ -774,13 +892,15 @@ pub fn create_sandboxed_command(
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
-        // Cargo can be configured (via config or env) to write its target dir outside
-        // the session sandbox. Force it back inside the working directory.
-        if std::path::Path::new(program)
-            .file_name()
-            .is_some_and(|n| n == "cargo")
-        {
-            cmd.env("CARGO_TARGET_DIR", working_dir.join("target"));
+        // Same safeguard as Linux: keep Cargo writes scoped to working_dir, including
+        // indirect Cargo invocation via shells.
+        let target_dir = working_dir.join("target");
+        cmd.env("CARGO_TARGET_DIR", &target_dir);
+        cmd.env("CARGO_BUILD_TARGET_DIR", &target_dir);
+
+        #[cfg(unix)]
+        if let Ok(Some(wrapper_dir)) = ensure_cargo_target_dir_wrapper_dir(working_dir) {
+            prepend_path_env(&mut cmd, &wrapper_dir);
         }
         Ok(cmd)
     }
@@ -836,6 +956,18 @@ pub fn create_sandboxed_shell_command(
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
+
+        // When running Cargo via a shell script/pipeline (sandboxed_shell), Cargo can be configured
+        // (via config or env) to write its target dir outside the sandbox. Force it back under the
+        // tool call working_directory to prevent macOS sandbox-exec EPERM on `.cargo-lock`.
+        let target_dir = working_dir.join("target");
+        cmd.env("CARGO_TARGET_DIR", &target_dir);
+        cmd.env("CARGO_BUILD_TARGET_DIR", &target_dir);
+
+        #[cfg(unix)]
+        if let Ok(Some(wrapper_dir)) = ensure_cargo_target_dir_wrapper_dir(working_dir) {
+            prepend_path_env(&mut cmd, &wrapper_dir);
+        }
         Ok(cmd)
     }
 
@@ -853,6 +985,16 @@ pub fn create_sandboxed_shell_command(
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
+
+        // Same safeguard as create_sandboxed_command(): keep Cargo writes scoped to working_dir.
+        let target_dir = working_dir.join("target");
+        cmd.env("CARGO_TARGET_DIR", &target_dir);
+        cmd.env("CARGO_BUILD_TARGET_DIR", &target_dir);
+
+        #[cfg(unix)]
+        if let Ok(Some(wrapper_dir)) = ensure_cargo_target_dir_wrapper_dir(working_dir) {
+            prepend_path_env(&mut cmd, &wrapper_dir);
+        }
         Ok(cmd)
     }
 
