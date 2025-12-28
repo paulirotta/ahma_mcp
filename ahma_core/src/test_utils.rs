@@ -385,6 +385,29 @@ pub mod test_client {
     ) -> Result<RunningService<RoleClient, ()>> {
         let workspace_dir = get_workspace_dir();
 
+        fn sandbox_scope_from_args(extra_args: &[&str]) -> Option<PathBuf> {
+            extra_args
+                .iter()
+                .position(|arg| *arg == "--sandbox-scope")
+                .and_then(|i| extra_args.get(i + 1))
+                .map(|s| PathBuf::from(s))
+        }
+
+        // Under coverage runs (cargo-llvm-cov), spawned instrumented subprocesses must write
+        // their .profraw output somewhere that the sandbox allows. When Landlock is enabled,
+        // the server process is restricted to --sandbox-scope, so point LLVM_PROFILE_FILE
+        // inside that scope to avoid an early EACCES and stdio initialize EOF.
+        let llvm_profile_file = if std::env::var_os("LLVM_PROFILE_FILE").is_some() {
+            sandbox_scope_from_args(extra_args).map(|scope| {
+                scope
+                    .join("ahma_mcp-%p-%m.profraw")
+                    .to_string_lossy()
+                    .to_string()
+            })
+        } else {
+            None
+        };
+
         let client = if use_prebuilt_binary() {
             let binary_path = get_binary_path();
             let args_for_error = extra_args.iter().map(|s| s.to_string()).collect::<Vec<_>>();
@@ -409,6 +432,10 @@ pub mod test_client {
                             // Surface server startup logs in test output (critical for CI debugging
                             // when the handshake fails and we only see EOF).
                             .stderr(std::process::Stdio::inherit());
+
+                        if let Some(ref profile) = llvm_profile_file {
+                            cmd.env("LLVM_PROFILE_FILE", profile);
+                        }
                         if let Some(dir) = tools_dir {
                             let tools_path = if Path::new(dir).is_absolute() {
                                 Path::new(dir).to_path_buf()
@@ -463,6 +490,10 @@ pub mod test_client {
                         .arg("--bin")
                         .arg("ahma_mcp")
                         .arg("--");
+
+                    if let Some(ref profile) = llvm_profile_file {
+                        cmd.env("LLVM_PROFILE_FILE", profile);
+                    }
                     if let Some(dir) = tools_dir {
                         let tools_path = if Path::new(dir).is_absolute() {
                             Path::new(dir).to_path_buf()
