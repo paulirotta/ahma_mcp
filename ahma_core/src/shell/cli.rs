@@ -715,8 +715,20 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
 
     // Load guidance configuration (using async I/O)
     let guidance_config = if fs::try_exists(&cli.guidance_file).await.unwrap_or(false) {
-        let guidance_content = fs::read_to_string(&cli.guidance_file).await?;
-        from_str::<GuidanceConfig>(&guidance_content).ok()
+        match fs::read_to_string(&cli.guidance_file).await {
+            Ok(guidance_content) => from_str::<GuidanceConfig>(&guidance_content).ok(),
+            Err(e) => {
+                // Guidance is optional and must not prevent the MCP server from starting.
+                // This commonly occurs under Linux Landlock when the sandbox scope is a temp
+                // dir but the default guidance file lives in the repo working directory.
+                tracing::warn!(
+                    "Could not read guidance file {:?} (continuing without guidance): {}",
+                    cli.guidance_file,
+                    e
+                );
+                None
+            }
+        }
     } else {
         None
     };

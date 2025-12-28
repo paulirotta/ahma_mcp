@@ -5,5 +5,9 @@ use anyhow::Result;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    ahma_core::shell::run().await
+    if let Err(e) = ahma_core::shell::run().await {
+        eprintln!("ahma_mcp fatal error: {:#}", e);
+        return Err(e);
+    }
+    Ok(())
 }
