@@ -283,7 +283,11 @@ pub async fn run() -> Result<()> {
         // Apply kernel-level sandbox restrictions on Linux (skip if disabled)
         #[cfg(target_os = "linux")]
         if !no_sandbox {
-            if let Err(e) = sandbox::enforce_landlock_sandbox(sandbox_scope) {
+            // Tools directory may be outside the sandbox scope; allow it as read-only.
+            if let Err(e) = sandbox::enforce_landlock_sandbox_with_readonly_paths(
+                sandbox_scope,
+                &[cli.tools_dir.as_path()],
+            ) {
                 tracing::error!("Failed to enforce Landlock sandbox: {}", e);
                 return Err(e);
             }

@@ -746,6 +746,22 @@ fn generate_seatbelt_profile(sandbox_scope: &Path, working_dir: &Path) -> String
 /// * `Err` if Landlock is not available or rules couldn't be applied
 #[cfg(target_os = "linux")]
 pub fn enforce_landlock_sandbox(sandbox_scope: &Path) -> Result<()> {
+    enforce_landlock_sandbox_with_readonly_paths(sandbox_scope, &[])
+}
+
+/// Apply Landlock sandbox restrictions to the current process with additional read-only paths.
+///
+/// This is needed when Ahma is configured with resources (e.g., `--tools-dir`) that live
+/// outside the primary sandbox scope. Those resources should typically be read-only.
+///
+/// # Arguments
+/// * `sandbox_scope` - The directory to allow read/write access to
+/// * `readonly_paths` - Additional directories to allow read access to
+#[cfg(target_os = "linux")]
+pub fn enforce_landlock_sandbox_with_readonly_paths(
+    sandbox_scope: &Path,
+    readonly_paths: &[&Path],
+) -> Result<()> {
     use landlock::{
         ABI, Access, AccessFs, PathBeneath, PathFd, Ruleset, RulesetAttr, RulesetCreatedAttr,
     };
@@ -771,6 +787,33 @@ pub fn enforce_landlock_sandbox(sandbox_scope: &Path) -> Result<()> {
             access_all,
         ))
         .context("Failed to add Landlock rule for sandbox scope")?;
+
+    // Allow read access to additional paths (e.g., tools directory) that may live outside
+    // the primary scope.
+    for path in readonly_paths {
+        if path.as_os_str().is_empty() {
+            continue;
+        }
+
+        if !path.exists() {
+            continue;
+        }
+
+        // Avoid duplicate rule when the readonly path is the sandbox scope itself.
+        if path == &sandbox_scope {
+            continue;
+        }
+
+        if let Ok(fd) = PathFd::new(path) {
+            if let Err(e) = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read)) {
+                tracing::debug!(
+                    "Could not add Landlock read-only rule for {:?}: {:?}, continuing without it",
+                    path,
+                    e
+                );
+            }
+        }
+    }
 
     // Allow read access to system directories needed for execution
     // These directories are needed for running binaries and loading libraries

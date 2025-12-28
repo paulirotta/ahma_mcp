@@ -321,7 +321,11 @@ pub async fn run() -> Result<()> {
     #[cfg(target_os = "linux")]
     if !no_sandbox && !cli.defer_sandbox {
         if let Some(first_scope) = sandbox_scopes.first() {
-            if let Err(e) = sandbox::enforce_landlock_sandbox(first_scope) {
+            // Tools directory may be outside the sandbox scope; allow it as read-only.
+            if let Err(e) = sandbox::enforce_landlock_sandbox_with_readonly_paths(
+                first_scope,
+                &[cli.tools_dir.as_path()],
+            ) {
                 tracing::error!("Failed to enforce Landlock sandbox: {}", e);
                 return Err(e);
             }
