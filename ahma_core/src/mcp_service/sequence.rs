@@ -277,10 +277,15 @@ async fn handle_sequence_tool_async(
         };
 
         let operation_id = format!("op_{}", SEQUENCE_ID.fetch_add(1, Ordering::SeqCst));
-        let callback: Box<dyn CallbackSender> = Box::new(McpCallbackSender::new(
-            context.peer.clone(),
-            operation_id.clone(),
-        ));
+        // Only send progress notifications when the client provided a progressToken in `_meta`.
+        let progress_token = context.meta.get_progress_token();
+        let callback: Option<Box<dyn CallbackSender>> = progress_token.map(|token| {
+            Box::new(McpCallbackSender::new(
+                context.peer.clone(),
+                operation_id.clone(),
+                Some(token),
+            )) as Box<dyn CallbackSender>
+        });
 
         let step_result = adapter
             .execute_async_in_dir_with_options(
@@ -291,7 +296,7 @@ async fn handle_sequence_tool_async(
                     operation_id: Some(operation_id),
                     args: step_params.arguments,
                     timeout: None, // Add timeout logic if needed
-                    callback: Some(callback),
+                    callback,
                     subcommand_config: Some(subcommand_config),
                 },
             )
@@ -358,10 +363,15 @@ pub async fn handle_subcommand_sequence(
             };
 
         let operation_id = format!("op_{}", SEQUENCE_ID.fetch_add(1, Ordering::SeqCst));
-        let callback: Box<dyn CallbackSender> = Box::new(McpCallbackSender::new(
-            context.peer.clone(),
-            operation_id.clone(),
-        ));
+        // Only send progress notifications when the client provided a progressToken in `_meta`.
+        let progress_token = context.meta.get_progress_token();
+        let callback: Option<Box<dyn CallbackSender>> = progress_token.map(|token| {
+            Box::new(McpCallbackSender::new(
+                context.peer.clone(),
+                operation_id.clone(),
+                Some(token),
+            )) as Box<dyn CallbackSender>
+        });
 
         let step_result = adapter
             .execute_async_in_dir_with_options(
@@ -372,7 +382,7 @@ pub async fn handle_subcommand_sequence(
                     operation_id: Some(operation_id),
                     args: params.arguments.clone(),
                     timeout: None,
-                    callback: Some(callback),
+                    callback,
                     subcommand_config: Some(step_config),
                 },
             )

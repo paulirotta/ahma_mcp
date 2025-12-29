@@ -632,22 +632,6 @@ fn generate_seatbelt_profile(sandbox_scope: &Path, working_dir: &Path) -> String
 /// * `Err` if Landlock is not available or rules couldn't be applied
 #[cfg(target_os = "linux")]
 pub fn enforce_landlock_sandbox(sandbox_scope: &Path) -> Result<()> {
-    enforce_landlock_sandbox_with_readonly_paths(sandbox_scope, &[])
-}
-
-/// Apply Landlock sandbox restrictions to the current process with additional read-only paths.
-///
-/// This is needed when Ahma is configured with resources (e.g., `--tools-dir`) that live
-/// outside the primary sandbox scope. Those resources should typically be read-only.
-///
-/// # Arguments
-/// * `sandbox_scope` - The directory to allow read/write access to
-/// * `readonly_paths` - Additional directories to allow read access to
-#[cfg(target_os = "linux")]
-pub fn enforce_landlock_sandbox_with_readonly_paths(
-    sandbox_scope: &Path,
-    readonly_paths: &[&Path],
-) -> Result<()> {
     use landlock::{
         ABI, Access, AccessFs, PathBeneath, PathFd, Ruleset, RulesetAttr, RulesetCreatedAttr,
     };
@@ -673,59 +657,6 @@ pub fn enforce_landlock_sandbox_with_readonly_paths(
             access_all,
         ))
         .context("Failed to add Landlock rule for sandbox scope")?;
-
-    if !readonly_paths.is_empty() {
-        tracing::info!(
-            "Landlock extra read-only paths requested: {}",
-            readonly_paths.len()
-        );
-    }
-
-    // Allow read access to additional paths (e.g., tools directory) that may live outside
-    // the primary scope.
-    for path in readonly_paths {
-        if path.as_os_str().is_empty() {
-            continue;
-        }
-
-        if !path.exists() {
-            tracing::debug!(
-                "Landlock read-only path does not exist (skipping): {:?}",
-                path
-            );
-            continue;
-        }
-
-        // Avoid duplicate rule when the readonly path is the sandbox scope itself.
-        if path == &sandbox_scope {
-            continue;
-        }
-
-        // Canonicalize to reduce surprises with symlinks/mounts.
-        let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-        match PathFd::new(&canonical) {
-            Ok(fd) => {
-                // IMPORTANT: Use `&mut ruleset` to avoid consuming the ruleset.
-                // The landlock crate implements `RulesetCreatedAttr` for `&mut RulesetCreated`.
-                if let Err(e) = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read)) {
-                    tracing::debug!(
-                        "Could not add Landlock read-only rule for {:?}: {:?}, continuing without it",
-                        canonical,
-                        e
-                    );
-                } else {
-                    tracing::info!("Added Landlock read-only rule for: {:?}", canonical);
-                }
-            }
-            Err(e) => {
-                tracing::debug!(
-                    "Could not open Landlock read-only path {:?}: {:?}, continuing without it",
-                    canonical,
-                    e
-                );
-            }
-        }
-    }
 
     // Allow read access to system directories needed for execution
     // These directories are needed for running binaries and loading libraries
@@ -816,6 +747,14 @@ pub fn create_sandboxed_command(
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
+        // Cargo can be configured (via config or env) to write its target dir outside
+        // the session sandbox. Force it back inside the working directory.
+        if std::path::Path::new(program)
+            .file_name()
+            .is_some_and(|n| n == "cargo")
+        {
+            cmd.env("CARGO_TARGET_DIR", working_dir.join("target"));
+        }
         Ok(cmd)
     }
 
@@ -835,6 +774,14 @@ pub fn create_sandboxed_command(
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
+        // Cargo can be configured (via config or env) to write its target dir outside
+        // the session sandbox. Force it back inside the working directory.
+        if std::path::Path::new(program)
+            .file_name()
+            .is_some_and(|n| n == "cargo")
+        {
+            cmd.env("CARGO_TARGET_DIR", working_dir.join("target"));
+        }
         Ok(cmd)
     }
 
@@ -889,7 +836,6 @@ pub fn create_sandboxed_shell_command(
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
-
         Ok(cmd)
     }
 
@@ -907,7 +853,6 @@ pub fn create_sandboxed_shell_command(
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
-
         Ok(cmd)
     }
 

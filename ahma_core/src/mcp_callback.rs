@@ -45,32 +45,52 @@
 use crate::callback_system::{CallbackError, CallbackSender, ProgressUpdate};
 use async_trait::async_trait;
 use rmcp::{
-    model::{NumberOrString, ProgressNotificationParam, ProgressToken},
+    model::{ProgressNotificationParam, ProgressToken},
     service::{Peer, RoleServer},
 };
-use std::sync::Arc;
 use tracing;
 
 /// MCP callback sender that sends progress notifications to the AI client
 pub struct McpCallbackSender {
     peer: Peer<RoleServer>,
+    #[allow(dead_code)]
     operation_id: String,
+    progress_token: Option<ProgressToken>,
 }
 
 impl McpCallbackSender {
-    pub fn new(peer: Peer<RoleServer>, operation_id: String) -> Self {
-        Self { peer, operation_id }
+    pub fn new(
+        peer: Peer<RoleServer>,
+        operation_id: String,
+        progress_token: Option<ProgressToken>,
+    ) -> Self {
+        Self {
+            peer,
+            operation_id,
+            progress_token,
+        }
     }
 }
 
 #[async_trait]
 impl CallbackSender for McpCallbackSender {
     async fn send_progress(&self, update: ProgressUpdate) -> Result<(), CallbackError> {
-        tracing::debug!("Sending MCP progress notification: {:?}", update);
+        // IMPORTANT:
+        // Only send MCP progress notifications when the client provided a `progressToken`
+        // in the request `_meta`. Cursor (and other clients) will log errors if the server
+        // emits progress notifications with unknown tokens.
+        let Some(progress_token) = self.progress_token.clone() else {
+            return Ok(());
+        };
 
-        let progress_token = ProgressToken(NumberOrString::String(Arc::from(
-            self.operation_id.as_str(),
-        )));
+        tracing::debug!(
+            operation_id = %self.operation_id,
+            "Sending MCP progress notification: {:?}",
+            update
+        );
+
+        // NOTE: progress_token must match the client-provided token, not our internal operation id.
+        // We keep operation_id for logging/debug and include it in messages where relevant.
 
         let params = match update {
             ProgressUpdate::Started {
@@ -219,6 +239,10 @@ impl CallbackSender for McpCallbackSender {
 }
 
 /// Utility function to create an MCP callback sender.
-pub fn mcp_callback(peer: Peer<RoleServer>, operation_id: String) -> Box<dyn CallbackSender> {
-    Box::new(McpCallbackSender::new(peer, operation_id))
+pub fn mcp_callback(
+    peer: Peer<RoleServer>,
+    operation_id: String,
+    progress_token: Option<ProgressToken>,
+) -> Box<dyn CallbackSender> {
+    Box::new(McpCallbackSender::new(peer, operation_id, progress_token))
 }

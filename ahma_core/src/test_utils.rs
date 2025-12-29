@@ -5,6 +5,69 @@ use std::sync::Once;
 use std::time::Duration;
 use tempfile::TempDir;
 
+// =============================================================================
+// Skip-if-disabled macros for test utilities
+// =============================================================================
+
+/// Check if a tool is disabled in the config.
+/// Returns true if the tool JSON exists and has `"enabled": false`.
+pub fn is_tool_disabled(tool_name: &str) -> bool {
+    let workspace_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("Failed to get workspace root")
+        .to_path_buf();
+    let tools_dir = workspace_dir.join(".ahma/tools");
+    let config_path = tools_dir.join(format!("{}.json", tool_name));
+
+    if !config_path.exists() {
+        return false; // Tool doesn't have a config file, assume enabled
+    }
+
+    match std::fs::read_to_string(&config_path) {
+        Ok(content) => {
+            // Simple check for "enabled": false
+            content.contains(r#""enabled": false"#) || content.contains(r#""enabled":false"#)
+        }
+        Err(_) => false, // Can't read, assume enabled
+    }
+}
+
+/// Macro to skip a synchronous test if a tool is disabled.
+/// Usage: `skip_if_disabled!("tool_name");`
+#[macro_export]
+macro_rules! skip_if_disabled {
+    ($tool_name:expr) => {
+        if $crate::test_utils::is_tool_disabled($tool_name) {
+            eprintln!("⚠️  Skipping test - {} is disabled in config", $tool_name);
+            return;
+        }
+    };
+}
+
+/// Macro to skip an async test that returns Result if a tool is disabled.
+/// Usage: `skip_if_disabled_async_result!("tool_name");`
+#[macro_export]
+macro_rules! skip_if_disabled_async_result {
+    ($tool_name:expr) => {
+        if $crate::test_utils::is_tool_disabled($tool_name) {
+            eprintln!("⚠️  Skipping test - {} is disabled in config", $tool_name);
+            return Ok(());
+        }
+    };
+}
+
+/// Macro to skip an async test (no return value) if a tool is disabled.
+/// Usage: `skip_if_disabled_async!("tool_name");`
+#[macro_export]
+macro_rules! skip_if_disabled_async {
+    ($tool_name:expr) => {
+        if $crate::test_utils::is_tool_disabled($tool_name) {
+            eprintln!("⚠️  Skipping test - {} is disabled in config", $tool_name);
+            return;
+        }
+    };
+}
+
 /// Initialize sandbox for tests. Uses "/" as the sandbox scope to allow all operations.
 /// This is safe because tests run in controlled environments.
 /// This function is idempotent - calling it multiple times is safe.
@@ -169,7 +232,7 @@ pub fn strip_ansi(input: &str) -> String {
 // Test client module
 pub mod test_client {
     use super::{get_workspace_dir, get_workspace_path};
-    use anyhow::{Context, Result};
+    use anyhow::Result;
     use rmcp::{
         ServiceExt,
         service::{RoleClient, RunningService},
@@ -368,158 +431,6 @@ pub mod test_client {
                 },
             ))?)
             .await?
-        };
-
-        Ok(client)
-    }
-
-    /// Spawn an ahma_mcp client subprocess without enabling AHMA_TEST_MODE.
-    ///
-    /// This is used for integration tests that must validate *real* sandbox enforcement
-    /// (e.g., macOS sandbox-exec EPERM repros).
-    #[allow(dead_code)]
-    pub async fn new_client_in_dir_real(
-        tools_dir: Option<&str>,
-        extra_args: &[&str],
-        working_dir: &Path,
-    ) -> Result<RunningService<RoleClient, ()>> {
-        let workspace_dir = get_workspace_dir();
-
-        fn sandbox_scope_from_args(extra_args: &[&str]) -> Option<PathBuf> {
-            extra_args
-                .iter()
-                .position(|arg| *arg == "--sandbox-scope")
-                .and_then(|i| extra_args.get(i + 1))
-                .map(PathBuf::from)
-        }
-
-        // Under coverage runs (cargo-llvm-cov), spawned instrumented subprocesses must write
-        // their .profraw output somewhere that the sandbox allows. When Landlock is enabled,
-        // the server process is restricted to --sandbox-scope, so point LLVM_PROFILE_FILE
-        // inside that scope to avoid an early EACCES and stdio initialize EOF.
-        let llvm_profile_file = if std::env::var_os("LLVM_PROFILE_FILE").is_some() {
-            sandbox_scope_from_args(extra_args).map(|scope| {
-                scope
-                    .join("ahma_mcp-%p-%m.profraw")
-                    .to_string_lossy()
-                    .to_string()
-            })
-        } else {
-            None
-        };
-
-        let client = if use_prebuilt_binary() {
-            let binary_path = get_binary_path();
-            let args_for_error = extra_args.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-            let tools_dir_for_error = tools_dir.map(|s| s.to_string());
-
-            ().serve(
-                TokioChildProcess::new(
-                    Command::new(&binary_path).configure(|cmd| {
-                        cmd
-                            // IMPORTANT: do not set AHMA_TEST_MODE here.
-                            // Keep behavior aligned with real user runs.
-                            .env_remove("AHMA_TEST_MODE")
-                            // Keep tests deterministic even if the developer/CI environment sets these.
-                            .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
-                            .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
-                            // Prevent auto-permissive sandbox behavior in test environments.
-                            .env_remove("NEXTEST")
-                            .env_remove("NEXTEST_EXECUTION_MODE")
-                            .env_remove("CARGO_TARGET_DIR")
-                            .env_remove("RUST_TEST_THREADS")
-                            .current_dir(working_dir)
-                            // Surface server startup logs in test output (critical for CI debugging
-                            // when the handshake fails and we only see EOF).
-                            .stderr(std::process::Stdio::inherit());
-
-                        if let Some(ref profile) = llvm_profile_file {
-                            cmd.env("LLVM_PROFILE_FILE", profile);
-                        }
-                        if let Some(dir) = tools_dir {
-                            let tools_path = if Path::new(dir).is_absolute() {
-                                Path::new(dir).to_path_buf()
-                            } else {
-                                working_dir.join(dir)
-                            };
-                            cmd.arg("--tools-dir").arg(tools_path);
-                        }
-                        for arg in extra_args {
-                            cmd.arg(arg);
-                        }
-                    }),
-                )
-                .with_context(|| {
-                    format!(
-                        "Failed to start ahma_mcp stdio process (binary={:?}, tools_dir={:?}, args={:?})",
-                        binary_path, tools_dir_for_error, args_for_error
-                    )
-                })?,
-            )
-            .await
-            .with_context(|| {
-                format!(
-                    "Failed to connect to ahma_mcp via stdio (binary={:?}, tools_dir={:?}, args={:?})",
-                    binary_path, tools_dir_for_error, args_for_error
-                )
-            })?
-        } else {
-            eprintln!(
-                "Warning: Using slow 'cargo run' path. Run 'cargo build' first for faster tests."
-            );
-            let args_for_error = extra_args.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-            let tools_dir_for_error = tools_dir.map(|s| s.to_string());
-            let manifest_path = workspace_dir.join("Cargo.toml");
-
-            ().serve(
-                TokioChildProcess::new(Command::new("cargo").configure(|cmd| {
-                    cmd.env_remove("AHMA_TEST_MODE")
-                        .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
-                        .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
-                        .env_remove("NEXTEST")
-                        .env_remove("NEXTEST_EXECUTION_MODE")
-                        .env_remove("CARGO_TARGET_DIR")
-                        .env_remove("RUST_TEST_THREADS")
-                        .current_dir(working_dir)
-                        .stderr(std::process::Stdio::inherit())
-                        .arg("run")
-                        .arg("--manifest-path")
-                        .arg(&manifest_path)
-                        .arg("--package")
-                        .arg("ahma_core")
-                        .arg("--bin")
-                        .arg("ahma_mcp")
-                        .arg("--");
-
-                    if let Some(ref profile) = llvm_profile_file {
-                        cmd.env("LLVM_PROFILE_FILE", profile);
-                    }
-                    if let Some(dir) = tools_dir {
-                        let tools_path = if Path::new(dir).is_absolute() {
-                            Path::new(dir).to_path_buf()
-                        } else {
-                            working_dir.join(dir)
-                        };
-                        cmd.arg("--tools-dir").arg(tools_path);
-                    }
-                    for arg in extra_args {
-                        cmd.arg(arg);
-                    }
-                }))
-                .with_context(|| {
-                    format!(
-                        "Failed to start ahma_mcp via cargo run (manifest={:?}, tools_dir={:?}, args={:?})",
-                        manifest_path, tools_dir_for_error, args_for_error
-                    )
-                })?,
-            )
-            .await
-            .with_context(|| {
-                format!(
-                    "Failed to connect to ahma_mcp via stdio (cargo run, manifest={:?}, tools_dir={:?}, args={:?})",
-                    manifest_path, tools_dir_for_error, args_for_error
-                )
-            })?
         };
 
         Ok(client)
@@ -905,130 +816,4 @@ pub mod test_utils {
             );
         }
     }
-}
-
-/// Check if a tool is enabled in its JSON configuration file.
-/// Loads the tool config from `.ahma/tools/<tool_name>.json` and returns true if enabled.
-/// Returns false if the file doesn't exist, can't be parsed, or has `enabled: false`.
-pub fn is_tool_enabled(tool_name: &str) -> bool {
-    let workspace_dir = get_workspace_dir();
-    let tool_path = workspace_dir
-        .join(".ahma/tools")
-        .join(format!("{}.json", tool_name));
-
-    if !tool_path.exists() {
-        return false;
-    }
-
-    match std::fs::read_to_string(&tool_path) {
-        Ok(contents) => match serde_json::from_str::<serde_json::Value>(&contents) {
-            Ok(json) => json
-                .get("enabled")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true),
-            Err(_) => false,
-        },
-        Err(_) => false,
-    }
-}
-
-/// Macro to skip a test if the specified tool is disabled.
-///
-/// Usage for tests that return `()`:
-/// ```ignore
-/// #[test]
-/// fn test_something() {
-///     skip_if_disabled!("file_tools");
-///     // ... rest of test
-/// }
-/// ```
-///
-/// For tests that return `Result<()>`, use `skip_if_disabled_result!` instead.
-///
-/// This macro checks if the tool's JSON config has `"enabled": false` and if so,
-/// prints a skip message and returns early from the test.
-#[macro_export]
-macro_rules! skip_if_disabled {
-    ($tool_name:expr) => {
-        if !$crate::test_utils::is_tool_enabled($tool_name) {
-            eprintln!(
-                "[SKIPPED] Test skipped: tool '{}' is disabled in .ahma/tools/{}.json",
-                $tool_name, $tool_name
-            );
-            return;
-        }
-    };
-}
-
-/// Macro to skip a test that returns `Result<()>` if the specified tool is disabled.
-///
-/// Usage:
-/// ```ignore
-/// #[test]
-/// fn test_something() -> Result<()> {
-///     skip_if_disabled_result!("file_tools");
-///     // ... rest of test
-///     Ok(())
-/// }
-/// ```
-#[macro_export]
-macro_rules! skip_if_disabled_result {
-    ($tool_name:expr) => {
-        if !$crate::test_utils::is_tool_enabled($tool_name) {
-            eprintln!(
-                "[SKIPPED] Test skipped: tool '{}' is disabled in .ahma/tools/{}.json",
-                $tool_name, $tool_name
-            );
-            return Ok(());
-        }
-    };
-}
-
-/// Async version of skip_if_disabled for async tests that return `()`.
-///
-/// Usage:
-/// ```ignore
-/// #[tokio::test]
-/// async fn test_something() {
-///     skip_if_disabled_async!("git");
-///     // ... rest of test
-/// }
-/// ```
-///
-/// For async tests that return `Result<()>`, use `skip_if_disabled_async_result!` instead.
-#[macro_export]
-macro_rules! skip_if_disabled_async {
-    ($tool_name:expr) => {
-        if !$crate::test_utils::is_tool_enabled($tool_name) {
-            eprintln!(
-                "[SKIPPED] Test skipped: tool '{}' is disabled in .ahma/tools/{}.json",
-                $tool_name, $tool_name
-            );
-            return;
-        }
-    };
-}
-
-/// Async version of skip_if_disabled for async tests that return `Result<()>`.
-///
-/// Usage:
-/// ```ignore
-/// #[tokio::test]
-/// async fn test_something() -> Result<()> {
-///     skip_if_disabled_async_result!("git");
-///     // ... rest of test
-///     Ok(())
-/// }
-/// ```
-#[macro_export]
-macro_rules! skip_if_disabled_async_result {
-    ($tool_name:expr) => {
-        if !$crate::test_utils::is_tool_enabled($tool_name) {
-            eprintln!(
-                "[SKIPPED] Test skipped: tool '{}' is disabled in .ahma/tools/{}.json",
-                $tool_name, $tool_name
-            );
-            return Ok(());
-        }
-    };
 }

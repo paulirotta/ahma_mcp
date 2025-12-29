@@ -41,6 +41,5 @@ pub mod session;
 pub use bridge::{BridgeConfig, start_bridge};
 pub use error::{BridgeError, Result};
 pub use session::{
-    HandshakeState, McpRoot, Session, SessionManager, SessionManagerConfig,
-    SessionTerminationReason,
+    McpRoot, Session, SessionManager, SessionManagerConfig, SessionTerminationReason,
 };

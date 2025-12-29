@@ -1452,10 +1452,16 @@ impl ServerHandler for AhmaMcpService {
                 }
                 crate::adapter::ExecutionMode::AsyncResultPush => {
                     let operation_id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
-                    let callback: Box<dyn CallbackSender> = Box::new(McpCallbackSender::new(
-                        context.peer.clone(),
-                        operation_id.clone(),
-                    ));
+                    // Only send progress notifications when the client provided a progressToken
+                    // in request `_meta`. Otherwise clients (e.g. Cursor) will log "unknown token".
+                    let progress_token = context.meta.get_progress_token();
+                    let callback: Option<Box<dyn CallbackSender>> = progress_token.map(|token| {
+                        Box::new(McpCallbackSender::new(
+                            context.peer.clone(),
+                            operation_id.clone(),
+                            Some(token),
+                        )) as Box<dyn CallbackSender>
+                    });
 
                     let job_id = self
                         .adapter
@@ -1467,7 +1473,7 @@ impl ServerHandler for AhmaMcpService {
                                 operation_id: Some(operation_id),
                                 args: Some(arguments),
                                 timeout,
-                                callback: Some(callback),
+                                callback,
                                 subcommand_config: Some(subcommand_config),
                             },
                         )

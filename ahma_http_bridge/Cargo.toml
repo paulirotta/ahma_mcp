@@ -10,9 +10,9 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 axum = {version = "0.8.8", features = ["http2", "tokio"]}
+bytes = "1.11"
 chrono.workspace = true
 clap = {workspace = true, features = ["derive"]}
-bytes = "1.11"
 dashmap = "6.1.0"
 futures.workspace = true
 owo-colors = "4.2.3"
@@ -28,6 +28,7 @@ tracing.workspace = true
 uuid = {version = "1.19.0", features = ["v4", "serde"]}
 
 [dev-dependencies]
-reqwest = { workspace = true, features = ["json", "stream"] }
+futures.workspace = true
+reqwest = {workspace = true, features = ["json", "stream"]}
 tempfile.workspace = true
 tower = {version = "0.5.2", features = ["util"]}

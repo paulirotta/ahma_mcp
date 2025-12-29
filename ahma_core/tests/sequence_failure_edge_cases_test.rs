@@ -183,43 +183,9 @@ async fn setup_failure_test_configs() -> Result<TempDir> {
 "#;
     fs::write(tools_dir.join("sandboxed_shell.json"), shell_config).await?;
 
-    // Create a sequence that uses shell to create a marker file ONLY if step 2 runs
-    // This gives us a deterministic way to verify step 3 did NOT run
-    let marker_sequence_config = r#"
-{
-    "name": "marker_sequence",
-    "description": "Sequence that creates marker files to prove execution order",
-    "command": "sequence",
-    "timeout_seconds": 30,
-    "synchronous": true,
-    "enabled": true,
-    "step_delay_ms": 50,
-    "sequence": [
-        {
-            "tool": "sandboxed_shell",
-            "subcommand": "default",
-            "description": "Step 1: create first marker",
-            "args": {"command": "touch /tmp/ahma_test_step1_ran"}
-        },
-        {
-            "tool": "fail_tool",
-            "subcommand": "default",
-            "description": "Step 2: fail"
-        },
-        {
-            "tool": "sandboxed_shell",
-            "subcommand": "default",
-            "description": "Step 3: should NOT create this marker",
-            "args": {"command": "touch /tmp/ahma_test_step3_ran"}
-        }
-    ]
-}
-"#;
-    fs::write(
-        tools_dir.join("marker_sequence.json"),
-        marker_sequence_config,
-    )
-    .await?;
+    // NOTE: marker_sequence is dynamically generated in the test that uses it,
+    // because it needs paths inside the temp directory (sandbox-scoped).
+    // See test_sequence_failure_with_filesystem_markers for the actual config.
 
     Ok(temp_dir)
 }
@@ -355,10 +321,54 @@ async fn test_sequence_with_missing_subcommand_reference() -> Result<()> {
 async fn test_sequence_failure_with_filesystem_markers() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_failure_test_configs().await?;
+    let tools_dir = temp_dir.path().join(".ahma").join("tools");
 
-    // Clean up any leftover marker files from previous runs
-    let _ = std::fs::remove_file("/tmp/ahma_test_step1_ran");
-    let _ = std::fs::remove_file("/tmp/ahma_test_step3_ran");
+    // Create marker file paths INSIDE the temp directory (sandbox-scoped)
+    let step1_marker = temp_dir.path().join("step1_marker");
+    let step3_marker = temp_dir.path().join("step3_marker");
+
+    // Clean up any leftover marker files
+    let _ = std::fs::remove_file(&step1_marker);
+    let _ = std::fs::remove_file(&step3_marker);
+
+    // Dynamically create marker_sequence with paths inside the sandbox scope
+    let marker_sequence_config = format!(
+        r#"{{
+    "name": "marker_sequence",
+    "description": "Sequence that creates marker files to prove execution order",
+    "command": "sequence",
+    "timeout_seconds": 30,
+    "synchronous": true,
+    "enabled": true,
+    "step_delay_ms": 50,
+    "sequence": [
+        {{
+            "tool": "sandboxed_shell",
+            "subcommand": "default",
+            "description": "Step 1: create first marker",
+            "args": {{"command": "touch {}"}}
+        }},
+        {{
+            "tool": "fail_tool",
+            "subcommand": "default",
+            "description": "Step 2: fail"
+        }},
+        {{
+            "tool": "sandboxed_shell",
+            "subcommand": "default",
+            "description": "Step 3: should NOT create this marker",
+            "args": {{"command": "touch {}"}}
+        }}
+    ]
+}}"#,
+        step1_marker.display(),
+        step3_marker.display()
+    );
+    fs::write(
+        tools_dir.join("marker_sequence.json"),
+        marker_sequence_config,
+    )
+    .await?;
 
     let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
 
@@ -382,8 +392,8 @@ async fn test_sequence_failure_with_filesystem_markers() -> Result<()> {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check the marker files
-    let step1_ran = std::path::Path::new("/tmp/ahma_test_step1_ran").exists();
-    let step3_ran = std::path::Path::new("/tmp/ahma_test_step3_ran").exists();
+    let step1_ran = step1_marker.exists();
+    let step3_ran = step3_marker.exists();
 
     // Step 1 should have created its marker
     assert!(
@@ -396,10 +406,6 @@ async fn test_sequence_failure_with_filesystem_markers() -> Result<()> {
         !step3_ran,
         "Step 3 marker file should NOT exist - step 3 should not have run after step 2 failed"
     );
-
-    // Clean up
-    let _ = std::fs::remove_file("/tmp/ahma_test_step1_ran");
-    let _ = std::fs::remove_file("/tmp/ahma_test_step3_ran");
 
     client.cancel().await?;
     Ok(())
