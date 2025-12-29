@@ -816,13 +816,6 @@ pub fn create_sandboxed_command(
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
-        // Cargo can be configured (via .cargo/config.toml) to write its target dir outside
-        // the sandbox scope. The CARGO_TARGET_DIR env var has higher priority than config,
-        // so setting it forces Cargo to write inside the working directory.
-        let target_dir = working_dir.join("target");
-        cmd.env("CARGO_TARGET_DIR", &target_dir);
-        cmd.env("CARGO_BUILD_TARGET_DIR", &target_dir);
-
         Ok(cmd)
     }
 
@@ -841,12 +834,6 @@ pub fn create_sandboxed_command(
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
-
-        // Same safeguard as Linux: keep Cargo writes scoped to working_dir.
-        // The CARGO_TARGET_DIR env var has higher priority than .cargo/config.toml.
-        let target_dir = working_dir.join("target");
-        cmd.env("CARGO_TARGET_DIR", &target_dir);
-        cmd.env("CARGO_BUILD_TARGET_DIR", &target_dir);
 
         Ok(cmd)
     }
@@ -903,13 +890,6 @@ pub fn create_sandboxed_shell_command(
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
-        // When running Cargo via a shell script/pipeline (sandboxed_shell), Cargo can be configured
-        // (via .cargo/config.toml) to write its target dir outside the sandbox. The CARGO_TARGET_DIR
-        // env var has higher priority than config, so setting it forces Cargo inside working_dir.
-        let target_dir = working_dir.join("target");
-        cmd.env("CARGO_TARGET_DIR", &target_dir);
-        cmd.env("CARGO_BUILD_TARGET_DIR", &target_dir);
-
         Ok(cmd)
     }
 
@@ -927,12 +907,6 @@ pub fn create_sandboxed_shell_command(
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
-
-        // Same safeguard as create_sandboxed_command(): keep Cargo writes scoped to working_dir.
-        // The CARGO_TARGET_DIR env var has higher priority than .cargo/config.toml.
-        let target_dir = working_dir.join("target");
-        cmd.env("CARGO_TARGET_DIR", &target_dir);
-        cmd.env("CARGO_BUILD_TARGET_DIR", &target_dir);
 
         Ok(cmd)
     }

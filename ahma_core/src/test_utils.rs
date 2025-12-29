@@ -390,7 +390,7 @@ pub mod test_client {
                 .iter()
                 .position(|arg| *arg == "--sandbox-scope")
                 .and_then(|i| extra_args.get(i + 1))
-                .map(|s| PathBuf::from(s))
+                .map(PathBuf::from)
         }
 
         // Under coverage runs (cargo-llvm-cov), spawned instrumented subprocesses must write
