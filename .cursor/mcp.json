@@ -1,16 +1,15 @@
 {
-    "servers": {
-        "Ahma VSCode": {
+    "mcpServers": {
+        "Ahma-stdio": {
             "type": "stdio",
             "cwd": "${workspaceFolder}",
-            "command": "target/release/ahma_mcp",
+            "command": "/Users/phoughton/github/ahma_mcp/target/release/ahma_mcp",
             "args": [
                 "--tools-dir",
-                ".ahma/tools",
-                "--no-sandbox"
+                "/Users/phoughton/github/ahma_mcp/.ahma/tools"
             ]
         },
-        "Ahma HTTP VSCode": {
+        "Ahma-http": {
             "type": "http",
             "url": "http://localhost:3000/mcp"
         }
