@@ -389,7 +389,10 @@ async fn test_empty_roots_rejection() {
             eprintln!("Got HTTP error (acceptable): {}", e);
             let e_lower = e.to_lowercase();
             assert!(
-                e.contains("403") || e.contains("400") || e.contains("409") || e_lower.contains("sandbox"),
+                e.contains("403")
+                    || e.contains("400")
+                    || e.contains("409")
+                    || e_lower.contains("sandbox"),
                 "Expected 403/400/409 or sandbox-related error, got: {}",
                 e
             );
