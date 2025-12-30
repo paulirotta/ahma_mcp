@@ -52,7 +52,7 @@ fn test_handshake_state_from_u8_invalid_falls_back_to_awaiting_both() {
 fn test_handshake_state_debug_and_clone() {
     // Ensure Debug and Clone traits work
     let state = HandshakeState::RootsRequested;
-    let cloned = state.clone();
+    let cloned = state;
     assert_eq!(state, cloned);
 
     let debug_str = format!("{:?}", state);

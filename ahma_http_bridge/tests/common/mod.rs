@@ -256,7 +256,6 @@ fn next_request_id() -> u64 {
 #[derive(Debug, Serialize)]
 pub struct JsonRpcRequest {
     pub jsonrpc: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<u64>,
     pub method: String,
     pub params: Value,
@@ -414,21 +413,16 @@ impl McpTestClient {
         format!("{}/mcp", self.base_url)
     }
 
-    /// Complete the MCP handshake: initialize + initialized notification + roots/list response.
+    /// Complete the MCP handshake: initialize + initialized notification.
     /// This MUST be called before any other MCP operations.
-    ///
-    /// Note: This uses a default empty roots list. For tests that need specific roots,
-    /// use `initialize_with_roots()`.
     pub async fn initialize(&mut self) -> Result<JsonRpcResponse, String> {
-        self.initialize_with_roots("mcp-test-client", &[]).await
+        self.initialize_with_name("mcp-test-client").await
     }
 
-    /// Complete the MCP handshake with specific workspace roots.
-    /// The roots are provided to the server in response to its roots/list request.
-    pub async fn initialize_with_roots(
+    /// Complete the MCP handshake with a custom client name
+    pub async fn initialize_with_name(
         &mut self,
         client_name: &str,
-        roots: &[std::path::PathBuf],
     ) -> Result<JsonRpcResponse, String> {
         // Step 1: Send initialize request
         let init_request = JsonRpcRequest::initialize(client_name);
@@ -469,76 +463,109 @@ impl McpTestClient {
             ));
         }
 
-        let session_id = self.session_id.as_deref().ok_or_else(|| {
-            "Initialize response did not include Mcp-Session-Id header".to_string()
-        })?;
-
-        // Step 2: Open the SSE stream BEFORE sending the initialized notification.
-        //
-        // Rationale:
-        // - Real MCP clients keep an SSE connection open early in the handshake.
-        // - The bridge intentionally avoids locking the sandbox from empty roots while SSE
-        //   is not connected ([ahma_http_bridge/src/bridge.rs]).
-        // - Connecting SSE first prevents subtle race conditions that can make tests pass
-        //   while real clients fail.
-        let sse_resp = self.open_sse_stream(session_id).await?;
-
-        // Step 3: Send initialized notification (required by MCP protocol)
+        // Step 2: Send initialized notification (required by MCP protocol)
         let initialized_notification = JsonRpcRequest::initialized();
         let _ = self
             .client
             .post(self.mcp_url())
             .header("Content-Type", "application/json")
-            .header("Mcp-Session-Id", session_id)
+            .header("Mcp-Session-Id", self.session_id.as_deref().unwrap_or(""))
             .json(&initialized_notification)
             .timeout(Duration::from_secs(5))
             .send()
             .await;
 
-        // Step 4: Handle roots/list request from server via SSE.
-        // The server sends roots/list to establish sandbox scope.
-        self.handle_roots_list_handshake_with_response(session_id, roots, sse_resp)
-            .await?;
-
         Ok(init_response)
     }
 
-    async fn open_sse_stream(&self, session_id: &str) -> Result<reqwest::Response, String> {
-        let url = format!("{}/mcp", self.base_url);
-
-        let resp = self
+    /// Complete the MCP handshake with roots to lock sandbox scope.
+    ///
+    /// This performs the full VS Code-style handshake:
+    /// 1. Send initialize request
+    /// 2. Open SSE connection
+    /// 3. Wait for roots/list request over SSE
+    /// 4. Respond with the provided roots
+    /// 5. Return after sandbox is locked
+    pub async fn initialize_with_roots(
+        &mut self,
+        client_name: &str,
+        roots: &[PathBuf],
+    ) -> Result<JsonRpcResponse, String> {
+        // Step 1: Send initialize request
+        let init_request = JsonRpcRequest::initialize(client_name);
+        let response = self
             .client
-            .get(&url)
-            .header("Accept", "text/event-stream")
-            .header("Cache-Control", "no-cache")
-            .header("Mcp-Session-Id", session_id)
+            .post(self.mcp_url())
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .json(&init_request)
+            .timeout(Duration::from_secs(10))
             .send()
             .await
-            .map_err(|e| format!("Failed to open SSE stream: {}", e))?;
+            .map_err(|e| format!("Initialize request failed: {}", e))?;
 
-        if !resp.status().is_success() {
-            return Err(format!("SSE stream HTTP {}", resp.status()));
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(format!("Initialize failed with HTTP {}: {}", status, text));
         }
 
-        Ok(resp)
-    }
+        // Extract session ID from response headers
+        self.session_id = response
+            .headers()
+            .get("mcp-session-id")
+            .or_else(|| response.headers().get("Mcp-Session-Id"))
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
 
-    /// Handle the roots/list handshake over SSE.
-    /// This listens for the server's roots/list request and responds with client roots.
-    async fn handle_roots_list_handshake_with_response(
-        &self,
-        session_id: &str,
-        roots: &[std::path::PathBuf],
-        resp: reqwest::Response,
-    ) -> Result<(), String> {
-        let mut stream = resp.bytes_stream();
+        let init_response: JsonRpcResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse initialize response: {}", e))?;
+
+        if init_response.error.is_some() {
+            return Err(format!(
+                "Initialize returned error: {:?}",
+                init_response.error
+            ));
+        }
+
+        let session_id = self.session_id.clone().ok_or("No session ID received")?;
+
+        // Step 2: Send initialized notification
+        let initialized_notification = JsonRpcRequest::initialized();
+        let _ = self
+            .client
+            .post(self.mcp_url())
+            .header("Content-Type", "application/json")
+            .header("Mcp-Session-Id", &session_id)
+            .json(&initialized_notification)
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await;
+
+        // Step 3: Open SSE connection and wait for roots/list
+        let sse_resp = self
+            .client
+            .get(self.mcp_url())
+            .header("Accept", "text/event-stream")
+            .header("Cache-Control", "no-cache")
+            .header("Mcp-Session-Id", &session_id)
+            .send()
+            .await
+            .map_err(|e| format!("SSE connection failed: {}", e))?;
+
+        if !sse_resp.status().is_success() {
+            return Err(format!("SSE stream failed with HTTP {}", sse_resp.status()));
+        }
+
+        let mut stream = sse_resp.bytes_stream();
         let mut buffer = String::new();
-
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + Duration::from_secs(10);
 
         loop {
-            if tokio::time::Instant::now() > deadline {
-                return Err("Timeout waiting for roots/list from server".to_string());
+            if Instant::now() > deadline {
+                return Err("Timeout waiting for roots/list over SSE".to_string());
             }
 
             let chunk = tokio::time::timeout(Duration::from_millis(500), stream.next())
@@ -556,7 +583,6 @@ impl McpTestClient {
                     let raw_event = buffer[..idx].to_string();
                     buffer = buffer[idx + 2..].to_string();
 
-                    // Extract data lines from SSE event
                     let mut data_lines: Vec<&str> = Vec::new();
                     for line in raw_event.lines() {
                         let line = line.trim_end_matches('\r');
@@ -579,22 +605,23 @@ impl McpTestClient {
                         continue;
                     }
 
-                    // Found roots/list request - respond with client roots
-                    let id = value.get("id").cloned().ok_or("roots/list must have id")?;
+                    let id = value
+                        .get("id")
+                        .cloned()
+                        .ok_or("roots/list must include id")?;
 
+                    // Build roots response
                     let roots_json: Vec<Value> = roots
                         .iter()
                         .map(|p| {
                             json!({
                                 "uri": format!("file://{}", p.display()),
-                                "name": p.file_name()
-                                    .and_then(|n| n.to_str())
-                                    .unwrap_or("root")
+                                "name": p.file_name().and_then(|n| n.to_str()).unwrap_or("root")
                             })
                         })
                         .collect();
 
-                    let response = json!({
+                    let roots_response = json!({
                         "jsonrpc": "2.0",
                         "id": id,
                         "result": {
@@ -602,21 +629,22 @@ impl McpTestClient {
                         }
                     });
 
-                    // Send the roots/list response
+                    // Send roots/list response
                     let _ = self
                         .client
                         .post(self.mcp_url())
                         .header("Content-Type", "application/json")
-                        .header("Mcp-Session-Id", session_id)
-                        .json(&response)
+                        .header("Mcp-Session-Id", &session_id)
+                        .json(&roots_response)
                         .timeout(Duration::from_secs(5))
                         .send()
                         .await
-                        .map_err(|e| format!("Failed to send roots/list response: {}", e))?;
+                        .map_err(|e| format!("Failed to send roots response: {}", e))?;
 
-                    // Small delay to let server process roots
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                    return Ok(());
+                    // Give the server a moment to lock sandbox
+                    sleep(Duration::from_millis(100)).await;
+
+                    return Ok(init_response);
                 }
             }
         }

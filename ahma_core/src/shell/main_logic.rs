@@ -321,11 +321,7 @@ pub async fn run() -> Result<()> {
     #[cfg(target_os = "linux")]
     if !no_sandbox && !cli.defer_sandbox {
         if let Some(first_scope) = sandbox_scopes.first() {
-            // Tools directory may be outside the sandbox scope; allow it as read-only.
-            if let Err(e) = sandbox::enforce_landlock_sandbox_with_readonly_paths(
-                first_scope,
-                &[cli.tools_dir.as_path()],
-            ) {
+            if let Err(e) = sandbox::enforce_landlock_sandbox(first_scope) {
                 tracing::error!("Failed to enforce Landlock sandbox: {}", e);
                 return Err(e);
             }
@@ -391,6 +387,7 @@ pub fn find_matching_tool<'a>(
 ) -> Result<(&'a str, &'a ToolConfig)> {
     configs
         .iter()
+        .filter(|(_, config)| config.enabled)
         .filter_map(|(key, config)| {
             if tool_name.starts_with(key) {
                 Some((key.as_str(), config))
@@ -422,6 +419,9 @@ pub fn resolve_cli_subcommand<'a>(
     tool_name: &str,
     subcommand_override: Option<&str>,
 ) -> Result<(&'a SubcommandConfig, Vec<String>)> {
+    let subcommand_source =
+        subcommand_override.unwrap_or_else(|| tool_name.strip_prefix(config_key).unwrap_or(""));
+    let trimmed = subcommand_source.trim();
     let is_default_call = trimmed.is_empty() || trimmed == "default";
 
     let subcommand_parts: Vec<&str> = if is_default_call {
@@ -786,7 +786,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     let tools_dir = cli.tools_dir.clone();
     let raw_configs = load_tool_configs(&tools_dir)
         .await
-        .with_context(|| format!("Failed to load tool configurations from {:?}", tools_dir))?;
+        .context("Failed to load tool configurations")?;
     let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let availability_summary = evaluate_tool_availability(
         shell_pool_manager.clone(),
@@ -1053,16 +1053,6 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     let configs_ref = configs.as_ref();
     let (config_key, config) = find_matching_tool(configs_ref, &tool_name)?;
 
-    // Check if tool is disabled
-    if !config.enabled {
-        let msg = if let Some(install) = &config.install_instructions {
-            format!("Tool '{}' is disabled. {}", config.name, install.trim())
-        } else {
-            format!("Tool '{}' is disabled", config.name)
-        };
-        anyhow::bail!("{}", msg);
-    }
-
     // Check if this is a top-level sequence tool (no subcommands, just sequence)
     let is_top_level_sequence = config.command == "sequence" && config.sequence.is_some();
 
@@ -1217,18 +1207,19 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         }
         Err(e) => {
             let error_message = e.to_string();
-            // Use centralized cancellation formatter for clear, actionable error messages
-            let formatted = ahma_core::callback_system::format_cancellation_message(
-                &error_message,
-                Some(tool_name),
-                None, // No operation_id in CLI mode
-            );
-            
-            // If the formatter returned a different message, it was a cancellation
-            if formatted != error_message {
-                eprintln!("{}", formatted);
+            if error_message.contains("Canceled: Canceled") {
+                eprintln!(
+                    "Operation cancelled by user request (was: {})",
+                    error_message
+                );
+            } else if error_message.contains("task cancelled for reason") {
+                eprintln!(
+                    "Operation cancelled by user request or system signal (detected MCP cancellation)"
+                );
+            } else if error_message.to_lowercase().contains("cancel") {
+                eprintln!("Operation cancelled: {}", error_message);
             } else {
-                eprintln!("Error executing tool '{}': {}", tool_name, e);
+                eprintln!("Error executing tool: {}", e);
             }
             Err(anyhow::anyhow!("Tool execution failed"))
         }
@@ -1399,7 +1390,7 @@ mod tests {
         }
 
         #[test]
-        fn finds_disabled_tool() {
+        fn returns_error_when_all_matching_tools_disabled() {
             let mut configs = HashMap::new();
             configs.insert(
                 "cargo".to_string(),
@@ -1408,9 +1399,7 @@ mod tests {
 
             let result = find_matching_tool(&configs, "cargo_test");
 
-            // Should find the disabled tool (execution will reject it)
-            assert!(result.is_ok());
-            assert!(!result.unwrap().1.enabled);
+            assert!(result.is_err());
         }
     }
 

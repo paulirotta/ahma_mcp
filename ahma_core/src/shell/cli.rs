@@ -181,9 +181,7 @@ pub async fn run() -> Result<()> {
 
     // Initialize logging
     let log_level = if cli.debug { "debug" } else { "info" };
-    // In HTTP server mode, default to stderr so users see logs in the terminal.
-    // (File logging is still the default for CLI/stdio usage.)
-    let log_to_file = !cli.log_to_stderr && cli.mode != "http";
+    let log_to_file = !cli.log_to_stderr;
 
     init_logging(log_level, log_to_file)?;
 
@@ -283,11 +281,7 @@ pub async fn run() -> Result<()> {
         // Apply kernel-level sandbox restrictions on Linux (skip if disabled)
         #[cfg(target_os = "linux")]
         if !no_sandbox {
-            // Tools directory may be outside the sandbox scope; allow it as read-only.
-            if let Err(e) = sandbox::enforce_landlock_sandbox_with_readonly_paths(
-                sandbox_scope,
-                &[cli.tools_dir.as_path()],
-            ) {
+            if let Err(e) = sandbox::enforce_landlock_sandbox(sandbox_scope) {
                 tracing::error!("Failed to enforce Landlock sandbox: {}", e);
                 return Err(e);
             }
@@ -353,6 +347,7 @@ pub fn find_matching_tool<'a>(
 ) -> Result<(&'a str, &'a ToolConfig)> {
     configs
         .iter()
+        .filter(|(_, config)| config.enabled)
         .filter_map(|(key, config)| {
             if tool_name.starts_with(key) {
                 Some((key.as_str(), config))
@@ -420,9 +415,11 @@ pub fn resolve_cli_subcommand<'a>(
             .iter()
             .find(|candidate| candidate.name == *part && candidate.enabled)
         {
-            // Build the executable command path for CLI tools.
-            // The synthetic "default" subcommand should *not* become part of the command.
-            if sub.name != "default" {
+            if sub.name == "default" && is_default_call {
+                // Logic to derive subcommand from tool name (e.g. cargo_build -> cargo build)
+                // is removed because it causes issues for tools like bash (bash -c async).
+                // If a tool needs a subcommand, it should be explicit in the config or the command.
+            } else if sub.name != "default" {
                 command_parts.push(sub.name.clone());
             }
 
@@ -715,20 +712,8 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
 
     // Load guidance configuration (using async I/O)
     let guidance_config = if fs::try_exists(&cli.guidance_file).await.unwrap_or(false) {
-        match fs::read_to_string(&cli.guidance_file).await {
-            Ok(guidance_content) => from_str::<GuidanceConfig>(&guidance_content).ok(),
-            Err(e) => {
-                // Guidance is optional and must not prevent the MCP server from starting.
-                // This commonly occurs under Linux Landlock when the sandbox scope is a temp
-                // dir but the default guidance file lives in the repo working directory.
-                tracing::warn!(
-                    "Could not read guidance file {:?} (continuing without guidance): {}",
-                    cli.guidance_file,
-                    e
-                );
-                None
-            }
-        }
+        let guidance_content = fs::read_to_string(&cli.guidance_file).await?;
+        from_str::<GuidanceConfig>(&guidance_content).ok()
     } else {
         None
     };
@@ -756,15 +741,8 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     let tools_dir = cli.tools_dir.clone();
     let raw_configs = load_tool_configs(&tools_dir)
         .await
-        .with_context(|| format!("Failed to load tool configurations from {:?}", tools_dir))?;
-    // Under Linux Landlock, the process current working directory may be outside the sandbox
-    // scope (e.g., test harness starts the server from the repo root but sets sandbox scope to
-    // a temp dir). Tool availability checks spawn shells in this directory, so prefer the
-    // sandbox scope when it is initialized.
-    let working_dir = crate::sandbox::get_sandbox_scope()
-        .cloned()
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    tracing::info!("Availability probes working directory: {:?}", working_dir);
+        .context("Failed to load tool configurations")?;
+    let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let availability_summary = evaluate_tool_availability(
         shell_pool_manager.clone(),
         raw_configs,
@@ -1029,16 +1007,6 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     let configs_ref = configs.as_ref();
     let (config_key, config) = find_matching_tool(configs_ref, &tool_name)?;
 
-    // Check if tool is disabled
-    if !config.enabled {
-        let msg = if let Some(install) = &config.install_instructions {
-            format!("Tool '{}' is disabled. {}", config.name, install.trim())
-        } else {
-            format!("Tool '{}' is disabled", config.name)
-        };
-        anyhow::bail!("{}", msg);
-    }
-
     // Check if this is a top-level sequence tool (no subcommands, just sequence)
     let is_top_level_sequence = config.command == "sequence" && config.sequence.is_some();
 
@@ -1193,18 +1161,19 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         }
         Err(e) => {
             let error_message = e.to_string();
-            // Use centralized cancellation formatter for clear, actionable error messages
-            let formatted = crate::callback_system::format_cancellation_message(
-                &error_message,
-                Some(&tool_name),
-                None, // No operation_id in CLI mode
-            );
-
-            // If the formatter returned a different message, it was a cancellation
-            if formatted != error_message {
-                eprintln!("{}", formatted);
+            if error_message.contains("Canceled: Canceled") {
+                eprintln!(
+                    "Operation cancelled by user request (was: {})",
+                    error_message
+                );
+            } else if error_message.contains("task cancelled for reason") {
+                eprintln!(
+                    "Operation cancelled by user request or system signal (detected MCP cancellation)"
+                );
+            } else if error_message.to_lowercase().contains("cancel") {
+                eprintln!("Operation cancelled: {}", error_message);
             } else {
-                eprintln!("Error executing tool '{}': {}", tool_name, e);
+                eprintln!("Error executing tool: {}", e);
             }
             Err(anyhow::anyhow!("Tool execution failed"))
         }
@@ -1343,7 +1312,7 @@ mod tests {
         }
 
         #[test]
-        fn finds_most_specific_match_even_if_disabled() {
+        fn ignores_disabled_tools() {
             let mut configs = HashMap::new();
             configs.insert(
                 "cargo_build".to_string(),
@@ -1356,10 +1325,8 @@ mod tests {
 
             let result = find_matching_tool(&configs, "cargo_build").unwrap();
 
-            // Should match "cargo_build" even though it's disabled (longest match wins)
-            // Execution-time check will reject it with a helpful message
-            assert_eq!(result.0, "cargo_build");
-            assert!(!result.1.enabled);
+            // Should match "cargo" since "cargo_build" is disabled
+            assert_eq!(result.0, "cargo");
         }
 
         #[test]
@@ -1377,7 +1344,7 @@ mod tests {
         }
 
         #[test]
-        fn finds_disabled_tool() {
+        fn returns_error_when_all_matching_tools_disabled() {
             let mut configs = HashMap::new();
             configs.insert(
                 "cargo".to_string(),
@@ -1386,9 +1353,7 @@ mod tests {
 
             let result = find_matching_tool(&configs, "cargo_test");
 
-            // Should find the disabled tool (execution will reject it)
-            assert!(result.is_ok());
-            assert!(!result.unwrap().1.enabled);
+            assert!(result.is_err());
         }
     }
 
