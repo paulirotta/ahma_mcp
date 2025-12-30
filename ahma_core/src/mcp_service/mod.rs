@@ -56,6 +56,7 @@ use tracing;
 use crate::{
     adapter::Adapter,
     callback_system::CallbackSender,
+    client_type::McpClientType,
     config::{ToolConfig, load_tool_configs},
     mcp_callback::McpCallbackSender,
     operation_monitor::Operation,
@@ -811,6 +812,19 @@ impl ServerHandler for AhmaMcpService {
     ) -> impl std::future::Future<Output = ()> + Send + '_ {
         async move {
             tracing::info!("Client connected: {context:?}");
+
+            // Detect and log client type for debugging
+            let client_type = McpClientType::from_peer(&context.peer);
+            tracing::info!(
+                "Detected MCP client type: {} (progress notifications: {})",
+                client_type.display_name(),
+                if client_type.supports_progress() {
+                    "enabled"
+                } else {
+                    "disabled"
+                }
+            );
+
             // Get the peer from the context
             let peer = &context.peer;
             if self.peer.read().unwrap().is_none() {
@@ -1453,13 +1467,16 @@ impl ServerHandler for AhmaMcpService {
                 crate::adapter::ExecutionMode::AsyncResultPush => {
                     let operation_id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
                     // Only send progress notifications when the client provided a progressToken
-                    // in request `_meta`. Otherwise clients (e.g. Cursor) will log "unknown token".
+                    // in request `_meta`. Additionally, skip progress for clients that don't
+                    // handle them well (e.g., Cursor logs errors for valid tokens).
                     let progress_token = context.meta.get_progress_token();
+                    let client_type = McpClientType::from_peer(&context.peer);
                     let callback: Option<Box<dyn CallbackSender>> = progress_token.map(|token| {
                         Box::new(McpCallbackSender::new(
                             context.peer.clone(),
                             operation_id.clone(),
                             Some(token),
+                            client_type,
                         )) as Box<dyn CallbackSender>
                     });
 

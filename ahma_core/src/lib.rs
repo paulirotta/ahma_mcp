@@ -47,6 +47,7 @@ pub mod adapter;
 pub mod callback_system;
 mod check_service_ext;
 pub mod client;
+pub mod client_type;
 pub mod config;
 pub mod constants;
 pub mod logging;

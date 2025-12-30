@@ -43,6 +43,7 @@
 //! making the system more modular and easier to maintain.
 
 use crate::callback_system::{CallbackError, CallbackSender, ProgressUpdate};
+use crate::client_type::McpClientType;
 use async_trait::async_trait;
 use rmcp::{
     model::{ProgressNotificationParam, ProgressToken},
@@ -56,6 +57,7 @@ pub struct McpCallbackSender {
     #[allow(dead_code)]
     operation_id: String,
     progress_token: Option<ProgressToken>,
+    client_type: McpClientType,
 }
 
 impl McpCallbackSender {
@@ -63,11 +65,13 @@ impl McpCallbackSender {
         peer: Peer<RoleServer>,
         operation_id: String,
         progress_token: Option<ProgressToken>,
+        client_type: McpClientType,
     ) -> Self {
         Self {
             peer,
             operation_id,
             progress_token,
+            client_type,
         }
     }
 }
@@ -75,10 +79,18 @@ impl McpCallbackSender {
 #[async_trait]
 impl CallbackSender for McpCallbackSender {
     async fn send_progress(&self, update: ProgressUpdate) -> Result<(), CallbackError> {
-        // IMPORTANT:
+        // Skip progress notifications for clients that don't handle them well (e.g., Cursor).
+        // Cursor logs errors for progress notifications even with valid tokens.
+        if !self.client_type.supports_progress() {
+            tracing::trace!(
+                "Skipping progress notification for {} client",
+                self.client_type.display_name()
+            );
+            return Ok(());
+        }
+
         // Only send MCP progress notifications when the client provided a `progressToken`
-        // in the request `_meta`. Cursor (and other clients) will log errors if the server
-        // emits progress notifications with unknown tokens.
+        // in the request `_meta`.
         let Some(progress_token) = self.progress_token.clone() else {
             return Ok(());
         };
@@ -243,6 +255,12 @@ pub fn mcp_callback(
     peer: Peer<RoleServer>,
     operation_id: String,
     progress_token: Option<ProgressToken>,
+    client_type: McpClientType,
 ) -> Box<dyn CallbackSender> {
-    Box::new(McpCallbackSender::new(peer, operation_id, progress_token))
+    Box::new(McpCallbackSender::new(
+        peer,
+        operation_id,
+        progress_token,
+        client_type,
+    ))
 }

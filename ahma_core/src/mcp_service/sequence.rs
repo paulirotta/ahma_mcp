@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use crate::adapter::Adapter;
 use crate::callback_system::CallbackSender;
+use crate::client_type::McpClientType;
 use crate::config::{SequenceStep, SubcommandConfig, ToolConfig};
 use crate::constants::SEQUENCE_STEP_DELAY_MS;
 use crate::mcp_callback::McpCallbackSender;
@@ -278,12 +279,15 @@ async fn handle_sequence_tool_async(
 
         let operation_id = format!("op_{}", SEQUENCE_ID.fetch_add(1, Ordering::SeqCst));
         // Only send progress notifications when the client provided a progressToken in `_meta`.
+        // Skip progress for clients that don't handle them well (e.g., Cursor).
         let progress_token = context.meta.get_progress_token();
+        let client_type = McpClientType::from_peer(&context.peer);
         let callback: Option<Box<dyn CallbackSender>> = progress_token.map(|token| {
             Box::new(McpCallbackSender::new(
                 context.peer.clone(),
                 operation_id.clone(),
                 Some(token),
+                client_type,
             )) as Box<dyn CallbackSender>
         });
 
@@ -364,12 +368,15 @@ pub async fn handle_subcommand_sequence(
 
         let operation_id = format!("op_{}", SEQUENCE_ID.fetch_add(1, Ordering::SeqCst));
         // Only send progress notifications when the client provided a progressToken in `_meta`.
+        // Skip progress for clients that don't handle them well (e.g., Cursor).
         let progress_token = context.meta.get_progress_token();
+        let client_type = McpClientType::from_peer(&context.peer);
         let callback: Option<Box<dyn CallbackSender>> = progress_token.map(|token| {
             Box::new(McpCallbackSender::new(
                 context.peer.clone(),
                 operation_id.clone(),
                 Some(token),
+                client_type,
             )) as Box<dyn CallbackSender>
         });
 
