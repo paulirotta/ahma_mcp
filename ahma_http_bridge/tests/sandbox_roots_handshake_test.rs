@@ -74,7 +74,12 @@ fn get_ahma_mcp_binary() -> PathBuf {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    workspace_dir.join("target/debug/ahma_mcp")
+    // Check for CARGO_TARGET_DIR
+    let target_dir = std::env::var("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| workspace_dir.join("target"));
+
+    target_dir.join("debug/ahma_mcp")
 }
 
 /// Start an HTTP bridge server with deferred sandbox (for roots/list testing)

@@ -12,7 +12,13 @@ fn get_ahma_mcp_binary() -> PathBuf {
         .parent()
         .unwrap()
         .to_path_buf();
-    project_root.join("target/debug/ahma_mcp")
+
+    // Check for CARGO_TARGET_DIR
+    let target_dir = std::env::var("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| project_root.join("target"));
+
+    target_dir.join("debug/ahma_mcp")
 }
 
 /// Test that the binary shows help for --list-tools
@@ -188,11 +194,13 @@ fn test_list_tools_output_format() {
         .expect("Failed to execute ahma_mcp --list-tools");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
 
     // Should have a header section
     assert!(
         stdout.contains("MCP") || stdout.contains("Tool"),
-        "Output should contain 'MCP' or 'Tool' header. Got: {}",
-        stdout
+        "Output should contain 'MCP' or 'Tool' header.\nStdout: {}\nStderr: {}",
+        stdout,
+        stderr
     );
 }

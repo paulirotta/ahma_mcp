@@ -269,6 +269,15 @@ pub mod test_client {
 
                 // Check for debug binary
                 let workspace = get_workspace_dir();
+
+                // Check CARGO_TARGET_DIR
+                if let Ok(target_dir) = std::env::var("CARGO_TARGET_DIR") {
+                    let p = PathBuf::from(target_dir).join("debug/ahma_mcp");
+                    if p.exists() {
+                        return p;
+                    }
+                }
+
                 let debug_binary = workspace.join("target/debug/ahma_mcp");
                 if debug_binary.exists() {
                     return debug_binary;

@@ -132,10 +132,16 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
     let wd = workspace_dir();
     let guidance_file = wd.join(".ahma").join("tool_guidance.json");
 
+    // Check for CARGO_TARGET_DIR
+    let target_dir = std::env::var("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| wd.join("target"));
+    let binary_path = target_dir.join("debug/ahma_mcp");
+
     let service = client_impl
         .clone()
         .serve(TokioChildProcess::new(
-            Command::new(wd.join("target/debug/ahma_mcp")).configure(|cmd| {
+            Command::new(binary_path).configure(|cmd| {
                 cmd.arg("--tools-dir")
                     .arg(&tools_dir)
                     .arg("--guidance-file")

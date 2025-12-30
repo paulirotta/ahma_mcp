@@ -38,7 +38,12 @@ fn build_binary(package: &str, binary: &str) -> PathBuf {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    workspace.join("target/debug").join(binary)
+    // Check for CARGO_TARGET_DIR
+    let target_dir = std::env::var("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| workspace.join("target"));
+
+    target_dir.join("debug").join(binary)
 }
 
 /// Create a command for a binary with test mode enabled (bypasses sandbox checks)
