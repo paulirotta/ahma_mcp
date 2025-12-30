@@ -18,7 +18,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, AtomicU8, Ordering},
     },
-    time::Instant,
+    time::{Duration, Instant},
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -127,6 +127,8 @@ pub struct Session {
     mcp_initialized_notify: Notify,
     /// When the session was created (for handshake timeout tracking)
     created_at: Instant,
+    /// Per-session handshake timeout duration captured at session creation to avoid env races
+    handshake_timeout: Duration,
 }
 
 impl Session {
@@ -180,10 +182,9 @@ impl Session {
         if self.is_sandbox_locked() {
             return None;
         }
-        let timeout = handshake_timeout_secs();
-        let elapsed = self.created_at.elapsed().as_secs();
-        if elapsed >= timeout {
-            Some(elapsed)
+        let elapsed = self.created_at.elapsed();
+        if elapsed >= self.handshake_timeout {
+            Some(elapsed.as_secs())
         } else {
             None
         }
@@ -498,6 +499,8 @@ impl SessionManager {
         let (broadcast_tx, _) = broadcast::channel::<String>(100);
         let pending_requests = Arc::new(DashMap::new());
 
+        let handshake_timeout = Duration::from_secs(handshake_timeout_secs());
+
         let session = Arc::new(Session {
             id: session_id.clone(),
             sender: Mutex::new(tx),
@@ -511,6 +514,7 @@ impl SessionManager {
             handshake_state: AtomicU8::new(HandshakeState::AwaitingBoth as u8),
             mcp_initialized_notify: Notify::new(),
             created_at: Instant::now(),
+            handshake_timeout,
         });
 
         // Spawn the I/O handler task

@@ -30,6 +30,7 @@ use futures::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::env;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -307,8 +308,8 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
     eprintln!("[TestServer] Starting test server with dynamic port");
 
     // Spawn with piped stderr to capture the bound port
-    let mut child = Command::new(&binary)
-        .args(&args)
+    let mut cmd = Command::new(&binary);
+    cmd.args(&args)
         .current_dir(&workspace_dir)
         // SECURITY:
         // Don't enable permissive test mode for the server process.
@@ -319,7 +320,14 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
         .env_remove("CARGO_TARGET_DIR")
         .env_remove("RUST_TEST_THREADS")
         .stdout(Stdio::null())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    // Explicitly propagate handshake timeout so tests can shrink it reliably
+    if let Ok(timeout) = env::var("AHMA_HANDSHAKE_TIMEOUT_SECS") {
+        cmd.env("AHMA_HANDSHAKE_TIMEOUT_SECS", timeout);
+    }
+
+    let mut child = cmd
         .spawn()
         .map_err(|e| format!("Failed to spawn test server: {}", e))?;
 

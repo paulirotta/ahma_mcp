@@ -345,3 +345,96 @@ async fn test_tools_call_during_handshake_returns_conflict() {
         "Expected error code -32001 for sandbox initializing"
     );
 }
+
+/// Ensure handshake timeout uses the per-session snapshot of the env value.
+/// This guards against concurrent tests mutating the global env between
+/// session creation and tools/call.
+#[tokio::test]
+async fn test_handshake_timeout_ignores_later_env_changes() {
+    let original = std::env::var("AHMA_HANDSHAKE_TIMEOUT_SECS").ok();
+
+    // SAFETY: test controls env and restores it.
+    unsafe { std::env::set_var("AHMA_HANDSHAKE_TIMEOUT_SECS", "1") };
+
+    let server = spawn_test_server()
+        .await
+        .expect("Failed to spawn test server");
+    let client = Client::new();
+
+    // Initialize session
+    let init_req = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": { "roots": {} },
+            "clientInfo": { "name": "env_race_test", "version": "0.1" }
+        }
+    });
+
+    let init_resp = client
+        .post(format!("{}/mcp", server.base_url()))
+        .header(CONTENT_TYPE, "application/json")
+        .header(ACCEPT, "application/json")
+        .json(&init_req)
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .expect("initialize POST failed");
+
+    let session_id = init_resp
+        .headers()
+        .get(MCP_SESSION_ID_HEADER)
+        .and_then(|h| h.to_str().ok())
+        .expect("Should have session ID")
+        .to_string();
+
+    // Simulate another test changing the env after the session was created
+    unsafe { std::env::set_var("AHMA_HANDSHAKE_TIMEOUT_SECS", "30") };
+
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+
+    let tool_call = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "cargo",
+            "arguments": { "subcommand": "locate-project" }
+        }
+    });
+
+    let resp = client
+        .post(format!("{}/mcp", server.base_url()))
+        .header(CONTENT_TYPE, "application/json")
+        .header(ACCEPT, "application/json")
+        .header(MCP_SESSION_ID_HEADER, &session_id)
+        .json(&tool_call)
+        .timeout(Duration::from_secs(5))
+        .send()
+        .await
+        .expect("tools/call POST failed");
+
+    // Should still honor the 1s timeout captured at session creation
+    assert_eq!(resp.status().as_u16(), 504);
+
+    let body: Value = resp.json().await.expect("Response should be JSON");
+    let error = body.get("error").expect("Should have error");
+    let msg = error
+        .get("message")
+        .and_then(|m| m.as_str())
+        .unwrap_or_default();
+
+    assert!(
+        msg.contains("Handshake timeout"),
+        "Error message should indicate handshake timeout. Got: {msg}"
+    );
+
+    // Restore env to avoid leaking changes into other tests
+    if let Some(prev) = original {
+        unsafe { std::env::set_var("AHMA_HANDSHAKE_TIMEOUT_SECS", prev) };
+    } else {
+        unsafe { std::env::remove_var("AHMA_HANDSHAKE_TIMEOUT_SECS") };
+    }
+}
