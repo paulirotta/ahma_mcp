@@ -152,7 +152,8 @@ impl HttpMcpTransport {
             return Err(McpHttpError::Auth("CSRF token mismatch".to_string()));
         }
 
-        let http_client = reqwest::Client::new();
+        // Use oauth2's bundled reqwest client which implements AsyncHttpClient
+        let http_client = oauth2::reqwest::Client::new();
         let token_result = oauth_client
             .exchange_code(AuthorizationCode::new(code))
             .set_pkce_verifier(pkce_verifier)

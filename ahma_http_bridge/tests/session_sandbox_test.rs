@@ -78,9 +78,13 @@ async fn test_sandbox_scope_should_use_client_roots_not_server_cwd() {
     );
 }
 
-/// Test that sandbox scope defaults to server's CWD when client provides no roots.
+/// Test that empty roots are rejected (security feature).
+///
+/// Empty roots should NOT fall back to a default scope because this could
+/// lead to over-permissive behavior. The client must provide at least one
+/// valid file:// URI.
 #[tokio::test]
-async fn test_sandbox_scope_defaults_to_server_cwd_when_no_roots() {
+async fn test_sandbox_scope_rejects_empty_roots() {
     let server_default_scope = PathBuf::from("/tmp/server_workspace");
     let session_manager = create_test_session_manager(server_default_scope.clone());
 
@@ -92,24 +96,22 @@ async fn test_sandbox_scope_defaults_to_server_cwd_when_no_roots() {
     // Client provides empty roots (no workspace folders)
     let empty_roots: Vec<McpRoot> = vec![];
 
-    session_manager
-        .lock_sandbox(&session_id, &empty_roots)
-        .await
-        .expect("Should lock sandbox with default");
+    let result = session_manager.lock_sandbox(&session_id, &empty_roots).await;
+
+    // Empty roots should be rejected
+    assert!(
+        result.is_err(),
+        "Empty roots should be rejected, not fall back to default scope"
+    );
 
     let session = session_manager
         .get_session(&session_id)
         .expect("Session should exist");
 
-    let sandbox_scope = session
-        .get_sandbox_scope()
-        .await
-        .expect("Sandbox scope should be set");
-
-    // When no roots provided, should use server's default scope
-    assert_eq!(
-        sandbox_scope, server_default_scope,
-        "Should default to server's scope when client provides no roots"
+    // Sandbox should not be locked after rejection
+    assert!(
+        !session.is_sandbox_locked(),
+        "Sandbox should not be locked after empty roots rejection"
     );
 }
 

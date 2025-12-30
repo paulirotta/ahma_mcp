@@ -485,25 +485,33 @@ async fn test_session_operations_with_timeout() {
         .await;
 }
 
-/// Test session manager with empty roots (should use default scope)
+/// Test session manager rejects empty roots (security feature)
+///
+/// Empty roots should NOT fall back to a default scope. This prevents
+/// over-permissive behavior by requiring explicit client-provided roots.
 #[tokio::test]
-async fn test_empty_roots_uses_default() {
+async fn test_empty_roots_rejected() {
     let default_scope = PathBuf::from("/custom/default/scope");
     let session_manager = create_test_session_manager(default_scope.clone());
 
     let session_id = session_manager.create_session().await.unwrap();
 
-    // Lock with empty roots
+    // Try to lock with empty roots - should fail
     let empty_roots: Vec<McpRoot> = vec![];
-    session_manager
+    let result = session_manager
         .lock_sandbox(&session_id, &empty_roots)
-        .await
-        .unwrap();
+        .await;
+
+    assert!(
+        result.is_err(),
+        "Empty roots should be rejected, not fall back to default"
+    );
 
     let session = session_manager.get_session(&session_id).unwrap();
-    let scope = session.get_sandbox_scope().await.unwrap();
-
-    assert_eq!(scope, default_scope, "Empty roots should use default scope");
+    assert!(
+        !session.is_sandbox_locked(),
+        "Sandbox should not be locked after empty roots rejection"
+    );
 
     let _ = session_manager
         .terminate_session(&session_id, SessionTerminationReason::ClientRequested)

@@ -642,6 +642,7 @@ impl SessionManager {
     /// roots changes after lock) and for debugging.
     ///
     /// Returns `true` if the sandbox was newly locked by this call.
+    /// Returns an error if no valid roots are provided (empty roots or all malformed URIs).
     pub async fn lock_sandbox(&self, session_id: &str, roots: &[McpRoot]) -> Result<bool> {
         let session = self.sessions.get(session_id).ok_or_else(|| {
             BridgeError::Communication(format!("Session not found: {}", session_id))
@@ -651,17 +652,25 @@ impl SessionManager {
             return Ok(false);
         }
 
-        // Extract all roots as sandbox scopes, or use default if no roots
+        // Extract all roots as sandbox scopes
         let scopes: Vec<PathBuf> = roots
             .iter()
             .filter_map(|r| Self::parse_file_uri_to_path(&r.uri))
             .collect();
 
-        let scopes = if scopes.is_empty() {
-            vec![self.config.default_scope.clone()]
-        } else {
-            scopes
-        };
+        // SECURITY: Reject empty roots or roots where all URIs are malformed.
+        // This prevents accidental over-permissive behavior by ensuring the sandbox
+        // is bound to an explicit client-provided scope, not a server default.
+        if scopes.is_empty() {
+            warn!(
+                session_id = %session_id,
+                provided_roots = roots.len(),
+                "Rejecting sandbox lock: no valid file:// URIs in roots/list response"
+            );
+            return Err(BridgeError::Communication(
+                "No valid sandbox roots provided. Client must provide at least one valid file:// URI in roots/list response.".to_string()
+            ));
+        }
 
         info!(
             session_id = %session_id,

@@ -385,11 +385,12 @@ async fn test_empty_roots_rejection() {
             );
         }
         Err(e) => {
-            // HTTP-level error is also acceptable (e.g., 403 Forbidden)
+            // HTTP-level error is also acceptable (e.g., 403 Forbidden, 409 Conflict)
             eprintln!("Got HTTP error (acceptable): {}", e);
+            let e_lower = e.to_lowercase();
             assert!(
-                e.contains("403") || e.contains("400") || e.contains("sandbox"),
-                "Expected 403/400 or sandbox-related error, got: {}",
+                e.contains("403") || e.contains("400") || e.contains("409") || e_lower.contains("sandbox"),
+                "Expected 403/400/409 or sandbox-related error, got: {}",
                 e
             );
         }

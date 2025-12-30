@@ -575,14 +575,12 @@ async fn test_tool_call_with_different_working_directory() {
 
         tool_response = resp;
 
-        if let Some(error) = tool_response.get("error") {
-            if let Some(msg) = error.get("message").and_then(|m| m.as_str()) {
-                if msg.contains("Sandbox initializing from client roots") {
+        if let Some(error) = tool_response.get("error")
+            && let Some(msg) = error.get("message").and_then(|m| m.as_str())
+                && msg.contains("Sandbox initializing from client roots") {
                     sleep(Duration::from_millis(100)).await;
                     continue;
                 }
-            }
-        }
 
         break;
     }
@@ -743,14 +741,12 @@ async fn test_basic_tool_call_within_sandbox() {
 
         response = resp;
 
-        if let Some(error) = response.get("error") {
-            if let Some(msg) = error.get("message").and_then(|m| m.as_str()) {
-                if msg.contains("Sandbox initializing from client roots") {
+        if let Some(error) = response.get("error")
+            && let Some(msg) = error.get("message").and_then(|m| m.as_str())
+                && msg.contains("Sandbox initializing from client roots") {
                     sleep(Duration::from_millis(100)).await;
                     continue;
                 }
-            }
-        }
 
         break;
     }
@@ -1118,14 +1114,12 @@ async fn test_rejects_working_directory_path_traversal_outside_root() {
 
         resp = r;
 
-        if let Some(error) = resp.get("error") {
-            if let Some(msg) = error.get("message").and_then(|m| m.as_str()) {
-                if msg.contains("Sandbox initializing from client roots") {
+        if let Some(error) = resp.get("error")
+            && let Some(msg) = error.get("message").and_then(|m| m.as_str())
+                && msg.contains("Sandbox initializing from client roots") {
                     sleep(Duration::from_millis(100)).await;
                     continue;
                 }
-            }
-        }
         break;
     }
 
@@ -1244,14 +1238,12 @@ async fn test_symlink_escape_attempt_is_blocked() {
 
         resp = r;
 
-        if let Some(error) = resp.get("error") {
-            if let Some(msg) = error.get("message").and_then(|m| m.as_str()) {
-                if msg.contains("Sandbox initializing from client roots") {
+        if let Some(error) = resp.get("error")
+            && let Some(msg) = error.get("message").and_then(|m| m.as_str())
+                && msg.contains("Sandbox initializing from client roots") {
                     sleep(Duration::from_millis(100)).await;
                     continue;
                 }
-            }
-        }
         break;
     }
 

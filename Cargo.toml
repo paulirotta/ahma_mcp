@@ -28,7 +28,8 @@ dirs = "6.0.0"
 futures = "0.3.31"
 landlock = "0.4.4"
 regex = "1.12.2"
-reqwest = {version = "0.12.28", default-features = false}
+# Note: If crypto build issues occur, try "rustls-ring" instead of "rustls" in dependent crates
+reqwest = {version = "0.13.1", default-features = false}
 rmcp = {version = "0.12.0", features = ["server", "client", "macros", "transport-io", "transport-child-process", "elicitation", "schemars"]}
 schemars = "1.2.0"
 serde = "1.0.228"

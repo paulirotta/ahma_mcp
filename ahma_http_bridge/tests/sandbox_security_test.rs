@@ -250,9 +250,13 @@ async fn test_multi_root_workspace_sandbox() {
     }
 }
 
-/// Test empty roots uses default scope
+/// Test empty roots are rejected (security feature)
+///
+/// Empty roots should NOT fall back to a default scope because this could
+/// lead to over-permissive behavior. Instead, the client must provide at
+/// least one valid file:// URI.
 #[tokio::test]
-async fn test_empty_roots_uses_default_scope() {
+async fn test_empty_roots_rejected() {
     let default_scope = PathBuf::from("/tmp/default_scope_test");
 
     let config = SessionManagerConfig {
@@ -269,13 +273,14 @@ async fn test_empty_roots_uses_default_scope() {
     let empty_roots: Vec<McpRoot> = vec![];
 
     let lock_result = manager.lock_sandbox(&session_id, &empty_roots).await;
-    assert!(lock_result.is_ok(), "Empty roots should use default scope");
+    assert!(
+        lock_result.is_err(),
+        "Empty roots should be rejected, not fall back to default scope"
+    );
 
     let session = manager.get_session(&session_id).unwrap();
-    let scope = session.get_sandbox_scope().await;
-    assert_eq!(
-        scope,
-        Some(default_scope),
-        "Scope should fall back to default"
+    assert!(
+        !session.is_sandbox_locked(),
+        "Sandbox should not be locked after empty roots rejection"
     );
 }
