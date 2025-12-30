@@ -7,6 +7,12 @@
 //! Tests use dynamic port allocation (port 0) to avoid port conflicts when running
 //! in parallel. Each test gets its own isolated server instance.
 //!
+//! ## Sandbox Isolation Testing
+//!
+//! When testing real sandbox behavior (not bypassed via test mode), use
+//! `SandboxTestEnv` to ensure spawned `ahma_mcp` processes don't inherit
+//! environment variables that enable permissive test mode.
+//!
 //! ## Usage
 //!
 //! ```ignore
@@ -31,6 +37,163 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use tokio::time::sleep;
+
+// =============================================================================
+// Sandbox Test Environment Helper
+// =============================================================================
+
+/// Environment variables that enable permissive test mode in ahma_mcp.
+///
+/// When spawning ahma_mcp processes for tests that verify real sandbox behavior,
+/// these env vars must be cleared to prevent the process from auto-enabling
+/// a permissive test mode that bypasses sandbox validation.
+///
+/// See AGENTS.md for the full explanation of this failure mode.
+pub const SANDBOX_BYPASS_ENV_VARS: &[&str] = &[
+    "AHMA_TEST_MODE",
+    "NEXTEST",
+    "NEXTEST_EXECUTION_MODE",
+    "CARGO_TARGET_DIR",
+    "RUST_TEST_THREADS",
+];
+
+/// Helper to configure a `Command` for sandbox-isolated testing.
+///
+/// Removes all environment variables that could trigger permissive test mode
+/// in the spawned ahma_mcp process, ensuring real sandbox behavior is tested.
+///
+/// # Usage
+/// ```ignore
+/// let mut cmd = Command::new(&binary_path);
+/// SandboxTestEnv::configure(&mut cmd);
+/// // cmd is now configured to test real sandbox behavior
+/// ```
+pub struct SandboxTestEnv;
+
+impl SandboxTestEnv {
+    /// Configure a Command to test real sandbox behavior by removing bypass env vars.
+    pub fn configure(cmd: &mut Command) -> &mut Command {
+        for var in SANDBOX_BYPASS_ENV_VARS {
+            cmd.env_remove(var);
+        }
+        cmd
+    }
+
+    /// Configure a tokio Command to test real sandbox behavior.
+    pub fn configure_tokio(cmd: &mut tokio::process::Command) -> &mut tokio::process::Command {
+        for var in SANDBOX_BYPASS_ENV_VARS {
+            cmd.env_remove(var);
+        }
+        cmd
+    }
+
+    /// Get a list of key=value pairs for the env vars that would bypass sandbox.
+    /// Useful for debugging which vars are set in the current environment.
+    pub fn current_bypass_vars() -> Vec<String> {
+        SANDBOX_BYPASS_ENV_VARS
+            .iter()
+            .filter_map(|var| {
+                std::env::var(var)
+                    .ok()
+                    .map(|val| format!("{}={}", var, val))
+            })
+            .collect()
+    }
+
+    /// Check if any bypass env vars are currently set.
+    pub fn is_bypass_active() -> bool {
+        SANDBOX_BYPASS_ENV_VARS
+            .iter()
+            .any(|var| std::env::var(var).is_ok())
+    }
+}
+
+// =============================================================================
+// File URI Utilities
+// =============================================================================
+
+/// Parse a file:// URI to a filesystem path.
+///
+/// Handles:
+/// - Standard file:// URIs
+/// - URL-encoded characters (%20 for space, etc.)
+/// - Missing file:// prefix (returns None)
+///
+/// # Errors
+/// Returns None for:
+/// - Non-file:// URIs (http://, https://, etc.)
+/// - Malformed URIs that can't be decoded
+/// - Empty URIs
+pub fn parse_file_uri(uri: &str) -> Option<PathBuf> {
+    if !uri.starts_with("file://") {
+        return None;
+    }
+    let path_str = uri.strip_prefix("file://")?;
+    if path_str.is_empty() {
+        return None;
+    }
+    // URL-decode the path
+    let decoded = urlencoding::decode(path_str).ok()?;
+    Some(PathBuf::from(decoded.into_owned()))
+}
+
+/// Encode a filesystem path as a file:// URI.
+///
+/// Properly encodes special characters like spaces, unicode, etc.
+pub fn encode_file_uri(path: &std::path::Path) -> String {
+    let path_str = path.to_string_lossy();
+    // Encode everything except unreserved chars and /
+    let mut out = String::with_capacity(path_str.len() + 7);
+    out.push_str("file://");
+    for &b in path_str.as_bytes() {
+        let keep = matches!(
+            b,
+            b'a'..=b'z'
+                | b'A'..=b'Z'
+                | b'0'..=b'9'
+                | b'-'
+                | b'.'
+                | b'_'
+                | b'~'
+                | b'/'
+        );
+        if keep {
+            out.push(b as char);
+        } else {
+            out.push('%');
+            out.push_str(&format!("{:02X}", b));
+        }
+    }
+    out
+}
+
+/// Malformed URI test cases for edge case testing.
+pub mod malformed_uris {
+    /// URIs that should be rejected (return None from parse_file_uri)
+    pub const INVALID: &[&str] = &[
+        "",                         // Empty
+        "file://",                  // No path (missing slash after authority)
+        "http://localhost/path",    // Wrong scheme
+        "https://example.com/file", // Wrong scheme
+        "ftp://server/file",        // Wrong scheme
+        "file:",                    // Incomplete
+        "file:/",                   // Incomplete (only one slash)
+    ];
+
+    /// URIs that might look valid but have edge cases
+    pub const EDGE_CASES: &[(&str, Option<&str>)] = &[
+        ("file:///tmp/test", Some("/tmp/test")), // Triple slash (valid)
+        ("file:///", Some("/")),                 // Root directory (valid)
+        ("file:///tmp/test%20file", Some("/tmp/test file")), // URL-encoded space
+        ("file:///tmp/%E2%9C%93", Some("/tmp/✓")), // URL-encoded unicode
+        ("file:///tmp/a%2Fb", Some("/tmp/a/b")), // Encoded slash (debatable)
+        ("file:///C:/Windows", Some("/C:/Windows")), // Windows-style path on Unix
+    ];
+}
+
+// =============================================================================
+// Test Server Infrastructure (existing code continues below)
+// =============================================================================
 
 /// Legacy constant for backward compatibility. Prefer using `spawn_test_server()` instead.
 #[deprecated(note = "Use spawn_test_server() for dynamic port allocation")]
