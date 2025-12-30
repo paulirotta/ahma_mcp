@@ -560,9 +560,32 @@ async fn test_tool_call_with_different_working_directory() {
         }
     });
 
-    let (tool_response, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
-        .await
-        .expect("Tool call should not fail with connection error");
+    // Retry loop for tools/call to handle race condition where sandbox initialization
+    // (which happens in a background task after roots/list response) hasn't finished yet.
+    let start = tokio::time::Instant::now();
+    let mut tool_response;
+    loop {
+        if start.elapsed() > Duration::from_secs(5) {
+            panic!("Timed out waiting for sandbox initialization");
+        }
+
+        let (resp, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
+            .await
+            .expect("Tool call should not fail with connection error");
+
+        tool_response = resp;
+
+        if let Some(error) = tool_response.get("error") {
+            if let Some(msg) = error.get("message").and_then(|m| m.as_str()) {
+                if msg.contains("Sandbox initializing from client roots") {
+                    sleep(Duration::from_millis(100)).await;
+                    continue;
+                }
+            }
+        }
+
+        break;
+    }
 
     assert!(
         tool_response.get("error").is_none(),
@@ -700,14 +723,37 @@ async fn test_basic_tool_call_within_sandbox() {
         }
     });
 
-    let (response, _) = send_mcp_request(
-        &client,
-        &base_url,
-        &tool_call,
-        Some(&session_id_for_requests),
-    )
-    .await
-    .expect("Tool call should succeed");
+    // Retry loop for tools/call to handle race condition where sandbox initialization
+    // (which happens in a background task after roots/list response) hasn't finished yet.
+    let start = tokio::time::Instant::now();
+    let mut response;
+    loop {
+        if start.elapsed() > Duration::from_secs(5) {
+            panic!("Timed out waiting for sandbox initialization");
+        }
+
+        let (resp, _) = send_mcp_request(
+            &client,
+            &base_url,
+            &tool_call,
+            Some(&session_id_for_requests),
+        )
+        .await
+        .expect("Tool call should succeed");
+
+        response = resp;
+
+        if let Some(error) = response.get("error") {
+            if let Some(msg) = error.get("message").and_then(|m| m.as_str()) {
+                if msg.contains("Sandbox initializing from client roots") {
+                    sleep(Duration::from_millis(100)).await;
+                    continue;
+                }
+            }
+        }
+
+        break;
+    }
 
     // Should have result, not "expect initialized request" error
     let error = response.get("error");
@@ -1057,9 +1103,31 @@ async fn test_rejects_working_directory_path_traversal_outside_root() {
         }
     });
 
-    let (resp, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
-        .await
-        .expect("Request should succeed at transport layer");
+    // Retry loop for tools/call to handle race condition where sandbox initialization
+    // (which happens in a background task after roots/list response) hasn't finished yet.
+    let start = tokio::time::Instant::now();
+    let mut resp;
+    loop {
+        if start.elapsed() > Duration::from_secs(5) {
+            panic!("Timed out waiting for sandbox initialization");
+        }
+
+        let (r, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
+            .await
+            .expect("Request should succeed at transport layer");
+
+        resp = r;
+
+        if let Some(error) = resp.get("error") {
+            if let Some(msg) = error.get("message").and_then(|m| m.as_str()) {
+                if msg.contains("Sandbox initializing from client roots") {
+                    sleep(Duration::from_millis(100)).await;
+                    continue;
+                }
+            }
+        }
+        break;
+    }
 
     assert!(
         resp.get("error").is_some(),
@@ -1161,9 +1229,31 @@ async fn test_symlink_escape_attempt_is_blocked() {
         }
     });
 
-    let (resp, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
-        .await
-        .expect("Request should succeed at transport layer");
+    // Retry loop for tools/call to handle race condition where sandbox initialization
+    // (which happens in a background task after roots/list response) hasn't finished yet.
+    let start = tokio::time::Instant::now();
+    let mut resp;
+    loop {
+        if start.elapsed() > Duration::from_secs(5) {
+            panic!("Timed out waiting for sandbox initialization");
+        }
+
+        let (r, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
+            .await
+            .expect("Request should succeed at transport layer");
+
+        resp = r;
+
+        if let Some(error) = resp.get("error") {
+            if let Some(msg) = error.get("message").and_then(|m| m.as_str()) {
+                if msg.contains("Sandbox initializing from client roots") {
+                    sleep(Duration::from_millis(100)).await;
+                    continue;
+                }
+            }
+        }
+        break;
+    }
 
     assert!(
         !outside_dir.join("owned.txt").exists(),
