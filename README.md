@@ -15,8 +15,8 @@ This project is actively used and still undergoing rapid evolution. http MCP is 
 ## Documentation
 
 - **[AGENTS.md](AGENTS.md)**: AI agent development guide (setup, testing, code style, tool usage)
-- **[requirements.md](requirements.md)**: Product requirements and architecture
-- **Crate-specific docs**: Each crate has AGENTS.md (symlinked) and requirements.md for crate-specific requirements
+- **[REQUIREMENTS.md](REQUIREMENTS.md)**: Product requirements and architecture
+- **Crate-specific docs**: Each crate has AGENTS.md (symlinked) and REQUIREMENTS.md for crate-specific requirements
 
 **Note on AGENTS.md symlinks**: Each crate directory (`ahma_core/`, `ahma_http_bridge/`, etc.) contains a symlink to the root `AGENTS.md`. This ensures AI coding assistants always have access to development guidance regardless of which directory is opened as the project root. If you're working in a crate subdirectory, the AGENTS.md you see is the same workspace-wide file.
 
@@ -111,11 +111,11 @@ Here's an example of Claude Sonnet 4.5's workflow. Notice both the tool and the 
 >
 > While the tests run, let me continue with updating the requirements document:
 >
-> _Read requirements.md_
+> _Read REQUIREMENTS.md_
 >
 > Let me add the JSON schema requirements to the product requirements:
 >
-> _requirements.md+21-6_
+> _REQUIREMENTS.md+21-6_
 >
 > Now let me check on the test results:
 >
@@ -278,10 +278,10 @@ To use `ahma_mcp` with GitHub Copilot in VS Code:
 
 This project is guided by a clear set of principles and requirements.
 
-- **`requirements.md`**: This is the **single source of truth** for the project. It details the core mission, architecture, and the workflow an AI maintainer must follow. All new tasks and changes are driven by this document.
+- **`REQUIREMENTS.md`**: This is the **single source of truth** for the project. It details the core mission, architecture, and the workflow an AI maintainer must follow. All new tasks and changes are driven by this document.
 - **`docs/CONSTITUTION.md`**: This document outlines the core development principles for human contributors, ensuring consistency and quality.
 
-For a list of available tools and instructions on how to add your own, please refer to the `requirements.md` file and the examples in the `tools/` directory.
+For a list of available tools and instructions on how to add your own, please refer to the `REQUIREMENTS.md` file and the examples in the `tools/` directory.
 
 ## Developer Scripts
 

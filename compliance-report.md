@@ -2,7 +2,7 @@
 
 ## Summary (short)
 
-- Scope: Compare `ahma_core` code + tests against project `requirements.md` (relevant sections include R1, R2, R3, R4, R5, R6, R7, R8).
+- Scope: Compare `ahma_core` code + tests against project `REQUIREMENTS.md` (relevant sections include R1, R2, R3, R4, R5, R6, R7, R8).
 - Status: **Partial compliance** — most core requirements are implemented and tested, but a few notable mismatches were found and are recorded below.
 
 ---
@@ -33,7 +33,7 @@
 
 1) R7.6: Required behavior on nested sandbox environments (macOS) — Implementation differs from requirement
 
-- Requirement (R7.6.1-R7.6.3): "The system **must** detect when it is running inside another sandbox... Upon detection, the system **must** exit with a clear error message instructing the user to disable the internal sandbox using `--no-sandbox` or `AHMA_NO_SANDBOX=1`." (See `requirements.md` R7.6)
+- Requirement (R7.6.1-R7.6.3): "The system **must** detect when it is running inside another sandbox... Upon detection, the system **must** exit with a clear error message instructing the user to disable the internal sandbox using `--no-sandbox` or `AHMA_NO_SANDBOX=1`." (See `REQUIREMENTS.md` R7.6)
 
 - Actual behavior (code): `sandbox::test_sandbox_exec_available()` detects nested sandbox conditions and returns `SandboxError::NestedSandboxDetected`.
   - But `ahma_core/src/shell/main_logic.rs` handles this error by logging warnings and calling `sandbox::enable_test_mode()` (which effectively disables sandboxing) and continues startup rather than exiting.
@@ -42,6 +42,7 @@
     - Handling: `ahma_core/src/shell/main_logic.rs` — **lines ~215-240** (main startup logic handles the error by logging warnings and calling `sandbox::enable_test_mode()`; see the `if let Err(e) = sandbox::test_sandbox_exec_available()` branch which sets `no_sandbox = true`).
 
       Example excerpt:
+
       ```text
       if let Err(e) = sandbox::test_sandbox_exec_available() {
           match e {
@@ -56,13 +57,14 @@
           }
       }
       ```
+
 - Tests: macOS integration tests (`ahma_core/tests/macos_sandbox_integration_test.rs`) skip when running inside a nested sandbox; they do not assert that the server exits with an error on nested detection.
 
 - Conclusion: This is a requirement vs implementation mismatch. The requirement demands a *fail-secure exit* on nested sandbox; the current code prefers *graceful degradation* (disable sandbox and continue). This is a security-sensitive variance and should be flagged for correction.
 
 ---
 
-2) R6.9: Workspace `default-members` mismatch
+1) R6.9: Workspace `default-members` mismatch
 
 - Requirement (R6.9): "The root `Cargo.toml` **must** define `default-members = ["ahma_shell"]` so that `cargo run` executes the main MCP server binary by default."
 
@@ -88,7 +90,7 @@
 ## Next steps (per plan)
 
 1. Finalize `ahma_core` section in the `compliance-report.md` (this file).
-2. Continue module-by-module review: proceed to `ahma_http_bridge` and repeat (read module-specific `requirements.md` if present, review code and tests, document mismatches and confirmations).
+2. Continue module-by-module review: proceed to `ahma_http_bridge` and repeat (read module-specific `REQUIREMENTS.md` if present, review code and tests, document mismatches and confirmations).
 
 ---
 
@@ -100,7 +102,7 @@
 
 ## Summary (short)
 
-- Scope: Compare `ahma_http_bridge` code + tests against `ahma_http_bridge/requirements.md` (session isolation, deferred sandbox, restart/initialization behavior, handshake timeouts and safety invariants).
+- Scope: Compare `ahma_http_bridge` code + tests against `ahma_http_bridge/REQUIREMENTS.md` (session isolation, deferred sandbox, restart/initialization behavior, handshake timeouts and safety invariants).
 - Status: **Mostly compliant** — core handshake, sandbox locking, timeout semantics and tests are implemented and thorough; one API-level mismatch found concerning session termination.
 
 ---
@@ -130,6 +132,7 @@
     - Router registration: `ahma_http_bridge/src/bridge.rs` sets up routes at **lines ~81-83** (and a secondary router at **~734-736**), e.g.: `.route("/mcp", post(handle_mcp_request).get(handle_sse_stream))`. There is **no `DELETE` route registered** to accept `DELETE /mcp` with a `Mcp-Session-Id` header.
 
     Evidence excerpt (router registration):
+
     ```text
     let app = Router::new()
         .route("/health", get(health_check))
@@ -186,7 +189,7 @@
 
 ## Minor notes
 
-- OAuth flow uses ephemeral local listener for redirect (http://localhost:8080), which is acceptable for CLI-style flows. Token file path is controlled by `AHMA_HTTP_CLIENT_TOKEN_PATH` and defaults to temp dir; tests guard env usage.
+- OAuth flow uses ephemeral local listener for redirect (<http://localhost:8080>), which is acceptable for CLI-style flows. Token file path is controlled by `AHMA_HTTP_CLIENT_TOKEN_PATH` and defaults to temp dir; tests guard env usage.
 
 - No high-risk mismatches found in this module at the time of review.
 
@@ -220,7 +223,7 @@
 - R6.5 (MTDF JSON Schema generation): `generate_tool_schema` generates `mtdf-schema.json` using `schemars::schema_for!(ToolConfig)`, writes to the `docs` directory, and has tests for generation and file writing.
   - Files: `generate_tool_schema/src/main.rs` and its tests.
 
-- Non-functional / Testing Standards (coverage): `ahma_validate/requirements.md` documents strict coverage targets; tests in `main.rs` cover a wide range of input scenarios and follow `tempfile` isolation patterns.
+- Non-functional / Testing Standards (coverage): `ahma_validate/REQUIREMENTS.md` documents strict coverage targets; tests in `main.rs` cover a wide range of input scenarios and follow `tempfile` isolation patterns.
 
 ---
 

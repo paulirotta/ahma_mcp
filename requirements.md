@@ -247,6 +247,7 @@ Tools can declare prerequisites and installation instructions:
 ## 4. Development Workflow
 
 **For AI agent development instructions**, including:
+
 - Setup commands
 - Build and test commands
 - Code style and conventions
@@ -256,7 +257,7 @@ Tools can declare prerequisites and installation instructions:
 
 **See [AGENTS.md](AGENTS.md).**
 
-This section previously contained development workflow details but has been moved to AGENTS.md to follow the agents.md standard. The requirements.md file now focuses purely on **what** the product does and **how** it's architected.
+This section previously contained development workflow details but has been moved to AGENTS.md to follow the agents.md standard. The REQUIREMENTS.md file now focuses purely on **what** the product does and **how** it's architected.
 
 ## 5. Implementation Constraints and Architecture Decisions
 
@@ -507,6 +508,7 @@ See `ARCHITECTURE_UPGRADE_PLAN.md` for detailed roadmap including:
 ### 6.3. Test Coverage Notes
 
 Test coverage is tracked in the following areas:
+
 - Cross-platform sandbox tests (macOS: Seatbelt, Linux: Landlock)
 - Tool JSON configuration tests (`ahma_core/tests/tool_suite/`)
 - SSE integration tests (`ahma_http_bridge/tests/sse_tool_integration_test.rs`)

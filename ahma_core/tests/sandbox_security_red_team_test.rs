@@ -308,7 +308,7 @@ async fn documented_limitation_read_access_unrestricted() {
 /// The Seatbelt profile allows `(allow network*)` for all network operations.
 /// This means AI could potentially exfiltrate data via network.
 ///
-/// This is documented in requirements.md as a future TODO.
+/// This is documented in REQUIREMENTS.md as a future TODO.
 #[tokio::test]
 async fn documented_limitation_network_unrestricted() {
     init_test_logging();

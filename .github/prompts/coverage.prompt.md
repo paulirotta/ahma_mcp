@@ -8,7 +8,7 @@ Act as a Senior Rust QA Engineer. Your goal is to systematically increase code c
 
 ### 1. Context & Requirements
 
-- Read `requirements.md` to understand the current testing standards and coverage goals.
+- Read `REQUIREMENTS.md` to understand the current testing standards and coverage goals.
 - Ensure you are adhering to the project's existing testing patterns.
 
 ### 2. Analysis (Coverage Report)
@@ -34,4 +34,4 @@ Act as a Senior Rust QA Engineer. Your goal is to systematically increase code c
 
 ### 5. Documentation
 
-- Update `requirements.md` if in the process of improving test coverage you believe requirements need to be updated so future improvements will be based on the actual and complete requirements.
+- Update `REQUIREMENTS.md` if in the process of improving test coverage you believe requirements need to be updated so future improvements will be based on the actual and complete requirements.
