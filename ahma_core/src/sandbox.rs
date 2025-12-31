@@ -664,17 +664,15 @@ pub fn enforce_landlock_sandbox(sandbox_scope: &Path) -> Result<()> {
 
     for path in &system_paths {
         let path_obj = Path::new(path);
-        if path_obj.exists() {
-            if let Ok(fd) = PathFd::new(path_obj) {
-                // Use &mut reference to avoid consuming ruleset on error
-                // The RulesetCreatedAttr trait is implemented for &mut RulesetCreated
-                if let Err(e) = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read)) {
-                    tracing::debug!(
-                        "Could not add Landlock rule for {}: {:?}, continuing without it",
-                        path,
-                        e
-                    );
-                }
+        if path_obj.exists() && let Ok(fd) = PathFd::new(path_obj) {
+            // Use &mut reference to avoid consuming ruleset on error
+            // The RulesetCreatedAttr trait is implemented for &mut RulesetCreated
+            if let Err(e) = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read)) {
+                tracing::debug!(
+                    "Could not add Landlock rule for {}: {:?}, continuing without it",
+                    path,
+                    e
+                );
             }
         }
     }

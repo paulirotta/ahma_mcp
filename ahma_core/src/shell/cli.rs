@@ -280,11 +280,9 @@ pub async fn run() -> Result<()> {
 
         // Apply kernel-level sandbox restrictions on Linux (skip if disabled)
         #[cfg(target_os = "linux")]
-        if !no_sandbox {
-            if let Err(e) = sandbox::enforce_landlock_sandbox(sandbox_scope) {
-                tracing::error!("Failed to enforce Landlock sandbox: {}", e);
-                return Err(e);
-            }
+        if !no_sandbox && let Err(e) = sandbox::enforce_landlock_sandbox(sandbox_scope) {
+            tracing::error!("Failed to enforce Landlock sandbox: {}", e);
+            return Err(e);
         }
     }
 

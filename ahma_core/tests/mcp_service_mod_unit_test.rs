@@ -319,14 +319,13 @@ async fn test_config_watcher_debounce_logic() {
     // Simulate debounce receiver
     let debounce_result = timeout(Duration::from_millis(500), async {
         let mut event_count = 0;
-        while (rx.recv().await).is_some() {
+        if (rx.recv().await).is_some() {
             event_count += 1;
             // Drain rapid events
             while rx.try_recv().is_ok() {
                 event_count += 1;
             }
             // Only count as one "debounced" event
-            break;
         }
         event_count
     })
