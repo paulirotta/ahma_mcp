@@ -228,28 +228,12 @@ pub async fn run() -> Result<()> {
 
         // On macOS, test if sandbox-exec can actually be applied
         // This detects when running inside another sandbox (Cursor, VS Code, Docker)
+        // Per R7.6: nested sandbox MUST exit with error, user must explicitly use --no-sandbox
         #[cfg(target_os = "macos")]
         {
             if let Err(e) = sandbox::test_sandbox_exec_available() {
-                match e {
-                    SandboxError::NestedSandboxDetected => {
-                        tracing::warn!(
-                            "Nested sandbox detected - Ahma is running inside another sandbox (e.g., Cursor IDE)"
-                        );
-                        tracing::warn!(
-                            "Ahma's sandbox will be disabled; the outer sandbox provides security"
-                        );
-                        tracing::info!(
-                            "To suppress this warning, use --no-sandbox or set AHMA_NO_SANDBOX=1"
-                        );
-                        sandbox::enable_test_mode();
-                        no_sandbox = true;
-                    }
-                    _ => {
-                        // Other sandbox errors should be fatal
-                        sandbox::exit_with_sandbox_error(&e);
-                    }
-                }
+                // All sandbox errors are fatal - including nested sandbox detection (R7.6)
+                sandbox::exit_with_sandbox_error(&e);
             }
         }
     }

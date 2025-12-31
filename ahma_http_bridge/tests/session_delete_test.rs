@@ -1,0 +1,328 @@
+//! HTTP DELETE Session Termination Tests (R8.4.7)
+//!
+//! These tests verify that HTTP DELETE with `Mcp-Session-Id` header properly
+//! terminates sessions and their subprocesses.
+//!
+//! Per MCP specification (R8.4.7): HTTP DELETE with `Mcp-Session-Id` terminates
+//! session and subprocess.
+
+use reqwest::Client;
+use serde_json::{Value, json};
+use std::net::TcpListener;
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
+use std::time::Duration;
+use tempfile::TempDir;
+use tokio::time::sleep;
+
+/// Find an available port for testing
+fn find_available_port() -> u16 {
+    TcpListener::bind("127.0.0.1:0")
+        .expect("Failed to bind to any port")
+        .local_addr()
+        .expect("Failed to get local address")
+        .port()
+}
+
+/// Build the ahma_mcp binary if needed and return the path
+fn get_ahma_mcp_binary() -> PathBuf {
+    let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("Failed to get workspace dir")
+        .to_path_buf();
+
+    let output = Command::new("cargo")
+        .current_dir(&workspace_dir)
+        .args(["build", "--package", "ahma_core", "--bin", "ahma_mcp"])
+        .output()
+        .expect("Failed to run cargo build");
+
+    assert!(
+        output.status.success(),
+        "Failed to build ahma_mcp: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let target_dir = std::env::var("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| workspace_dir.join("target"));
+
+    target_dir.join("debug/ahma_mcp")
+}
+
+/// Start the HTTP bridge server and return the process
+async fn start_http_bridge(
+    port: u16,
+    tools_dir: &std::path::Path,
+    sandbox_scope: &std::path::Path,
+) -> std::process::Child {
+    let binary = get_ahma_mcp_binary();
+
+    let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("Failed to get workspace dir")
+        .to_path_buf();
+    let guidance_file = workspace_dir.join(".ahma").join("tool_guidance.json");
+
+    let child = Command::new(&binary)
+        .args([
+            "--mode",
+            "http",
+            "--http-port",
+            &port.to_string(),
+            "--sync",
+            "--tools-dir",
+            &tools_dir.to_string_lossy(),
+            "--guidance-file",
+            &guidance_file.to_string_lossy(),
+            "--sandbox-scope",
+            &sandbox_scope.to_string_lossy(),
+            "--log-to-stderr",
+        ])
+        .env_remove("AHMA_TEST_MODE")
+        .env_remove("NEXTEST")
+        .env_remove("NEXTEST_EXECUTION_MODE")
+        .env_remove("CARGO_TARGET_DIR")
+        .env_remove("RUST_TEST_THREADS")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Failed to start HTTP bridge");
+
+    // Wait for server to be ready
+    let client = Client::new();
+    let health_url = format!("http://127.0.0.1:{}/health", port);
+
+    for _ in 0..30 {
+        sleep(Duration::from_millis(200)).await;
+        if let Ok(resp) = client.get(&health_url).send().await
+            && resp.status().is_success()
+        {
+            return child;
+        }
+    }
+
+    let mut child = child;
+    let _ = child.kill();
+    let _ = child.wait();
+    panic!("HTTP bridge failed to start within timeout");
+}
+
+/// Send a JSON-RPC request to the MCP endpoint
+async fn send_mcp_request(
+    client: &Client,
+    base_url: &str,
+    request: &Value,
+    session_id: Option<&str>,
+) -> Result<(Value, Option<String>), String> {
+    let url = format!("{}/mcp", base_url);
+
+    let mut req = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .timeout(Duration::from_secs(30));
+
+    if let Some(id) = session_id {
+        req = req.header("Mcp-Session-Id", id);
+    }
+
+    let response = req
+        .json(request)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {:?}", e))?;
+
+    let new_session_id = response
+        .headers()
+        .get("mcp-session-id")
+        .or_else(|| response.headers().get("Mcp-Session-Id"))
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(format!("HTTP {}: {}", status, text));
+    }
+
+    let body: Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    Ok((body, new_session_id))
+}
+
+/// Test that DELETE with valid session ID returns 204 and terminates the session (R8.4.7)
+#[tokio::test]
+async fn test_delete_session_terminates_subprocess() {
+    let port = find_available_port();
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let base_url = format!("http://127.0.0.1:{}", port);
+
+    let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("Failed to get workspace dir")
+        .to_path_buf();
+    let tools_dir = workspace_dir.join(".ahma/tools");
+
+    let mut child = start_http_bridge(port, &tools_dir, temp_dir.path()).await;
+    let client = Client::new();
+
+    // Step 1: Initialize a session
+    let init_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {
+                "roots": { "listChanged": true }
+            },
+            "clientInfo": {
+                "name": "test-client",
+                "version": "1.0.0"
+            }
+        }
+    });
+
+    let (_, session_id) = send_mcp_request(&client, &base_url, &init_request, None)
+        .await
+        .expect("Initialize should succeed");
+
+    let session_id = session_id.expect("Should receive session ID from initialize");
+    eprintln!("Got session ID: {}", session_id);
+
+    // Step 2: Send DELETE request to terminate the session
+    let delete_url = format!("{}/mcp", base_url);
+    let delete_response = client
+        .delete(&delete_url)
+        .header("Mcp-Session-Id", &session_id)
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .expect("DELETE request should succeed");
+
+    eprintln!("DELETE response status: {}", delete_response.status());
+
+    // Step 3: Assert 204 No Content
+    assert_eq!(
+        delete_response.status().as_u16(),
+        204,
+        "DELETE should return 204 No Content"
+    );
+
+    // Step 4: Verify subsequent requests with same session ID return 404
+    sleep(Duration::from_millis(100)).await;
+
+    let post_response = client
+        .post(&format!("{}/mcp", base_url))
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("Mcp-Session-Id", &session_id)
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list",
+            "params": {}
+        }))
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .expect("POST request should complete");
+
+    eprintln!("POST after DELETE status: {}", post_response.status());
+
+    // Session should no longer exist - expect 403 Forbidden (per R8D.13: security response for
+    // non-existent or terminated sessions) or 404 Not Found
+    let status = post_response.status().as_u16();
+    assert!(
+        status == 403 || status == 404,
+        "Requests to deleted session should return 403 Forbidden or 404 Not Found, got {}",
+        status
+    );
+
+    // Cleanup
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// Test that DELETE without session ID returns 400 Bad Request
+#[tokio::test]
+async fn test_delete_without_session_id_returns_400() {
+    let port = find_available_port();
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let base_url = format!("http://127.0.0.1:{}", port);
+
+    let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("Failed to get workspace dir")
+        .to_path_buf();
+    let tools_dir = workspace_dir.join(".ahma/tools");
+
+    let mut child = start_http_bridge(port, &tools_dir, temp_dir.path()).await;
+    let client = Client::new();
+
+    // Send DELETE without session ID
+    let delete_url = format!("{}/mcp", base_url);
+    let delete_response = client
+        .delete(&delete_url)
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .expect("DELETE request should complete");
+
+    eprintln!("DELETE response status: {}", delete_response.status());
+
+    // Should return 400 Bad Request
+    assert_eq!(
+        delete_response.status().as_u16(),
+        400,
+        "DELETE without session ID should return 400 Bad Request"
+    );
+
+    // Cleanup
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// Test that DELETE with non-existent session ID returns 404 Not Found
+#[tokio::test]
+async fn test_delete_nonexistent_session_returns_404() {
+    let port = find_available_port();
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let base_url = format!("http://127.0.0.1:{}", port);
+
+    let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("Failed to get workspace dir")
+        .to_path_buf();
+    let tools_dir = workspace_dir.join(".ahma/tools");
+
+    let mut child = start_http_bridge(port, &tools_dir, temp_dir.path()).await;
+    let client = Client::new();
+
+    // Send DELETE with a fake session ID
+    let delete_url = format!("{}/mcp", base_url);
+    let delete_response = client
+        .delete(&delete_url)
+        .header("Mcp-Session-Id", "non-existent-session-id-12345")
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .expect("DELETE request should complete");
+
+    eprintln!("DELETE response status: {}", delete_response.status());
+
+    // Should return 404 Not Found
+    assert_eq!(
+        delete_response.status().as_u16(),
+        404,
+        "DELETE with non-existent session should return 404 Not Found"
+    );
+
+    // Cleanup
+    let _ = child.kill();
+    let _ = child.wait();
+}

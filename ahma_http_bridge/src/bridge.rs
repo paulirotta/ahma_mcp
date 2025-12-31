@@ -76,11 +76,16 @@ pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
     let state = Arc::new(BridgeState { session_manager });
 
     // Build the router
-    // MCP Streamable HTTP transport: single endpoint supporting POST (requests) and GET (SSE)
+    // MCP Streamable HTTP transport: single endpoint supporting POST (requests), GET (SSE), DELETE (terminate)
     // See: https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http
     let app = Router::new()
         .route("/health", get(health_check))
-        .route("/mcp", post(handle_mcp_request).get(handle_sse_stream))
+        .route(
+            "/mcp",
+            post(handle_mcp_request)
+                .get(handle_sse_stream)
+                .delete(handle_session_delete),
+        )
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state);
@@ -111,6 +116,64 @@ pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
 /// Health check endpoint
 async fn health_check() -> impl IntoResponse {
     (StatusCode::OK, "OK")
+}
+
+/// Handle DELETE requests to terminate a session (R8.4.7)
+///
+/// Per MCP specification: HTTP DELETE with `Mcp-Session-Id` header terminates
+/// the session and its subprocess.
+///
+/// Returns:
+/// - 204 No Content on successful termination
+/// - 400 Bad Request if session ID header is missing
+/// - 404 Not Found if session doesn't exist
+async fn handle_session_delete(
+    State(state): State<Arc<BridgeState>>,
+    headers: HeaderMap,
+) -> Response {
+    // Get session ID from header
+    let session_id = match headers
+        .get(MCP_SESSION_ID_HEADER)
+        .and_then(|v| v.to_str().ok())
+    {
+        Some(id) => id.to_string(),
+        None => {
+            warn!("DELETE request without session ID header");
+            return (
+                StatusCode::BAD_REQUEST,
+                "Missing Mcp-Session-Id header",
+            )
+                .into_response();
+        }
+    };
+
+    info!(session_id = %session_id, "Session termination requested via HTTP DELETE");
+
+    // Check if session exists before terminating
+    if !state.session_manager.session_exists(&session_id) {
+        debug!(session_id = %session_id, "Session not found for DELETE request");
+        return StatusCode::NOT_FOUND.into_response();
+    }
+
+    // Terminate the session
+    match state
+        .session_manager
+        .terminate_session(&session_id, crate::session::SessionTerminationReason::ClientRequested)
+        .await
+    {
+        Ok(()) => {
+            info!(session_id = %session_id, "Session terminated successfully");
+            StatusCode::NO_CONTENT.into_response()
+        }
+        Err(e) => {
+            error!(session_id = %session_id, "Failed to terminate session: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to terminate session: {}", e),
+            )
+                .into_response()
+        }
+    }
 }
 
 /// Handle SSE stream connections for server-to-client messages

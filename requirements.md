@@ -57,13 +57,13 @@ These are the non-negotiable principles of the project.
 
 - **R6.1**: The project **must** be organized as a Cargo workspace with clearly separated concerns to improve maintainability and enable future extensions.
 - **R6.2**: Core library functionality (tool execution, configuration, async orchestration, MCP service) **must** live in the `ahma_core` crate, which is protocol-agnostic and reusable.
-- **R6.3**: The main MCP server logic **must** live in the `ahma_shell` binary crate, which depends on `ahma_core`.
+- **R6.3**: The main MCP server binary (`ahma_mcp`) **must** be defined in the `ahma_core` crate alongside the core library functionality.
 - **R6.4**: Tool configuration validation logic **must** be implemented in the `ahma_validate` binary crate. This provides a fast, focused way to check tool definitions for correctness without starting the full server.
 - **R6.5**: The MTDF JSON Schema generation logic **must** be implemented in the `generate_tool_schema` binary crate.
 - **R6.6**: Project-specific quality assurance workflows **should** be expressed as shell command pipelines executed via the built-in `sandboxed_shell` tool (preferred). Tool configs that are marked `"enabled": false` are considered deprecated in this repo.
 - **R6.7**: The core library **must** expose a clean public API that allows other crates (like future `ahma_web` or `ahma_okta` components) to leverage the tool execution engine without tight coupling.
 - **R6.8**: This separation ensures that adding new interfaces (web, authentication) or changing the CLI does not require modifications to core business logic.
-- **R6.9**: The root `Cargo.toml` **must** define `default-members = ["ahma_shell"]` so that `cargo run` executes the main MCP server binary by default.
+- **R6.9**: The root `Cargo.toml` **must** include `ahma_core` in `default-members` so that `cargo run` executes the main `ahma_mcp` binary by default.
 - **R6.10**: The `ahma_list_tools` binary crate **must** provide a CLI utility to dump all MCP tool information from an MCP server (stdio or HTTP mode) to the terminal, useful for tests and development verification.
 
 ### R7: Security First - Kernel-Enforced Sandboxing (Updated 2025-11-26)
