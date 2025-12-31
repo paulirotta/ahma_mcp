@@ -1,256 +1,442 @@
-# Compliance Report — Module: ahma_core
+# Ahma MCP Comprehensive Compliance Report
 
-## Summary (short)
-
-- Scope: Compare `ahma_core` code + tests against project `REQUIREMENTS.md` (relevant sections include R1, R2, R3, R4, R5, R6, R7, R8).
-- Status: **Partial compliance** — most core requirements are implemented and tested, but a few notable mismatches were found and are recorded below.
-
----
-
-## ✅ Requirements that appear satisfied (evidence)
-
-- R6.2 (Core library): `ahma_core` is a library crate that exposes core types and APIs.
-  - Evidence: `ahma_core/Cargo.toml` defines `[lib] name = "ahma_core"` and `src/lib.rs` re-exports `Adapter` and `AhmaMcpService`.
-
-- R2 (Async-first behavior): Async operations return `operation_id`, operation monitoring and progress notifications are implemented and well tested.
-  - Evidence: `ahma_core/src/operation_monitor.rs`, `ahma_core/src/mcp_callback.rs`; tests: `tests/mcp_callback_coverage_test.rs`, `tests/notification_tests/async_tracking.rs`, `tests/client_coverage_expansion_test.rs`.
-
-- R1 (Tool config JSON & Hot-reloading): Tools are defined in JSON files and `start_config_watcher` implements file-watching with `notify` and sends `tools/list_changed` notifications on change.
-  - Evidence: `ahma_core/src/mcp_service/mod.rs` function `start_config_watcher` and tests `tests/mcp_service_mod_unit_test.rs` (debounce logic) and coverage tests asserting `list_changed` capability.
-
-- R5 (MTDF Schema validation): `schema_validation` module implements validation, error types, formatting and performance checks with tests for edge cases and large inputs.
-  - Evidence: `ahma_core/src/schema_validation.rs` and tests in `tests/schema_validation/*` (comprehensive, performance, message quality).
-
-- R7 (Sandbox enforcement core primitives): Sandbox module provides initialization, canonicalization, path-checking, and platform-specific checks for Linux and macOS; path validation and path-security tests exist.
-  - Evidence: `ahma_core/src/sandbox.rs`, `ahma_core/src/path_security.rs`, tests in `tests/sandbox_coverage_test.rs`, `tests/macos_sandbox_integration_test.rs`, `tests/linux_sandbox_integration_test.rs`.
-
-- R8 (HTTP bridge handshake & session isolation): `mcp_service` defers sandbox initialization via `--defer-sandbox`, and `configure_sandbox_from_roots` processes `roots/list`; HTTP bridge side implements the handshake and session sandbox locking with tests.
-  - Evidence: `ahma_core/src/mcp_service/mod.rs` (methods `configure_sandbox_from_roots`, `on_roots_list_changed`) and extensive tests in `ahma_http_bridge/tests/*` (sandbox_roots_handshake_test, http_roots_handshake_integration_test).
+**Generated:** 2025-01-01  
+**Scope:** Full codebase audit against `REQUIREMENTS.md` (R0-R19) and module-specific requirements  
+**Status:** **Partial compliance** — Most requirements implemented with 2 notable mismatches requiring action
 
 ---
 
-## ⚠️ Notable mismatches (detailed)
+## Executive Summary
 
-1) R7.6: Required behavior on nested sandbox environments (macOS) — Implementation differs from requirement
-
-- Requirement (R7.6.1-R7.6.3): "The system **must** detect when it is running inside another sandbox... Upon detection, the system **must** exit with a clear error message instructing the user to disable the internal sandbox using `--no-sandbox` or `AHMA_NO_SANDBOX=1`." (See `REQUIREMENTS.md` R7.6)
-
-- Actual behavior (code): `sandbox::test_sandbox_exec_available()` detects nested sandbox conditions and returns `SandboxError::NestedSandboxDetected`.
-  - But `ahma_core/src/shell/main_logic.rs` handles this error by logging warnings and calling `sandbox::enable_test_mode()` (which effectively disables sandboxing) and continues startup rather than exiting.
-  - Files/locations (precise):
-    - Detection: `ahma_core/src/sandbox.rs` function `test_sandbox_exec_available()` — **lines ~368-405** (returns `SandboxError::NestedSandboxDetected` on nested detection).
-    - Handling: `ahma_core/src/shell/main_logic.rs` — **lines ~215-240** (main startup logic handles the error by logging warnings and calling `sandbox::enable_test_mode()`; see the `if let Err(e) = sandbox::test_sandbox_exec_available()` branch which sets `no_sandbox = true`).
-
-      Example excerpt:
-
-      ```text
-      if let Err(e) = sandbox::test_sandbox_exec_available() {
-          match e {
-              SandboxError::NestedSandboxDetected => {
-                  tracing::warn!("Nested sandbox detected - Ahma is running inside another sandbox");
-                  tracing::warn!("Ahma's sandbox will be disabled; the outer sandbox provides security");
-                  tracing::info!("To suppress this warning, use --no-sandbox or set AHMA_NO_SANDBOX=1");
-                  sandbox::enable_test_mode();
-                  no_sandbox = true;
-              }
-              _ => sandbox::exit_with_sandbox_error(&e);
-          }
-      }
-      ```
-
-- Tests: macOS integration tests (`ahma_core/tests/macos_sandbox_integration_test.rs`) skip when running inside a nested sandbox; they do not assert that the server exits with an error on nested detection.
-
-- Conclusion: This is a requirement vs implementation mismatch. The requirement demands a *fail-secure exit* on nested sandbox; the current code prefers *graceful degradation* (disable sandbox and continue). This is a security-sensitive variance and should be flagged for correction.
+| Module | Status | Confirmed | Mismatches | Notes |
+|--------|--------|-----------|------------|-------|
+| `ahma_core` | ⚠️ Partial | R1-R5, R7.1-R7.5, R15-R17, R19 | R6.9, R7.6 | Nested sandbox handling, workspace config |
+| `ahma_http_bridge` | ⚠️ Partial | R8.1-R8.4.6, R8.4.8+ | R8.4.7 | Missing HTTP DELETE endpoint |
+| `ahma_http_mcp_client` | ✅ Compliant | R9.3-R9.8 | None | OAuth PKCE, token persistence |
+| `ahma_validate` | ✅ Compliant | R5.2, R6.4 | None | MTDF validation, exit codes |
+| `generate_tool_schema` | ✅ Compliant | R6.5 | None | Schema generation |
 
 ---
 
-1) R6.9: Workspace `default-members` mismatch
+# Module: ahma_core
 
-- Requirement (R6.9): "The root `Cargo.toml` **must** define `default-members = ["ahma_shell"]` so that `cargo run` executes the main MCP server binary by default."
+## ✅ Requirements Confirmed
 
-- Actual state: Top-level `Cargo.toml` defines `default-members = ["ahma_core", "ahma_validate", "generate_tool_schema", "ahma_http_bridge", "ahma_http_mcp_client"]` (multiple members), and no separate `ahma_shell` crate exists; the server binary is implemented as `[[bin]] name = "ahma_mcp"` inside `ahma_core/Cargo.toml`.
-  - Files/locations:
-    - Root: `/Cargo.toml` — `[workspace] default-members` definition appears at the top of the file (e.g., **lines ~1-8**; currently set to multiple crates instead of `["ahma_shell"]`).
-    - Binary: `/ahma_core/Cargo.toml` has `[[bin]] name = "ahma_mcp" path = "src/shell/bin.rs"` (see **lines ~1-12** of that file).
+### R1: Configuration-Driven Tools & Hot-Reloading
 
-- Conclusion: This is an architecture/configuration mismatch: the workspace layout does not match the R6 expectation that a dedicated `ahma_shell` binary crate would be the workspace default member. This inconsistency affects developer UX (running `cargo run`), automation, and the formal project structure requirement.
+| Req | Description | Status | Evidence |
+|-----|-------------|--------|----------|
+| R1.1 | JSON tool definitions | ✅ | `ahma_core/src/config.rs` defines `ToolConfig`, `SubcommandConfig` |
+| R1.2 | Directory scanning | ✅ | `load_tool_configs()` in `config.rs` |
+| R1.3 | Startup validation | ✅ | `ahma_core/src/schema_validation.rs` `MtdfValidator` |
+| R1.4 | Hot-reload + notification | ✅ | `mcp_service/mod.rs:202-259` `start_config_watcher()` uses `notify` crate, calls `notify_tool_list_changed()` at line 191 |
 
----
+**Evidence excerpt:**
 
-## Minor notes / observations (informational)
-
-- Many tests indicate awareness of known limitations (e.g., broad file-read* allowances, network access in Seatbelt profiles). These are documented as "KNOWN LIMITATION" tests (see `tests/sandbox_security_red_team_test.rs`). This is consistent with requirements that document allowed/required Seatbelt rules (R7.3.5) and explicit caveats.
-
-- Schema fields: tests use `force_synchronous` in JSON test configs while `config.rs` uses `synchronous` with a Serde `alias = "force_synchronous"`; the alias ensures backward compatibility (validated in tests).
-
-- `format: "path"` support and `file_arg`/`file_flag` semantics are present: `config` includes `file_arg`/`file_flag`, `adapter` uses them to create temp files when needed, and `path_security` provides validation. Tests exist to cover these flows (adapter and tool-suite tests).
-
----
-
-## Next steps (per plan)
-
-1. Finalize `ahma_core` section in the `compliance-report.md` (this file).
-2. Continue module-by-module review: proceed to `ahma_http_bridge` and repeat (read module-specific `REQUIREMENTS.md` if present, review code and tests, document mismatches and confirmations).
+```191:198:ahma_core/src/mcp_service/mod.rs
+        if let Some(peer) = peer_opt {
+            if let Err(e) = peer.notify_tool_list_changed().await {
+                tracing::error!("Failed to send tools/list_changed notification: {}", e);
+            } else {
+                tracing::info!("Sent tools/list_changed notification to client");
+            }
+```
 
 ---
 
-(End of `ahma_core` module report)
+### R2/R3: Async-First Architecture
+
+| Req | Description | Status | Evidence |
+|-----|-------------|--------|----------|
+| R2.1 | Async by default | ✅ | `mcp_service/mod.rs:1420-1443` defaults to `AsyncResultPush` mode |
+| R2.2 | Operation ID return | ✅ | `adapter.rs:421` generates `op_<id>` pattern |
+| R2.3 | Progress notifications | ✅ | `mcp_callback.rs` implements `CallbackSender` |
+| R3.1 | Sync override | ✅ | `--sync` CLI flag or `synchronous: true` in config |
+
+**Evidence excerpt (async default):**
+
+```1437:1443:ahma_core/src/mcp_service/mod.rs
+            } else {
+                // Default to ASYNCHRONOUS mode
+                crate::adapter::ExecutionMode::AsyncResultPush
+            };
+```
 
 ---
 
-# Compliance Report — Module: ahma_http_bridge
+### R4: Performance (Shell Pool)
 
-## Summary (short)
-
-- Scope: Compare `ahma_http_bridge` code + tests against `ahma_http_bridge/REQUIREMENTS.md` (session isolation, deferred sandbox, restart/initialization behavior, handshake timeouts and safety invariants).
-- Status: **Mostly compliant** — core handshake, sandbox locking, timeout semantics and tests are implemented and thorough; one API-level mismatch found concerning session termination.
-
----
-
-## ✅ Requirements that appear satisfied (evidence)
-
-- Session isolation and onboarding handshake (R8.4): Implemented via per-session `SessionManager` and handshake state machine.
-  - Evidence: `ahma_http_bridge/src/session.rs` `HandshakeState`, `mark_mcp_initialized`, `mark_sse_connected`, and tests `tests/session_sandbox_test.rs`, `tests/handshake_state_machine_test.rs`.
-
-- Deferred sandbox + request gating: `tools/call` requests are blocked with clear errors (HTTP 409 with code -32001) until sandbox is locked; handshake timeouts return 504 with code -32002.
-  - Evidence: `ahma_http_bridge/src/bridge.rs` (blocking logic and error codes) and tests `tests/handshake_timeout_test.rs`, `tests/http_bridge_integration_test.rs` that assert 409 and 504 semantics.
-
-- Restart & initialization correctness: Bridge waits for `notifications/initialized` and confirms handshake completion before marking the session ready; tests ensure subprocess restarts do not result in forwarding requests to uninitialized subprocess (no "expect initialized request" leak).
-  - Evidence: `ahma_http_bridge/src/bridge.rs` and tests `tests/http_bridge_integration_test.rs` for restart & initialization verification.
+| Req | Description | Status | Evidence |
+|-----|-------------|--------|----------|
+| R4.1 | Pre-warmed shell pool | ✅ | `ahma_core/src/shell_pool.rs` `ShellPoolManager` |
+| R4.2 | Background replenishment | ✅ | `start_background_tasks()` in shell_pool.rs |
 
 ---
 
-## ⚠️ Notable mismatch (detailed)
+### R5: JSON Schema and Validation (MTDF)
 
-1) R8.4.7: HTTP DELETE with session ID → Clean session termination (missing HTTP endpoint)
+| Req | Description | Status | Evidence |
+|-----|-------------|--------|----------|
+| R5.1 | Schema generation | ✅ | `schemars::schema_for!(ToolConfig)` in generate_tool_schema |
+| R5.2 | Startup validation | ✅ | `MtdfValidator::validate_tool_config()` |
+| R5.3 | `format: "path"` support | ✅ | `adapter.rs:937-953` validates paths with `path_security::validate_path()` |
+| R5.4 | `file_arg`/`file_flag` | ✅ | `adapter.rs:871-897` creates temp files for multi-line args |
 
-- Requirement (R8.4.7): "HTTP DELETE with `Mcp-Session-Id` terminates session and subprocess."
+---
 
-- Actual state: The `SessionManager` supports `terminate_session` (programmatic API) and there are unit/integration tests that call it directly (session cleanup/termination is tested extensively). However, the HTTP router does **not** expose an HTTP DELETE route for sessions: only `POST /mcp` and `GET /mcp` endpoints are registered in `ahma_http_bridge/src/bridge.rs`.
-  - Files/locations:
-    - Session termination API: `ahma_http_bridge/src/session.rs` (`terminate_session`) and tests `ahma_http_bridge/tests/session_sandbox_test.rs`, `session_coverage_test.rs` that validate termination behavior at API level (**terminate_session implementation at lines ~729-780**).
-    - Router registration: `ahma_http_bridge/src/bridge.rs` sets up routes at **lines ~81-83** (and a secondary router at **~734-736**), e.g.: `.route("/mcp", post(handle_mcp_request).get(handle_sse_stream))`. There is **no `DELETE` route registered** to accept `DELETE /mcp` with a `Mcp-Session-Id` header.
+### R7: Security First - Kernel-Enforced Sandboxing
 
-    Evidence excerpt (router registration):
+| Req | Description | Status | Evidence |
+|-----|-------------|--------|----------|
+| R7.1 | Landlock (Linux) | ✅ | `sandbox.rs:634-694` `enforce_landlock_sandbox()` |
+| R7.2 | Seatbelt (macOS) | ✅ | `sandbox.rs:524-622` `generate_seatbelt_profile()` |
+| R7.3 | Scope immutability | ✅ | `sandbox.rs:170-173` uses `OnceLock` for `SANDBOX_SCOPES` |
+| R7.4 | Path validation | ✅ | `sandbox.rs:201-237` `validate_path_in_sandbox()` |
+| R7.5 | Sandbox prerequisite check | ✅ | `sandbox.rs:268-285` `check_sandbox_prerequisites()` |
 
-    ```text
+---
+
+### R15: Unified Shell Output (2>&1)
+
+| Req | Description | Status | Evidence |
+|-----|-------------|--------|----------|
+| R15.1 | stderr→stdout redirect | ✅ | `adapter.rs:836-850` `ensure_shell_redirect()` appends `2>&1` |
+
+**Evidence excerpt:**
+
+```836:850:ahma_core/src/adapter.rs
+    fn ensure_shell_redirect(script: &mut String) {
+        if script.trim_end().ends_with("2>&1") {
+            return;
+        }
+        // ... adds 2>&1
+        script.push_str("2>&1");
+    }
+```
+
+**Test coverage:**
+
+```1091:1102:ahma_core/src/adapter.rs
+    #[tokio::test]
+    async fn shell_commands_append_redirect_once() {
+        // ... asserts 2>&1 is appended
+        assert_eq!(args_vec, vec!["-c".to_string(), "echo hi 2>&1".to_string()]);
+    }
+```
+
+---
+
+### R16: Logging Configuration
+
+| Req | Description | Status | Evidence |
+|-----|-------------|--------|----------|
+| R16.1 | File logging default | ✅ | `logging.rs` uses `tracing-appender` |
+| R16.2 | `--log-to-stderr` option | ✅ | `main_logic.rs:171` CLI arg |
+
+---
+
+### R17: MCP Callback Notifications
+
+| Req | Description | Status | Evidence |
+|-----|-------------|--------|----------|
+| R17.1 | Progress notifications | ✅ | `mcp_callback.rs` `McpCallbackSender` |
+| R17.2 | Client-type detection | ✅ | `client_type.rs` `McpClientType::from_peer()` |
+| R17.3 | Progress token handling | ✅ | `mcp_service/mod.rs:1473-1481` checks for `progressToken` |
+
+---
+
+### R19: Protocol Stability & Cancellation Handling
+
+| Req | Description | Status | Evidence |
+|-----|-------------|--------|----------|
+| R19.1 | MCP cancellation handling | ✅ | `mcp_service/mod.rs:881-963` `on_cancelled()` |
+| R19.2 | Background op filtering | ✅ | Lines 909-915 filter out `await`/`status`/`cancel` tools |
+
+**Evidence excerpt:**
+
+```909:915:ahma_core/src/mcp_service/mod.rs
+                    let background_ops: Vec<_> = active_ops
+                        .iter()
+                        .filter(|op| {
+                            // Only cancel operations that represent actual background processes
+                            // NOT synchronous tools like 'await', 'status', 'cancel'
+                            !matches!(op.tool_name.as_str(), "await" | "status" | "cancel")
+                        })
+```
+
+---
+
+## ⚠️ Mismatches Found
+
+### R7.6: Nested Sandbox Environments — MISMATCH
+
+**Requirement (R7.6.1-R7.6.3):**
+> "The system **must** detect when it is running inside another sandbox... Upon detection, the system **must** exit with a clear error message..."
+
+**Actual Implementation:**
+
+- Detection: ✅ `sandbox.rs:368-400` `test_sandbox_exec_available()` correctly detects nested sandbox
+- Handling: ❌ `main_logic.rs:231-254` logs warnings and **continues** instead of exiting
+
+**Code Evidence:**
+
+```231:254:ahma_core/src/shell/main_logic.rs
+        #[cfg(target_os = "macos")]
+        {
+            if let Err(e) = sandbox::test_sandbox_exec_available() {
+                match e {
+                    SandboxError::NestedSandboxDetected => {
+                        tracing::warn!(
+                            "Nested sandbox detected - Ahma is running inside another sandbox (e.g., Cursor IDE)"
+                        );
+                        tracing::warn!(
+                            "Ahma's sandbox will be disabled; the outer sandbox provides security"
+                        );
+                        tracing::info!(
+                            "To suppress this warning, use --no-sandbox or set AHMA_NO_SANDBOX=1"
+                        );
+                        sandbox::enable_test_mode();
+                        no_sandbox = true;
+                    }
+                    _ => {
+                        // Other sandbox errors should be fatal
+                        sandbox::exit_with_sandbox_error(&e);
+                    }
+                }
+            }
+        }
+```
+
+**Impact:** Security-sensitive variance. Requirement demands fail-secure exit; implementation prefers graceful degradation.
+
+**Recommended Fix:** Change to call `sandbox::exit_with_sandbox_error(&e)` for `NestedSandboxDetected` instead of continuing with disabled sandbox.
+
+---
+
+### R6.9: Workspace `default-members` — MISMATCH
+
+**Requirement (R6.9):**
+> "The root `Cargo.toml` **must** define `default-members = ["ahma_shell"]` so that `cargo run` executes the main MCP server binary by default."
+
+**Actual State:**
+
+```1:9:Cargo.toml
+[workspace]
+default-members = [
+  "ahma_core",
+  "ahma_validate",
+  "generate_tool_schema",
+  "ahma_http_bridge",
+  "ahma_http_mcp_client",
+]
+members = ["ahma_core", "ahma_validate", "generate_tool_schema", "ahma_http_bridge", "ahma_http_mcp_client"]
+```
+
+- No `ahma_shell` crate exists
+- Binary is `[[bin]] name = "ahma_mcp"` in `ahma_core/Cargo.toml:22-24`
+- `default-members` lists all crates, not just the shell
+
+**Impact:** Developer UX mismatch. `cargo run` behavior differs from spec.
+
+**Recommended Fix:** Either:
+
+1. Update REQUIREMENTS.md to reflect current architecture (binary in ahma_core), or
+2. Create `ahma_shell` crate and set `default-members = ["ahma_shell"]`
+
+---
+
+# Module: ahma_http_bridge
+
+## ✅ Requirements Confirmed
+
+### R8: HTTP Bridge
+
+| Req | Description | Status | Evidence |
+|-----|-------------|--------|----------|
+| R8.1 | HTTP/SSE transport | ✅ | `bridge.rs:81-83` POST/GET `/mcp` routes |
+| R8.2 | Content negotiation | ✅ | JSON response handling in `json_response()` |
+| R8.3 | Debug colored output | ✅ | `session.rs:788-825` colored STDIN/STDOUT/STDERR |
+| R8.4.1 | Session creation on initialize | ✅ | `bridge.rs:283-343` creates session on first `initialize` |
+| R8.4.2 | `Mcp-Session-Id` header | ✅ | `bridge.rs:59` constant, lines 317-322 set in response |
+| R8.4.3 | Session routing | ✅ | `bridge.rs:344-365` routes by session ID |
+| R8.4.4 | Sandbox from roots/list | ✅ | `bridge.rs:539-579` locks sandbox from roots response |
+| R8.4.5 | Sandbox immutability | ✅ | `session.rs:650-651` checks `sandbox_locked` before modification |
+| R8.4.6 | Roots change rejection | ✅ | `session.rs:694-726` `handle_roots_changed()` terminates session |
+
+### Session Handshake State Machine
+
+| State | Description | Evidence |
+|-------|-------------|----------|
+| `AwaitingBoth` | Initial state | `session.rs:47` |
+| `AwaitingSseOnly` | SSE connected first | `session.rs:48` |
+| `AwaitingMcpOnly` | MCP initialized first | `session.rs:50` |
+| `RootsRequested` | Both ready, roots/list_changed sent | `session.rs:52` |
+| `Complete` | Sandbox locked | `session.rs:54` |
+
+**Handshake tests:** `tests/handshake_state_machine_test.rs`, `tests/handshake_timeout_test.rs`
+
+---
+
+## ⚠️ Mismatch Found
+
+### R8.4.7: HTTP DELETE Session Termination — MISSING
+
+**Requirement (R8.4.7):**
+> "HTTP DELETE with `Mcp-Session-Id` terminates session and subprocess."
+
+**Actual State:**
+
+- Programmatic API exists: `session.rs:729-754` `terminate_session()`
+- No HTTP DELETE route registered in `bridge.rs`
+
+**Router Evidence:**
+
+```81:86:ahma_http_bridge/src/bridge.rs
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/mcp", post(handle_mcp_request).get(handle_sse_stream))
-    ```
+        .layer(CorsLayer::permissive())
+        .layer(TraceLayer::new_for_http())
+        .with_state(state);
+```
 
-    The absence of a `DELETE` handler means the API-level requirement (HTTP DELETE to terminate a session) is not satisfied by an HTTP endpoint, despite having an internal `terminate_session` API.
+**Impact:** External clients cannot terminate sessions via HTTP DELETE as specified.
 
-- Implication: External clients (e.g., IDEs) cannot terminate sessions via the HTTP DELETE method as required by the spec; session termination is only possible via internal calls (or via sending `notifications/roots/list_changed` which may also terminate sessions for security reasons). This is an API-level non-compliance with the stated requirement.
+**Recommended Fix:** Add DELETE handler:
 
-- Recommended action (documented only): Add `DELETE /mcp` route that checks `Mcp-Session-Id` header and calls `session_manager.terminate_session(..., ClientRequested)` returning appropriate HTTP status (204 No Content on success or 404/403 for missing/terminated sessions).
+```rust
+.route("/mcp", post(handle_mcp_request).get(handle_sse_stream).delete(handle_session_delete))
+```
 
----
+With handler:
 
-## Minor observations
-
-- The bridge's approach of returning clear 409/504 responses during handshake/timeout matches the requirement's allowance to "queue or handle gracefully" incoming requests during sandbox initialization. Tests assert both conflict and timeout behaviors.
-
-- Tests comprehensively cover handshake ordering, concurrency, timeouts, and restart conditions. This indicates strong alignment with the requirements for robust session management.
-
----
-
-## Next steps (per plan)
-
-1. Record the `ahma_http_bridge` findings in `compliance-report.md` (this section).
-2. Move to next module: `ahma_http_mcp_client` for the same analysis and add findings.
-
----
-
-(End of `ahma_http_bridge` module report)
-
----
-
-# Compliance Report — Module: ahma_http_mcp_client
-
-## Summary (short)
-
-- Scope: Review `ahma_http_mcp_client` for transport semantics, authentication support, token persistence, and message handling.
-- Status: **Compliant** — implementation matches expectations and tests cover token storage and basic transport behavior.
+```rust
+async fn handle_session_delete(
+    State(state): State<Arc<BridgeState>>,
+    headers: HeaderMap,
+) -> Response {
+    let session_id = headers.get(MCP_SESSION_ID_HEADER)...;
+    match state.session_manager.terminate_session(&session_id, ClientRequested).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+```
 
 ---
 
-## ✅ Requirements / expectations satisfied (evidence)
+# Module: ahma_http_mcp_client
 
-- Optional OAuth support implemented with token persistence and restore.
-  - Evidence: `ahma_http_mcp_client/src/client.rs` contains `perform_oauth_flow`, `save_token`, `load_token`, and tests `load_token_returns_none_when_override_missing`, `save_token_round_trips_via_override_path`.
+## ✅ Fully Compliant
 
-- Transport implementation matches rmcp transport API and handles JSON-RPC POSTs with bearer auth and response parsing.
-  - Evidence: `impl Transport<RoleClient> for HttpMcpTransport` in `client.rs` (send/receive/close methods).
+| Req | Description | Status | Evidence |
+|-----|-------------|--------|----------|
+| R9.3 | OAuth PKCE flow | ✅ | `client.rs:112-178` `perform_oauth_flow()` with `PkceCodeChallenge` |
+| R9.4 | Token persistence | ✅ | `client.rs:304-334` `save_token()`, `load_token()` |
+| R9.5 | Token path override | ✅ | `client.rs:329-334` `AHMA_HTTP_CLIENT_TOKEN_PATH` env var |
+| R9.8 | Transport implementation | ✅ | `client.rs:222-294` `impl Transport<RoleClient>` |
 
-- Error handling and integration-ready example provided (Atlassian example). README documents usage and examples.
-
----
-
-## Minor notes
-
-- OAuth flow uses ephemeral local listener for redirect (<http://localhost:8080>), which is acceptable for CLI-style flows. Token file path is controlled by `AHMA_HTTP_CLIENT_TOKEN_PATH` and defaults to temp dir; tests guard env usage.
-
-- No high-risk mismatches found in this module at the time of review.
+**Test coverage:** Token round-trip, env override, minimal fields — `client.rs:336-490`
 
 ---
 
-## Next steps
+# Module: ahma_validate
 
-1. Add this section to the report (done).
-2. Proceed to review `ahma_validate` and `generate_tool_schema` (validation and MTDF schema generation) for R5 and R6 compliance.
+## ✅ Fully Compliant
 
----
+| Req | Description | Status | Evidence |
+|-----|-------------|--------|----------|
+| R5.2/R6.4 | Validation binary | ✅ | `main.rs` uses `MtdfValidator` |
+| Exit codes | 0 valid, non-zero invalid | ✅ | `main.rs:42-49` returns `Err` on failure |
+| `--guidance-file` | Guidance config support | ✅ | `main.rs:26-27` CLI arg |
+| `--debug` | Debug logging | ✅ | `main.rs:30-31` CLI arg |
+| Multiple targets | Comma-separated support | ✅ | `main.rs:61-68` splits by comma |
 
-(End of `ahma_http_mcp_client` module report)
-
----
-
-# Compliance Report — Module: ahma_validate & generate_tool_schema
-
-## Summary (short)
-
-- Scope: Validate the schema validator (`ahma_validate`) and MTDF JSON Schema generation (`generate_tool_schema`) against R5 (MTDF validation) and R6.5 (schema generation).
-- Status: **Compliant** — `ahma_validate` uses `ahma_core::schema_validation::MtdfValidator` and tests cover expected success/failure paths; `generate_tool_schema` produces the `mtdf-schema.json` and has tests for output and file writing.
+**Test coverage:** 15 tests covering valid/invalid JSON, directories, comma-separated targets — `main.rs:123-489`
 
 ---
 
-## ✅ Evidence and mapping to requirements
+# Module: generate_tool_schema
 
-- R5 (JSON Schema & Validation): `ahma_validate` uses `MtdfValidator` (from `ahma_core`) to validate tool JSON files and fails with non-zero exit code for invalid configs. Tests cover single-file, directory, comma-separated targets, invalid JSON, and missing guidance file cases.
-  - Files: `ahma_validate/src/main.rs`, tests in same file.
+## ✅ Fully Compliant
 
-- R6.5 (MTDF JSON Schema generation): `generate_tool_schema` generates `mtdf-schema.json` using `schemars::schema_for!(ToolConfig)`, writes to the `docs` directory, and has tests for generation and file writing.
-  - Files: `generate_tool_schema/src/main.rs` and its tests.
+| Req | Description | Status | Evidence |
+|-----|-------------|--------|----------|
+| R6.5 | Schema generation | ✅ | `main.rs:14-17` `schemars::schema_for!(ToolConfig)` |
+| File output | `mtdf-schema.json` | ✅ | `main.rs:39` joins with output dir |
+| Preview | First N lines | ✅ | `main.rs:46-63` `generate_preview()` |
 
-- Non-functional / Testing Standards (coverage): `ahma_validate/REQUIREMENTS.md` documents strict coverage targets; tests in `main.rs` cover a wide range of input scenarios and follow `tempfile` isolation patterns.
-
----
-
-## Minor notes
-
-- `generate_tool_schema` produces a pretty-printed JSON Schema whose structure includes `$schema` or `$defs`, as expected by schema consumers.
-- Both crates use `ahma_core` types and are well integrated with the core schema and config types.
+**Test coverage:** 12 tests covering generation, file writing, preview — `main.rs:87-262`
 
 ---
 
-## Next steps
+# Suggested Tests to Add
 
-1. Add this section to the report (done).
-2. Consolidate findings and perform a final pass to ensure `compliance-report.md` includes precise file references and line ranges for each mismatch.
+## 1. R7.6 Nested Sandbox Exit Test
+
+**Target:** `ahma_core/tests/nested_sandbox_exit_test.rs`
+
+```rust
+#[test]
+#[cfg(target_os = "macos")]
+fn test_nested_sandbox_detection_exits_with_error() {
+    // Spawn ahma_mcp in a simulated nested sandbox environment
+    // Assert: process exits with non-zero code
+    // Assert: stderr contains "SECURITY ERROR" or "nested sandbox"
+}
+```
+
+## 2. R8.4.7 HTTP DELETE Session Test
+
+**Target:** `ahma_http_bridge/tests/session_delete_test.rs`
+
+```rust
+#[tokio::test]
+async fn test_delete_session_terminates_subprocess() {
+    // 1. Create session via POST /mcp with initialize
+    // 2. Send DELETE /mcp with Mcp-Session-Id header
+    // 3. Assert: 204 No Content
+    // 4. Assert: subsequent requests return 404
+}
+```
 
 ---
 
+# Requirements Coverage Matrix
+
+| Requirement | ahma_core | ahma_http_bridge | ahma_http_mcp_client | ahma_validate | generate_tool_schema |
+|-------------|-----------|------------------|----------------------|---------------|---------------------|
+| R0 (Terminology) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| R1 (Config/Hot-reload) | ✅ | — | — | — | — |
+| R2 (Async-first) | ✅ | — | — | — | — |
+| R3 (Sync override) | ✅ | — | — | — | — |
+| R4 (Shell pool) | ✅ | — | — | — | — |
+| R5 (MTDF validation) | ✅ | — | — | ✅ | ✅ |
+| R6 (Modular arch) | ⚠️ R6.9 | ✅ | ✅ | ✅ | ✅ |
+| R7 (Sandbox) | ⚠️ R7.6 | ✅ | — | — | — |
+| R8 (HTTP bridge) | — | ⚠️ R8.4.7 | — | — | — |
+| R9 (OAuth) | — | — | ✅ | — | — |
+| R10 (Meta-params) | ✅ | — | — | — | — |
+| R11 (Dependencies) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| R12 (Error handling) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| R13 (Testing) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| R15 (Unified output) | ✅ | — | — | — | — |
+| R16 (Logging) | ✅ | — | — | — | — |
+| R17 (Callbacks) | ✅ | — | — | — | — |
+| R19 (Cancellation) | ✅ | — | — | — | — |
+
+**Legend:** ✅ Confirmed | ⚠️ Mismatch | — Not applicable
+
 ---
 
-## Tests to add (suggested evidence gaps)
+# Summary of Action Items
 
-- **Nested sandbox detection fail-secure test**: Add an integration test for macOS that simulates nested sandbox detection and asserts the server **exits** with a clear error message (matching R7.6), rather than silently disabling sandbox.
-  - Target: `ahma_core/tests/` (new test), reference code `ahma_core/src/sandbox.rs` `test_sandbox_exec_available()` (lines ~368-405) and `ahma_core/src/shell/main_logic.rs` branch (lines ~215-240).
-
-- **HTTP DELETE session termination test**: Add an HTTP-level test asserting that `DELETE /mcp` with `Mcp-Session-Id` terminates the session (returns 204 No Content on success) and cleans up subprocesses (matching R8.4.7).
-  - Target: `ahma_http_bridge/tests/` (new integration test); currently `SessionManager::terminate_session()` is tested at the API level (lines ~729-780) but not via HTTP.
+| Priority | Issue | Location | Recommended Fix |
+|----------|-------|----------|-----------------|
+| **HIGH** | R7.6 Nested sandbox should exit | `main_logic.rs:231-254` | Change to `exit_with_sandbox_error()` |
+| **MEDIUM** | R8.4.7 Missing DELETE endpoint | `bridge.rs:81-83` | Add `.delete(handle_session_delete)` |
+| **LOW** | R6.9 Workspace default-members | `Cargo.toml:1-8` | Update REQUIREMENTS.md or restructure |
 
 ---
 
-(End of `ahma_validate` & `generate_tool_schema` module report)
+*End of Compliance Report*
