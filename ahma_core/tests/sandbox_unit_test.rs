@@ -276,11 +276,9 @@ fn test_canonicalize_symlink_resolution() {
 
 #[test]
 fn test_any_scope_matches() {
-    let scopes = vec![
-        PathBuf::from("/home/user/project1"),
+    let scopes = [PathBuf::from("/home/user/project1"),
         PathBuf::from("/home/user/project2"),
-        PathBuf::from("/shared/workspace"),
-    ];
+        PathBuf::from("/shared/workspace")];
 
     let path1 = PathBuf::from("/home/user/project1/src/main.rs");
     let path2 = PathBuf::from("/home/user/project2/lib/mod.rs");

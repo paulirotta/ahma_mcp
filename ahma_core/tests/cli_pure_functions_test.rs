@@ -100,7 +100,10 @@ fn create_subcommand_with_nested(name: &str, nested: Vec<SubcommandConfig>) -> S
 #[test]
 fn test_find_matching_tool_exact_match() {
     let mut configs = HashMap::new();
-    configs.insert("cargo".to_string(), create_test_tool_config("cargo", "cargo"));
+    configs.insert(
+        "cargo".to_string(),
+        create_test_tool_config("cargo", "cargo"),
+    );
 
     let result = find_matching_tool(&configs, "cargo");
     assert!(result.is_ok());
@@ -112,7 +115,10 @@ fn test_find_matching_tool_exact_match() {
 #[test]
 fn test_find_matching_tool_prefix_match() {
     let mut configs = HashMap::new();
-    configs.insert("cargo".to_string(), create_test_tool_config("cargo", "cargo"));
+    configs.insert(
+        "cargo".to_string(),
+        create_test_tool_config("cargo", "cargo"),
+    );
 
     let result = find_matching_tool(&configs, "cargo_build");
     assert!(result.is_ok());
@@ -123,7 +129,10 @@ fn test_find_matching_tool_prefix_match() {
 #[test]
 fn test_find_matching_tool_longest_prefix_wins() {
     let mut configs = HashMap::new();
-    configs.insert("cargo".to_string(), create_test_tool_config("cargo", "cargo"));
+    configs.insert(
+        "cargo".to_string(),
+        create_test_tool_config("cargo", "cargo"),
+    );
     configs.insert(
         "cargo_build".to_string(),
         create_test_tool_config("cargo_build", "cargo build"),
@@ -138,7 +147,10 @@ fn test_find_matching_tool_longest_prefix_wins() {
 #[test]
 fn test_find_matching_tool_no_match() {
     let mut configs = HashMap::new();
-    configs.insert("cargo".to_string(), create_test_tool_config("cargo", "cargo"));
+    configs.insert(
+        "cargo".to_string(),
+        create_test_tool_config("cargo", "cargo"),
+    );
 
     let result = find_matching_tool(&configs, "npm_install");
     assert!(result.is_err());
@@ -169,7 +181,10 @@ fn test_find_matching_tool_empty_configs() {
 #[test]
 fn test_find_tool_config_by_key() {
     let mut configs = HashMap::new();
-    configs.insert("cargo".to_string(), create_test_tool_config("cargo", "cargo"));
+    configs.insert(
+        "cargo".to_string(),
+        create_test_tool_config("cargo", "cargo"),
+    );
 
     let result = find_tool_config(&configs, "cargo");
     assert!(result.is_some());
@@ -193,7 +208,10 @@ fn test_find_tool_config_by_name() {
 #[test]
 fn test_find_tool_config_not_found() {
     let mut configs = HashMap::new();
-    configs.insert("cargo".to_string(), create_test_tool_config("cargo", "cargo"));
+    configs.insert(
+        "cargo".to_string(),
+        create_test_tool_config("cargo", "cargo"),
+    );
 
     let result = find_tool_config(&configs, "nonexistent");
     assert!(result.is_none());
@@ -450,10 +468,7 @@ fn test_should_skip_with_matching_value() {
 
 #[test]
 fn test_should_skip_with_non_matching_value() {
-    let set = Some(HashSet::from([
-        "cargo".to_string(),
-        "git".to_string(),
-    ]));
+    let set = Some(HashSet::from(["cargo".to_string(), "git".to_string()]));
 
     assert!(!should_skip(&set, "npm"));
     assert!(!should_skip(&set, "python"));
