@@ -40,6 +40,7 @@
 
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
+use futures::StreamExt;
 use reqwest::Client;
 use serde_json::{Value, json};
 use std::process::Stdio;
@@ -148,7 +149,11 @@ impl StressClient {
                 "method": "initialize",
                 "params": {
                     "protocolVersion": "2024-11-05",
-                    "capabilities": {},
+                    "capabilities": {
+                        "roots": {
+                            "listChanged": true
+                        }
+                    },
                     "clientInfo": {
                         "name": "stress-test",
                         "version": "0.1.0"
@@ -171,12 +176,30 @@ impl StressClient {
             return Err(anyhow!("No mcp-session-id header in initialize response"));
         }
 
-        // Step 3: Open SSE stream (if sync client needs it, but we'll do it per-request for simplicity)
+        let session_id = self.session_id.clone().unwrap();
+
+        // Step 3: Open SSE stream BEFORE sending initialized notification
+        // This is required to receive the roots/list request from the server
+        let sse_client = self.client.clone();
+        let sse_url = url.clone();
+        let sse_session_id = session_id.clone();
+        
+        let sse_response = sse_client
+            .get(&sse_url)
+            .header("mcp-session-id", &sse_session_id)
+            .header("Accept", "text/event-stream")
+            .send()
+            .await
+            .context("Failed to open SSE stream")?;
+
+        if !sse_response.status().is_success() {
+            return Err(anyhow!("SSE connection failed: {}", sse_response.status()));
+        }
 
         // Step 4: Send initialized notification
         self.client
             .post(&url)
-            .header("mcp-session-id", self.session_id.as_ref().unwrap())
+            .header("mcp-session-id", &session_id)
             .json(&json!({
                 "jsonrpc": "2.0",
                 "method": "notifications/initialized"
@@ -185,10 +208,75 @@ impl StressClient {
             .await
             .context("Failed to send initialized notification")?;
 
-        // Give server time to process initialization
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        // Step 5: Wait for roots/list request on SSE and respond
+        let post_client = self.client.clone();
+        let post_url = url.clone();
+        let post_session_id = session_id.clone();
+        
+        let mut stream = sse_response.bytes_stream();
+        let mut buffer = String::new();
+        
+        // Read SSE events looking for roots/list request
+        let timeout = tokio::time::timeout(Duration::from_secs(5), async {
+            while let Some(chunk_result) = stream.next().await {
+                let chunk = chunk_result.context("Failed to read SSE chunk")?;
+                let chunk_str = String::from_utf8_lossy(&chunk);
+                buffer.push_str(&chunk_str);
+                
+                // Parse SSE events from buffer
+                for line in buffer.lines() {
+                    if let Some(data) = line.strip_prefix("data: ") {
+                        if let Ok(msg) = serde_json::from_str::<Value>(data) {
+                            // Check if this is a roots/list request
+                            if msg.get("method").and_then(|m| m.as_str()) == Some("roots/list") {
+                                if let Some(req_id) = msg.get("id") {
+                                    // Respond with roots
+                                    let response = post_client
+                                        .post(&post_url)
+                                        .header("mcp-session-id", &post_session_id)
+                                        .json(&json!({
+                                            "jsonrpc": "2.0",
+                                            "id": req_id,
+                                            "result": {
+                                                "roots": [{
+                                                    "uri": "file://.",
+                                                    "name": "workspace"
+                                                }]
+                                            }
+                                        }))
+                                        .send()
+                                        .await
+                                        .context("Failed to respond to roots/list")?;
+                                    
+                                    if !response.status().is_success() {
+                                        return Err(anyhow!("roots/list response failed: {}", response.status()));
+                                    }
+                                    
+                                    // Handshake complete!
+                                    return Ok(());
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Clear processed lines from buffer, keep partial line
+                if let Some(last_newline) = buffer.rfind('\n') {
+                    buffer = buffer[last_newline + 1..].to_string();
+                }
+            }
+            Err(anyhow!("SSE stream ended without receiving roots/list"))
+        }).await;
 
-        Ok(())
+        match timeout {
+            Ok(Ok(())) => {
+                // Give server a moment to process the roots response
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                Ok(())
+            }
+            Ok(Err(e)) => Err(e),
+            Err(_) => Err(anyhow!("Timeout waiting for roots/list request from server")),
+        }
     }
 
     /// Run commands in a loop until stopped
@@ -580,10 +668,35 @@ async fn main() -> Result<()> {
             break;
         }
 
+        // Check for excessive client errors (abort if all requests are failing)
+        let success = success_count.load(Ordering::Relaxed);
+        let errors = error_count.load(Ordering::Relaxed);
+        
+        // If we have many errors and no successes, something is fundamentally broken
+        if errors >= 10 && success == 0 {
+            stop_flag.store(true, Ordering::SeqCst);
+            
+            eprintln!();
+            eprintln!("╔═══════════════════════════════════════════════════════════╗");
+            eprintln!("║       ❌ TOO MANY CLIENT ERRORS - ABORTING                 ║");
+            eprintln!("╚═══════════════════════════════════════════════════════════╝");
+            eprintln!();
+            eprintln!("  Errors: {} with 0 successes", errors);
+            eprintln!("  This indicates a fundamental problem with the server or protocol.");
+            eprintln!();
+            eprintln!("  Common causes:");
+            eprintln!("    - 409 Conflict: Sandbox not initialized (missing roots/list response)");
+            eprintln!("    - 401/403: Authentication issues");
+            eprintln!("    - 404: Wrong endpoint URL");
+            eprintln!();
+            
+            join_set.abort_all();
+            let _ = server.kill().await;
+            std::process::exit(1);
+        }
+
         // Print progress every 5 seconds
         if start.elapsed().as_secs() % 5 == 0 {
-            let success = success_count.load(Ordering::Relaxed);
-            let errors = error_count.load(Ordering::Relaxed);
             let elapsed = start.elapsed().as_secs();
             let rate = if elapsed > 0 { success / elapsed } else { 0 };
             println!(
