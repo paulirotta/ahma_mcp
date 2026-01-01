@@ -18,7 +18,7 @@
 #
 # For backwards compatibility, this script now invokes the Rust example:
 
-exec cargo run --example stress_test -- "$@"
+exec cargo run --release --example stress_test -- "$@"
 
 # Resolve project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

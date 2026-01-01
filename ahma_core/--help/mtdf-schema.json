@@ -249,6 +249,20 @@
             "null"
           ]
         },
+        "skip_if_file_exists": {
+          "description": "Skip this step if the specified file exists",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "skip_if_file_missing": {
+          "description": "Skip this step if the specified file is missing",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "subcommand": {
           "description": "Subcommand within that tool",
           "type": "string"

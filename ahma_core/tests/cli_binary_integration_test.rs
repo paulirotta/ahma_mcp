@@ -633,4 +633,66 @@ mod ahma_list_tools_mode_tests {
             );
         }
     }
+    #[test]
+    fn test_ahma_mcp_cli_mode_execution() {
+        let binary = build_binary("ahma_core", "ahma_mcp");
+        let temp = tempfile::tempdir().unwrap();
+        let tools_dir = temp.path().join("tools");
+        std::fs::create_dir_all(&tools_dir).unwrap();
+
+        // Create a simple tool
+        let echo_tool = r#"
+{
+    "name": "test_echo",
+    "description": "Test echo tool",
+    "command": "echo",
+    "timeout_seconds": 10,
+    "synchronous": true,
+    "enabled": true,
+    "subcommand": [
+        {
+            "name": "default",
+            "description": "Echo a message",
+            "positional_args": [
+                {
+                    "name": "message",
+                    "type": "string",
+                    "description": "The message to echo",
+                    "required": true
+                }
+            ]
+        }
+    ]
 }
+"#;
+        std::fs::write(tools_dir.join("test_echo.json"), echo_tool).unwrap();
+
+        // Execute the tool via CLI mode
+        // ahma_mcp [GLOBAL_OPTIONS] <tool_name> [TOOL_OPTIONS] -- [RAW_ARGS]
+        let output = test_command(&binary)
+            .arg("--tools-dir")
+            .arg(&tools_dir)
+            .arg("--sandbox-scope")
+            .arg(temp.path())
+            .arg("test_echo")
+            .arg("--working-directory")
+            .arg(temp.path())
+            .arg("--")
+            .arg("hello-cli-mode")
+            .output()
+            .expect("Failed to execute ahma_mcp in CLI mode");
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        
+        assert!(
+            output.status.success(),
+            "CLI mode execution failed. stderr: {}",
+            stderr
+        );
+        assert!(
+            stdout.contains("hello-cli-mode"),
+            "Output should contain the echoed message. Got: {}",
+            stdout
+        );
+    }}

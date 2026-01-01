@@ -130,6 +130,9 @@ pub enum SandboxError {
     #[error("Sandbox prerequisite check failed: {0}")]
     PrerequisiteFailed(String),
 
+    #[error("Path '{path}' is blocked by high-security mode (no-temp-files)")]
+    HighSecurityViolation { path: PathBuf },
+
     #[error(
         "Nested sandbox detected - running inside another sandbox (e.g., Cursor, VS Code, Docker)"
     )]
@@ -228,6 +231,21 @@ pub fn validate_path_in_sandbox(path: &Path) -> Result<PathBuf, SandboxError> {
 
     // Check if canonical path is within any scope
     if scopes.iter().any(|scope| canonical.starts_with(scope)) {
+        // High security mode: block temp directories and /dev even if they are within scope
+        // (e.g. if someone explicitly added /tmp as a scope)
+        if is_no_temp_files() {
+            let path_str = canonical.to_string_lossy();
+            if path_str.starts_with("/tmp")
+                || path_str.starts_with("/var/folders")
+                || path_str.starts_with("/private/tmp")
+                || path_str.starts_with("/private/var/folders")
+                || path_str.starts_with("/dev")
+            {
+                return Err(SandboxError::HighSecurityViolation {
+                    path: path.to_path_buf(),
+                });
+            }
+        }
         Ok(canonical)
     } else {
         Err(SandboxError::PathOutsideSandbox {

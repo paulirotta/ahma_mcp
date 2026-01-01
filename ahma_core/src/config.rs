@@ -229,6 +229,12 @@ pub struct SequenceStep {
     /// Optional description for logging/display
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Skip this step if the specified file exists
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skip_if_file_exists: Option<String>,
+    /// Skip this step if the specified file is missing
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skip_if_file_missing: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

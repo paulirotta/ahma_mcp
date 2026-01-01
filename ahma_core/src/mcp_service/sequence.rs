@@ -62,12 +62,6 @@ async fn handle_sequence_tool_sync(
     let kind = SequenceKind::TopLevel;
 
     for (index, step) in sequence.iter().enumerate() {
-        if should_skip_step(&kind, step) {
-            let message = format_step_skipped_message(&kind, step);
-            final_result.content.push(Content::text(message));
-            continue;
-        }
-
         // Extract working directory from parent args
         let parent_args = params.arguments.clone().unwrap_or_default();
         let working_directory = parent_args
@@ -82,6 +76,12 @@ async fn handle_sequence_tool_sync(
                 }
             })
             .unwrap_or_else(|| ".".to_string());
+
+        if should_skip_step_with_context(&kind, step, &working_directory) {
+            let message = format_step_skipped_message(&kind, step);
+            final_result.content.push(Content::text(message));
+            continue;
+        }
 
         // Merge arguments, excluding meta-parameters
         let mut merged_args = Map::new();
@@ -209,14 +209,6 @@ async fn handle_sequence_tool_async(
     let kind = SequenceKind::TopLevel;
 
     for (index, step) in sequence.iter().enumerate() {
-        if should_skip_step(&kind, step) {
-            let message = format_step_skipped_message(&kind, step);
-            final_result.content.push(Content::text(message));
-            continue;
-        }
-        let mut step_params = params.clone();
-        step_params.name = step.tool.clone().into();
-
         // Extract meta-parameters that should not be passed to tools
         let parent_args = params.arguments.clone().unwrap_or_default();
         let working_directory = parent_args
@@ -231,6 +223,15 @@ async fn handle_sequence_tool_async(
                 }
             })
             .unwrap_or_else(|| ".".to_string());
+
+        if should_skip_step_with_context(&kind, step, &working_directory) {
+            let message = format_step_skipped_message(&kind, step);
+            final_result.content.push(Content::text(message));
+            continue;
+        }
+
+        let mut step_params = params.clone();
+        step_params.name = step.tool.clone().into();
 
         // Merge arguments, excluding meta-parameters from parent
         let mut merged_args = Map::new();
@@ -476,6 +477,45 @@ pub fn should_skip_step(kind: &SequenceKind, step: &SequenceStep) -> bool {
     }
 }
 
+/// Checks if a sequence step should be skipped based on environment variables or file existence.
+pub fn should_skip_step_with_context(
+    kind: &SequenceKind,
+    step: &SequenceStep,
+    working_dir: &str,
+) -> bool {
+    // Check environment variables first
+    if should_skip_step(kind, step) {
+        return true;
+    }
+
+    // Check file existence
+    if let Some(path) = &step.skip_if_file_exists {
+        let full_path = std::path::Path::new(working_dir).join(path);
+        if full_path.exists() {
+            tracing::info!(
+                "Skipping sequence step {} because file exists: {:?}",
+                step.tool,
+                full_path
+            );
+            return true;
+        }
+    }
+
+    if let Some(path) = &step.skip_if_file_missing {
+        let full_path = std::path::Path::new(working_dir).join(path);
+        if !full_path.exists() {
+            tracing::info!(
+                "Skipping sequence step {} because file is missing: {:?}",
+                step.tool,
+                full_path
+            );
+            return true;
+        }
+    }
+
+    false
+}
+
 /// Checks if an environment variable contains a value in a comma-separated list.
 pub fn env_list_contains(env_key: &str, value: &str) -> bool {
     match std::env::var(env_key) {
@@ -502,6 +542,8 @@ mod tests {
             subcommand: subcommand.to_string(),
             description: description.map(|s| s.to_string()),
             args: Default::default(),
+            skip_if_file_exists: None,
+            skip_if_file_missing: None,
         }
     }
 
@@ -730,5 +772,55 @@ mod tests {
         let kind = SequenceKind::TopLevel;
         let step = make_test_sequence_step("cargo", "build", None);
         assert!(!should_skip_step(&kind, &step));
+    }
+
+    #[test]
+    fn test_should_skip_step_file_exists() {
+        let temp = tempfile::tempdir().unwrap();
+        let file_path = temp.path().join("skip_me.txt");
+        std::fs::write(&file_path, "exists").unwrap();
+
+        let mut step = make_test_sequence_step("cargo", "build", None);
+        step.skip_if_file_exists = Some("skip_me.txt".to_string());
+
+        let kind = SequenceKind::TopLevel;
+        assert!(should_skip_step_with_context(
+            &kind,
+            &step,
+            temp.path().to_str().unwrap()
+        ));
+
+        // Should not skip if file doesn't exist
+        step.skip_if_file_exists = Some("non_existent.txt".to_string());
+        assert!(!should_skip_step_with_context(
+            &kind,
+            &step,
+            temp.path().to_str().unwrap()
+        ));
+    }
+
+    #[test]
+    fn test_should_skip_step_file_missing() {
+        let temp = tempfile::tempdir().unwrap();
+
+        let mut step = make_test_sequence_step("cargo", "build", None);
+        step.skip_if_file_missing = Some("missing.txt".to_string());
+
+        let kind = SequenceKind::TopLevel;
+        assert!(should_skip_step_with_context(
+            &kind,
+            &step,
+            temp.path().to_str().unwrap()
+        ));
+
+        // Should not skip if file exists
+        let file_path = temp.path().join("exists.txt");
+        std::fs::write(&file_path, "exists").unwrap();
+        step.skip_if_file_missing = Some("exists.txt".to_string());
+        assert!(!should_skip_step_with_context(
+            &kind,
+            &step,
+            temp.path().to_str().unwrap()
+        ));
     }
 }
