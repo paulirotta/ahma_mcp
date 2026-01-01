@@ -45,7 +45,7 @@
 
 use anyhow::Result;
 use directories::ProjectDirs;
-use std::{io::stderr, sync::Once};
+use std::{io::stderr, path::Path, sync::Once};
 use tracing_subscriber::{EnvFilter, fmt::layer, prelude::*};
 
 static INIT: Once = Once::new();
@@ -75,17 +75,19 @@ pub fn init_logging(log_level: &str, log_to_file: bool) -> Result<()> {
             if let Some(proj_dirs) = ProjectDirs::from("com", "AhmaMcp", "ahma_mcp") {
                 let log_dir = proj_dirs.cache_dir();
 
-                // Try to create the log directory first
-                let dir_created = std::fs::create_dir_all(log_dir).is_ok();
+                // Test if we can actually write to the log directory before calling
+                // tracing_appender::rolling::daily, which panics on permission errors
+                // in tracing-appender 0.2.4+.
+                let can_write = test_write_permission(log_dir);
 
                 // Try to create the file appender, fall back to stderr if it fails
                 // Use catch_unwind to handle panics from tracing_appender
-                let file_appender_result = if dir_created {
-                    std::panic::catch_unwind(|| {
+                let file_appender_result = if can_write {
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         tracing_appender::rolling::daily(log_dir, "ahma_mcp.log")
-                    })
+                    }))
                 } else {
-                    Err(Box::new("Failed to create log directory") as Box<dyn std::any::Any + Send>)
+                    Err(Box::new("Cannot write to log directory") as Box<dyn std::any::Any + Send>)
                 };
 
                 match file_appender_result {
@@ -128,4 +130,27 @@ pub fn init_logging(log_level: &str, log_to_file: bool) -> Result<()> {
     });
 
     Ok(())
+}
+
+/// Test if we can write to the given directory.
+///
+/// This creates the directory if needed, then attempts to create and remove a test file.
+/// Used to check write permissions before calling tracing_appender::rolling::daily
+/// which panics on permission errors in tracing-appender 0.2.4+.
+fn test_write_permission(dir: &Path) -> bool {
+    // Try to create the directory
+    if std::fs::create_dir_all(dir).is_err() {
+        return false;
+    }
+
+    // Try to create a test file to verify write permission
+    let test_file = dir.join(".ahma_log_test");
+    match std::fs::write(&test_file, "test") {
+        Ok(()) => {
+            // Clean up the test file
+            let _ = std::fs::remove_file(&test_file);
+            true
+        }
+        Err(_) => false,
+    }
 }

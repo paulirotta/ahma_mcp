@@ -196,6 +196,9 @@ impl StressClient {
             return Err(anyhow!("SSE connection failed: {}", sse_response.status()));
         }
 
+        // Small delay to ensure SSE is registered on server before sending initialized
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
         // Step 4: Send initialized notification
         self.client
             .post(&url)
@@ -215,54 +218,71 @@ impl StressClient {
         
         let mut stream = sse_response.bytes_stream();
         let mut buffer = String::new();
+
+        // Get the current working directory for the roots response
+        let cwd = std::env::current_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| ".".to_string());
         
         // Read SSE events looking for roots/list request
-        let timeout = tokio::time::timeout(Duration::from_secs(5), async {
+        let timeout = tokio::time::timeout(Duration::from_secs(10), async {
             while let Some(chunk_result) = stream.next().await {
                 let chunk = chunk_result.context("Failed to read SSE chunk")?;
                 let chunk_str = String::from_utf8_lossy(&chunk);
                 buffer.push_str(&chunk_str);
                 
-                // Parse SSE events from buffer
-                for line in buffer.lines() {
-                    if let Some(data) = line.strip_prefix("data: ") {
-                        if let Ok(msg) = serde_json::from_str::<Value>(data) {
-                            // Check if this is a roots/list request
-                            if msg.get("method").and_then(|m| m.as_str()) == Some("roots/list") {
-                                if let Some(req_id) = msg.get("id") {
-                                    // Respond with roots
-                                    let response = post_client
-                                        .post(&post_url)
-                                        .header("mcp-session-id", &post_session_id)
-                                        .json(&json!({
-                                            "jsonrpc": "2.0",
-                                            "id": req_id,
-                                            "result": {
-                                                "roots": [{
-                                                    "uri": "file://.",
-                                                    "name": "workspace"
-                                                }]
-                                            }
-                                        }))
-                                        .send()
-                                        .await
-                                        .context("Failed to respond to roots/list")?;
-                                    
-                                    if !response.status().is_success() {
-                                        return Err(anyhow!("roots/list response failed: {}", response.status()));
-                                    }
-                                    
-                                    // Handshake complete!
-                                    return Ok(());
+                // SSE events are separated by double newline (\n\n)
+                while let Some(event_end) = buffer.find("\n\n") {
+                    let event_block = buffer[..event_end].to_string();
+                    buffer = buffer[event_end + 2..].to_string();
+                    
+                    // Extract data lines from the event
+                    let mut data_parts = Vec::new();
+                    for line in event_block.lines() {
+                        let line = line.trim_end_matches('\r');
+                        // SSE data lines can be "data: <content>" or "data:<content>"
+                        if let Some(content) = line.strip_prefix("data:") {
+                            data_parts.push(content.trim_start());
+                        }
+                    }
+                    
+                    if data_parts.is_empty() {
+                        continue;
+                    }
+                    
+                    let data = data_parts.join("\n");
+                    
+                    if let Ok(msg) = serde_json::from_str::<Value>(&data) {
+                        // Check if this is a roots/list request
+                        if msg.get("method").and_then(|m| m.as_str()) == Some("roots/list") {
+                            if let Some(req_id) = msg.get("id") {
+                                // Respond with roots using proper file:// URI
+                                let response = post_client
+                                    .post(&post_url)
+                                    .header("mcp-session-id", &post_session_id)
+                                    .json(&json!({
+                                        "jsonrpc": "2.0",
+                                        "id": req_id,
+                                        "result": {
+                                            "roots": [{
+                                                "uri": format!("file://{}", cwd),
+                                                "name": "workspace"
+                                            }]
+                                        }
+                                    }))
+                                    .send()
+                                    .await
+                                    .context("Failed to respond to roots/list")?;
+                                
+                                if !response.status().is_success() {
+                                    return Err(anyhow!("roots/list response failed: {}", response.status()));
                                 }
+                                
+                                // Handshake complete!
+                                return Ok(());
                             }
                         }
                     }
-                }
-                
-                // Clear processed lines from buffer, keep partial line
-                if let Some(last_newline) = buffer.rfind('\n') {
-                    buffer = buffer[last_newline + 1..].to_string();
                 }
             }
             Err(anyhow!("SSE stream ended without receiving roots/list"))
@@ -270,12 +290,12 @@ impl StressClient {
 
         match timeout {
             Ok(Ok(())) => {
-                // Give server a moment to process the roots response
-                tokio::time::sleep(Duration::from_millis(100)).await;
+                // Give server a moment to process the roots response and lock sandbox
+                tokio::time::sleep(Duration::from_millis(200)).await;
                 Ok(())
             }
             Ok(Err(e)) => Err(e),
-            Err(_) => Err(anyhow!("Timeout waiting for roots/list request from server")),
+            Err(_) => Err(anyhow!("Timeout waiting for roots/list request from server (10s)")),
         }
     }
 
