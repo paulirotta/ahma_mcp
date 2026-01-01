@@ -1,22 +1,24 @@
 #!/bin/bash
 #
-# Stress Test Script for ahma_mcp HTTP Bridge
+# DEPRECATED: This script has been replaced by a Rust example
 #
-# This script:
-# 1. Builds the project (release mode)
-# 2. Spawns an HTTP server on a random port
-# 3. Runs stress tests against it
-# 4. Shows results in real-time
-# 5. Cleans up the server on exit (including errors/Ctrl+C)
+# The new stress test is located at:
+#   ahma_http_mcp_client/examples/stress_test.rs
 #
 # Usage:
-#   ./scripts/stress-test.sh [--quick] [--verbose]
+#   cargo run --example stress_test -- --help
+#   cargo run --example stress_test -- --port 7634 --duration 60
 #
-# Options:
-#   --quick    Run a quick subset of stress tests
-#   --verbose  Show verbose server output
+# The new implementation provides:
+#   - Multi-threaded concurrent clients (1 sync + 3 async by default)
+#   - Immediate error detection from server stderr
+#   - Better performance and reliability
+#   - Detailed statistics reporting
+#   - Configurable port, duration, and client count
+#
+# For backwards compatibility, this script now invokes the Rust example:
 
-set -euo pipefail
+exec cargo run --example stress_test -- "$@"
 
 # Resolve project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -28,3 +28,11 @@ clap = {version = "4.5.53", features = ["derive"]}
 tempfile.workspace = true
 tracing-subscriber = "0.3"
 wiremock = "0.6"
+
+[[example]]
+name = "stress_test"
+path = "examples/stress_test.rs"
+
+[[example]]
+name = "oauth_mcp_client"
+path = "examples/oauth_mcp_client.rs"
