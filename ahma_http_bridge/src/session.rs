@@ -481,6 +481,9 @@ impl SessionManager {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(stderr_mode)
+            // Ensure the subprocess does not outlive this process in the event a test exits early
+            // or fails to explicitly terminate the session.
+            .kill_on_drop(true)
             .spawn()
             .map_err(|e| {
                 BridgeError::ServerProcess(format!("Failed to spawn subprocess: {}", e))
