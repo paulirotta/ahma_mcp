@@ -1,5 +1,5 @@
 use ahma_core::sandbox;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tempfile::tempdir;
 
 #[test]

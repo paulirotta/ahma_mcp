@@ -217,7 +217,7 @@ async fn test_delete_session_terminates_subprocess() {
     sleep(Duration::from_millis(100)).await;
 
     let post_response = client
-        .post(&format!("{}/mcp", base_url))
+        .post(format!("{}/mcp", base_url))
         .header("Content-Type", "application/json")
         .header("Accept", "application/json")
         .header("Mcp-Session-Id", &session_id)

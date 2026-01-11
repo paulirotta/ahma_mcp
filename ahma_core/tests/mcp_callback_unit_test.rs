@@ -1,10 +1,4 @@
-use ahma_core::callback_system::{CallbackSender, ProgressUpdate};
-use ahma_core::client_type::McpClientType;
-use ahma_core::mcp_callback::McpCallbackSender;
-use rmcp::{
-    model::{ProgressToken, NumberOrString},
-};
-use std::sync::Arc;
+use ahma_core::callback_system::ProgressUpdate;
 
 #[tokio::test]
 async fn test_progress_skipping_for_unsupported_clients() {

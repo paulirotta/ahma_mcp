@@ -20,7 +20,7 @@ serde = {workspace = true, features = ["derive"]}
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = {workspace = true, features = ["rt-multi-thread", "macros", "io-util", "process", "sync"]}
-tokio-stream = {version = "0.1.17", features = ["sync"]}
+tokio-stream = {version = "0.1.18", features = ["sync"]}
 tokio-util = {workspace = true, features = ["io", "codec"]}
 tower-http = {version = "0.6", features = ["trace", "cors"]}
 tracing-subscriber = {workspace = true, features = ["env-filter"]}

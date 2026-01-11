@@ -297,7 +297,9 @@ pub async fn load_mcp_config(config_path: &Path) -> anyhow::Result<McpConfig> {
 /// # Returns
 /// * `Result<HashMap<String, ToolConfig>>` - Map of tool name to configuration or error
 pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<String, ToolConfig>> {
+    use std::time::Duration;
     use tokio::fs;
+    use tokio::time;
 
     // Hardcoded tool names that should not be overridden by user configurations
     const RESERVED_TOOL_NAMES: &[&str] = &["await", "status"];
@@ -309,6 +311,37 @@ pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<Strin
 
     let mut configs = HashMap::new();
 
+    async fn read_tool_config_with_retry(path: &Path) -> Option<ToolConfig> {
+        // Filesystem watchers can fire before a newly-written JSON file is fully durable.
+        // A short bounded retry makes dynamic reload reliable without slowing normal startup.
+        const MAX_ATTEMPTS: usize = 8;
+        const BACKOFF_MS: u64 = 40;
+
+        for attempt in 1..=MAX_ATTEMPTS {
+            match fs::read_to_string(path).await {
+                Ok(contents) => match serde_json::from_str::<ToolConfig>(&contents) {
+                    Ok(config) => return Some(config),
+                    Err(e) => {
+                        if attempt == MAX_ATTEMPTS {
+                            tracing::warn!("Failed to parse {}: {}", path.display(), e);
+                            return None;
+                        }
+                    }
+                },
+                Err(e) => {
+                    if attempt == MAX_ATTEMPTS {
+                        tracing::warn!("Failed to read {}: {}", path.display(), e);
+                        return None;
+                    }
+                }
+            }
+
+            time::sleep(Duration::from_millis(BACKOFF_MS)).await;
+        }
+
+        None
+    }
+
     // Read directory entries
     let mut dir = fs::read_dir(tools_dir).await?;
     while let Some(entry) = dir.next_entry().await? {
@@ -316,30 +349,20 @@ pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<Strin
 
         // Only process .json files
         if path.extension().and_then(|s| s.to_str()) == Some("json") {
-            match fs::read_to_string(&path).await {
-                Ok(contents) => match serde_json::from_str::<ToolConfig>(&contents) {
-                    Ok(config) => {
-                        // Guard rail: Check for conflicts with hardcoded tool names
-                        if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
-                            anyhow::bail!(
-                                "Tool name '{}' conflicts with a hardcoded system tool. Reserved tool names: {:?}. Please rename your tool in {}",
-                                config.name,
-                                RESERVED_TOOL_NAMES,
-                                path.display()
-                            );
-                        }
-
-                        // Include all tools (enabled or disabled)
-                        // Disabled tools will be rejected at execution time with a helpful message
-                        configs.insert(config.name.clone(), config);
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to parse {}: {}", path.display(), e);
-                    }
-                },
-                Err(e) => {
-                    tracing::warn!("Failed to read {}: {}", path.display(), e);
+            if let Some(config) = read_tool_config_with_retry(&path).await {
+                // Guard rail: Check for conflicts with hardcoded tool names
+                if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
+                    anyhow::bail!(
+                        "Tool name '{}' conflicts with a hardcoded system tool. Reserved tool names: {:?}. Please rename your tool in {}",
+                        config.name,
+                        RESERVED_TOOL_NAMES,
+                        path.display()
+                    );
                 }
+
+                // Include all tools (enabled or disabled)
+                // Disabled tools will be rejected at execution time with a helpful message
+                configs.insert(config.name.clone(), config);
             }
         }
     }
@@ -360,6 +383,7 @@ pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<Strin
 /// * `Result<HashMap<String, ToolConfig>>` - Map of tool name to configuration or error
 pub fn load_tool_configs_sync(tools_dir: &Path) -> anyhow::Result<HashMap<String, ToolConfig>> {
     use std::fs;
+    use std::{thread, time::Duration};
 
     // Hardcoded tool names that should not be overridden by user configurations
     const RESERVED_TOOL_NAMES: &[&str] = &["await", "status"];
@@ -371,6 +395,35 @@ pub fn load_tool_configs_sync(tools_dir: &Path) -> anyhow::Result<HashMap<String
 
     let mut configs = HashMap::new();
 
+    fn read_tool_config_with_retry(path: &Path) -> Option<ToolConfig> {
+        const MAX_ATTEMPTS: usize = 8;
+        const BACKOFF_MS: u64 = 40;
+
+        for attempt in 1..=MAX_ATTEMPTS {
+            match fs::read_to_string(path) {
+                Ok(contents) => match serde_json::from_str::<ToolConfig>(&contents) {
+                    Ok(config) => return Some(config),
+                    Err(e) => {
+                        if attempt == MAX_ATTEMPTS {
+                            tracing::warn!("Failed to parse {}: {}", path.display(), e);
+                            return None;
+                        }
+                    }
+                },
+                Err(e) => {
+                    if attempt == MAX_ATTEMPTS {
+                        tracing::warn!("Failed to read {}: {}", path.display(), e);
+                        return None;
+                    }
+                }
+            }
+
+            thread::sleep(Duration::from_millis(BACKOFF_MS));
+        }
+
+        None
+    }
+
     // Read directory entries
     for entry in fs::read_dir(tools_dir)? {
         let entry = entry?;
@@ -378,30 +431,20 @@ pub fn load_tool_configs_sync(tools_dir: &Path) -> anyhow::Result<HashMap<String
 
         // Only process .json files
         if path.extension().and_then(|s| s.to_str()) == Some("json") {
-            match fs::read_to_string(&path) {
-                Ok(contents) => match serde_json::from_str::<ToolConfig>(&contents) {
-                    Ok(config) => {
-                        // Guard rail: Check for conflicts with hardcoded tool names
-                        if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
-                            anyhow::bail!(
-                                "Tool name '{}' conflicts with a hardcoded system tool. Reserved tool names: {:?}. Please rename your tool in {}",
-                                config.name,
-                                RESERVED_TOOL_NAMES,
-                                path.display()
-                            );
-                        }
-
-                        // Include all tools (enabled or disabled)
-                        // Disabled tools will be rejected at execution time with a helpful message
-                        configs.insert(config.name.clone(), config);
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to parse {}: {}", path.display(), e);
-                    }
-                },
-                Err(e) => {
-                    tracing::warn!("Failed to read {}: {}", path.display(), e);
+            if let Some(config) = read_tool_config_with_retry(&path) {
+                // Guard rail: Check for conflicts with hardcoded tool names
+                if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
+                    anyhow::bail!(
+                        "Tool name '{}' conflicts with a hardcoded system tool. Reserved tool names: {:?}. Please rename your tool in {}",
+                        config.name,
+                        RESERVED_TOOL_NAMES,
+                        path.display()
+                    );
                 }
+
+                // Include all tools (enabled or disabled)
+                // Disabled tools will be rejected at execution time with a helpful message
+                configs.insert(config.name.clone(), config);
             }
         }
     }

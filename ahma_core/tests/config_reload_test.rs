@@ -32,7 +32,7 @@ async fn test_dynamic_config_reload() -> Result<()> {
 
     // 3. Start the MCP server using the test client
     // We pass the tools_dir to the server
-    let mut client = new_client_with_args(Some(tools_dir.to_str().unwrap()), &[]).await?;
+    let client = new_client_with_args(Some(tools_dir.to_str().unwrap()), &[]).await?;
 
     // 4. Verify initial tool is present
     let tools = client.list_tools(None).await?;
