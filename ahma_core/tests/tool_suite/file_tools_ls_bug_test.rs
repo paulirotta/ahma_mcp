@@ -19,7 +19,7 @@ use std::borrow::Cow;
 async fn test_ls_command_with_long_flag() {
     skip_if_disabled_async!("file_tools");
     // Setup: Create a test client with file_tools
-    let client = new_client(Some(".ahma/tools"))
+    let client = new_client(Some(".ahma"))
         .await
         .expect("Failed to create test client");
 
@@ -75,7 +75,7 @@ async fn test_ls_command_with_long_flag() {
 async fn test_ls_command_without_flags() {
     skip_if_disabled_async!("file_tools");
     // Setup
-    let client = new_client(Some(".ahma/tools"))
+    let client = new_client(Some(".ahma"))
         .await
         .expect("Failed to create test client");
 
@@ -115,7 +115,7 @@ async fn test_ls_command_without_flags() {
 async fn test_ls_command_with_all_flag() {
     skip_if_disabled_async!("file_tools");
     // Setup
-    let client = new_client(Some(".ahma/tools"))
+    let client = new_client(Some(".ahma"))
         .await
         .expect("Failed to create test client");
 
@@ -156,7 +156,7 @@ async fn test_ls_command_with_all_flag() {
 async fn test_ls_command_with_multiple_flags() {
     skip_if_disabled_async!("file_tools");
     // Setup
-    let client = new_client(Some(".ahma/tools"))
+    let client = new_client(Some(".ahma"))
         .await
         .expect("Failed to create test client");
 

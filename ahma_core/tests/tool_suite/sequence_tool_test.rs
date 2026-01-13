@@ -12,13 +12,13 @@ use std::borrow::Cow;
 #[tokio::test]
 async fn test_sequence_tool_loads() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     let tools = client.list_tools(None).await?;
     let tool_names: Vec<_> = tools.tools.iter().map(|t| t.name.as_ref()).collect();
 
     // Verify sandboxed_shell is loaded (preferred built-in tool for running CLI commands).
-    // In CI environments, the .ahma/tools may not be available, so skip gracefully.
+    // In CI environments, the .ahma may not be available, so skip gracefully.
     if !tool_names.contains(&"sandboxed_shell") {
         eprintln!("Skipping test: sandboxed_shell tool not available (may be CI environment)");
         eprintln!("Available tools: {:?}", tool_names);
@@ -71,7 +71,7 @@ async fn test_simple_sequence_execution() -> Result<()> {
 
     // Copy sandboxed_shell.json to the test tools directory
     std::fs::copy(
-        get_workspace_path(".ahma/tools/sandboxed_shell.json"),
+        get_workspace_path(".ahma/sandboxed_shell.json"),
         tools_dir.join("sandboxed_shell.json"),
     )?;
 
@@ -255,7 +255,7 @@ async fn test_sequence_delay_is_applied() -> Result<()> {
     });
 
     std::fs::copy(
-        get_workspace_path(".ahma/tools/sandboxed_shell.json"),
+        get_workspace_path(".ahma/sandboxed_shell.json"),
         tools_dir.join("sandboxed_shell.json"),
     )?;
 

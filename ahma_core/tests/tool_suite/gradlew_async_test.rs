@@ -22,7 +22,7 @@ fn get_android_test_project_path() -> String {
 /// Test gradlew async build commands (might fail without Android SDK but tests tool behavior)
 #[tokio::test]
 async fn test_gradlew_async_build_commands() -> Result<()> {
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
     let project_path = get_android_test_project_path();
 
     // Test async commands - these might fail due to missing Android SDK but should show proper error handling
@@ -90,7 +90,7 @@ async fn test_gradlew_async_build_commands() -> Result<()> {
 /// Test lint commands that are async but don't require compilation
 #[tokio::test]
 async fn test_gradlew_lint_commands() -> Result<()> {
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
     let project_path = get_android_test_project_path();
 
     // Test lint-related commands
@@ -140,7 +140,7 @@ async fn test_gradlew_lint_commands() -> Result<()> {
 /// Test final comprehensive validation that the tool works end-to-end
 #[tokio::test]
 async fn test_comprehensive_gradlew_validation() -> Result<()> {
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
     let project_path = get_android_test_project_path();
 
     // Test that we can chain multiple gradlew commands successfully

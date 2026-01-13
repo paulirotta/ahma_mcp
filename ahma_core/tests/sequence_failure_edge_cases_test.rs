@@ -20,7 +20,7 @@ use tokio::fs;
 /// Create a temp directory with sequence tools designed to test failure scenarios
 async fn setup_failure_test_configs() -> Result<TempDir> {
     let temp_dir = tempfile::tempdir()?;
-    let tools_dir = temp_dir.path().join(".ahma").join("tools");
+    let tools_dir = temp_dir.path().join(".ahma");
     fs::create_dir_all(&tools_dir).await?;
 
     // Create a working echo tool
@@ -201,7 +201,7 @@ async fn test_sequence_step_failure_stops_subsequent_steps() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_failure_test_configs().await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     // List tools to verify our sequence is loaded
     let tools = client.list_all_tools().await?;
@@ -266,7 +266,7 @@ async fn test_sequence_with_missing_subcommand_reference() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_failure_test_configs().await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     let tools = client.list_all_tools().await?;
     let has_seq = tools
@@ -321,7 +321,7 @@ async fn test_sequence_with_missing_subcommand_reference() -> Result<()> {
 async fn test_sequence_failure_with_filesystem_markers() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_failure_test_configs().await?;
-    let tools_dir = temp_dir.path().join(".ahma").join("tools");
+    let tools_dir = temp_dir.path().join(".ahma");
 
     // Create marker file paths INSIDE the temp directory (sandbox-scoped)
     let step1_marker = temp_dir.path().join("step1_marker");
@@ -370,7 +370,7 @@ async fn test_sequence_failure_with_filesystem_markers() -> Result<()> {
     )
     .await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     let tools = client.list_all_tools().await?;
     let has_marker_seq = tools.iter().any(|t| t.name.as_ref() == "marker_sequence");
@@ -420,7 +420,7 @@ async fn test_sequence_failure_with_filesystem_markers() -> Result<()> {
 async fn test_empty_sequence_handling() -> Result<()> {
     init_test_logging();
     let temp_dir = tempfile::tempdir()?;
-    let tools_dir = temp_dir.path().join(".ahma").join("tools");
+    let tools_dir = temp_dir.path().join(".ahma");
     fs::create_dir_all(&tools_dir).await?;
 
     let empty_sequence_config = r#"
@@ -436,7 +436,7 @@ async fn test_empty_sequence_handling() -> Result<()> {
 "#;
     fs::write(tools_dir.join("empty_sequence.json"), empty_sequence_config).await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     let tools = client.list_all_tools().await?;
     let has_empty_seq = tools.iter().any(|t| t.name.as_ref() == "empty_sequence");
@@ -469,7 +469,7 @@ async fn test_empty_sequence_handling() -> Result<()> {
 async fn test_sequence_all_steps_succeed() -> Result<()> {
     init_test_logging();
     let temp_dir = tempfile::tempdir()?;
-    let tools_dir = temp_dir.path().join(".ahma").join("tools");
+    let tools_dir = temp_dir.path().join(".ahma");
     fs::create_dir_all(&tools_dir).await?;
 
     let echo_tool = r#"
@@ -502,7 +502,7 @@ async fn test_sequence_all_steps_succeed() -> Result<()> {
 "#;
     fs::write(tools_dir.join("success_sequence.json"), success_sequence).await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     let params = CallToolRequestParam {
         name: Cow::Borrowed("success_sequence"),

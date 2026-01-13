@@ -215,7 +215,7 @@ mod flag_combination_tests {
     fn test_ahma_mcp_multiple_flags() {
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
-        let tools_dir = workspace.join(".ahma/tools");
+        let tools_dir = workspace.join(".ahma");
 
         // Use CLI mode with multiple flags
         let output = test_command(&binary)
@@ -386,7 +386,7 @@ mod mode_tests {
     fn test_ahma_mcp_stdio_mode_without_client() {
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
-        let tools_dir = workspace.join(".ahma/tools");
+        let tools_dir = workspace.join(".ahma");
 
         let output = test_command(&binary)
             .current_dir(&workspace)
@@ -462,7 +462,7 @@ mod cli_execution_tests {
     fn test_ahma_mcp_cli_simple_tool() {
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
-        let tools_dir = workspace.join(".ahma/tools");
+        let tools_dir = workspace.join(".ahma");
 
         // Try to run file_tools_pwd which should be available
         let output = test_command(&binary)
@@ -492,7 +492,7 @@ mod cli_execution_tests {
     fn test_ahma_mcp_cli_tool_with_args() {
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
-        let tools_dir = workspace.join(".ahma/tools");
+        let tools_dir = workspace.join(".ahma");
 
         // Try to run sandboxed_shell with an echo command
         let output = test_command(&binary)
@@ -520,7 +520,7 @@ mod cli_execution_tests {
     fn test_ahma_mcp_cli_sync_execution() {
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
-        let tools_dir = workspace.join(".ahma/tools");
+        let tools_dir = workspace.join(".ahma");
 
         let output = test_command(&binary)
             .current_dir(&workspace)
@@ -567,7 +567,7 @@ mod ahma_validate_extended_tests {
         if combined.contains("--verbose") || combined.contains("-v") {
             // It has verbose mode, test it
             let workspace = workspace_dir();
-            let tools_dir = workspace.join(".ahma/tools");
+            let tools_dir = workspace.join(".ahma");
 
             let verbose_output = Command::new(&binary)
                 .current_dir(&workspace)
@@ -589,7 +589,7 @@ mod ahma_validate_extended_tests {
     fn test_ahma_validate_specific_files() {
         let binary = build_binary("ahma_validate", "ahma_validate");
         let workspace = workspace_dir();
-        let tools_dir = workspace.join(".ahma/tools");
+        let tools_dir = workspace.join(".ahma");
 
         // Validate specific tool files if they exist
         for tool_name in ["cargo.json", "git.json", "file_tools.json"] {

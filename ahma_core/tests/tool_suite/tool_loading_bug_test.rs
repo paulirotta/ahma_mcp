@@ -25,7 +25,7 @@ use common::test_client::new_client;
 async fn test_tools_are_loaded_after_json_migration() -> Result<()> {
     init_test_logging();
     // Test that core tool configurations are properly loaded
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     let tools = client.list_tools(None).await?;
 
@@ -63,7 +63,7 @@ async fn test_tools_are_loaded_after_json_migration() -> Result<()> {
 async fn test_specific_json_tool_functionality() -> Result<()> {
     init_test_logging();
     // Test that a specific tool from JSON config actually works
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     let tools = client.list_tools(None).await?;
 

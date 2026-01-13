@@ -215,7 +215,7 @@ async fn test_http_no_progress_token_does_not_emit_progress_notifications() -> a
         .expect("Failed to get workspace dir")
         .to_path_buf();
     std::fs::copy(
-        workspace_dir.join(".ahma/tools/sandboxed_shell.json"),
+        workspace_dir.join(".ahma/sandboxed_shell.json"),
         tools_dir.join("sandboxed_shell.json"),
     )
     .context("Failed to copy sandboxed_shell tool config")?;
@@ -303,7 +303,7 @@ async fn test_http_progress_token_is_echoed_in_progress_notifications() -> anyho
         .expect("Failed to get workspace dir")
         .to_path_buf();
     std::fs::copy(
-        workspace_dir.join(".ahma/tools/sandboxed_shell.json"),
+        workspace_dir.join(".ahma/sandboxed_shell.json"),
         tools_dir.join("sandboxed_shell.json"),
     )
     .context("Failed to copy sandboxed_shell tool config")?;

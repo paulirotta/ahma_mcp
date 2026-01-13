@@ -13,7 +13,7 @@ async fn test_path_validation_success() {
     init_test_logging();
     skip_if_disabled_async!("sandboxed_shell");
     // Use existing sandboxed_shell tool for path validation test
-    let client = new_client(Some(".ahma/tools")).await.unwrap();
+    let client = new_client(Some(".ahma")).await.unwrap();
 
     let params = CallToolRequestParam {
         name: "sandboxed_shell".into(),
@@ -37,7 +37,7 @@ async fn test_path_validation_failure_absolute() {
     init_test_logging();
     skip_if_disabled_async!("sandboxed_shell");
     // Use existing sandboxed_shell tool for path validation test
-    let client = new_client(Some(".ahma/tools")).await.unwrap();
+    let client = new_client(Some(".ahma")).await.unwrap();
 
     let params = CallToolRequestParam {
         name: "sandboxed_shell".into(),
@@ -79,7 +79,7 @@ async fn test_path_validation_failure_relative() {
     init_test_logging();
     skip_if_disabled_async!("sandboxed_shell");
     // Use existing sandboxed_shell tool for path validation test
-    let client = new_client(Some(".ahma/tools")).await.unwrap();
+    let client = new_client(Some(".ahma")).await.unwrap();
 
     let params = CallToolRequestParam {
         name: "sandboxed_shell".into(),

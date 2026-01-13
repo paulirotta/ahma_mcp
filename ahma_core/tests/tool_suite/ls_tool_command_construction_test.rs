@@ -11,7 +11,7 @@ use std::borrow::Cow;
 async fn test_ls_tool_should_not_add_undefined_path_parameter() -> Result<()> {
     init_test_logging();
     // ARRANGE: Set up test client to execute ls tool
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Check if ls tool is available (optional since ls.json was removed)
     let tools = client.list_tools(None).await?;
@@ -80,7 +80,7 @@ async fn test_ls_tool_should_not_add_undefined_path_parameter() -> Result<()> {
 async fn test_ls_tool_executes_plain_ls_command() -> Result<()> {
     init_test_logging();
     // ARRANGE: Set up test client
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Check if ls tool is available (optional since ls.json was removed)
     let tools = client.list_tools(None).await?;
@@ -130,7 +130,7 @@ async fn test_ls_tool_executes_plain_ls_command() -> Result<()> {
 async fn test_ls_tool_with_valid_options() -> Result<()> {
     init_test_logging();
     // ARRANGE: Set up test client with tools directory
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Check if ls tool is available (optional since ls.json was removed)
     let tools = client.list_tools(None).await?;

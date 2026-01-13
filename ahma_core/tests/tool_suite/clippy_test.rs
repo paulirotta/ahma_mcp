@@ -11,7 +11,7 @@ use common::test_client::new_client;
 #[tokio::test]
 async fn test_run_clippy() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Check if cargo tool is available (may not be in CI environment)
     let tools = client.list_all_tools().await?;

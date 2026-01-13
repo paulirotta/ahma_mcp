@@ -229,7 +229,7 @@ async fn test_operation_completion_tracking() {
 
     // Load configs and create service (not used in this test)
     let configs = Arc::new(
-        load_tool_configs(&std::path::PathBuf::from(".ahma/tools"))
+        load_tool_configs(&std::path::PathBuf::from(".ahma"))
             .await
             .unwrap(),
     );

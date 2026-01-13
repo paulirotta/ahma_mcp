@@ -123,7 +123,7 @@ mod ahma_mcp_tests {
     fn test_ahma_mcp_cli_mode_invalid_tool() {
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
-        let tools_dir = workspace.join(".ahma/tools");
+        let tools_dir = workspace.join(".ahma");
 
         let output = test_command(&binary)
             .current_dir(&workspace)
@@ -156,7 +156,7 @@ mod ahma_mcp_tests {
         // Test using a simple echo-like tool if available
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
-        let tools_dir = workspace.join(".ahma/tools");
+        let tools_dir = workspace.join(".ahma");
 
         // Check if file_tools exists (a simple tool to test with)
         let output = test_command(&binary)
@@ -194,7 +194,7 @@ mod ahma_mcp_tests {
         // Note: This test behavior depends on the test runner's TTY state
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
-        let tools_dir = workspace.join(".ahma/tools");
+        let tools_dir = workspace.join(".ahma");
 
         let output = test_command(&binary)
             .current_dir(&workspace)
@@ -280,7 +280,7 @@ mod ahma_validate_tests {
     fn test_ahma_validate_valid_tools_directory() {
         let binary = build_binary("ahma_validate", "ahma_validate");
         let workspace = workspace_dir();
-        let tools_dir = workspace.join(".ahma/tools");
+        let tools_dir = workspace.join(".ahma");
 
         let output = Command::new(&binary)
             .current_dir(&workspace)
@@ -359,7 +359,7 @@ mod ahma_validate_tests {
     fn test_ahma_validate_single_valid_file() {
         let binary = build_binary("ahma_validate", "ahma_validate");
         let workspace = workspace_dir();
-        let cargo_json = workspace.join(".ahma/tools/cargo.json");
+        let cargo_json = workspace.join(".ahma/cargo.json");
 
         if cargo_json.exists() {
             let output = Command::new(&binary)
@@ -551,7 +551,7 @@ mod ahma_list_tools_mode_tests {
         // This test connects to another ahma_mcp binary via stdio
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
-        let tools_dir = workspace.join(".ahma/tools");
+        let tools_dir = workspace.join(".ahma");
 
         let output = test_command(&binary)
             .current_dir(&workspace)
@@ -591,7 +591,7 @@ mod ahma_list_tools_mode_tests {
     fn test_ahma_mcp_list_tools_json_format() {
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
-        let tools_dir = workspace.join(".ahma/tools");
+        let tools_dir = workspace.join(".ahma");
 
         let output = test_command(&binary)
             .current_dir(&workspace)

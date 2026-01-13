@@ -124,7 +124,7 @@ fn test_nested_sandbox_detection_exits_with_error() {
             outer_sandbox_profile,
             binary.to_str().unwrap(),
             "--tools-dir",
-            ".ahma/tools",
+            ".ahma",
             // CLI mode: execute sandboxed_shell with echo (command as single arg)
             "sandboxed_shell",
             "--",
@@ -187,7 +187,7 @@ fn test_no_sandbox_flag_allows_nested_execution() {
             binary.to_str().unwrap(),
             "--no-sandbox", // Explicitly disable sandbox
             "--tools-dir",
-            ".ahma/tools",
+            ".ahma",
             // CLI mode: execute sandboxed_shell with echo (command as single arg)
             "sandboxed_shell",
             "--",
@@ -237,7 +237,7 @@ fn test_no_sandbox_env_var_allows_nested_execution() {
             outer_sandbox_profile,
             binary.to_str().unwrap(),
             "--tools-dir",
-            ".ahma/tools",
+            ".ahma",
             // CLI mode: execute sandboxed_shell with echo (command as single arg)
             "sandboxed_shell",
             "--",

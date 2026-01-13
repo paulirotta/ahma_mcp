@@ -1,4 +1,4 @@
-//! Comprehensive coverage tests for all .ahma/tools/*.json tool definitions.
+//! Comprehensive coverage tests for all .ahma/*.json tool definitions.
 //!
 //! This test module ensures that all JSON tool definitions are:
 //! 1. Properly loadable and parseable

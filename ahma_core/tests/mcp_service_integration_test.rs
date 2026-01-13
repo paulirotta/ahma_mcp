@@ -21,7 +21,7 @@ use tokio::fs;
 /// Setup test tools directory with various tool configurations
 async fn setup_mcp_service_test_tools() -> Result<TempDir> {
     let temp_dir = tempfile::tempdir()?;
-    let tools_dir = temp_dir.path().join(".ahma").join("tools");
+    let tools_dir = temp_dir.path().join(".ahma");
     fs::create_dir_all(&tools_dir).await?;
 
     // 1. Simple synchronous tool
@@ -191,7 +191,7 @@ async fn test_mcp_list_tools_returns_enabled_tools() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_mcp_service_test_tools().await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
     let tools = client.list_all_tools().await?;
 
     let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_ref()).collect();
@@ -230,7 +230,7 @@ async fn test_mcp_tool_descriptions_populated() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_mcp_service_test_tools().await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
     let tools = client.list_all_tools().await?;
 
     // Find the test_echo tool
@@ -254,7 +254,7 @@ async fn test_mcp_call_sync_tool_with_positional_args() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_mcp_service_test_tools().await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     let params = CallToolRequestParam {
         name: Cow::Borrowed("test_echo"),
@@ -297,7 +297,7 @@ async fn test_mcp_call_tool_with_no_args() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_mcp_service_test_tools().await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     let params = CallToolRequestParam {
         name: Cow::Borrowed("test_echo"),
@@ -326,7 +326,7 @@ async fn test_mcp_call_async_tool_returns_operation_id() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_mcp_service_test_tools().await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     let params = CallToolRequestParam {
         name: Cow::Borrowed("async_echo"),
@@ -373,7 +373,7 @@ async fn test_mcp_subcommand_routing() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_mcp_service_test_tools().await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     // Call with explicit subcommand
     let params = CallToolRequestParam {
@@ -408,7 +408,7 @@ async fn test_mcp_call_nonexistent_tool_error() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_mcp_service_test_tools().await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     let params = CallToolRequestParam {
         name: Cow::Borrowed("nonexistent_tool_xyz"),
@@ -448,7 +448,7 @@ async fn test_mcp_call_invalid_subcommand_error() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_mcp_service_test_tools().await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     let params = CallToolRequestParam {
         name: Cow::Borrowed("test_echo"),
@@ -497,7 +497,7 @@ async fn test_mcp_shell_command_execution() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_mcp_service_test_tools().await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     let params = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
@@ -538,7 +538,7 @@ async fn test_mcp_shell_command_failure() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_mcp_service_test_tools().await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     let params = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
@@ -604,7 +604,7 @@ async fn test_mcp_working_directory_parameter() -> Result<()> {
     fs::create_dir_all(&sub_dir).await?;
     fs::write(sub_dir.join("marker.txt"), "marker content").await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     let params = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),

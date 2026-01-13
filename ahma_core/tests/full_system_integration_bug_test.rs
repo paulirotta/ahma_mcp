@@ -72,7 +72,7 @@ mod tests {
         let adapter =
             Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager).unwrap());
         let configs = Arc::new(
-            load_tool_configs(&std::path::PathBuf::from(".ahma/tools"))
+            load_tool_configs(&std::path::PathBuf::from(".ahma"))
                 .await
                 .unwrap(),
         );

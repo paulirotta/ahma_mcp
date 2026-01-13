@@ -12,7 +12,7 @@ mod tool_validation_tdd_tests {
     fn test_cargo_test_is_available_via_cargo_tool() {
         // TDD: cargo test should be available as a subcommand in the cargo tool
         let workspace_dir = get_workspace_dir();
-        let tools_dir = get_workspace_path(".ahma/tools");
+        let tools_dir = get_workspace_path(".ahma");
         let tools_dir_str = tools_dir.to_string_lossy().into_owned();
         let output = Command::new("cargo")
             .current_dir(&workspace_dir)
@@ -45,7 +45,7 @@ mod tool_validation_tdd_tests {
     #[test]
     fn test_mcp_ahma_mcp_tools_should_include_cargo_commands() {
         // TDD: All cargo subcommands must live in cargo.json (no separate cargo-X files)
-        let cargo_path = get_workspace_path(".ahma/tools/cargo.json");
+        let cargo_path = get_workspace_path(".ahma/cargo.json");
         assert!(
             cargo_path.exists(),
             "cargo.json should exist for cargo subcommands"
@@ -87,7 +87,7 @@ mod tool_validation_tdd_tests {
     #[test]
     fn test_all_json_files_in_tools_directory_are_valid_json() {
         // TDD: Ensure all .json files in tools directory contain valid JSON
-        let tools_dir = get_workspace_path(".ahma/tools");
+        let tools_dir = get_workspace_path(".ahma");
         assert!(tools_dir.exists(), "Tools directory should exist");
 
         for entry in std::fs::read_dir(&tools_dir).expect("Failed to read tools directory") {
@@ -112,7 +112,7 @@ mod tool_validation_tdd_tests {
     #[test]
     fn test_no_toml_files_exist_in_tools_directory() {
         // TDD: Ensure there are no .toml files causing formatting errors
-        let tools_dir = get_workspace_path(".ahma/tools");
+        let tools_dir = get_workspace_path(".ahma");
         assert!(tools_dir.exists(), "Tools directory should exist");
 
         let mut toml_files = Vec::new();

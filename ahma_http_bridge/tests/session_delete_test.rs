@@ -157,7 +157,7 @@ async fn test_delete_session_terminates_subprocess() {
         .parent()
         .expect("Failed to get workspace dir")
         .to_path_buf();
-    let tools_dir = workspace_dir.join(".ahma/tools");
+    let tools_dir = workspace_dir.join(".ahma");
 
     let mut child = start_http_bridge(port, &tools_dir, temp_dir.path()).await;
     let client = Client::new();
@@ -251,7 +251,7 @@ async fn test_delete_without_session_id_returns_400() {
         .parent()
         .expect("Failed to get workspace dir")
         .to_path_buf();
-    let tools_dir = workspace_dir.join(".ahma/tools");
+    let tools_dir = workspace_dir.join(".ahma");
 
     let mut child = start_http_bridge(port, &tools_dir, temp_dir.path()).await;
     let client = Client::new();
@@ -290,7 +290,7 @@ async fn test_delete_nonexistent_session_returns_404() {
         .parent()
         .expect("Failed to get workspace dir")
         .to_path_buf();
-    let tools_dir = workspace_dir.join(".ahma/tools");
+    let tools_dir = workspace_dir.join(".ahma");
 
     let mut child = start_http_bridge(port, &tools_dir, temp_dir.path()).await;
     let client = Client::new();

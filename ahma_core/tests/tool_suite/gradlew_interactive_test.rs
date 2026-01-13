@@ -29,7 +29,7 @@ fn get_android_test_project_path() -> String {
 #[tokio::test]
 #[ignore = "Slow test: Gradle startup takes ~10s per command. Run separately with --run-ignored"]
 async fn test_gradlew_sync_commands_interactive() -> Result<()> {
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
     let project_path = get_android_test_project_path();
 
     // Test synchronous commands that should complete quickly
@@ -98,7 +98,7 @@ async fn test_gradlew_sync_commands_interactive() -> Result<()> {
 #[cfg(feature = "android")]
 #[tokio::test]
 async fn test_gradlew_working_directory_handling() -> Result<()> {
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
     let project_path = get_android_test_project_path();
 
     // Test: Valid project directory with a quick command
@@ -137,7 +137,7 @@ async fn test_gradlew_working_directory_handling() -> Result<()> {
 #[tokio::test]
 #[ignore = "Slow test: Gradle startup takes ~10s per command. Run separately with --run-ignored"]
 async fn test_gradlew_subcommand_validation() -> Result<()> {
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
     let project_path = get_android_test_project_path();
 
     // Test 1: Valid subcommand
@@ -234,7 +234,7 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
 #[tokio::test]
 #[ignore = "Slow test: Gradle startup takes ~10s per command. Run separately with --run-ignored"]
 async fn test_gradlew_optional_parameters() -> Result<()> {
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
     let project_path = get_android_test_project_path();
 
     // Test 1: tasks command with --all option
@@ -328,7 +328,7 @@ async fn test_gradlew_optional_parameters() -> Result<()> {
 #[tokio::test]
 async fn test_gradlew_tool_availability() -> Result<()> {
     skip_if_disabled_async_result!("gradlew");
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Test that gradlew tool is available
     let tools = client.list_tools(None).await?;
@@ -373,7 +373,7 @@ async fn test_gradlew_tool_availability() -> Result<()> {
 /// Test error handling for malformed parameters
 #[tokio::test]
 async fn test_gradlew_error_handling() -> Result<()> {
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Test 1: Completely invalid parameters
     let call_param = CallToolRequestParam {

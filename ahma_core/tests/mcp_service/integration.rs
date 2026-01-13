@@ -20,9 +20,9 @@ async fn create_test_service() -> AhmaMcpService {
     let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
     let adapter = Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool).unwrap());
 
-    // Load tool configs from .ahma/tools directory
-    let tool_configs = if Path::new(".ahma/tools").exists() {
-        load_tool_configs(Path::new(".ahma/tools"))
+    // Load tool configs from .ahma directory
+    let tool_configs = if Path::new(".ahma").exists() {
+        load_tool_configs(Path::new(".ahma"))
             .await
             .unwrap_or_default()
     } else {

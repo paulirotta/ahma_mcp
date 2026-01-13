@@ -63,7 +63,7 @@ fn test_init_logging_idempotent() {
 async fn test_client_with_debug_logging() -> Result<()> {
     init_test_logging();
 
-    let client = new_client_with_args(Some(".ahma/tools"), &["--debug"]).await?;
+    let client = new_client_with_args(Some(".ahma"), &["--debug"]).await?;
 
     // Verify client works with debug logging
     let params = CallToolRequestParam {
@@ -84,7 +84,7 @@ async fn test_client_with_debug_logging() -> Result<()> {
 async fn test_client_with_stderr_logging() -> Result<()> {
     init_test_logging();
 
-    let client = new_client_with_args(Some(".ahma/tools"), &["--log-to-stderr"]).await?;
+    let client = new_client_with_args(Some(".ahma"), &["--log-to-stderr"]).await?;
 
     // Verify client works with stderr logging
     let params = CallToolRequestParam {
@@ -104,7 +104,7 @@ async fn test_client_with_stderr_logging() -> Result<()> {
 async fn test_client_with_debug_and_stderr_logging() -> Result<()> {
     init_test_logging();
 
-    let client = new_client_with_args(Some(".ahma/tools"), &["--debug", "--log-to-stderr"]).await?;
+    let client = new_client_with_args(Some(".ahma"), &["--debug", "--log-to-stderr"]).await?;
 
     // Verify client works with both flags by listing tools
     let tools = client.list_all_tools().await?;
@@ -120,7 +120,7 @@ async fn test_client_with_default_file_logging() -> Result<()> {
     init_test_logging();
 
     // No logging flags - should use file logging by default
-    let client = new_client_with_args(Some(".ahma/tools"), &[]).await?;
+    let client = new_client_with_args(Some(".ahma"), &[]).await?;
 
     // Verify client works with default logging
     let params = CallToolRequestParam {

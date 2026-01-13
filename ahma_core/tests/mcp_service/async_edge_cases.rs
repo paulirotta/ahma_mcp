@@ -19,7 +19,7 @@ use std::borrow::Cow;
 #[tokio::test]
 async fn test_async_notification_malformed_operation_ids() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Test status tool with numeric operation_id (should be handled gracefully)
     let malformed_params = CallToolRequestParam {
@@ -49,7 +49,7 @@ async fn test_async_notification_malformed_operation_ids() -> Result<()> {
 #[tokio::test]
 async fn test_async_notification_extreme_timeout_values() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Test await with no timeout parameter (uses intelligent timeout)
     let no_timeout_params = CallToolRequestParam {
@@ -84,12 +84,12 @@ async fn test_async_notification_extreme_timeout_values() -> Result<()> {
 #[tokio::test]
 async fn test_tool_schema_generation_comprehensive() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Test list_tools generates proper schemas
     let tools_result = client.list_all_tools().await?;
 
-    // Should have multiple tools from .ahma/tools directory
+    // Should have multiple tools from .ahma directory
     // Note: Some tools may be disabled, so we just check that basic tools exist
     assert!(!tools_result.is_empty());
     assert!(
@@ -132,7 +132,7 @@ async fn test_tool_schema_generation_comprehensive() -> Result<()> {
 #[tokio::test]
 async fn test_error_handling_malformed_call_tool_params() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Test with missing required parameters for cancel tool
     let missing_params = CallToolRequestParam {
@@ -178,7 +178,7 @@ async fn test_error_handling_malformed_call_tool_params() -> Result<()> {
 #[tokio::test]
 async fn test_error_handling_unknown_tools() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     let unknown_tool_params = CallToolRequestParam {
         name: Cow::Borrowed("nonexistent_tool_xyz_123"),
@@ -196,7 +196,7 @@ async fn test_error_handling_unknown_tools() -> Result<()> {
 #[tokio::test]
 async fn test_async_notification_concurrent_load() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Start multiple async operations concurrently
     let mut handles = Vec::new();
@@ -238,7 +238,7 @@ async fn test_async_notification_concurrent_load() -> Result<()> {
 #[tokio::test]
 async fn test_status_tool_filter_combinations() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Test with tool filter
     let tool_filter_params = CallToolRequestParam {
@@ -290,7 +290,7 @@ async fn test_status_tool_filter_combinations() -> Result<()> {
 async fn test_async_operation_with_real_execution() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
-    let client = new_client_with_args(Some(".ahma/tools"), &[]).await?;
+    let client = new_client_with_args(Some(".ahma"), &[]).await?;
 
     // Start a real async operation (shell command)
     let async_params = CallToolRequestParam {
@@ -337,7 +337,7 @@ async fn test_async_operation_with_real_execution() -> Result<()> {
 #[tokio::test]
 async fn test_error_recovery_and_resilience() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Test that service continues working after errors
 

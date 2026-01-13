@@ -318,13 +318,11 @@ pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<Strin
                 .and_then(|s| s.to_str())
                 .is_some_and(|s| s == ".ahma");
 
-        if is_legacy_tools_dir {
-            if let Some(parent) = tools_dir.parent() {
-                if fs::try_exists(parent).await.unwrap_or(false) {
+        if is_legacy_tools_dir
+            && let Some(parent) = tools_dir.parent()
+                && fs::try_exists(parent).await.unwrap_or(false) {
                     resolved_tools_dir = parent.to_path_buf();
                 }
-            }
-        }
     }
 
     let tools_dir = resolved_tools_dir.as_path();
@@ -427,13 +425,11 @@ pub fn load_tool_configs_sync(tools_dir: &Path) -> anyhow::Result<HashMap<String
                 .and_then(|s| s.to_str())
                 .is_some_and(|s| s == ".ahma");
 
-        if is_legacy_tools_dir {
-            if let Some(parent) = tools_dir.parent() {
-                if parent.exists() {
+        if is_legacy_tools_dir
+            && let Some(parent) = tools_dir.parent()
+                && parent.exists() {
                     resolved_tools_dir = parent.to_path_buf();
                 }
-            }
-        }
     }
 
     let tools_dir = resolved_tools_dir.as_path();

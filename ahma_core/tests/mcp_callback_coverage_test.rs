@@ -34,7 +34,7 @@ use std::borrow::Cow;
 async fn test_async_operation_triggers_callbacks() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Start an async operation that produces output
     let shell_params = CallToolRequestParam {
@@ -81,7 +81,7 @@ async fn test_async_operation_triggers_callbacks() -> Result<()> {
 async fn test_failed_operation_callback() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Start an operation that will fail
     let shell_params = CallToolRequestParam {
@@ -122,7 +122,7 @@ async fn test_failed_operation_callback() -> Result<()> {
 async fn test_cancelled_operation_callback() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Start a long-running async operation
     let shell_params = CallToolRequestParam {
@@ -192,7 +192,7 @@ async fn test_cancelled_operation_callback() -> Result<()> {
 async fn test_stderr_output_callback() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Command that writes to stderr
     let shell_params = CallToolRequestParam {
@@ -237,7 +237,7 @@ async fn test_stderr_output_callback() -> Result<()> {
 async fn test_concurrent_operations_callbacks() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Start multiple operations
     let params1 = CallToolRequestParam {

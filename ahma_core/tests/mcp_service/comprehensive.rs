@@ -14,7 +14,7 @@ use std::borrow::Cow;
 /// Test that hardcoded tools are properly listed
 #[tokio::test]
 async fn test_hardcoded_tools_listing() -> Result<()> {
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
     let result = client.list_all_tools().await?;
 
     // Should have the hardcoded tools (await, status)
@@ -43,7 +43,7 @@ async fn test_hardcoded_tools_listing() -> Result<()> {
 /// Test await tool functionality and error handling
 #[tokio::test]
 async fn test_await_tool_comprehensive() -> Result<()> {
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Test valid await call with no timeout parameter (uses intelligent timeout)
     let params = Map::new();
@@ -86,7 +86,7 @@ async fn test_await_tool_comprehensive() -> Result<()> {
 /// Test status tool functionality
 #[tokio::test]
 async fn test_status_tool_comprehensive() -> Result<()> {
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Test basic status call
     let params = Map::new();
@@ -129,7 +129,7 @@ async fn test_status_tool_comprehensive() -> Result<()> {
 /// Test error handling for unknown tools
 #[tokio::test]
 async fn test_unknown_tool_error_handling() -> Result<()> {
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     let params = Map::new();
 
@@ -168,13 +168,13 @@ async fn test_unknown_tool_error_handling() -> Result<()> {
 /// Test concurrent tool execution
 #[tokio::test]
 async fn test_concurrent_tool_execution() -> Result<()> {
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Execute multiple status calls concurrently
     let mut handles = vec![];
 
     for i in 0..5 {
-        let client_clone = new_client(Some(".ahma/tools")).await?;
+        let client_clone = new_client(Some(".ahma")).await?;
         let handle = tokio::spawn(async move {
             let mut params = Map::new();
             params.insert(
@@ -211,7 +211,7 @@ async fn test_concurrent_tool_execution() -> Result<()> {
 /// Test path validation and security
 #[tokio::test]
 async fn test_path_validation_security() -> Result<()> {
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Test with potentially dangerous path arguments
     let mut params = Map::new();
@@ -245,7 +245,7 @@ async fn test_path_validation_security() -> Result<()> {
 /// Test tool schema generation and validation
 #[tokio::test]
 async fn test_tool_schema_validation() -> Result<()> {
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
     let tools = client.list_all_tools().await?;
 
     // Verify all tools have valid schemas
@@ -279,7 +279,7 @@ async fn test_tool_schema_validation() -> Result<()> {
 /// Test resilience under stress and mixed operations
 #[tokio::test]
 async fn test_service_resilience_stress() -> Result<()> {
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Execute a mix of valid and invalid operations
     let operations = vec![
@@ -326,7 +326,7 @@ async fn test_service_resilience_stress() -> Result<()> {
 /// Test argument parsing and parameter handling
 #[tokio::test]
 async fn test_argument_parsing_edge_cases() -> Result<()> {
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Test with empty arguments
     let empty_call_param = CallToolRequestParam {

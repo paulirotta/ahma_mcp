@@ -14,7 +14,7 @@ async fn test_synchronous_cargo_check_returns_actual_results() -> Result<()> {
     skip_if_disabled_async_result!("cargo");
     // This test identifies the issue where cargo check should return actual results
 
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("cargo"),
@@ -56,7 +56,7 @@ async fn test_ls_tool_command_structure() -> Result<()> {
     // This test identifies the issue where ls_ls tool fails with command structure
     // The tool appears to be running "ls ls" instead of just "ls"
 
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Check if ls tool is available (optional since ls.json was removed)
     let tools = client.list_tools(None).await?;
@@ -114,7 +114,7 @@ async fn test_tool_descriptions_match_actual_behavior() -> Result<()> {
     // This test identifies inconsistencies between tool descriptions and actual behavior
     // Specifically checking if synchronous tools are properly described
 
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
     let tools_result = client.list_tools(None).await?;
 
     // Find cargo tool and verify its description
@@ -148,7 +148,7 @@ async fn test_sandboxed_shell_returns_actual_results() -> Result<()> {
     init_test_logging();
     // sandboxed_shell is always available - no skip needed
 
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),

@@ -64,7 +64,7 @@ fn test_list_tools_from_stdio_server() {
         .unwrap()
         .to_path_buf();
     let ahma_binary = get_ahma_mcp_binary();
-    let tools_dir = project_root.join(".ahma/tools");
+    let tools_dir = project_root.join(".ahma");
 
     // Check if pre-built binary exists
     if !ahma_binary.exists() {
@@ -116,7 +116,7 @@ fn test_list_tools_json_format() {
         .unwrap()
         .to_path_buf();
     let ahma_binary = get_ahma_mcp_binary();
-    let tools_dir = project_root.join(".ahma/tools");
+    let tools_dir = project_root.join(".ahma");
 
     // Check if pre-built binary exists
     if !ahma_binary.exists() {
@@ -168,7 +168,7 @@ fn test_list_tools_output_format() {
         .unwrap()
         .to_path_buf();
     let ahma_binary = get_ahma_mcp_binary();
-    let tools_dir = project_root.join(".ahma/tools");
+    let tools_dir = project_root.join(".ahma");
 
     // Check if pre-built binary exists
     if !ahma_binary.exists() {

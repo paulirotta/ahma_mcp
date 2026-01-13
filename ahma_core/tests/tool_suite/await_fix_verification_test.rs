@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 async fn test_await_blocks_correctly() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     // Use the real tools directory with --async flag
-    let client = new_client_with_args(Some(".ahma/tools"), &[]).await?;
+    let client = new_client_with_args(Some(".ahma"), &[]).await?;
 
     // Start a long-running asynchronous task (sleep for 2 seconds)
     let start_time = Instant::now();
@@ -103,7 +103,7 @@ async fn test_await_blocks_correctly() -> Result<()> {
 async fn test_await_detects_pending_operation_without_delay() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     // Use the real tools directory with --async flag
-    let client = new_client_with_args(Some(".ahma/tools"), &[]).await?;
+    let client = new_client_with_args(Some(".ahma"), &[]).await?;
 
     // Launch an async operation and immediately await it.
     let call_params = CallToolRequestParam {

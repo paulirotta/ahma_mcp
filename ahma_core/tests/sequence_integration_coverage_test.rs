@@ -20,7 +20,7 @@ use tokio::fs;
 /// Create a temp directory with a sequence tool configuration
 async fn setup_sequence_tool_config() -> Result<TempDir> {
     let temp_dir = tempfile::tempdir()?;
-    let tools_dir = temp_dir.path().join(".ahma").join("tools");
+    let tools_dir = temp_dir.path().join(".ahma");
     fs::create_dir_all(&tools_dir).await?;
 
     // Create a simple echo tool
@@ -188,7 +188,7 @@ async fn test_sync_sequence_tool_execution() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_sequence_tool_config().await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     // List tools to verify our sequence tool is loaded
     let tools = client.list_all_tools().await?;
@@ -236,7 +236,7 @@ async fn test_async_sequence_tool_execution() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_sequence_tool_config().await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     // Call the asynchronous sequence tool
     let params = CallToolRequestParam {
@@ -288,7 +288,7 @@ async fn test_subcommand_sequence_execution() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_sequence_tool_config().await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     // List tools to verify our tool is loaded
     let tools = client.list_all_tools().await?;
@@ -329,7 +329,7 @@ async fn test_skip_sequence_step_via_env() -> Result<()> {
     let temp_dir = setup_sequence_tool_config().await?;
 
     let client = new_client_in_dir_with_env(
-        Some(".ahma/tools"),
+        Some(".ahma"),
         &[],
         temp_dir.path(),
         &[("AHMA_SKIP_SEQUENCE_TOOLS", "echo")],
@@ -374,7 +374,7 @@ async fn test_skip_subcommand_sequence_step_via_env() -> Result<()> {
     let temp_dir = setup_sequence_tool_config().await?;
 
     let client = new_client_in_dir_with_env(
-        Some(".ahma/tools"),
+        Some(".ahma"),
         &[],
         temp_dir.path(),
         &[("AHMA_SKIP_SEQUENCE_SUBCOMMANDS", "default")],
@@ -416,7 +416,7 @@ async fn test_skip_subcommand_sequence_step_via_env() -> Result<()> {
 async fn test_sequence_with_missing_tool_reference() -> Result<()> {
     init_test_logging();
     let temp_dir = tempfile::tempdir()?;
-    let tools_dir = temp_dir.path().join(".ahma").join("tools");
+    let tools_dir = temp_dir.path().join(".ahma");
     fs::create_dir_all(&tools_dir).await?;
 
     // Create a sequence that references a non-existent tool
@@ -439,7 +439,7 @@ async fn test_sequence_with_missing_tool_reference() -> Result<()> {
 "#;
     fs::write(tools_dir.join("bad_sequence.json"), bad_sequence_config).await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     let tools = client.list_all_tools().await?;
     let has_bad_seq = tools.iter().any(|t| t.name.as_ref() == "bad_sequence");

@@ -1,6 +1,6 @@
 //! SSE Integration Tests for All Tools
 //!
-//! These tests verify that all tools defined in `.ahma/tools/*.json` work correctly
+//! These tests verify that all tools defined in `.ahma/*.json` work correctly
 //! when invoked via the HTTP SSE bridge. This serves two purposes:
 //! 1. Verify all tool configurations are correct and parameters pass through
 //! 2. Stress test the system by sending many concurrent requests
@@ -304,7 +304,7 @@ async fn test_list_tools_returns_all_expected_tools() {
         }
     };
 
-    // Expected tool names from .ahma/tools/*.json
+    // Expected tool names from .ahma/*.json
     let expected_tools = [
         // From cargo.json
         "cargo_build",

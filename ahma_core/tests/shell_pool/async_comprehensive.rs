@@ -42,7 +42,7 @@ fn make_workdir(prefix: &str) -> Result<(TempDir, PathBuf)> {
 #[tokio::test]
 async fn test_basic_shell_command_execution() -> Result<()> {
     init_test_logging();
-    let client = new_async_client(Some(".ahma/tools")).await?;
+    let client = new_async_client(Some(".ahma")).await?;
 
     let (_temp_dir, workdir_path) = make_workdir("basic")?;
     let workdir = workdir_path.to_string_lossy().to_string();
@@ -73,7 +73,7 @@ async fn test_basic_shell_command_execution() -> Result<()> {
 #[tokio::test]
 async fn test_working_directory_handling() -> Result<()> {
     init_test_logging();
-    let client = new_async_client(Some(".ahma/tools")).await?;
+    let client = new_async_client(Some(".ahma")).await?;
 
     let (_temp_dir, workdir_path) = make_workdir("wd_handling")?;
 
@@ -109,7 +109,7 @@ async fn test_working_directory_handling() -> Result<()> {
 #[tokio::test]
 async fn test_complex_shell_commands() -> Result<()> {
     init_test_logging();
-    let client = new_async_client(Some(".ahma/tools")).await?;
+    let client = new_async_client(Some(".ahma")).await?;
 
     let (_temp_dir, workdir_path) = make_workdir("complex")?;
     let workdir = workdir_path.to_string_lossy().to_string();
@@ -140,7 +140,7 @@ async fn test_complex_shell_commands() -> Result<()> {
 #[tokio::test]
 async fn test_invalid_command_handling() -> Result<()> {
     init_test_logging();
-    let client = new_async_client(Some(".ahma/tools")).await?;
+    let client = new_async_client(Some(".ahma")).await?;
 
     let (_temp_dir, workdir_path) = make_workdir("invalid_cmd")?;
     let workdir = workdir_path.to_string_lossy().to_string();
@@ -172,7 +172,7 @@ async fn test_invalid_command_handling() -> Result<()> {
 #[tokio::test]
 async fn test_missing_command_parameter() -> Result<()> {
     init_test_logging();
-    let client = new_async_client(Some(".ahma/tools")).await?;
+    let client = new_async_client(Some(".ahma")).await?;
 
     let args = Map::new();
 
@@ -201,7 +201,7 @@ async fn test_missing_command_parameter() -> Result<()> {
 #[tokio::test]
 async fn test_invalid_working_directory() -> Result<()> {
     init_test_logging();
-    let client = new_async_client(Some(".ahma/tools")).await?;
+    let client = new_async_client(Some(".ahma")).await?;
 
     let (_temp_dir, workdir_path) = make_workdir("invalid_dir")?;
     let invalid_dir = workdir_path.join("does_not_exist");
@@ -236,7 +236,7 @@ async fn test_invalid_working_directory() -> Result<()> {
 #[tokio::test]
 async fn test_environment_variables() -> Result<()> {
     init_test_logging();
-    let client = new_async_client(Some(".ahma/tools")).await?;
+    let client = new_async_client(Some(".ahma")).await?;
 
     let (_temp_dir, workdir_path) = make_workdir("env_vars")?;
     let workdir = workdir_path.to_string_lossy().to_string();
@@ -270,7 +270,7 @@ async fn test_environment_variables() -> Result<()> {
 #[tokio::test]
 async fn test_shell_builtins() -> Result<()> {
     init_test_logging();
-    let client = new_async_client(Some(".ahma/tools")).await?;
+    let client = new_async_client(Some(".ahma")).await?;
 
     let (_temp_dir, workdir_path) = make_workdir("builtins")?;
     let workdir = workdir_path.to_string_lossy().to_string();
@@ -298,7 +298,7 @@ async fn test_shell_builtins() -> Result<()> {
 #[tokio::test]
 async fn test_special_characters() -> Result<()> {
     init_test_logging();
-    let client = new_async_client(Some(".ahma/tools")).await?;
+    let client = new_async_client(Some(".ahma")).await?;
 
     let (_temp_dir, workdir_path) = make_workdir("special_chars")?;
     let workdir = workdir_path.to_string_lossy().to_string();
@@ -332,7 +332,7 @@ async fn test_special_characters() -> Result<()> {
 #[tokio::test]
 async fn test_multiple_arguments() -> Result<()> {
     init_test_logging();
-    let client = new_async_client(Some(".ahma/tools")).await?;
+    let client = new_async_client(Some(".ahma")).await?;
 
     let (_temp_dir, workdir_path) = make_workdir("multi_args")?;
     let workdir = workdir_path.to_string_lossy().to_string();
@@ -363,7 +363,7 @@ async fn test_multiple_arguments() -> Result<()> {
 #[tokio::test]
 async fn test_long_running_command() -> Result<()> {
     init_test_logging();
-    let client = new_async_client(Some(".ahma/tools")).await?;
+    let client = new_async_client(Some(".ahma")).await?;
 
     let (_temp_dir, workdir_path) = make_workdir("long_running")?;
     let workdir = workdir_path.to_string_lossy().to_string();
@@ -403,7 +403,7 @@ async fn test_long_running_command() -> Result<()> {
 #[tokio::test]
 async fn test_working_directory_not_passed_to_command() -> Result<()> {
     init_test_logging();
-    let client = new_async_client(Some(".ahma/tools")).await?;
+    let client = new_async_client(Some(".ahma")).await?;
 
     let (_temp_dir, workdir_path) = make_workdir("wd_exclusion")?;
     let workdir = workdir_path.to_string_lossy().to_string();
@@ -439,7 +439,7 @@ async fn test_working_directory_not_passed_to_command() -> Result<()> {
 #[tokio::test]
 async fn test_different_working_directories() -> Result<()> {
     init_test_logging();
-    let client = new_async_client(Some(".ahma/tools")).await?;
+    let client = new_async_client(Some(".ahma")).await?;
 
     let (_temp_dir, workdir_path) = make_workdir("wd_variants")?;
 

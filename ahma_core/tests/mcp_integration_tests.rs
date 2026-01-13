@@ -16,7 +16,7 @@ use std::borrow::Cow;
 #[tokio::test]
 async fn test_list_tools() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
     let result = client.list_all_tools().await?;
 
     // Should have at least the built-in 'await' tool
@@ -32,7 +32,7 @@ async fn test_list_tools() -> Result<()> {
 #[tokio::test]
 async fn test_call_tool_basic() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Use the await tool which should always be available - no timeout parameter needed
     let params = Map::new();
@@ -66,7 +66,7 @@ async fn test_async_notification_delivery() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
     // Use --async flag to enable async execution
-    let client = new_client_with_args(Some(".ahma/tools"), &[]).await?;
+    let client = new_client_with_args(Some(".ahma"), &[]).await?;
 
     // Test that an async operation completes and we can check its status
     // This is a simpler but more reliable test of async notification delivery

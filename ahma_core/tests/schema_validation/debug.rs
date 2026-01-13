@@ -13,7 +13,7 @@ use tempfile::tempdir;
 async fn test_dump_actual_schemas_for_debugging() -> anyhow::Result<()> {
     init_test_logging();
     // Create a test client with the real tool configurations
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
     let tools = client.list_all_tools().await?;
 
     println!(
@@ -95,7 +95,7 @@ async fn test_release_build_schema_generation() -> anyhow::Result<()> {
     println!("Testing schema generation with release build...");
 
     // This will help us compare debug vs release build schemas
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
     let tools = client.list_all_tools().await?;
 
     let cargo_tool = match tools.iter().find(|tool| tool.name == "cargo") {

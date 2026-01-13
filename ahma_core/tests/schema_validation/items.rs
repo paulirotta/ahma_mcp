@@ -30,7 +30,7 @@ async fn test_array_parameters_must_have_items_property() -> anyhow::Result<()> 
     eprintln!("Binary built successfully");
 
     // Create a test client with the real tool configurations (assume new_client is now async)
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
     let tools = client.list_all_tools().await?;
 
     eprintln!(

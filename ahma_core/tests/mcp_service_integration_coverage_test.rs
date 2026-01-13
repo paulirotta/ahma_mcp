@@ -25,7 +25,7 @@ use std::borrow::Cow;
 #[tokio::test]
 async fn test_status_tool_no_filters() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Call status with no arguments
     let params = CallToolRequestParam {
@@ -59,7 +59,7 @@ async fn test_status_tool_no_filters() -> Result<()> {
 async fn test_status_tool_with_tool_filter() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // First start an async operation to have something to query
     let shell_params = CallToolRequestParam {
@@ -102,7 +102,7 @@ async fn test_status_tool_with_tool_filter() -> Result<()> {
 #[tokio::test]
 async fn test_status_tool_with_operation_id_filter() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Query status with a non-existent operation_id
     let params = CallToolRequestParam {
@@ -143,7 +143,7 @@ async fn test_status_tool_with_operation_id_filter() -> Result<()> {
 #[tokio::test]
 async fn test_await_tool_no_pending_operations() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     let params = CallToolRequestParam {
         name: Cow::Borrowed("await"),
@@ -174,7 +174,7 @@ async fn test_await_tool_no_pending_operations() -> Result<()> {
 #[tokio::test]
 async fn test_await_tool_nonexistent_operation_id() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     let params = CallToolRequestParam {
         name: Cow::Borrowed("await"),
@@ -209,7 +209,7 @@ async fn test_await_tool_nonexistent_operation_id() -> Result<()> {
 #[tokio::test]
 async fn test_await_tool_with_tool_filter() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Request await for a specific tool prefix that has no pending operations
     let params = CallToolRequestParam {
@@ -246,7 +246,7 @@ async fn test_await_tool_with_tool_filter() -> Result<()> {
 async fn test_await_for_completed_async_operation() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Start a fast async shell command
     let shell_params = CallToolRequestParam {
@@ -311,7 +311,7 @@ async fn test_await_for_completed_async_operation() -> Result<()> {
 #[tokio::test]
 async fn test_cancel_tool_missing_operation_id() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // The cancel tool isn't in the default tool list, need to check if it exists
     // If it does, call it without operation_id to trigger validation error
@@ -341,7 +341,7 @@ async fn test_cancel_tool_missing_operation_id() -> Result<()> {
 #[tokio::test]
 async fn test_cancel_tool_nonexistent_operation() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     let tools = client.list_all_tools().await?;
     let has_cancel = tools.iter().any(|t| t.name.as_ref() == "cancel");
@@ -385,7 +385,7 @@ async fn test_cancel_tool_nonexistent_operation() -> Result<()> {
 #[tokio::test]
 async fn test_call_nonexistent_tool() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     let params = CallToolRequestParam {
         name: Cow::Borrowed("this_tool_definitely_does_not_exist_xyz123"),
@@ -405,7 +405,7 @@ async fn test_call_nonexistent_tool() -> Result<()> {
 #[tokio::test]
 async fn test_call_tool_invalid_subcommand() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Assume there's a file_tools tool available
     let tools = client.list_all_tools().await?;
@@ -442,7 +442,7 @@ async fn test_call_tool_invalid_subcommand() -> Result<()> {
 #[tokio::test]
 async fn test_list_tools_includes_builtin_tools() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     let tools = client.list_all_tools().await?;
 
@@ -468,7 +468,7 @@ async fn test_list_tools_includes_builtin_tools() -> Result<()> {
 #[tokio::test]
 async fn test_list_tools_await_schema() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     let tools = client.list_all_tools().await?;
 
@@ -497,7 +497,7 @@ async fn test_list_tools_await_schema() -> Result<()> {
 #[tokio::test]
 async fn test_list_tools_status_schema() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     let tools = client.list_all_tools().await?;
 
@@ -533,7 +533,7 @@ async fn test_list_tools_status_schema() -> Result<()> {
 async fn test_async_operation_full_lifecycle() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Start an async shell command
     let shell_params = CallToolRequestParam {
@@ -594,7 +594,7 @@ async fn test_file_tools_in_temp_directory() -> Result<()> {
     })
     .await?;
 
-    let client = new_client_in_dir(Some(".ahma/tools"), &[], temp_dir.path()).await?;
+    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     // List files in the temp directory
     let tools = client.list_all_tools().await?;
@@ -636,7 +636,7 @@ async fn test_file_tools_in_temp_directory() -> Result<()> {
 #[tokio::test]
 async fn test_status_with_multiple_tool_filters() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Query with multiple tool prefixes
     let params = CallToolRequestParam {
@@ -675,7 +675,7 @@ async fn test_status_with_multiple_tool_filters() -> Result<()> {
 #[tokio::test]
 async fn test_await_with_multiple_tool_filters() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Await with multiple tool prefixes
     let params = CallToolRequestParam {

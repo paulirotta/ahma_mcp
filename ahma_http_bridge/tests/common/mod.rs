@@ -279,8 +279,8 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
         .expect("Failed to get workspace dir")
         .to_path_buf();
 
-    // Use the workspace .ahma/tools directory
-    let tools_dir = workspace_dir.join(".ahma/tools");
+    // Use the workspace .ahma directory
+    let tools_dir = workspace_dir.join(".ahma");
 
     // Create temp directory for sandbox scope
     let temp_dir = TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;

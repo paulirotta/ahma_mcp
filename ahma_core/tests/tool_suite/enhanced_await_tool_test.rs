@@ -19,7 +19,7 @@ use tokio::time::timeout;
 #[tokio::test]
 async fn test_await_tool_timeout_functionality() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Test that await tool uses intelligent timeout calculation only
     let call_param = rmcp::model::CallToolRequestParam {
@@ -54,7 +54,7 @@ async fn test_await_tool_timeout_functionality() -> Result<()> {
 #[tokio::test]
 async fn test_await_tool_timeout_validation() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Test that timeout parameter is no longer accepted
     let call_param = rmcp::model::CallToolRequestParam {
@@ -87,7 +87,7 @@ async fn test_await_tool_timeout_validation() -> Result<()> {
 #[tokio::test]
 async fn test_status_tool_functionality() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Test status tool - should return current operation status
     let call_param = rmcp::model::CallToolRequestParam {
@@ -122,7 +122,7 @@ async fn test_status_tool_functionality() -> Result<()> {
 #[tokio::test]
 async fn test_await_tool_with_tool_filter() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma/tools")).await?;
+    let client = new_client(Some(".ahma")).await?;
 
     // Test await tool with tool filter only (no timeout parameter)
     let call_param = rmcp::model::CallToolRequestParam {

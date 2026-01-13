@@ -27,7 +27,7 @@ async fn test_realistic_notification_scenario_with_history() {
     let adapter =
         Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager.clone()).unwrap());
     let configs = Arc::new(
-        load_tool_configs(&std::path::PathBuf::from(".ahma/tools"))
+        load_tool_configs(&std::path::PathBuf::from(".ahma"))
             .await
             .unwrap(),
     );
