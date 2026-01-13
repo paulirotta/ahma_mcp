@@ -40,10 +40,10 @@ fn synth_config() -> Value {
                 "type": "stdio",
                 "cwd": "${workspaceFolder}",
                 "command": "target/release/ahma_mcp",
-                "args": ["--tools-dir", ".ahma/tools"],
+                "args": ["--tools-dir", ".ahma"],
                 "dev": {
                     "command": "cargo",
-                    "args": ["run", "--release", "--", "--tools-dir", ".ahma/tools"],
+                    "args": ["run", "--release", "--", "--tools-dir", ".ahma"],
                     "watch": ["target/release/ahma_mcp"]
                 }
             }
@@ -126,10 +126,10 @@ async fn test_vscode_mcp_config_has_valid_command_structure() -> Result<()> {
         .as_array()
         .expect("Args should be an array");
     // Allow additional future arguments while ensuring required pair exists in order.
-    let required = ["--tools-dir", ".ahma/tools"];
+    let required = ["--tools-dir", ".ahma"];
     assert!(
         args.windows(required.len()).any(|w| w == required),
-        "Args should contain the sequence: --tools-dir .ahma/tools"
+        "Args should contain the sequence: --tools-dir .ahma"
     );
 
     // Verify dev command uses cargo with passthrough args
@@ -143,7 +143,7 @@ async fn test_vscode_mcp_config_has_valid_command_structure() -> Result<()> {
         "Dev should separate cargo args from binary args"
     );
     // Dev args may grow; assert required segment exists after separator.
-    let dev_required = ["--tools-dir", ".ahma/tools"];
+    let dev_required = ["--tools-dir", ".ahma"];
     let after_sep = dev_args
         .iter()
         .skip_while(|v| **v != "--")
@@ -154,7 +154,7 @@ async fn test_vscode_mcp_config_has_valid_command_structure() -> Result<()> {
         after_sep
             .windows(dev_required.len())
             .any(|w| w == dev_required),
-        "Dev args should contain the sequence after '--': --tools-dir .ahma/tools"
+        "Dev args should contain the sequence after '--': --tools-dir .ahma"
     );
 
     Ok(())

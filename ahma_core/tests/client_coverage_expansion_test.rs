@@ -354,10 +354,7 @@ async fn test_sandboxed_shell_with_working_dir() -> Result<()> {
 
     // Use the workspace's target directory which is inside the sandbox
     let tools_dir = get_workspace_tools_dir();
-    let workspace_dir = tools_dir
-        .parent()
-        .and_then(|p| p.parent())
-        .expect("Should have workspace parent");
+    let workspace_dir = tools_dir.parent().expect("Should have workspace parent");
     let target_dir = workspace_dir.join("target");
 
     // Use target directory if it exists, otherwise use workspace root

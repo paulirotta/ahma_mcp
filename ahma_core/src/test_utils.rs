@@ -16,7 +16,7 @@ pub fn is_tool_disabled(tool_name: &str) -> bool {
         .parent()
         .expect("Failed to get workspace root")
         .to_path_buf();
-    let tools_dir = workspace_dir.join(".ahma/tools");
+    let tools_dir = workspace_dir.join(".ahma");
     let config_path = tools_dir.join(format!("{}.json", tool_name));
 
     if !config_path.exists() {
@@ -164,10 +164,10 @@ pub fn get_workspace_path<P: AsRef<Path>>(relative: P) -> PathBuf {
     get_workspace_dir().join(relative)
 }
 
-/// Get the `.ahma/tools` directory path
+/// Get the `.ahma` directory path
 #[allow(dead_code)]
 pub fn get_tools_dir() -> PathBuf {
-    get_workspace_path(".ahma/tools")
+    get_workspace_path(".ahma")
 }
 
 /// Create a test config for integration tests
@@ -528,7 +528,7 @@ pub mod test_client {
     /// Get the absolute path to the workspace tools directory
     #[allow(dead_code)]
     pub fn get_workspace_tools_dir() -> std::path::PathBuf {
-        get_workspace_path(".ahma/tools")
+        get_workspace_path(".ahma")
     }
 }
 
@@ -623,7 +623,7 @@ async fn main() {
     }
 
     async fn create_tool_configs(project_path: &Path) -> Result<()> {
-        let tools_dir = project_path.join(".ahma").join("tools");
+        let tools_dir = project_path.join(".ahma");
         fs::create_dir_all(&tools_dir).await?;
         fs::write(
             tools_dir.join("echo.json"),

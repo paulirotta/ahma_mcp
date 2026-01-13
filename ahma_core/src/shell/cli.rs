@@ -119,7 +119,7 @@ struct Cli {
     http_host: String,
 
     /// Path to the directory containing tool JSON configuration files.
-    #[arg(long, global = true, default_value = ".ahma/tools")]
+    #[arg(long, global = true, default_value = ".ahma")]
     tools_dir: PathBuf,
 
     /// Default timeout for commands in seconds.
@@ -173,7 +173,8 @@ struct Cli {
 }
 
 pub async fn run() -> Result<()> {
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
+    cli.tools_dir = normalize_tools_dir(cli.tools_dir);
 
     // Initialize logging
     let log_level = if cli.debug { "debug" } else { "info" };
@@ -332,6 +333,27 @@ pub async fn run() -> Result<()> {
     } else {
         tracing::info!("Running in CLI mode");
         run_cli_mode(cli).await
+    }
+}
+
+fn normalize_tools_dir(tools_dir: PathBuf) -> PathBuf {
+    let is_legacy_tools_dir = tools_dir
+        .file_name()
+        .and_then(|s| s.to_str())
+        .is_some_and(|s| s == "tools")
+        && tools_dir
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|s| s.to_str())
+            .is_some_and(|s| s == ".ahma");
+
+    if is_legacy_tools_dir {
+        tools_dir
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or(tools_dir)
+    } else {
+        tools_dir
     }
 }
 

@@ -7,7 +7,7 @@ mod config_tests {
     fn test_config_loading() {
         init_test_logging();
         println!("Testing configuration loading...");
-        let tools_dir = Path::new(".ahma/tools");
+        let tools_dir = Path::new(".ahma");
         match load_tool_configs(tools_dir) {
             Ok(configs) => {
                 println!("Successfully loaded {} configurations:", configs.len());

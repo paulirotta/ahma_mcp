@@ -7,9 +7,9 @@ mod main_tests {
     fn test_default_paths() {
         init_test_logging();
         // Test that default paths can be created
-        let tools_dir = PathBuf::from(".ahma/tools");
+        let tools_dir = PathBuf::from(".ahma");
 
-        assert_eq!(tools_dir.to_string_lossy(), ".ahma/tools");
+        assert_eq!(tools_dir.to_string_lossy(), ".ahma");
     }
 
     #[test]

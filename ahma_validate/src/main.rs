@@ -16,8 +16,8 @@ use tracing::{error, info, instrument};
     long_about = "Validates tool configurations against the MTDF schema and checks for other inconsistencies."
 )]
 struct Cli {
-    /// Path to the directory containing tool JSON configuration files, a comma-separated list of files, or blank to validate '.ahma/tools'.
-    #[arg(default_value = ".ahma/tools")]
+    /// Path to the directory containing tool JSON configuration files, a comma-separated list of files, or blank to validate '.ahma'.
+    #[arg(default_value = ".ahma")]
     validation_target: String,
 
     /// Enable debug logging.
@@ -59,9 +59,31 @@ fn run_validation_mode(cli: &Cli) -> Result<bool> {
         vec![cli.validation_target.clone()]
     };
 
+    fn normalize_validation_target(path: PathBuf) -> PathBuf {
+        let is_legacy_tools_dir = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .is_some_and(|s| s == "tools")
+            && path
+                .parent()
+                .and_then(|p| p.file_name())
+                .and_then(|s| s.to_str())
+                .is_some_and(|s| s == ".ahma");
+
+        if is_legacy_tools_dir && !path.exists() {
+            if let Some(parent) = path.parent() {
+                if parent.exists() {
+                    return parent.to_path_buf();
+                }
+            }
+        }
+
+        path
+    }
+
     let mut files_to_validate = Vec::new();
     for target in targets {
-        let path = PathBuf::from(target);
+        let path = normalize_validation_target(PathBuf::from(target));
         if path.is_dir() {
             files_to_validate.extend(get_json_files(&path)?);
         } else if path.is_file() {
@@ -194,7 +216,7 @@ mod tests {
     fn test_cli_default_values() {
         let cli = Cli::parse_from(["ahma_validate"]);
 
-        assert_eq!(cli.validation_target, ".ahma/tools");
+        assert_eq!(cli.validation_target, ".ahma");
         assert!(!cli.debug);
     }
 

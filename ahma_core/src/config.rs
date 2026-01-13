@@ -2,7 +2,7 @@
 //!
 //! This module defines the data structures and logic for managing the configuration of
 //! command-line tools. All tool configurations are loaded from `.json` files
-//! located in the `.ahma/tools/` directory. This approach allows for easy extension and
+//! located in the `.ahma/` directory. This approach allows for easy extension and
 //! modification of supported tools without altering the core server code.
 //!
 //! ## Core Data Structures
@@ -24,7 +24,7 @@
 //! - The `load_from_file` function reads a specified JSON file and deserializes it
 //!   into a `Config` struct.
 //! - The `load_tool_config` helper function simplifies loading by constructing the path
-//!   to a tool's configuration file within the `.ahma/tools/` directory.
+//!   to a tool's configuration file within the `.ahma/` directory.
 //!
 //! ## Key Features
 //!
@@ -304,6 +304,31 @@ pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<Strin
     // Hardcoded tool names that should not be overridden by user configurations
     const RESERVED_TOOL_NAMES: &[&str] = &["await", "status"];
 
+    // Backwards compatibility: older layouts stored tool configs in `.ahma/tools/`.
+    // If a caller passes that path but it doesn't exist, transparently fall back to `.ahma/`.
+    let mut resolved_tools_dir = tools_dir.to_path_buf();
+    if !fs::try_exists(tools_dir).await.unwrap_or(false) {
+        let is_legacy_tools_dir = tools_dir
+            .file_name()
+            .and_then(|s| s.to_str())
+            .is_some_and(|s| s == "tools")
+            && tools_dir
+                .parent()
+                .and_then(|p| p.file_name())
+                .and_then(|s| s.to_str())
+                .is_some_and(|s| s == ".ahma");
+
+        if is_legacy_tools_dir {
+            if let Some(parent) = tools_dir.parent() {
+                if fs::try_exists(parent).await.unwrap_or(false) {
+                    resolved_tools_dir = parent.to_path_buf();
+                }
+            }
+        }
+    }
+
+    let tools_dir = resolved_tools_dir.as_path();
+
     // Return empty map if directory doesn't exist
     if !fs::try_exists(tools_dir).await.unwrap_or(false) {
         return Ok(HashMap::new());
@@ -349,21 +374,22 @@ pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<Strin
 
         // Only process .json files
         if path.extension().and_then(|s| s.to_str()) == Some("json")
-            && let Some(config) = read_tool_config_with_retry(&path).await {
-                // Guard rail: Check for conflicts with hardcoded tool names
-                if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
-                    anyhow::bail!(
-                        "Tool name '{}' conflicts with a hardcoded system tool. Reserved tool names: {:?}. Please rename your tool in {}",
-                        config.name,
-                        RESERVED_TOOL_NAMES,
-                        path.display()
-                    );
-                }
-
-                // Include all tools (enabled or disabled)
-                // Disabled tools will be rejected at execution time with a helpful message
-                configs.insert(config.name.clone(), config);
+            && let Some(config) = read_tool_config_with_retry(&path).await
+        {
+            // Guard rail: Check for conflicts with hardcoded tool names
+            if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
+                anyhow::bail!(
+                    "Tool name '{}' conflicts with a hardcoded system tool. Reserved tool names: {:?}. Please rename your tool in {}",
+                    config.name,
+                    RESERVED_TOOL_NAMES,
+                    path.display()
+                );
             }
+
+            // Include all tools (enabled or disabled)
+            // Disabled tools will be rejected at execution time with a helpful message
+            configs.insert(config.name.clone(), config);
+        }
     }
 
     Ok(configs)
@@ -386,6 +412,31 @@ pub fn load_tool_configs_sync(tools_dir: &Path) -> anyhow::Result<HashMap<String
 
     // Hardcoded tool names that should not be overridden by user configurations
     const RESERVED_TOOL_NAMES: &[&str] = &["await", "status"];
+
+    // Backwards compatibility: older layouts stored tool configs in `.ahma/tools/`.
+    // If a caller passes that path but it doesn't exist, transparently fall back to `.ahma/`.
+    let mut resolved_tools_dir = tools_dir.to_path_buf();
+    if !tools_dir.exists() {
+        let is_legacy_tools_dir = tools_dir
+            .file_name()
+            .and_then(|s| s.to_str())
+            .is_some_and(|s| s == "tools")
+            && tools_dir
+                .parent()
+                .and_then(|p| p.file_name())
+                .and_then(|s| s.to_str())
+                .is_some_and(|s| s == ".ahma");
+
+        if is_legacy_tools_dir {
+            if let Some(parent) = tools_dir.parent() {
+                if parent.exists() {
+                    resolved_tools_dir = parent.to_path_buf();
+                }
+            }
+        }
+    }
+
+    let tools_dir = resolved_tools_dir.as_path();
 
     // Return empty map if directory doesn't exist
     if !tools_dir.exists() {
@@ -430,21 +481,22 @@ pub fn load_tool_configs_sync(tools_dir: &Path) -> anyhow::Result<HashMap<String
 
         // Only process .json files
         if path.extension().and_then(|s| s.to_str()) == Some("json")
-            && let Some(config) = read_tool_config_with_retry(&path) {
-                // Guard rail: Check for conflicts with hardcoded tool names
-                if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
-                    anyhow::bail!(
-                        "Tool name '{}' conflicts with a hardcoded system tool. Reserved tool names: {:?}. Please rename your tool in {}",
-                        config.name,
-                        RESERVED_TOOL_NAMES,
-                        path.display()
-                    );
-                }
-
-                // Include all tools (enabled or disabled)
-                // Disabled tools will be rejected at execution time with a helpful message
-                configs.insert(config.name.clone(), config);
+            && let Some(config) = read_tool_config_with_retry(&path)
+        {
+            // Guard rail: Check for conflicts with hardcoded tool names
+            if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
+                anyhow::bail!(
+                    "Tool name '{}' conflicts with a hardcoded system tool. Reserved tool names: {:?}. Please rename your tool in {}",
+                    config.name,
+                    RESERVED_TOOL_NAMES,
+                    path.display()
+                );
             }
+
+            // Include all tools (enabled or disabled)
+            // Disabled tools will be rejected at execution time with a helpful message
+            configs.insert(config.name.clone(), config);
+        }
     }
 
     Ok(configs)
