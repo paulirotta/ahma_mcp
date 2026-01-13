@@ -36,7 +36,7 @@ async fn test_schema_generation_normalizes_option_types() {
         }]
     });
 
-    let tools_dir = temp_dir.path().join(".ahma/tools");
+    let tools_dir = temp_dir.path().join(".ahma");
     std::fs::create_dir_all(&tools_dir).unwrap();
     std::fs::write(
         tools_dir.join("test_types.json"),
@@ -139,7 +139,7 @@ async fn test_schema_generation_array_with_items() {
         }]
     });
 
-    let tools_dir = temp_dir.path().join(".ahma/tools");
+    let tools_dir = temp_dir.path().join(".ahma");
     std::fs::create_dir_all(&tools_dir).unwrap();
     std::fs::write(
         tools_dir.join("test_arrays.json"),
@@ -220,7 +220,7 @@ async fn test_schema_generation_positional_args() {
         }]
     });
 
-    let tools_dir = temp_dir.path().join(".ahma/tools");
+    let tools_dir = temp_dir.path().join(".ahma");
     std::fs::create_dir_all(&tools_dir).unwrap();
     std::fs::write(
         tools_dir.join("test_positional.json"),
@@ -320,7 +320,7 @@ async fn test_schema_generation_multiple_subcommands() {
         ]
     });
 
-    let tools_dir = temp_dir.path().join(".ahma/tools");
+    let tools_dir = temp_dir.path().join(".ahma");
     std::fs::create_dir_all(&tools_dir).unwrap();
     std::fs::write(
         tools_dir.join("test_multi_sub.json"),
@@ -416,7 +416,7 @@ async fn test_schema_generation_nested_subcommands() {
         ]
     });
 
-    let tools_dir = temp_dir.path().join(".ahma/tools");
+    let tools_dir = temp_dir.path().join(".ahma");
     std::fs::create_dir_all(&tools_dir).unwrap();
     std::fs::write(
         tools_dir.join("test_nested.json"),
@@ -486,7 +486,7 @@ async fn test_disabled_tools_not_in_list() {
         }]
     });
 
-    let tools_dir = temp_dir.path().join(".ahma/tools");
+    let tools_dir = temp_dir.path().join(".ahma");
     std::fs::create_dir_all(&tools_dir).unwrap();
     std::fs::write(
         tools_dir.join("disabled_tool.json"),
@@ -537,7 +537,7 @@ async fn test_disabled_subcommands_skipped() {
         ]
     });
 
-    let tools_dir = temp_dir.path().join(".ahma/tools");
+    let tools_dir = temp_dir.path().join(".ahma");
     std::fs::create_dir_all(&tools_dir).unwrap();
     std::fs::write(
         tools_dir.join("test_disabled_sub.json"),
@@ -596,7 +596,7 @@ async fn test_default_subcommand_no_enum() {
         }]
     });
 
-    let tools_dir = temp_dir.path().join(".ahma/tools");
+    let tools_dir = temp_dir.path().join(".ahma");
     std::fs::create_dir_all(&tools_dir).unwrap();
     std::fs::write(
         tools_dir.join("test_default_only.json"),
@@ -648,7 +648,7 @@ async fn test_working_directory_added_for_non_cargo_tools() {
         }]
     });
 
-    let tools_dir = temp_dir.path().join(".ahma/tools");
+    let tools_dir = temp_dir.path().join(".ahma");
     std::fs::create_dir_all(&tools_dir).unwrap();
     std::fs::write(
         tools_dir.join("test_wd.json"),
@@ -684,7 +684,7 @@ async fn test_hardwired_tools_always_present() {
     let temp_dir = tempdir().unwrap();
 
     // Create empty tools directory - no custom tools
-    let tools_dir = temp_dir.path().join(".ahma/tools");
+    let tools_dir = temp_dir.path().join(".ahma");
     std::fs::create_dir_all(&tools_dir).unwrap();
 
     let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
@@ -741,7 +741,7 @@ async fn test_required_options_in_schema() {
         }]
     });
 
-    let tools_dir = temp_dir.path().join(".ahma/tools");
+    let tools_dir = temp_dir.path().join(".ahma");
     std::fs::create_dir_all(&tools_dir).unwrap();
     std::fs::write(
         tools_dir.join("test_required.json"),
