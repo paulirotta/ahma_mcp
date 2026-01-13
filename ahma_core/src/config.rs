@@ -320,9 +320,10 @@ pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<Strin
 
         if is_legacy_tools_dir
             && let Some(parent) = tools_dir.parent()
-                && fs::try_exists(parent).await.unwrap_or(false) {
-                    resolved_tools_dir = parent.to_path_buf();
-                }
+            && fs::try_exists(parent).await.unwrap_or(false)
+        {
+            resolved_tools_dir = parent.to_path_buf();
+        }
     }
 
     let tools_dir = resolved_tools_dir.as_path();
@@ -427,9 +428,10 @@ pub fn load_tool_configs_sync(tools_dir: &Path) -> anyhow::Result<HashMap<String
 
         if is_legacy_tools_dir
             && let Some(parent) = tools_dir.parent()
-                && parent.exists() {
-                    resolved_tools_dir = parent.to_path_buf();
-                }
+            && parent.exists()
+        {
+            resolved_tools_dir = parent.to_path_buf();
+        }
     }
 
     let tools_dir = resolved_tools_dir.as_path();

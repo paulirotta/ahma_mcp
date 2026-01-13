@@ -694,6 +694,260 @@ impl AhmaMcpService {
         }
     }
 
+    /// Handles the 'status' tool call.
+    async fn handle_status(&self, args: Map<String, Value>) -> Result<CallToolResult, McpError> {
+        // Parse tools parameter as comma-separated string
+        let tool_filters: Vec<String> = if let Some(v) = args.get("tools") {
+            if let Some(s) = v.as_str() {
+                s.split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        };
+
+        // Parse operation_id parameter
+        let specific_operation_id: Option<String> = if let Some(v) = args.get("operation_id") {
+            v.as_str().map(|s| s.to_string())
+        } else {
+            None
+        };
+
+        let mut contents = Vec::new();
+
+        // Get active operations
+        let active_ops: Vec<Operation> = self
+            .operation_monitor
+            .get_all_active_operations()
+            .await
+            .into_iter()
+            .filter(|op| {
+                let matches_filter = if tool_filters.is_empty() {
+                    true
+                } else {
+                    tool_filters.iter().any(|tn| op.tool_name.starts_with(tn))
+                };
+
+                let matches_id = if let Some(ref id) = specific_operation_id {
+                    op.id == *id
+                } else {
+                    true
+                };
+
+                matches_filter && matches_id
+            })
+            .collect();
+
+        // Get completed operations
+        let completed_ops: Vec<Operation> = self
+            .operation_monitor
+            .get_completed_operations()
+            .await
+            .into_iter()
+            .filter(|op| {
+                let matches_filter = if tool_filters.is_empty() {
+                    true
+                } else {
+                    tool_filters.iter().any(|tn| op.tool_name.starts_with(tn))
+                };
+
+                let matches_id = if let Some(ref id) = specific_operation_id {
+                    op.id == *id
+                } else {
+                    true
+                };
+
+                matches_filter && matches_id
+            })
+            .collect();
+
+        // Create summary with timing information
+        let active_count = active_ops.len();
+        let completed_count = completed_ops.len();
+        let total_count = active_count + completed_count;
+
+        let summary = if let Some(ref id) = specific_operation_id {
+            if total_count == 0 {
+                format!("Operation '{}' not found", id)
+            } else {
+                format!("Operation '{}' found", id)
+            }
+        } else if tool_filters.is_empty() {
+            format!(
+                "Operations status: {} active, {} completed (total: {})",
+                active_count, completed_count, total_count
+            )
+        } else {
+            format!(
+                "Operations status for '{}': {} active, {} completed (total: {})",
+                tool_filters.join(", "),
+                active_count,
+                completed_count,
+                total_count
+            )
+        };
+
+        contents.push(Content::text(summary));
+
+        // Add concurrency efficiency analysis
+        if !completed_ops.is_empty() {
+            let mut total_execution_time = 0.0;
+            let mut total_wait_time = 0.0;
+            let mut operations_with_waits = 0;
+
+            for op in &completed_ops {
+                if let Some(end_time) = op.end_time
+                    && let Ok(execution_duration) = end_time.duration_since(op.start_time)
+                {
+                    total_execution_time += execution_duration.as_secs_f64();
+
+                    if let Some(first_wait_time) = op.first_wait_time
+                        && let Ok(wait_duration) = first_wait_time.duration_since(op.start_time)
+                    {
+                        total_wait_time += wait_duration.as_secs_f64();
+                        operations_with_waits += 1;
+                    }
+                }
+            }
+
+            if total_execution_time > 0.0 {
+                let efficiency_analysis = if operations_with_waits > 0 {
+                    let avg_wait_ratio = (total_wait_time / total_execution_time) * 100.0;
+                    if avg_wait_ratio < 10.0 {
+                        format!(
+                            "✓ Good concurrency efficiency: {:.1}% of execution time spent waiting",
+                            avg_wait_ratio
+                        )
+                    } else if avg_wait_ratio < 50.0 {
+                        format!(
+                            "⚠ Moderate concurrency efficiency: {:.1}% of execution time spent waiting",
+                            avg_wait_ratio
+                        )
+                    } else {
+                        format!(
+                            "⚠ Low concurrency efficiency: {:.1}% of execution time spent waiting. Consider using status tool instead of frequent waits.",
+                            avg_wait_ratio
+                        )
+                    }
+                } else {
+                    "✓ Excellent concurrency: No blocking waits detected".to_string()
+                };
+
+                contents.push(Content::text(format!(
+                    "\nConcurrency Analysis:\n{}",
+                    efficiency_analysis
+                )));
+            }
+        }
+
+        // Add active operations details
+        if !active_ops.is_empty() {
+            contents.push(Content::text("\n=== ACTIVE OPERATIONS ===".to_string()));
+            for op in active_ops {
+                match serde_json::to_string_pretty(&op) {
+                    Ok(s) => contents.push(Content::text(s)),
+                    Err(e) => tracing::error!("Serialization error: {}", e),
+                }
+            }
+        }
+
+        // Add completed operations details
+        if !completed_ops.is_empty() {
+            contents.push(Content::text("\n=== COMPLETED OPERATIONS ===".to_string()));
+            for op in completed_ops {
+                match serde_json::to_string_pretty(&op) {
+                    Ok(s) => contents.push(Content::text(s)),
+                    Err(e) => tracing::error!("Serialization error: {}", e),
+                }
+            }
+        }
+
+        Ok(CallToolResult::success(contents))
+    }
+
+    /// Handles the 'cancel' tool call.
+    async fn handle_cancel(&self, args: Map<String, Value>) -> Result<CallToolResult, McpError> {
+        // Parse operation_id parameter (required)
+        let operation_id = if let Some(v) = args.get("operation_id") {
+            if let Some(s) = v.as_str() {
+                s.to_string()
+            } else {
+                return Err(McpError::invalid_params(
+                    "operation_id must be a string".to_string(),
+                    Some(serde_json::json!({ "operation_id": v })),
+                ));
+            }
+        } else {
+            return Err(McpError::invalid_params(
+                "operation_id parameter is required".to_string(),
+                Some(serde_json::json!({ "missing_param": "operation_id" })),
+            ));
+        };
+
+        // Optional cancellation reason to aid debugging
+        let reason: Option<String> = args
+            .get("reason")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        // Attempt to cancel the operation
+        let cancelled = self
+            .operation_monitor
+            .cancel_operation_with_reason(&operation_id, reason.clone())
+            .await;
+
+        let result_message = if cancelled {
+            let why = reason
+                .as_deref()
+                .unwrap_or("No reason provided (default: user-initiated)");
+            format!(
+                "✓ Operation '{}' has been cancelled successfully.\nString: reason='{}'.\nHint: Consider restarting the operation if needed.",
+                operation_id, why
+            )
+        } else {
+            // Check if operation exists but is already terminal
+            if let Some(operation) = self.operation_monitor.get_operation(&operation_id).await {
+                format!(
+                    "⚠ Operation '{}' is already {} and cannot be cancelled.",
+                    operation_id,
+                    match operation.state {
+                        crate::operation_monitor::OperationStatus::Completed => "completed",
+                        crate::operation_monitor::OperationStatus::Failed => "failed",
+                        crate::operation_monitor::OperationStatus::Cancelled => "cancelled",
+                        crate::operation_monitor::OperationStatus::TimedOut => "timed out",
+                        _ => "in a terminal state",
+                    }
+                )
+            } else {
+                format!(
+                    "❌ Operation '{}' not found. It may have already completed or never existed.",
+                    operation_id
+                )
+            }
+        };
+
+        // Add a machine-parseable suggestion block to encourage restart via tool hint
+        let suggestion = serde_json::json!({
+            "tool_hint": {
+                "suggested_tool": "status",
+                "reason": "Operation cancelled; check status and consider restarting",
+                "next_steps": [
+                    {"tool": "status", "args": {"operation_id": operation_id}},
+                    {"tool": "await", "args": {"tools": "", "timeout_seconds": 360}}
+                ]
+            }
+        });
+
+        Ok(CallToolResult::success(vec![
+            Content::text(result_message),
+            Content::text(suggestion.to_string()),
+        ]))
+    }
+
     /// Calculate intelligent timeout based on operation timeouts and default await timeout
     ///
     /// Returns the maximum of:
@@ -1029,181 +1283,7 @@ impl ServerHandler for AhmaMcpService {
             let tool_name = params.name.as_ref();
 
             if tool_name == "status" {
-                let args = params.arguments.unwrap_or_default();
-
-                // Parse tools parameter as comma-separated string
-                let tool_filters: Vec<String> = if let Some(v) = args.get("tools") {
-                    if let Some(s) = v.as_str() {
-                        s.split(',')
-                            .map(|s| s.trim().to_string())
-                            .filter(|s| !s.is_empty())
-                            .collect()
-                    } else {
-                        Vec::new()
-                    }
-                } else {
-                    Vec::new()
-                };
-
-                // Parse operation_id parameter
-                let specific_operation_id: Option<String> =
-                    if let Some(v) = args.get("operation_id") {
-                        v.as_str().map(|s| s.to_string())
-                    } else {
-                        None
-                    };
-
-                let mut contents = Vec::new();
-
-                // Get active operations
-                let active_ops: Vec<Operation> = self
-                    .operation_monitor
-                    .get_all_active_operations()
-                    .await
-                    .into_iter()
-                    .filter(|op| {
-                        let matches_filter = if tool_filters.is_empty() {
-                            true
-                        } else {
-                            tool_filters.iter().any(|tn| op.tool_name.starts_with(tn))
-                        };
-
-                        let matches_id = if let Some(ref id) = specific_operation_id {
-                            op.id == *id
-                        } else {
-                            true
-                        };
-
-                        matches_filter && matches_id
-                    })
-                    .collect();
-
-                // Get completed operations
-                let completed_ops: Vec<Operation> = self
-                    .operation_monitor
-                    .get_completed_operations()
-                    .await
-                    .into_iter()
-                    .filter(|op| {
-                        let matches_filter = if tool_filters.is_empty() {
-                            true
-                        } else {
-                            tool_filters.iter().any(|tn| op.tool_name.starts_with(tn))
-                        };
-
-                        let matches_id = if let Some(ref id) = specific_operation_id {
-                            op.id == *id
-                        } else {
-                            true
-                        };
-
-                        matches_filter && matches_id
-                    })
-                    .collect();
-
-                // Create summary with timing information
-                let active_count = active_ops.len();
-                let completed_count = completed_ops.len();
-                let total_count = active_count + completed_count;
-
-                let summary = if let Some(ref id) = specific_operation_id {
-                    if total_count == 0 {
-                        format!("Operation '{}' not found", id)
-                    } else {
-                        format!("Operation '{}' found", id)
-                    }
-                } else if tool_filters.is_empty() {
-                    format!(
-                        "Operations status: {} active, {} completed (total: {})",
-                        active_count, completed_count, total_count
-                    )
-                } else {
-                    format!(
-                        "Operations status for '{}': {} active, {} completed (total: {})",
-                        tool_filters.join(", "),
-                        active_count,
-                        completed_count,
-                        total_count
-                    )
-                };
-
-                contents.push(Content::text(summary));
-
-                // Add concurrency efficiency analysis
-                if !completed_ops.is_empty() {
-                    let mut total_execution_time = 0.0;
-                    let mut total_wait_time = 0.0;
-                    let mut operations_with_waits = 0;
-
-                    for op in &completed_ops {
-                        if let Some(end_time) = op.end_time
-                            && let Ok(execution_duration) = end_time.duration_since(op.start_time)
-                        {
-                            total_execution_time += execution_duration.as_secs_f64();
-
-                            if let Some(first_wait_time) = op.first_wait_time
-                                && let Ok(wait_duration) =
-                                    first_wait_time.duration_since(op.start_time)
-                            {
-                                total_wait_time += wait_duration.as_secs_f64();
-                                operations_with_waits += 1;
-                            }
-                        }
-                    }
-
-                    if total_execution_time > 0.0 {
-                        let efficiency_analysis = if operations_with_waits > 0 {
-                            let avg_wait_ratio = (total_wait_time / total_execution_time) * 100.0;
-                            if avg_wait_ratio < 10.0 {
-                                format!(
-                                    "✓ Good concurrency efficiency: {:.1}% of execution time spent waiting",
-                                    avg_wait_ratio
-                                )
-                            } else if avg_wait_ratio < 50.0 {
-                                format!(
-                                    "⚠ Moderate concurrency efficiency: {:.1}% of execution time spent waiting",
-                                    avg_wait_ratio
-                                )
-                            } else {
-                                format!(
-                                    "⚠ Low concurrency efficiency: {:.1}% of execution time spent waiting. Consider using status tool instead of frequent waits.",
-                                    avg_wait_ratio
-                                )
-                            }
-                        } else {
-                            "✓ Excellent concurrency: No blocking waits detected".to_string()
-                        };
-
-                        contents.push(Content::text(format!(
-                            "\nConcurrency Analysis:\n{}",
-                            efficiency_analysis
-                        )));
-                    }
-                }
-
-                // Add active operations details
-                if !active_ops.is_empty() {
-                    contents.push(Content::text("\n=== ACTIVE OPERATIONS ===".to_string()));
-                    for op in active_ops {
-                        match serde_json::to_string_pretty(&op) {
-                            Ok(s) => contents.push(Content::text(s)),
-                            Err(e) => tracing::error!("Serialization error: {}", e),
-                        }
-                    }
-                }
-
-                // Add completed operations details
-                if !completed_ops.is_empty() {
-                    contents.push(Content::text("\n=== COMPLETED OPERATIONS ===".to_string()));
-                    for op in completed_ops {
-                        match serde_json::to_string_pretty(&op) {
-                            Ok(s) => contents.push(Content::text(s)),
-                            Err(e) => tracing::error!("Serialization error: {}", e),
-                        }
-                    }
-                }
-
-                return Ok(CallToolResult::success(contents));
+                return self.handle_status(params.arguments.unwrap_or_default()).await;
             }
 
             if tool_name == "await" {
@@ -1211,85 +1291,7 @@ impl ServerHandler for AhmaMcpService {
             }
 
             if tool_name == "cancel" {
-                let args = params.arguments.unwrap_or_default();
-
-                // Parse operation_id parameter (required)
-                let operation_id = if let Some(v) = args.get("operation_id") {
-                    if let Some(s) = v.as_str() {
-                        s.to_string()
-                    } else {
-                        return Err(McpError::invalid_params(
-                            "operation_id must be a string".to_string(),
-                            Some(serde_json::json!({ "operation_id": v })),
-                        ));
-                    }
-                } else {
-                    return Err(McpError::invalid_params(
-                        "operation_id parameter is required".to_string(),
-                        Some(serde_json::json!({ "missing_param": "operation_id" })),
-                    ));
-                };
-
-                // Optional cancellation reason to aid debugging
-                let reason: Option<String> = args
-                    .get("reason")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-
-                // Attempt to cancel the operation
-                let cancelled = self
-                    .operation_monitor
-                    .cancel_operation_with_reason(&operation_id, reason.clone())
-                    .await;
-
-                let result_message = if cancelled {
-                    let why = reason
-                        .as_deref()
-                        .unwrap_or("No reason provided (default: user-initiated)");
-                    format!(
-                        "✓ Operation '{}' has been cancelled successfully.\nString: reason='{}'.\nHint: Consider restarting the operation if needed.",
-                        operation_id, why
-                    )
-                } else {
-                    // Check if operation exists but is already terminal
-                    if let Some(operation) =
-                        self.operation_monitor.get_operation(&operation_id).await
-                    {
-                        format!(
-                            "⚠ Operation '{}' is already {} and cannot be cancelled.",
-                            operation_id,
-                            match operation.state {
-                                crate::operation_monitor::OperationStatus::Completed => "completed",
-                                crate::operation_monitor::OperationStatus::Failed => "failed",
-                                crate::operation_monitor::OperationStatus::Cancelled => "cancelled",
-                                crate::operation_monitor::OperationStatus::TimedOut => "timed out",
-                                _ => "in a terminal state",
-                            }
-                        )
-                    } else {
-                        format!(
-                            "❌ Operation '{}' not found. It may have already completed or never existed.",
-                            operation_id
-                        )
-                    }
-                };
-
-                // Add a machine-parseable suggestion block to encourage restart via tool hint
-                let suggestion = serde_json::json!({
-                    "tool_hint": {
-                        "suggested_tool": "status",
-                        "reason": "Operation cancelled; check status and consider restarting",
-                        "next_steps": [
-                            {"tool": "status", "args": {"operation_id": operation_id}},
-                            {"tool": "await", "args": {"tools": "", "timeout_seconds": 360}}
-                        ]
-                    }
-                });
-
-                return Ok(CallToolResult::success(vec![
-                    Content::text(result_message),
-                    Content::text(suggestion.to_string()),
-                ]));
+                return self.handle_cancel(params.arguments.unwrap_or_default()).await;
             }
 
             // Find tool configuration
@@ -1521,6 +1523,405 @@ impl ServerHandler for AhmaMcpService {
 #[cfg(test)]
 mod tests {
     // ==================== force_synchronous inheritance tests ====================
+
+    use super::*;
+    use crate::config::{SubcommandConfig, ToolConfig, ToolHints};
+    use crate::operation_monitor::{MonitorConfig, Operation, OperationMonitor, OperationStatus};
+    use crate::test_utils;
+    use serde_json::json;
+    use std::collections::HashMap;
+    use std::path::Path;
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    async fn make_service_with_monitor(
+        monitor: Arc<OperationMonitor>,
+        guidance: Arc<Option<GuidanceConfig>>,
+    ) -> AhmaMcpService {
+        // Adapter is required by the service but not used by these unit tests.
+        let adapter = test_utils::create_test_config(Path::new(".")).expect("adapter");
+        let configs: Arc<HashMap<String, ToolConfig>> = Arc::new(HashMap::new());
+        AhmaMcpService::new(adapter, monitor, configs, guidance, false, false)
+            .await
+            .expect("service")
+    }
+
+    async fn make_service() -> AhmaMcpService {
+        let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
+            Duration::from_secs(30),
+        )));
+        make_service_with_monitor(monitor, Arc::new(None)).await
+    }
+
+    fn call_tool_params(name: &str, args: serde_json::Value) -> CallToolRequestParam {
+        CallToolRequestParam {
+            name: std::borrow::Cow::Owned(name.to_string()),
+            arguments: args.as_object().cloned(),
+        }
+    }
+
+    fn first_text(result: &CallToolResult) -> String {
+        result
+            .content
+            .iter()
+            .find_map(|c| c.as_text().map(|t| t.text.clone()))
+            .unwrap_or_default()
+    }
+
+    #[tokio::test]
+    async fn handle_status_empty_shows_zero_counts() {
+        let service = make_service().await;
+        let result = service
+            .handle_status(serde_json::Map::new())
+            .await
+            .expect("status result");
+        let text = first_text(&result);
+        assert!(text.contains("Operations status:"));
+        assert!(text.contains("0 active"));
+        assert!(text.contains("0 completed"));
+    }
+
+    #[tokio::test]
+    async fn handle_status_filters_by_tools_and_operation_id() {
+        let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
+            Duration::from_secs(30),
+        )));
+        let service = make_service_with_monitor(monitor.clone(), Arc::new(None)).await;
+
+        // Active operation
+        let op_active = Operation::new(
+            "op_active".to_string(),
+            "alpha_tool".to_string(),
+            "desc".to_string(),
+            None,
+        );
+        monitor.add_operation(op_active).await;
+
+        // Completed operation
+        let op_completed = Operation::new(
+            "op_completed".to_string(),
+            "beta_tool".to_string(),
+            "desc".to_string(),
+            None,
+        );
+        monitor.add_operation(op_completed).await;
+        monitor
+            .update_status(
+                "op_completed",
+                OperationStatus::Completed,
+                Some(json!({"ok": true})),
+            )
+            .await;
+
+        // Filter by tool prefix
+        let args = json!({"tools": "alpha"}).as_object().unwrap().clone();
+        let result = service.handle_status(args).await.expect("status");
+        let text = first_text(&result);
+        assert!(text.contains("Operations status for 'alpha': 1 active, 0 completed"));
+        assert!(result
+            .content
+            .iter()
+            .filter_map(|c| c.as_text())
+            .any(|t| t.text.contains("=== ACTIVE OPERATIONS ===")));
+
+        // Filter by specific operation id
+        let args = json!({"operation_id": "op_active"})
+            .as_object()
+            .unwrap()
+            .clone();
+        let result = service.handle_status(args).await.expect("status");
+        let text = first_text(&result);
+        assert!(text.contains("Operation 'op_active' found"));
+    }
+
+    #[tokio::test]
+    async fn handle_cancel_requires_operation_id() {
+        let service = make_service().await;
+        let err = service
+            .handle_cancel(serde_json::Map::new())
+            .await
+            .unwrap_err();
+        assert!(format!("{err:?}").contains("operation_id parameter is required"));
+    }
+
+    #[tokio::test]
+    async fn handle_cancel_rejects_non_string_operation_id() {
+        let service = make_service().await;
+        let args = json!({"operation_id": 123}).as_object().unwrap().clone();
+        let err = service.handle_cancel(args).await.unwrap_err();
+        assert!(format!("{err:?}").contains("operation_id must be a string"));
+    }
+
+    #[tokio::test]
+    async fn handle_cancel_success_includes_hint_block() {
+        let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
+            Duration::from_secs(30),
+        )));
+        let service = make_service_with_monitor(monitor.clone(), Arc::new(None)).await;
+
+        let op = Operation::new(
+            "op_to_cancel".to_string(),
+            "alpha_tool".to_string(),
+            "desc".to_string(),
+            None,
+        );
+        monitor.add_operation(op).await;
+
+        let args = json!({"operation_id": "op_to_cancel", "reason": "because"})
+            .as_object()
+            .unwrap()
+            .clone();
+        let result = service.handle_cancel(args).await.expect("cancel");
+        let text = first_text(&result);
+        assert!(text.contains("has been cancelled successfully"));
+        assert!(text.contains("reason='because'"));
+        assert!(result
+            .content
+            .iter()
+            .filter_map(|c| c.as_text())
+            .any(|t| t.text.contains("\"tool_hint\"")));
+    }
+
+    #[tokio::test]
+    async fn handle_cancel_terminal_operation_reports_already_terminal() {
+        let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
+            Duration::from_secs(30),
+        )));
+        let service = make_service_with_monitor(monitor.clone(), Arc::new(None)).await;
+
+        let mut op = Operation::new(
+            "op_terminal".to_string(),
+            "alpha_tool".to_string(),
+            "desc".to_string(),
+            None,
+        );
+        op.state = OperationStatus::Completed;
+        monitor.add_operation(op).await;
+
+        let args = json!({"operation_id": "op_terminal"})
+            .as_object()
+            .unwrap()
+            .clone();
+        let result = service.handle_cancel(args).await.expect("cancel");
+        let text = first_text(&result);
+        assert!(text.contains("already completed"));
+    }
+
+    #[test]
+    fn parse_file_uri_to_path_accepts_localhost_and_decodes() {
+        let p = AhmaMcpService::parse_file_uri_to_path(
+            "file://localhost/Users/test/My%20Project/file.txt?x=1#frag",
+        )
+        .expect("path");
+        assert_eq!(p.to_string_lossy(), "/Users/test/My Project/file.txt");
+    }
+
+    #[test]
+    fn parse_file_uri_to_path_rejects_non_file_scheme_and_relative() {
+        assert!(AhmaMcpService::parse_file_uri_to_path("http://example.com/a").is_none());
+        assert!(AhmaMcpService::parse_file_uri_to_path("file://not-abs").is_none());
+        assert!(AhmaMcpService::parse_file_uri_to_path("file://localhostnotabs").is_none());
+    }
+
+    #[test]
+    fn percent_decode_utf8_rejects_invalid_hex() {
+        assert!(AhmaMcpService::percent_decode_utf8("/a%ZZ").is_none());
+        assert!(AhmaMcpService::percent_decode_utf8("/a%2").is_none());
+    }
+
+    #[tokio::test]
+    async fn handle_await_operation_id_not_found_reports_not_found() {
+        let service = make_service().await;
+        let params = call_tool_params("await", json!({"operation_id": "op_missing"}));
+        let result = service.handle_await(params).await.expect("await result");
+        assert!(first_text(&result).contains("Operation op_missing not found"));
+    }
+
+    #[tokio::test]
+    async fn handle_await_operation_id_in_history_reports_already_completed() {
+        let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
+            Duration::from_secs(30),
+        )));
+        let service = make_service_with_monitor(monitor.clone(), Arc::new(None)).await;
+
+        let op_id = "op_done".to_string();
+        let op = Operation::new(
+            op_id.clone(),
+            "demo_tool".to_string(),
+            "desc".to_string(),
+            None,
+        );
+        monitor.add_operation(op).await;
+        monitor
+            .update_status(
+                &op_id,
+                OperationStatus::Completed,
+                Some(json!({"ok": true})),
+            )
+            .await;
+
+        let params = call_tool_params("await", json!({"operation_id": op_id}));
+        let result = service.handle_await(params).await.expect("await result");
+        assert!(first_text(&result).contains("already completed"));
+        // Completed op details should be included as a JSON block in content.
+        assert!(
+            result
+                .content
+                .iter()
+                .filter_map(|c| c.as_text())
+                .any(|t| t.text.contains("\"tool_name\": \"demo_tool\""))
+        );
+    }
+
+    #[tokio::test]
+    async fn handle_await_no_pending_operations_returns_fast_message() {
+        let service = make_service().await;
+        let params = call_tool_params("await", json!({}));
+        let result = service.handle_await(params).await.expect("await result");
+        assert_eq!(first_text(&result), "No pending operations to await for.");
+    }
+
+    #[tokio::test]
+    async fn handle_await_filtered_no_pending_but_recently_completed_lists_history() {
+        let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
+            Duration::from_secs(30),
+        )));
+        let service = make_service_with_monitor(monitor.clone(), Arc::new(None)).await;
+
+        let op_id = "op_recent".to_string();
+        let op = Operation::new(
+            op_id.clone(),
+            "alpha_tool".to_string(),
+            "desc".to_string(),
+            None,
+        );
+        monitor.add_operation(op).await;
+        monitor
+            .update_status(
+                &op_id,
+                OperationStatus::Completed,
+                Some(json!({"ok": true})),
+            )
+            .await;
+
+        let params = call_tool_params("await", json!({"tools": "alpha"}));
+        let result = service.handle_await(params).await.expect("await result");
+        let text = first_text(&result);
+        assert!(text.contains("No pending operations for tools: alpha"));
+        assert!(
+            result
+                .content
+                .iter()
+                .filter_map(|c| c.as_text())
+                .any(|t| t.text.contains("\"id\": \"op_recent\""))
+        );
+    }
+
+    #[tokio::test]
+    async fn calculate_intelligent_timeout_uses_max_of_default_and_ops() {
+        let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
+            Duration::from_secs(30),
+        )));
+        let service = make_service_with_monitor(monitor.clone(), Arc::new(None)).await;
+
+        let mut op = Operation::new(
+            "op_long".to_string(),
+            "beta_tool".to_string(),
+            "desc".to_string(),
+            None,
+        );
+        op.timeout_duration = Some(Duration::from_secs(600));
+        monitor.add_operation(op).await;
+
+        let t_any = service.calculate_intelligent_timeout(&[]).await;
+        assert!(t_any >= 600.0);
+
+        let t_filtered_miss = service
+            .calculate_intelligent_timeout(&["nope".to_string()])
+            .await;
+        assert!(t_filtered_miss >= 240.0);
+
+        let t_filtered_hit = service
+            .calculate_intelligent_timeout(&["beta".to_string()])
+            .await;
+        assert!(t_filtered_hit >= 600.0);
+    }
+
+    #[tokio::test]
+    async fn create_tool_from_config_prepends_guidance_block() {
+        let mut guidance_blocks = std::collections::HashMap::new();
+        guidance_blocks.insert("my_tool".to_string(), "GUIDE".to_string());
+        let guidance = GuidanceConfig {
+            guidance_blocks,
+            templates: std::collections::HashMap::new(),
+            legacy_guidance: None,
+        };
+
+        let service = make_service_with_monitor(
+            Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
+                Duration::from_secs(30),
+            ))),
+            Arc::new(Some(guidance)),
+        )
+        .await;
+
+        let tool_config = ToolConfig {
+            name: "my_tool".to_string(),
+            description: "DESC".to_string(),
+            command: "echo".to_string(),
+            subcommand: Some(vec![SubcommandConfig {
+                name: "default".to_string(),
+                description: "d".to_string(),
+                subcommand: None,
+                options: None,
+                positional_args: None,
+                positional_args_first: None,
+                timeout_seconds: None,
+                synchronous: None,
+                enabled: true,
+                guidance_key: None,
+                sequence: None,
+                step_delay_ms: None,
+                availability_check: None,
+                install_instructions: None,
+            }]),
+            input_schema: None,
+            timeout_seconds: None,
+            synchronous: None,
+            hints: ToolHints::default(),
+            enabled: true,
+            guidance_key: None,
+            sequence: None,
+            step_delay_ms: None,
+            availability_check: None,
+            install_instructions: None,
+        };
+
+        let tool = service.create_tool_from_config(&tool_config);
+        let desc = tool.description.unwrap_or_default();
+        assert!(desc.starts_with("GUIDE\n\nDESC"));
+    }
+
+    #[tokio::test]
+    async fn schemas_for_await_and_status_have_expected_properties() {
+        let service = make_service().await;
+        let await_schema = service.generate_input_schema_for_wait();
+        let status_schema = service.generate_input_schema_for_status();
+
+        let await_props = await_schema
+            .get("properties")
+            .and_then(|v| v.as_object())
+            .expect("await properties");
+        assert!(await_props.contains_key("tools"));
+        assert!(await_props.contains_key("operation_id"));
+
+        let status_props = status_schema
+            .get("properties")
+            .and_then(|v| v.as_object())
+            .expect("status properties");
+        assert!(status_props.contains_key("tools"));
+        assert!(status_props.contains_key("operation_id"));
+    }
 
     #[test]
     fn test_force_synchronous_inheritance_subcommand_overrides_tool() {

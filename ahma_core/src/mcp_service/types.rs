@@ -163,6 +163,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_guidance_config_default_contains_expected_blocks() {
+        let cfg = GuidanceConfig::default();
+        assert!(cfg.guidance_blocks.contains_key("async_behavior"));
+        assert!(cfg.guidance_blocks.contains_key("sync_behavior"));
+        assert!(cfg.guidance_blocks.contains_key("coordination_tool"));
+        assert!(cfg.templates.contains_key("working_progress"));
+        assert!(cfg.templates.contains_key("standard_hints"));
+        assert!(cfg.legacy_guidance.is_some());
+    }
+
+    #[test]
     fn test_meta_params_contains_expected_values() {
         assert!(META_PARAMS.contains(&"working_directory"));
         assert!(META_PARAMS.contains(&"execution_mode"));

@@ -25,4 +25,5 @@
         "titleBar.inactiveForeground": "#e7e7e799"
     },
     "peacock.color": "#a97938",
+    "markdownlint.enable": false
 }

@@ -96,9 +96,9 @@ The stress test monitors server stderr and will immediately stop if any error is
 - Client errors → Counted and reported, but test continues
 - Final report includes error counts and server status
 
-**Migration from stress-test.sh:**
+**Stress Test Usage:**
 
-This example replaces the old `scripts/stress-test.sh`. The shell script now delegates to this Rust implementation. Key improvements:
+This offers several advantages over simpler stress test clients and scripts:
 
 1. **Multi-threaded:** True concurrent execution using Tokio
 2. **Immediate error detection:** Monitors server stderr in real-time
@@ -108,6 +108,4 @@ This example replaces the old `scripts/stress-test.sh`. The shell script now del
 
 ### oauth_mcp_client
 
-OAuth authentication example for MCP clients connecting to Atlassian services.
-
-See the file itself for documentation.
+OAuth authentication example for MCP clients connecting to enterprise services.

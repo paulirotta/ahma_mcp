@@ -25,6 +25,30 @@
 			"command": "cargo nextest run -p ahma_http_bridge --test sse_tool_integration_test -E \"test(test_python_version)|test(test_python_code)|test(test_sandboxed_shell_pipe)|test(test_sandboxed_shell_variable_substitution)\"",
 			"isBackground": false,
 			"group": "test"
+		},
+		{
+			"label": "Test: mcp_service unit tests",
+			"type": "shell",
+			"command": "cargo test -p ahma_core mcp_service::tests::",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Test: mcp_service types tests",
+			"type": "shell",
+			"command": "cargo test -p ahma_core mcp_service::types::tests:: --quiet",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Test: guidance config default test",
+			"type": "shell",
+			"command": "cargo test -p ahma_core test_guidance_config_default_contains_expected_blocks --quiet",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
 		}
 	]
 }
