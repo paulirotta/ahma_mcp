@@ -281,14 +281,11 @@ mod ahma_validate_tests {
         let binary = build_binary("ahma_validate", "ahma_validate");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
-        let guidance_file = workspace.join(".ahma/tool_guidance.json");
 
         let output = Command::new(&binary)
             .current_dir(&workspace)
             .args([
                 tools_dir.to_str().unwrap(),
-                "--guidance-file",
-                guidance_file.to_str().unwrap(),
             ])
             .output()
             .expect("Failed to execute ahma_validate");
@@ -317,7 +314,6 @@ mod ahma_validate_tests {
         let binary = build_binary("ahma_validate", "ahma_validate");
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let workspace = workspace_dir();
-        let guidance_file = workspace.join(".ahma/tool_guidance.json");
 
         // Create an invalid JSON file
         let invalid_file = temp_dir.path().join("invalid.json");
@@ -328,8 +324,6 @@ mod ahma_validate_tests {
             .current_dir(&workspace)
             .args([
                 invalid_file.to_str().unwrap(),
-                "--guidance-file",
-                guidance_file.to_str().unwrap(),
             ])
             .output()
             .expect("Failed to execute ahma_validate");
@@ -345,14 +339,11 @@ mod ahma_validate_tests {
     fn test_ahma_validate_nonexistent_path() {
         let binary = build_binary("ahma_validate", "ahma_validate");
         let workspace = workspace_dir();
-        let guidance_file = workspace.join(".ahma/tool_guidance.json");
 
         let output = Command::new(&binary)
             .current_dir(&workspace)
             .args([
                 "/nonexistent/path/to/tools",
-                "--guidance-file",
-                guidance_file.to_str().unwrap(),
             ])
             .output()
             .expect("Failed to execute ahma_validate");
@@ -369,15 +360,12 @@ mod ahma_validate_tests {
         let binary = build_binary("ahma_validate", "ahma_validate");
         let workspace = workspace_dir();
         let cargo_json = workspace.join(".ahma/tools/cargo.json");
-        let guidance_file = workspace.join(".ahma/tool_guidance.json");
 
         if cargo_json.exists() {
             let output = Command::new(&binary)
                 .current_dir(&workspace)
                 .args([
                     cargo_json.to_str().unwrap(),
-                    "--guidance-file",
-                    guidance_file.to_str().unwrap(),
                 ])
                 .output()
                 .expect("Failed to execute ahma_validate");

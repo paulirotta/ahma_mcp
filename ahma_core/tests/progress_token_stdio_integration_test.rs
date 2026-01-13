@@ -130,7 +130,6 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
     };
 
     let wd = workspace_dir();
-    let guidance_file = wd.join(".ahma").join("tool_guidance.json");
 
     // Check for CARGO_TARGET_DIR
     let target_dir = std::env::var("CARGO_TARGET_DIR")
@@ -144,8 +143,6 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
             Command::new(binary_path).configure(|cmd| {
                 cmd.arg("--tools-dir")
                     .arg(&tools_dir)
-                    .arg("--guidance-file")
-                    .arg(&guidance_file)
                     .arg("--log-to-stderr")
                     .current_dir(&wd)
                     // AHMA_TEST_MODE=1 disables path validation (allows temp dirs)

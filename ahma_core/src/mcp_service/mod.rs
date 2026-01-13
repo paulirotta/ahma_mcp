@@ -263,10 +263,11 @@ impl AhmaMcpService {
         let tool_name = tool_config.name.clone();
 
         let mut description = tool_config.description.clone();
-        if let Some(guidance_config) = self.guidance.as_ref()
-            && let Some(guidance_text) = guidance_config.guidance_blocks.get(&tool_name)
-        {
-            description = format!("{}\n\n{}", guidance_text, description);
+        if let Some(guidance_config) = self.guidance.as_ref() {
+            let key = tool_config.guidance_key.as_ref().unwrap_or(&tool_name);
+            if let Some(guidance_text) = guidance_config.guidance_blocks.get(key) {
+                description = format!("{}\n\n{}", guidance_text, description);
+            }
         }
 
         let input_schema =

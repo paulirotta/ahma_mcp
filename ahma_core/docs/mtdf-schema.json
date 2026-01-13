@@ -26,7 +26,7 @@
       "default": true
     },
     "guidance_key": {
-      "description": "Key to look up guidance in tool_guidance.json",
+      "description": "Key to look up guidance in hardcoded tool guidance",
       "type": [
         "string",
         "null"
@@ -287,7 +287,7 @@
           "default": true
         },
         "guidance_key": {
-          "description": "Key to look up guidance in tool_guidance.json",
+          "description": "Key to look up guidance in hardcoded tool guidance",
           "type": [
             "string",
             "null"

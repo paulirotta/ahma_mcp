@@ -56,7 +56,7 @@ use ahma_http_mcp_client::client::HttpMcpTransport;
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use rmcp::ServiceExt;
-use serde_json::{Value, from_str};
+use serde_json::Value;
 use std::{
     collections::{HashMap, HashSet},
     env,
@@ -121,10 +121,6 @@ struct Cli {
     /// Path to the directory containing tool JSON configuration files.
     #[arg(long, global = true, default_value = ".ahma/tools")]
     tools_dir: PathBuf,
-
-    /// Path to the tool guidance JSON file.
-    #[arg(long, global = true, default_value = ".ahma/tool_guidance.json")]
-    guidance_file: PathBuf,
 
     /// Default timeout for commands in seconds.
     #[arg(long, global = true, default_value = "300")]
@@ -617,8 +613,6 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         "stdio".to_string(),
         "--tools-dir".to_string(),
         cli.tools_dir.to_string_lossy().to_string(),
-        "--guidance-file".to_string(),
-        cli.guidance_file.to_string_lossy().to_string(),
         "--timeout".to_string(),
         cli.timeout.to_string(),
     ];
@@ -659,7 +653,6 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
 async fn run_server_mode(cli: Cli) -> Result<()> {
     tracing::info!("Starting ahma_mcp v1.0.0");
     tracing::info!("Tools directory: {:?}", cli.tools_dir);
-    tracing::info!("Guidance file: {:?}", cli.guidance_file);
     tracing::info!("Command timeout: {}s", cli.timeout);
 
     // --- MCP Client Mode ---
@@ -708,13 +701,8 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     // --- Standard Server Mode ---
     tracing::info!("Running in standard child-process server mode.");
 
-    // Load guidance configuration (using async I/O)
-    let guidance_config = if fs::try_exists(&cli.guidance_file).await.unwrap_or(false) {
-        let guidance_content = fs::read_to_string(&cli.guidance_file).await?;
-        from_str::<GuidanceConfig>(&guidance_content).ok()
-    } else {
-        None
-    };
+    // Use default guidance configuration
+    let guidance_config = Some(GuidanceConfig::default());
 
     // Initialize the operation monitor
     let monitor_config = MonitorConfig::with_timeout(std::time::Duration::from_secs(cli.timeout));

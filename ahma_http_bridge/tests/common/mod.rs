@@ -282,9 +282,6 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
     // Use the workspace .ahma/tools directory
     let tools_dir = workspace_dir.join(".ahma/tools");
 
-    // Use a stable guidance file path (relative CWD is not stable in tests).
-    let guidance_file = workspace_dir.join(".ahma").join("tool_guidance.json");
-
     // Create temp directory for sandbox scope
     let temp_dir = TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
     let sandbox_scope = temp_dir.path().to_path_buf();
@@ -298,8 +295,6 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
         "--sync".to_string(),
         "--tools-dir".to_string(),
         tools_dir.to_string_lossy().to_string(),
-        "--guidance-file".to_string(),
-        guidance_file.to_string_lossy().to_string(),
         "--sandbox-scope".to_string(),
         sandbox_scope.to_string_lossy().to_string(),
         "--log-to-stderr".to_string(),

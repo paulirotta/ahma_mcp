@@ -549,28 +549,6 @@ mod cli_execution_tests {
 mod ahma_validate_extended_tests {
     use super::*;
 
-    /// Test validation with missing guidance file
-    #[test]
-    fn test_ahma_validate_missing_guidance_file() {
-        let binary = build_binary("ahma_validate", "ahma_validate");
-        let workspace = workspace_dir();
-        let tools_dir = workspace.join(".ahma/tools");
-
-        let output = Command::new(&binary)
-            .current_dir(&workspace)
-            .args([
-                tools_dir.to_str().unwrap(),
-                "--guidance-file",
-                "/nonexistent/guidance.json",
-            ])
-            .output()
-            .expect("Failed to execute ahma_validate with missing guidance");
-
-        // Should either work (guidance optional) or fail gracefully
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        println!("Missing guidance file stderr: {}", stderr);
-    }
-
     /// Test validation in verbose mode
     #[test]
     fn test_ahma_validate_verbose_mode() {
@@ -590,14 +568,11 @@ mod ahma_validate_extended_tests {
             // It has verbose mode, test it
             let workspace = workspace_dir();
             let tools_dir = workspace.join(".ahma/tools");
-            let guidance_file = workspace.join(".ahma/tool_guidance.json");
 
             let verbose_output = Command::new(&binary)
                 .current_dir(&workspace)
                 .args([
                     tools_dir.to_str().unwrap(),
-                    "--guidance-file",
-                    guidance_file.to_str().unwrap(),
                     "--verbose",
                 ])
                 .output()
@@ -615,7 +590,6 @@ mod ahma_validate_extended_tests {
         let binary = build_binary("ahma_validate", "ahma_validate");
         let workspace = workspace_dir();
         let tools_dir = workspace.join(".ahma/tools");
-        let guidance_file = workspace.join(".ahma/tool_guidance.json");
 
         // Validate specific tool files if they exist
         for tool_name in ["cargo.json", "git.json", "file_tools.json"] {
@@ -625,8 +599,6 @@ mod ahma_validate_extended_tests {
                     .current_dir(&workspace)
                     .args([
                         tool_path.to_str().unwrap(),
-                        "--guidance-file",
-                        guidance_file.to_str().unwrap(),
                     ])
                     .output()
                     .unwrap_or_else(|_| panic!("Failed to validate {}", tool_name));

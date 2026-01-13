@@ -1,60 +1,59 @@
-# Generate Tool Schema - Requirements
+# Ahma Generate Tool Schema Requirements
 
-## Purpose
+Technical specification for the `generate_tool_schema` utility, which provides the authoritative JSON Schema for MTDF.
 
-Generate JSON Schema definitions for MTDF (Multi-Tool Definition Format) tool configurations.
+---
 
-## Functionality
+## 1. Core Mission
 
-1. **Schema Generation**: Generate JSON Schema from `ToolConfig` type using `schemars`
-2. **File Output**: Write schema to `mtdf-schema.json` in specified directory (default: `docs/`)
-3. **Preview**: Display first 10 lines of generated schema for verification
+`generate_tool_schema` is a build-time utility designed to generate the JSON Schema definitions for the Multi-Tool Definition Format (MTDF). It ensures that the schema used by developers and documentation is always in sync with the underlying Rust types in `ahma_core`.
 
-## Command Line Interface
+## 2. Functional Requirements
 
-```bash
-# Default output to docs/
-generate_tool_schema
+### 2.1. Schema Generation
 
-# Custom output directory
-generate_tool_schema /custom/output/path
-```
+- **Type-Safe Generation**: Extract the JSON Schema from the `ToolConfig` Rust struct using `schemars`.
+- **MTDF Authority**: Serve as the "Source of Truth" for valid tool configuration structures.
 
-## Testing Standards
+### 2.2. Output & Verification
 
-### Coverage Goals
+- **File Output**: Automatically write the generated schema to `mtdf-schema.json`.
+- **Target Directories**: Support a default output path (`docs/`) and allow overrides via CLI arguments.
+- **Visual Preview**: Display a 10-line preview of the generated schema to the terminal for immediate verification.
 
-- **Target**: ≥80% line coverage
-- **Current**: ~91% line coverage
+### 2.3. Workflow Integration
 
-### Test Categories
+- **Directory Creation**: Automatically create the target output directory if it does not already exist.
+- **Graceful Overwrites**: Securely overwrite existing schema files to ensure they remain current.
 
-1. **Unit Tests**: Test individual functions in isolation
-   - Schema generation produces valid JSON
-   - Argument parsing handles various input cases
-   - File writing creates directories and handles overwrites
-   - Preview generation respects line limits
+## 3. Technical Stack
 
-2. **Integration Tests**: Test end-to-end workflow
-   - Full workflow from generation to file output
+- **Core Definition**: `ahma_core` for the canonical `ToolConfig` definition.
+- **Schema Engine**: `schemars` for Rust type to JSON Schema conversion.
+- **Serialization**: `serde_json` for final file formatting.
 
-### Test Patterns
+## 4. Constraints & Rules
 
-- Use `tempfile::tempdir()` for filesystem tests
-- Table-driven tests for input/output variations (e.g., `parse_output_dir`)
-- Assert meaningful behavior, not just function calls
-- Verify JSON schema structure, not exact content
+### 4.1. Implementation Standards
 
-## Dependencies
+- **Sync Invariant**: The utility must be run whenever `ToolConfig` changes to prevent documentation drift.
+- **Format Consistency**: Use standard JSON-RPC 2.0 and MCP naming conventions in the generated schema.
 
-### Runtime
+### 4.2. Testing Philosophy
 
-- `ahma_core`: Core library with `ToolConfig` definition
-- `schemars`: JSON Schema generation
-- `serde_json`: JSON serialization
+- **Minimum Coverage**: Maintain ≥80% line coverage for the generation and file handling logic.
+- **Filesystem Safety**: Use `tempfile::tempdir()` for all integration tests involving file operations.
+- **Structural Validation**: Verify the output JSON structure for schema-specific markers (e.g., `$schema`, `required` fields).
 
-## Code Quality
+## 5. User Journeys / Flows
 
-- All code passes `cargo clippy` without warnings
-- Code is formatted with `cargo fmt`
-- Documentation builds without errors
+### 5.1. Documentation Update Flow
+
+1. Architect modifies `ToolConfig` in `ahma_core` to add a new parameter.
+2. Architect runs `generate_tool_schema`.
+3. The file `docs/mtdf-schema.json` is automatically updated.
+4. Other tools (like `ahma_validate`) and developers now have the updated specification.
+
+## 6. Known Limitations
+
+- **Content vs. Structure**: Tests emphasize structural validity rather than verifying every specific field value, as field values are derived from `ahma_core`.

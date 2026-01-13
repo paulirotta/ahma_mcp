@@ -8,10 +8,8 @@ mod main_tests {
         init_test_logging();
         // Test that default paths can be created
         let tools_dir = PathBuf::from(".ahma/tools");
-        let guidance_file = PathBuf::from("tool_guidance.json");
 
         assert_eq!(tools_dir.to_string_lossy(), ".ahma/tools");
-        assert_eq!(guidance_file.to_string_lossy(), "tool_guidance.json");
     }
 
     #[test]

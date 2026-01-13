@@ -1,6 +1,6 @@
 //! # Standardized Constants and Templates
 //!
-//! T - If you'll need these results soon, start additional operations in parallel.- If you'll need these results soon, start additional operations in parallel.is module serves as a centralized repository for constants, particularly for strings
+//! This module serves as a centralized repository for constants, particularly for strings
 //! and templates that are presented to the AI agent. Centralizing these helps ensure
 //! consistency in the guidance and instructions provided to the agent across different
 //! parts of the application.

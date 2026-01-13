@@ -1,78 +1,63 @@
-# ahma_validate Requirements
+# Ahma Validate Requirements
 
-## Overview
+Technical specification for the `ahma_validate` tool, which ensures MTDF tool configurations are correct and consistent.
 
-`ahma_validate` is a command-line tool for validating MCP Tool Definition Format (MTDF) tool configurations against the schema and checking for inconsistencies.
+---
 
-## Functional Requirements
+## 1. Core Mission
 
-### Core Validation
+`ahma_validate` is a specialized CLI utility designed to validate MCP Tool Definition Format (MTDF) JSON configurations against the unified schema. Its purpose is to provide fast, reliable feedback to tool developers, ensuring that definitions are safe, structurally sound, and ready for deployment.
 
-1. **Tool Configuration Validation**: Validate tool JSON files against the `ToolConfig` schema from `ahma_core`
+## 2. Functional Requirements
 
-   - Required fields: `name`, `description`, `command`
-   - Optional fields: `subcommand`, `input_schema`, `timeout_seconds`, `synchronous`, `hints`, `enabled`, `guidance_key`, `sequence`, `step_delay_ms`, `availability_check`, `install_instructions`
+### 2.1. Core Validation Logic
 
-2. **Guidance Configuration Loading**: Load and validate guidance configuration from JSON
+- **MTDF Schema Compliance**: Validate tool JSON definitions against the `ToolConfig` schema provided by `ahma_core`.
+- **Field Integrity**: Verify presence of required fields (`name`, `description`, `command`) and correct formatting of optional fields (e.g., `timeout_seconds`, `synchronous`).
+- **Semantic Consistency**: Check for internal inconsistencies, such as duplicate subcommand names or invalid `format: "path"` markers.
 
-   - Required fields: `guidance_blocks`
-   - Optional fields: `templates`, `legacy_guidance`
+### 2.2. Batch & Target Support
 
-3. **Multiple Target Support**: Support validating:
-   - Single file
-   - Directory of JSON files
-   - Comma-separated list of files/directories
+- **Flexible Targets**: Support validation of single files, entire directories of JSON files, or comma-separated lists of both.
+- **Recursive Discovery**: (Optional/Future) Ability to traverse subdirectories to find tool definitions.
 
-### CLI Interface
+### 2.3. CLI Experience
 
-| Argument            | Default                    | Description                                        |
-| ------------------- | -------------------------- | -------------------------------------------------- |
-| `validation_target` | `.ahma/tools`              | Path to directory or comma-separated list of files |
-| `--guidance-file`   | `.ahma/tool_guidance.json` | Path to guidance configuration                     |
-| `-d, --debug`       | `false`                    | Enable debug logging                               |
+- **Clear Exit Codes**: Exit `0` for successful validation of all targets; exit non-zero if any configuration fails.
+- **Actionable Errors**: Provide specific, human-readable error messages pointing to the line or field causing the validation failure.
+- **Debug Mode**: Support `-d, --debug` for detailed diagnostic logging during the validation process.
 
-### Exit Behavior
+## 3. Technical Stack
 
-- Exit 0: All configurations are valid
-- Exit non-zero: One or more configurations are invalid
+- **Core Engine**: `ahma_core` for shared schema and configuration types.
+- **CLI Framework**: `clap` for robust argument parsing.
+- **JSON Handling**: `serde_json` for parsing and schema-based validation.
+- **Error Propagation**: `anyhow` for descriptive internal error reporting.
+- **Logging**: `tracing` for structured output.
 
-## Non-Functional Requirements
+## 4. Constraints & Rules
 
-### Testing Standards
+### 4.1. Implementation Standards
 
-- **Minimum Coverage**: 90% line coverage for `src/main.rs`
-- **Test Organization**: Tests grouped by function/module
-- **Test Patterns**:
-  - Use `tempfile::TempDir` for filesystem isolation
-  - Table-driven tests where appropriate
-  - Test both success and failure paths
-  - Test edge cases (empty directories, missing files, invalid JSON)
+- **Schema Single Source of Truth**: Always use the schema defined in `ahma_core` to prevent drift.
+- **Performance**: Validation must be nearly instantaneous for typical tool directories (< 100ms).
 
-### Code Quality
+### 4.2. Testing Philosophy
 
-- Pass `cargo clippy` with no warnings
-- Pass `cargo fmt` formatting
-- All code documented with `cargo doc`
+- **Mandatory Coverage**: Maintain at least 90% line coverage for the validation logic in `main.rs`.
+- **Filesystem Isolation**: All tests involving file reads must use `tempfile::TempDir`.
+- **Exhaustive Cases**: Tests must cover success paths, malformed JSON, missing files, and invalid schema instances.
 
-## Test Coverage Summary
+## 5. User Journeys / Flows
 
-| Module    | Coverage |
-| --------- | -------- |
-| `main.rs` | 94.30%   |
+### 5.1. Tool Development Feedback Loop
 
-### Untested Code Paths (Acceptable)
+1. Developer creates or modifies a tool configuration in `.ahma/tools/`.
+2. Developer runs `ahma_validate` (or it is triggered by a git hook).
+3. `ahma_validate` scans the directory and reports any schema violations immediately.
+4. Developer fixes the reported issues before proceeding to full server testing.
 
-1. `main()` function - CLI entry point with global state
-2. File read error path in validation loop (requires filesystem permission errors)
+## 6. Known Limitations
 
-## Dependencies
-
-- `ahma_core`: Core MCP service and schema validation
-- `anyhow`: Error handling
-- `clap`: CLI argument parsing
-- `serde_json`: JSON parsing
-- `tracing`: Structured logging
-
-### Dev Dependencies
-
-- `tempfile`: Temporary directory creation for tests
+- **Entry Point Coverage**: The `main()` function entry point and global state are excluded from strict unit test coverage targets.
+- **Static Analysis Only**: Does not verify if the `command` actually exists or is executable (this is handled by `ahma_core` at runtime).

@@ -68,14 +68,6 @@ async fn start_http_bridge(
 ) -> std::process::Child {
     let binary = get_ahma_mcp_binary();
 
-    // Ensure guidance file exists: the ahma_mcp default is `.ahma/tool_guidance.json`
-    // relative to the current working directory, which is not stable in tests.
-    let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("Failed to get workspace dir")
-        .to_path_buf();
-    let guidance_file = workspace_dir.join(".ahma").join("tool_guidance.json");
-
     let child = Command::new(&binary)
         .args([
             "--mode",
@@ -85,8 +77,6 @@ async fn start_http_bridge(
             "--sync",
             "--tools-dir",
             &tools_dir.to_string_lossy(),
-            "--guidance-file",
-            &guidance_file.to_string_lossy(),
             "--sandbox-scope",
             &sandbox_scope.to_string_lossy(),
             "--log-to-stderr",
@@ -577,10 +567,11 @@ async fn test_tool_call_with_different_working_directory() {
 
         if let Some(error) = tool_response.get("error")
             && let Some(msg) = error.get("message").and_then(|m| m.as_str())
-                && msg.contains("Sandbox initializing from client roots") {
-                    sleep(Duration::from_millis(100)).await;
-                    continue;
-                }
+            && msg.contains("Sandbox initializing from client roots")
+        {
+            sleep(Duration::from_millis(100)).await;
+            continue;
+        }
 
         break;
     }
@@ -743,10 +734,11 @@ async fn test_basic_tool_call_within_sandbox() {
 
         if let Some(error) = response.get("error")
             && let Some(msg) = error.get("message").and_then(|m| m.as_str())
-                && msg.contains("Sandbox initializing from client roots") {
-                    sleep(Duration::from_millis(100)).await;
-                    continue;
-                }
+            && msg.contains("Sandbox initializing from client roots")
+        {
+            sleep(Duration::from_millis(100)).await;
+            continue;
+        }
 
         break;
     }
@@ -1116,10 +1108,11 @@ async fn test_rejects_working_directory_path_traversal_outside_root() {
 
         if let Some(error) = resp.get("error")
             && let Some(msg) = error.get("message").and_then(|m| m.as_str())
-                && msg.contains("Sandbox initializing from client roots") {
-                    sleep(Duration::from_millis(100)).await;
-                    continue;
-                }
+            && msg.contains("Sandbox initializing from client roots")
+        {
+            sleep(Duration::from_millis(100)).await;
+            continue;
+        }
         break;
     }
 
@@ -1240,10 +1233,11 @@ async fn test_symlink_escape_attempt_is_blocked() {
 
         if let Some(error) = resp.get("error")
             && let Some(msg) = error.get("message").and_then(|m| m.as_str())
-                && msg.contains("Sandbox initializing from client roots") {
-                    sleep(Duration::from_millis(100)).await;
-                    continue;
-                }
+            && msg.contains("Sandbox initializing from client roots")
+        {
+            sleep(Duration::from_millis(100)).await;
+            continue;
+        }
         break;
     }
 

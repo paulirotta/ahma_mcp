@@ -50,13 +50,6 @@ async fn start_http_bridge_async(
 ) -> std::process::Child {
     let binary = get_ahma_mcp_binary();
 
-    // Use a stable guidance file path (relative CWD is not stable in tests).
-    let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("Failed to get workspace dir")
-        .to_path_buf();
-    let guidance_file = workspace_dir.join(".ahma").join("tool_guidance.json");
-
     // NOTE: Intentionally do NOT pass `--sync` here. We want async operations so progress
     // notifications can be emitted when (and only when) the client provides a progressToken.
     let child = Command::new(&binary)
@@ -67,8 +60,6 @@ async fn start_http_bridge_async(
             &port.to_string(),
             "--tools-dir",
             &tools_dir.to_string_lossy(),
-            "--guidance-file",
-            &guidance_file.to_string_lossy(),
             "--sandbox-scope",
             &sandbox_scope.to_string_lossy(),
             "--log-to-stderr",

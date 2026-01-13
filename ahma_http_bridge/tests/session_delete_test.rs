@@ -58,12 +58,6 @@ async fn start_http_bridge(
 ) -> std::process::Child {
     let binary = get_ahma_mcp_binary();
 
-    let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("Failed to get workspace dir")
-        .to_path_buf();
-    let guidance_file = workspace_dir.join(".ahma").join("tool_guidance.json");
-
     let child = Command::new(&binary)
         .args([
             "--mode",
@@ -73,8 +67,6 @@ async fn start_http_bridge(
             "--sync",
             "--tools-dir",
             &tools_dir.to_string_lossy(),
-            "--guidance-file",
-            &guidance_file.to_string_lossy(),
             "--sandbox-scope",
             &sandbox_scope.to_string_lossy(),
             "--log-to-stderr",

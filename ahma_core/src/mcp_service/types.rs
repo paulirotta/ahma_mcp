@@ -29,11 +29,130 @@ pub struct GuidanceConfig {
     pub legacy_guidance: Option<LegacyGuidanceConfig>,
 }
 
+impl Default for GuidanceConfig {
+    fn default() -> Self {
+        let mut guidance_blocks = HashMap::new();
+        guidance_blocks.insert(
+            "async_behavior".to_string(),
+            "**IMPORTANT:** This tool operates asynchronously\n1. **Immediate Response:** Returns operation_id and status 'started'. This is NOT YET success\n2. **Final Result:** Result pushed automatically via MCP notification when complete\n\n**Your Instructions:**\n- DO NOT await for the final result unless you are at end of all tasks and have already updated the user with 'assume success but verify' results.\n- **DO** continue with other tasks that don't depend on this operation\n- You **MUST** process the future result notification to know if operation succeeded".to_string(),
+        );
+        guidance_blocks.insert(
+            "sync_behavior".to_string(),
+            "This tool runs synchronously and returns results immediately".to_string(),
+        );
+        guidance_blocks.insert(
+            "coordination_tool".to_string(),
+            "**WARNING:** This is a blocking coordination tool. Use ONLY for final project validation when no other productive work remains.".to_string(),
+        );
+        guidance_blocks.insert(
+            "python_async".to_string(),
+            "**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- DO NOT await for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.".to_string(),
+        );
+        guidance_blocks.insert(
+            "python_sync".to_string(),
+            "This tool runs synchronously and returns results immediately.".to_string(),
+        );
+        guidance_blocks.insert(
+            "git_operations".to_string(),
+            "This tool runs synchronously and returns results immediately.".to_string(),
+        );
+        guidance_blocks.insert(
+            "cancellation_restart_hint".to_string(),
+            "An operation was cancelled. Include the cancellation reason back to the user, and suggest a tool hint to restart or check status: 1) Call 'status' with the operation_id to confirm state; 2) If appropriate, restart the tool with the same parameters; 3) Consider 'await' only when results are actually needed.".to_string(),
+        );
+
+        let mut templates = HashMap::new();
+        templates.insert(
+            "working_progress".to_string(),
+            serde_json::json!("While {tool} operations run, consider reviewing {suggestions}"),
+        );
+        templates.insert(
+            "standard_hints".to_string(),
+            serde_json::json!({
+                "build": "Building in progress - review compilation output for warnings, plan deployment steps, or work on documentation.",
+                "test": "Tests running - analyze test patterns, consider additional test cases, or review code coverage strategies.",
+                "doc": "Documentation building - consider reviewing doc comments, planning API improvements, or working on examples.",
+                "format": "Code formatting in progress - plan refactoring opportunities or review code patterns while waiting."
+            }),
+        );
+
+        Self {
+            guidance_blocks,
+            templates,
+            legacy_guidance: Some(LegacyGuidanceConfig::default()),
+        }
+    }
+}
+
 /// Legacy guidance config structure for backward compatibility
 #[derive(Deserialize, Debug, Clone)]
 pub struct LegacyGuidanceConfig {
     pub general_guidance: HashMap<String, String>,
     pub tool_specific_guidance: HashMap<String, HashMap<String, String>>,
+}
+
+impl Default for LegacyGuidanceConfig {
+    fn default() -> Self {
+        let mut general_guidance = HashMap::new();
+        general_guidance.insert(
+            "default".to_string(),
+            "Always use ahma_mcp for supported tools.".to_string(),
+        );
+        general_guidance.insert(
+            "completion".to_string(),
+            "Task completed. Review the output and plan your next action.".to_string(),
+        );
+        general_guidance.insert(
+            "error".to_string(),
+            "An error occurred. Check the error message for details and use 'await' for pending operations if needed.".to_string(),
+        );
+
+        let mut tool_specific_guidance = HashMap::new();
+
+        let mut cargo_build = HashMap::new();
+        cargo_build.insert("start".to_string(), "Cargo build started. Use 'await' to collect results when needed, or work on other tasks.".to_string());
+        cargo_build.insert(
+            "completion".to_string(),
+            "Build successful. Artifacts are located in the target directory.".to_string(),
+        );
+        cargo_build.insert(
+            "error".to_string(),
+            "Build failed. Review the compilation errors to identify the issue.".to_string(),
+        );
+        tool_specific_guidance.insert("cargo_build".to_string(), cargo_build);
+
+        let mut cargo_test = HashMap::new();
+        cargo_test.insert(
+            "start".to_string(),
+            "Running tests. Use 'await' to collect results when needed.".to_string(),
+        );
+        cargo_test.insert("completion".to_string(), "All tests passed.".to_string());
+        cargo_test.insert(
+            "error".to_string(),
+            "Some tests failed. Review the test output to debug.".to_string(),
+        );
+        tool_specific_guidance.insert("cargo_test".to_string(), cargo_test);
+
+        let mut await_guidance = HashMap::new();
+        await_guidance.insert(
+            "start".to_string(),
+            "Waiting for operations to complete. This is a blocking call.".to_string(),
+        );
+        await_guidance.insert(
+            "completion".to_string(),
+            "Wait complete. All specified operations have finished.".to_string(),
+        );
+        await_guidance.insert(
+            "error".to_string(),
+            "Wait timed out. Some operations may still be running.".to_string(),
+        );
+        tool_specific_guidance.insert("await".to_string(), await_guidance);
+
+        Self {
+            general_guidance,
+            tool_specific_guidance,
+        }
+    }
 }
 
 /// Meta-parameters that control execution environment but should not be passed as CLI args

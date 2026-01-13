@@ -68,8 +68,6 @@ async fn start_deferred_sandbox_server(
     tools_dir: &std::path::Path,
 ) -> std::process::Child {
     let binary = get_ahma_mcp_binary();
-    let workspace_dir = get_workspace_dir();
-    let guidance_file = workspace_dir.join(".ahma").join("tool_guidance.json");
 
     let mut cmd = Command::new(&binary);
     cmd.args([
@@ -80,8 +78,6 @@ async fn start_deferred_sandbox_server(
         "--sync",
         "--tools-dir",
         &tools_dir.to_string_lossy(),
-        "--guidance-file",
-        &guidance_file.to_string_lossy(),
         "--defer-sandbox",
         "--log-to-stderr",
     ]);

@@ -73,7 +73,7 @@ pub struct ToolConfig {
     pub hints: ToolHints,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
-    /// Key to look up guidance in tool_guidance.json
+    /// Key to look up hardcoded guidance
     #[serde(skip_serializing_if = "Option::is_none")]
     pub guidance_key: Option<String>,
     /// Optional sequence of tools to execute in order (for composite tools)
@@ -124,7 +124,7 @@ pub struct SubcommandConfig {
     pub synchronous: Option<bool>,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
-    /// Key to look up guidance in tool_guidance.json
+    /// Key to look up hardcoded guidance
     #[serde(skip_serializing_if = "Option::is_none")]
     pub guidance_key: Option<String>,
     /// Optional sequence of tools to execute in order (for composite tools)
@@ -348,8 +348,8 @@ pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<Strin
         let path = entry.path();
 
         // Only process .json files
-        if path.extension().and_then(|s| s.to_str()) == Some("json") {
-            if let Some(config) = read_tool_config_with_retry(&path).await {
+        if path.extension().and_then(|s| s.to_str()) == Some("json")
+            && let Some(config) = read_tool_config_with_retry(&path).await {
                 // Guard rail: Check for conflicts with hardcoded tool names
                 if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
                     anyhow::bail!(
@@ -364,7 +364,6 @@ pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<Strin
                 // Disabled tools will be rejected at execution time with a helpful message
                 configs.insert(config.name.clone(), config);
             }
-        }
     }
 
     Ok(configs)
@@ -430,8 +429,8 @@ pub fn load_tool_configs_sync(tools_dir: &Path) -> anyhow::Result<HashMap<String
         let path = entry.path();
 
         // Only process .json files
-        if path.extension().and_then(|s| s.to_str()) == Some("json") {
-            if let Some(config) = read_tool_config_with_retry(&path) {
+        if path.extension().and_then(|s| s.to_str()) == Some("json")
+            && let Some(config) = read_tool_config_with_retry(&path) {
                 // Guard rail: Check for conflicts with hardcoded tool names
                 if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
                     anyhow::bail!(
@@ -446,7 +445,6 @@ pub fn load_tool_configs_sync(tools_dir: &Path) -> anyhow::Result<HashMap<String
                 // Disabled tools will be rejected at execution time with a helpful message
                 configs.insert(config.name.clone(), config);
             }
-        }
     }
 
     Ok(configs)

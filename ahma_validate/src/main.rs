@@ -1,8 +1,6 @@
-use ahma_core::mcp_service::GuidanceConfig;
 use ahma_core::schema_validation::MtdfValidator;
 use anyhow::{Result, anyhow};
 use clap::Parser;
-use serde_json::from_str;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -21,10 +19,6 @@ struct Cli {
     /// Path to the directory containing tool JSON configuration files, a comma-separated list of files, or blank to validate '.ahma/tools'.
     #[arg(default_value = ".ahma/tools")]
     validation_target: String,
-
-    /// Path to the tool guidance JSON file.
-    #[arg(long, global = true, default_value = ".ahma/tool_guidance.json")]
-    guidance_file: PathBuf,
 
     /// Enable debug logging.
     #[arg(short, long, global = true)]
@@ -52,9 +46,7 @@ fn main() -> Result<()> {
 fn run_validation_mode(cli: &Cli) -> Result<bool> {
     let mut all_valid = true;
 
-    // Load guidance configuration
-    let guidance_content = fs::read_to_string(&cli.guidance_file)?;
-    let _guidance_config: GuidanceConfig = from_str(&guidance_content)?;
+    // Guidance configuration is now hardcoded in ahma_core
     let validator = MtdfValidator::new();
 
     // Process each target in the validation target list
@@ -203,7 +195,6 @@ mod tests {
         let cli = Cli::parse_from(["ahma_validate"]);
 
         assert_eq!(cli.validation_target, ".ahma/tools");
-        assert_eq!(cli.guidance_file, PathBuf::from(".ahma/tool_guidance.json"));
         assert!(!cli.debug);
     }
 
@@ -229,13 +220,6 @@ mod tests {
     }
 
     #[test]
-    fn test_cli_custom_guidance_file() {
-        let cli = Cli::parse_from(["ahma_validate", "--guidance-file", "custom_guidance.json"]);
-
-        assert_eq!(cli.guidance_file, PathBuf::from("custom_guidance.json"));
-    }
-
-    #[test]
     fn test_cli_comma_separated_targets() {
         let cli = Cli::parse_from(["ahma_validate", "file1.json,file2.json,dir/"]);
 
@@ -254,20 +238,9 @@ mod tests {
         }"#
     }
 
-    /// Creates a minimal valid guidance configuration
-    /// GuidanceConfig requires guidance_blocks field
-    fn valid_guidance_config() -> &'static str {
-        r#"{
-            "guidance_blocks": {}
-        }"#
-    }
-
     #[test]
     fn test_run_validation_mode_valid_single_file() {
-        let temp_dir = setup_temp_dir_with_files(&[
-            ("tool.json", valid_tool_config()),
-            ("tool_guidance.json", valid_guidance_config()),
-        ]);
+        let temp_dir = setup_temp_dir_with_files(&[("tool.json", valid_tool_config())]);
 
         let cli = Cli {
             validation_target: temp_dir
@@ -275,7 +248,6 @@ mod tests {
                 .join("tool.json")
                 .to_string_lossy()
                 .to_string(),
-            guidance_file: temp_dir.path().join("tool_guidance.json"),
             debug: false,
         };
 
@@ -290,12 +262,10 @@ mod tests {
         let temp_dir = setup_temp_dir_with_files(&[
             ("tools/tool1.json", valid_tool_config()),
             ("tools/tool2.json", valid_tool_config()),
-            ("tool_guidance.json", valid_guidance_config()),
         ]);
 
         let cli = Cli {
             validation_target: temp_dir.path().join("tools").to_string_lossy().to_string(),
-            guidance_file: temp_dir.path().join("tool_guidance.json"),
             debug: false,
         };
 
@@ -310,7 +280,6 @@ mod tests {
         let temp_dir = setup_temp_dir_with_files(&[
             ("tool1.json", valid_tool_config()),
             ("tool2.json", valid_tool_config()),
-            ("tool_guidance.json", valid_guidance_config()),
         ]);
 
         let file1 = temp_dir
@@ -326,7 +295,6 @@ mod tests {
 
         let cli = Cli {
             validation_target: format!("{},{}", file1, file2),
-            guidance_file: temp_dir.path().join("tool_guidance.json"),
             debug: false,
         };
 
@@ -338,12 +306,8 @@ mod tests {
 
     #[test]
     fn test_run_validation_mode_nonexistent_target() {
-        let temp_dir =
-            setup_temp_dir_with_files(&[("tool_guidance.json", valid_guidance_config())]);
-
         let cli = Cli {
             validation_target: "/nonexistent/path/12345".to_string(),
-            guidance_file: temp_dir.path().join("tool_guidance.json"),
             debug: false,
         };
 
@@ -355,10 +319,7 @@ mod tests {
 
     #[test]
     fn test_run_validation_mode_invalid_json_content() {
-        let temp_dir = setup_temp_dir_with_files(&[
-            ("tool.json", "{ invalid json }"),
-            ("tool_guidance.json", valid_guidance_config()),
-        ]);
+        let temp_dir = setup_temp_dir_with_files(&[("tool.json", "{ invalid json }")]);
 
         let cli = Cli {
             validation_target: temp_dir
@@ -366,7 +327,6 @@ mod tests {
                 .join("tool.json")
                 .to_string_lossy()
                 .to_string(),
-            guidance_file: temp_dir.path().join("tool_guidance.json"),
             debug: false,
         };
 
@@ -377,57 +337,14 @@ mod tests {
     }
 
     #[test]
-    fn test_run_validation_mode_missing_guidance_file() {
-        let temp_dir = setup_temp_dir_with_files(&[("tool.json", valid_tool_config())]);
-
-        let cli = Cli {
-            validation_target: temp_dir
-                .path()
-                .join("tool.json")
-                .to_string_lossy()
-                .to_string(),
-            guidance_file: PathBuf::from("/nonexistent/guidance.json"),
-            debug: false,
-        };
-
-        let result = run_validation_mode(&cli);
-
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_run_validation_mode_invalid_guidance_json() {
-        let temp_dir = setup_temp_dir_with_files(&[
-            ("tool.json", valid_tool_config()),
-            ("tool_guidance.json", "{ not valid json }"),
-        ]);
-
-        let cli = Cli {
-            validation_target: temp_dir
-                .path()
-                .join("tool.json")
-                .to_string_lossy()
-                .to_string(),
-            guidance_file: temp_dir.path().join("tool_guidance.json"),
-            debug: false,
-        };
-
-        let result = run_validation_mode(&cli);
-
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn test_run_validation_mode_empty_directory() {
-        let temp_dir =
-            setup_temp_dir_with_files(&[("tool_guidance.json", valid_guidance_config())]);
+        let temp_dir = setup_temp_dir_with_files(&[]);
 
         // Create an empty tools directory
         fs::create_dir(temp_dir.path().join("tools")).expect("Failed to create tools dir");
 
         let cli = Cli {
             validation_target: temp_dir.path().join("tools").to_string_lossy().to_string(),
-            guidance_file: temp_dir.path().join("tool_guidance.json"),
             debug: false,
         };
 
@@ -442,12 +359,10 @@ mod tests {
         let temp_dir = setup_temp_dir_with_files(&[
             ("tools/valid.json", valid_tool_config()),
             ("tools/invalid.json", "{ not json }"),
-            ("tool_guidance.json", valid_guidance_config()),
         ]);
 
         let cli = Cli {
             validation_target: temp_dir.path().join("tools").to_string_lossy().to_string(),
-            guidance_file: temp_dir.path().join("tool_guidance.json"),
             debug: false,
         };
 
@@ -467,10 +382,7 @@ mod tests {
             }
         }"#;
 
-        let temp_dir = setup_temp_dir_with_files(&[
-            ("tool.json", invalid_tool),
-            ("tool_guidance.json", valid_guidance_config()),
-        ]);
+        let temp_dir = setup_temp_dir_with_files(&[("tool.json", invalid_tool)]);
 
         let cli = Cli {
             validation_target: temp_dir
@@ -478,7 +390,6 @@ mod tests {
                 .join("tool.json")
                 .to_string_lossy()
                 .to_string(),
-            guidance_file: temp_dir.path().join("tool_guidance.json"),
             debug: false,
         };
 
