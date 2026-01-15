@@ -1,0 +1,689 @@
+{
+    "name": "file_tools",
+    "description": "Essential file operations toolkit providing secure, scoped access to common Unix commands. All file and directory paths are automatically validated and constrained to the current working scope for safety. These tools run synchronously by default to ensure immediate feedback and prevent race conditions. Enable efficient AI-driven file management with pre-approved commands.",
+    "command": "/bin/sh",
+    "enabled": true,
+    "timeout_seconds": 120,
+    "guidance_key": "sync_behavior",
+    "subcommand": [
+        {
+            "name": "ls",
+            "description": "List directory contents with various formatting options",
+            "positional_args": [
+                {
+                    "name": "path",
+                    "type": "string",
+                    "description": "Directory or file path to list",
+                    "format": "path",
+                    "required": false
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "long",
+                    "alias": "l",
+                    "type": "boolean",
+                    "description": "Use long listing format showing permissions, ownership, size, and dates"
+                },
+                {
+                    "name": "all",
+                    "alias": "a",
+                    "type": "boolean",
+                    "description": "Show hidden files (those starting with .)"
+                },
+                {
+                    "name": "human-readable",
+                    "alias": "h",
+                    "type": "boolean",
+                    "description": "Show file sizes in human readable format (K, M, G)"
+                },
+                {
+                    "name": "recursive",
+                    "alias": "R",
+                    "type": "boolean",
+                    "description": "List subdirectories recursively"
+                },
+                {
+                    "name": "sort-time",
+                    "alias": "t",
+                    "type": "boolean",
+                    "description": "Sort by modification time, newest first"
+                },
+                {
+                    "name": "reverse",
+                    "alias": "r",
+                    "type": "boolean",
+                    "description": "Reverse order while sorting"
+                },
+                {
+                    "name": "one-line",
+                    "alias": "1",
+                    "type": "boolean",
+                    "description": "List one file per line"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "mv",
+            "description": "Move (rename) files and directories",
+            "positional_args": [
+                {
+                    "name": "source",
+                    "type": "string",
+                    "description": "Source file or directory path",
+                    "format": "path",
+                    "required": true
+                },
+                {
+                    "name": "destination",
+                    "type": "string",
+                    "description": "Destination file or directory path",
+                    "format": "path",
+                    "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "force",
+                    "alias": "f",
+                    "type": "boolean",
+                    "description": "Force move without prompting for confirmation"
+                },
+                {
+                    "name": "no-clobber",
+                    "alias": "n",
+                    "type": "boolean",
+                    "description": "Do not overwrite existing files"
+                },
+                {
+                    "name": "verbose",
+                    "alias": "v",
+                    "type": "boolean",
+                    "description": "Verbose output, show what is being moved"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "cp",
+            "description": "Copy files and directories",
+            "positional_args": [
+                {
+                    "name": "source",
+                    "type": "string",
+                    "description": "Source file or directory path",
+                    "format": "path",
+                    "required": true
+                },
+                {
+                    "name": "destination",
+                    "type": "string",
+                    "description": "Destination file or directory path",
+                    "format": "path",
+                    "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "recursive",
+                    "alias": "r",
+                    "type": "boolean",
+                    "description": "Copy directories recursively"
+                },
+                {
+                    "name": "preserve",
+                    "alias": "p",
+                    "type": "boolean",
+                    "description": "Preserve file attributes (timestamps, permissions)"
+                },
+                {
+                    "name": "force",
+                    "alias": "f",
+                    "type": "boolean",
+                    "description": "Force copy, overwrite destination files"
+                },
+                {
+                    "name": "no-clobber",
+                    "alias": "n",
+                    "type": "boolean",
+                    "description": "Do not overwrite existing files"
+                },
+                {
+                    "name": "verbose",
+                    "alias": "v",
+                    "type": "boolean",
+                    "description": "Verbose output, show what is being copied"
+                },
+                {
+                    "name": "link",
+                    "alias": "l",
+                    "type": "boolean",
+                    "description": "Create hard links instead of copying"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "rm",
+            "description": "Remove files and directories",
+            "positional_args": [
+                {
+                    "name": "paths",
+                    "type": "array",
+                    "description": "File or directory paths to remove",
+                    "format": "path",
+                    "items": {
+                        "type": "string",
+                        "format": "path"
+                    },
+                    "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "recursive",
+                    "alias": "r",
+                    "type": "boolean",
+                    "description": "Remove directories and their contents recursively"
+                },
+                {
+                    "name": "force",
+                    "alias": "f",
+                    "type": "boolean",
+                    "description": "Force removal, ignore nonexistent files and never prompt"
+                },
+                {
+                    "name": "verbose",
+                    "alias": "v",
+                    "type": "boolean",
+                    "description": "Verbose output, show what is being removed"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "grep",
+            "description": "Search text patterns in files",
+            "positional_args": [
+                {
+                    "name": "pattern",
+                    "type": "string",
+                    "description": "Text pattern to search for",
+                    "required": true
+                },
+                {
+                    "name": "files",
+                    "type": "array",
+                    "description": "Files to search in",
+                    "format": "path",
+                    "items": {
+                        "type": "string",
+                        "format": "path"
+                    },
+                    "required": false
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "recursive",
+                    "alias": "r",
+                    "type": "boolean",
+                    "description": "Search directories recursively"
+                },
+                {
+                    "name": "ignore-case",
+                    "alias": "i",
+                    "type": "boolean",
+                    "description": "Ignore case differences"
+                },
+                {
+                    "name": "line-number",
+                    "alias": "n",
+                    "type": "boolean",
+                    "description": "Show line numbers"
+                },
+                {
+                    "name": "count",
+                    "alias": "c",
+                    "type": "boolean",
+                    "description": "Only show count of matching lines"
+                },
+                {
+                    "name": "files-with-matches",
+                    "alias": "l",
+                    "type": "boolean",
+                    "description": "Only show names of files containing matches"
+                },
+                {
+                    "name": "invert-match",
+                    "alias": "v",
+                    "type": "boolean",
+                    "description": "Show lines that do not match"
+                },
+                {
+                    "name": "word-regexp",
+                    "alias": "w",
+                    "type": "boolean",
+                    "description": "Match whole words only"
+                },
+                {
+                    "name": "extended-regexp",
+                    "alias": "E",
+                    "type": "boolean",
+                    "description": "Use extended regular expressions"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "sed",
+            "description": "Stream editor for filtering and transforming text",
+            "positional_args": [
+                {
+                    "name": "expression",
+                    "type": "string",
+                    "description": "Sed script expression to execute",
+                    "required": true
+                },
+                {
+                    "name": "files",
+                    "type": "array",
+                    "description": "Input files to process",
+                    "format": "path",
+                    "items": {
+                        "type": "string",
+                        "format": "path"
+                    },
+                    "required": false
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "in-place",
+                    "alias": "i",
+                    "type": "string",
+                    "description": "Edit files in place (optionally with backup suffix)"
+                },
+                {
+                    "name": "quiet",
+                    "alias": "n",
+                    "type": "boolean",
+                    "description": "Suppress automatic printing of pattern space"
+                },
+                {
+                    "name": "extended",
+                    "alias": "E",
+                    "type": "boolean",
+                    "description": "Use extended regular expressions"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "touch",
+            "description": "Create empty files or update timestamps",
+            "positional_args": [
+                {
+                    "name": "files",
+                    "type": "array",
+                    "description": "File paths to create or update",
+                    "format": "path",
+                    "items": {
+                        "type": "string",
+                        "format": "path"
+                    },
+                    "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "no-create",
+                    "alias": "c",
+                    "type": "boolean",
+                    "description": "Do not create files, only update timestamps"
+                },
+                {
+                    "name": "timestamp",
+                    "alias": "t",
+                    "type": "string",
+                    "description": "Use specified timestamp instead of current time (YYYY-MM-DD HH:MM:SS)"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "pwd",
+            "description": "Print current working directory",
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "cd",
+            "description": "Change working directory and list contents",
+            "positional_args": [
+                {
+                    "name": "path",
+                    "type": "string",
+                    "description": "Directory path to change to",
+                    "format": "path",
+                    "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "list",
+                    "type": "boolean",
+                    "description": "List directory contents after changing"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "cat",
+            "description": "Display file contents",
+            "positional_args": [
+                {
+                    "name": "files",
+                    "type": "array",
+                    "description": "File paths to display",
+                    "format": "path",
+                    "items": {
+                        "type": "string",
+                        "format": "path"
+                    },
+                    "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "number",
+                    "alias": "n",
+                    "type": "boolean",
+                    "description": "Number all output lines"
+                },
+                {
+                    "name": "show-ends",
+                    "alias": "E",
+                    "type": "boolean",
+                    "description": "Display $ at end of each line"
+                },
+                {
+                    "name": "show-tabs",
+                    "alias": "T",
+                    "type": "boolean",
+                    "description": "Display TAB characters as ^I"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "find",
+            "description": "Search for files and directories",
+            "positional_args_first": true,
+            "positional_args": [
+                {
+                    "name": "path",
+                    "type": "string",
+                    "description": "Starting directory for search",
+                    "format": "path",
+                    "required": false
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "-name",
+                    "type": "string",
+                    "description": "Search for files with this name pattern"
+                },
+                {
+                    "name": "-type",
+                    "type": "string",
+                    "description": "File type: f (file), d (directory), l (symlink)"
+                },
+                {
+                    "name": "-size",
+                    "type": "string",
+                    "description": "File size (e.g., +100M, -1k, 500c)"
+                },
+                {
+                    "name": "-mtime",
+                    "type": "string",
+                    "description": "Modification time in days (e.g., -7, +30)"
+                },
+                {
+                    "name": "-exec",
+                    "type": "string",
+                    "description": "Execute command on found files (use {} as placeholder)"
+                },
+                {
+                    "name": "-maxdepth",
+                    "type": "integer",
+                    "description": "Maximum directory depth to search"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "head",
+            "description": "Display first lines of files",
+            "positional_args": [
+                {
+                    "name": "files",
+                    "type": "array",
+                    "description": "File paths to display",
+                    "format": "path",
+                    "items": {
+                        "type": "string",
+                        "format": "path"
+                    },
+                    "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "lines",
+                    "alias": "n",
+                    "type": "integer",
+                    "description": "Number of lines to display"
+                },
+                {
+                    "name": "bytes",
+                    "alias": "c",
+                    "type": "integer",
+                    "description": "Number of bytes to display"
+                },
+                {
+                    "name": "quiet",
+                    "alias": "q",
+                    "type": "boolean",
+                    "description": "Never print headers giving file names"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "tail",
+            "description": "Display last lines of files",
+            "positional_args": [
+                {
+                    "name": "files",
+                    "type": "array",
+                    "description": "File paths to display",
+                    "format": "path",
+                    "items": {
+                        "type": "string",
+                        "format": "path"
+                    },
+                    "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "lines",
+                    "alias": "n",
+                    "type": "integer",
+                    "description": "Number of lines to display"
+                },
+                {
+                    "name": "bytes",
+                    "alias": "c",
+                    "type": "integer",
+                    "description": "Number of bytes to display"
+                },
+                {
+                    "name": "follow",
+                    "alias": "f",
+                    "type": "boolean",
+                    "description": "Continue reading as file grows (not recommended for AI use)"
+                },
+                {
+                    "name": "quiet",
+                    "alias": "q",
+                    "type": "boolean",
+                    "description": "Never print headers giving file names"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "diff",
+            "description": "Compare files line by line",
+            "positional_args": [
+                {
+                    "name": "file1",
+                    "type": "string",
+                    "description": "First file to compare",
+                    "format": "path",
+                    "required": true
+                },
+                {
+                    "name": "file2",
+                    "type": "string",
+                    "description": "Second file to compare",
+                    "format": "path",
+                    "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "unified",
+                    "alias": "u",
+                    "type": "integer",
+                    "description": "Output unified context with specified lines"
+                },
+                {
+                    "name": "context",
+                    "alias": "c",
+                    "type": "integer",
+                    "description": "Output context format with specified lines"
+                },
+                {
+                    "name": "ignore-case",
+                    "alias": "i",
+                    "type": "boolean",
+                    "description": "Ignore case differences"
+                },
+                {
+                    "name": "ignore-whitespace",
+                    "alias": "w",
+                    "type": "boolean",
+                    "description": "Ignore whitespace differences"
+                },
+                {
+                    "name": "brief",
+                    "alias": "q",
+                    "type": "boolean",
+                    "description": "Report only whether files differ"
+                }
+            ],
+            "synchronous": true
+        }
+    ],
+    "synchronous": true
+}

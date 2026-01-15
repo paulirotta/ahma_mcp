@@ -865,13 +865,11 @@ mod transport_lifecycle {
         transport.send(request).await.unwrap();
 
         // Now receive should get the message
-        let message = tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            transport.receive(),
-        )
-        .await
-        .expect("Should not timeout")
-        .expect("Should receive message");
+        let message =
+            tokio::time::timeout(std::time::Duration::from_millis(100), transport.receive())
+                .await
+                .expect("Should not timeout")
+                .expect("Should receive message");
 
         // Verify the message content
         let msg_str = serde_json::to_string(&message).unwrap();
@@ -1164,17 +1162,17 @@ mod oauth_callback_server_tests {
         // Simulate parsing callback URL with code and state
         let callback_url = "http://localhost:8080/?code=test_auth_code&state=test_state_token";
         let parsed_url = Url::parse(callback_url).unwrap();
-        
+
         let code = parsed_url
             .query_pairs()
             .find(|(key, _)| key == "code")
             .map(|(_, value)| value.into_owned());
-        
+
         let state = parsed_url
             .query_pairs()
             .find(|(key, _)| key == "state")
             .map(|(_, value)| value.into_owned());
-        
+
         assert_eq!(code, Some("test_auth_code".to_string()));
         assert_eq!(state, Some("test_state_token".to_string()));
     }
@@ -1184,12 +1182,12 @@ mod oauth_callback_server_tests {
         // Simulate missing code parameter
         let callback_url = "http://localhost:8080/?state=test_state";
         let parsed_url = Url::parse(callback_url).unwrap();
-        
+
         let code = parsed_url
             .query_pairs()
             .find(|(key, _)| key == "code")
             .map(|(_, value)| value.into_owned());
-        
+
         assert!(code.is_none(), "Code should be missing");
     }
 
@@ -1198,12 +1196,12 @@ mod oauth_callback_server_tests {
         // Simulate missing state parameter
         let callback_url = "http://localhost:8080/?code=test_code";
         let parsed_url = Url::parse(callback_url).unwrap();
-        
+
         let state = parsed_url
             .query_pairs()
             .find(|(key, _)| key == "state")
             .map(|(_, value)| value.into_owned());
-        
+
         assert!(state.is_none(), "State should be missing");
     }
 
@@ -1223,7 +1221,10 @@ mod oauth_callback_server_tests {
             Some("test_client_secret".to_string()),
         );
 
-        assert!(transport.is_ok(), "Transport with OAuth config should succeed");
+        assert!(
+            transport.is_ok(),
+            "Transport with OAuth config should succeed"
+        );
 
         unsafe { env::remove_var(TOKEN_PATH_ENV) };
     }
@@ -1232,15 +1233,15 @@ mod oauth_callback_server_tests {
 mod sse_integration_tests {
     use super::*;
     use std::sync::Arc;
-    use wiremock::{Mock, MockServer, ResponseTemplate};
     use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[tokio::test]
     async fn sse_endpoint_discovery_simulation() {
         // This is a simplified test showing how SSE endpoint discovery would work
         // In a real implementation, the transport would connect to an SSE endpoint
         // and receive the initial message with the RPC endpoint URL
-        
+
         let _guard = token_env_guard().lock().unwrap();
         let tmp = tempdir().unwrap();
         let token_path = tmp.path().join("sse_test.json");
@@ -1270,7 +1271,7 @@ mod sse_integration_tests {
                 ResponseTemplate::new(200)
                     .insert_header("content-type", "text/event-stream")
                     .insert_header("cache-control", "no-cache")
-                    .set_body_string(sse_response)
+                    .set_body_string(sse_response),
             )
             .mount(&server)
             .await;
@@ -1296,10 +1297,15 @@ mod sse_integration_tests {
         let sse_url = format!("{}/sse", server.uri());
         let client = reqwest::Client::new();
         let response = client.get(&sse_url).send().await.unwrap();
-        
+
         assert_eq!(response.status(), 200);
         // Check that content-type contains event-stream or is set
-        let content_type = response.headers().get("content-type").unwrap().to_str().unwrap();
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap();
         assert!(
             content_type.contains("event-stream") || content_type.contains("text"),
             "Content-type should be event-stream or text, got: {}",
@@ -1317,7 +1323,7 @@ mod sse_integration_tests {
     async fn sse_streaming_notifications_simulation() {
         // Simulate receiving JSON-RPC notifications via SSE
         // This tests the streaming aspect of SSE for server-to-client messages
-        
+
         let _guard = token_env_guard().lock().unwrap();
         let tmp = tempdir().unwrap();
         let token_path = tmp.path().join("sse_notifications.json");
@@ -1350,7 +1356,7 @@ mod sse_integration_tests {
                 ResponseTemplate::new(200)
                     .insert_header("content-type", "text/event-stream")
                     .insert_header("cache-control", "no-cache")
-                    .set_body_string(sse_notifications)
+                    .set_body_string(sse_notifications),
             )
             .mount(&server)
             .await;
@@ -1359,10 +1365,10 @@ mod sse_integration_tests {
         let events_url = format!("{}/events", server.uri());
         let client = reqwest::Client::new();
         let response = client.get(&events_url).send().await.unwrap();
-        
+
         assert_eq!(response.status(), 200);
         let body = response.text().await.unwrap();
-        
+
         // Verify all three notification types are present
         assert!(body.contains("tools/updated"));
         assert!(body.contains("resources/changed"));
@@ -1379,7 +1385,7 @@ mod sse_integration_tests {
     async fn sse_reconnection_simulation() {
         // Simulate SSE reconnection behavior when connection drops
         // This tests resilience requirements from REQUIREMENTS.md (future feature)
-        
+
         let _guard = token_env_guard().lock().unwrap();
         let tmp = tempdir().unwrap();
         let token_path = tmp.path().join("sse_reconnect.json");
@@ -1404,7 +1410,7 @@ mod sse_integration_tests {
             .and(path("/sse-reconnect"))
             .respond_with(move |_req: &wiremock::Request| {
                 let count = call_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
-                
+
                 // First call succeeds, subsequent calls demonstrate reconnection
                 if count == 1 {
                     ResponseTemplate::new(200)
@@ -1422,7 +1428,7 @@ mod sse_integration_tests {
 
         let reconnect_url = format!("{}/sse-reconnect", server.uri());
         let client = reqwest::Client::new();
-        
+
         // First connection
         let response1 = client.get(&reconnect_url).send().await.unwrap();
         let body1 = response1.text().await.unwrap();
