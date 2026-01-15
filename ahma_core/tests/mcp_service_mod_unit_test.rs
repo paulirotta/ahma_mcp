@@ -141,12 +141,16 @@ async fn test_operation_monitor_get_completed_operations() {
         None,
     );
     operation.state = OperationStatus::Completed;
-    
+
     monitor.add_operation(operation).await;
 
     // Update status to move to history
     monitor
-        .update_status("op_test_001", OperationStatus::Completed, Some(serde_json::json!("test output")))
+        .update_status(
+            "op_test_001",
+            OperationStatus::Completed,
+            Some(serde_json::json!("test output")),
+        )
         .await;
 
     // Get completed operations
@@ -175,12 +179,16 @@ async fn test_operation_monitor_wait_for_operation_already_completed() {
         "echo done".to_string(),
         None,
     );
-    
+
     monitor.add_operation(operation).await;
 
     // Update to completed
     monitor
-        .update_status("op_test_002", OperationStatus::Completed, Some(serde_json::json!("done")))
+        .update_status(
+            "op_test_002",
+            OperationStatus::Completed,
+            Some(serde_json::json!("done")),
+        )
         .await;
 
     // Check in completion history

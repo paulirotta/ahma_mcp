@@ -25,7 +25,9 @@ use tempfile::TempDir;
 /// Returns true if Landlock LSM is enabled and the kernel version supports it.
 fn is_landlock_available() -> bool {
     // First check if Landlock is listed in LSMs
-    if let Ok(content) = fs::read_to_string("/sys/kernel/security/lsm") && content.contains("landlock") {
+    if let Ok(content) = fs::read_to_string("/sys/kernel/security/lsm")
+        && content.contains("landlock")
+    {
         return true;
     }
 
@@ -111,8 +113,7 @@ fn apply_landlock_rules(sandbox_scope: &str) -> std::io::Result<()> {
     // Allow full access to sandbox scope
     ruleset = ruleset
         .add_rule(PathBeneath::new(
-            PathFd::new(sandbox_path)
-                .map_err(|e| std::io::Error::other(e.to_string()))?,
+            PathFd::new(sandbox_path).map_err(|e| std::io::Error::other(e.to_string()))?,
             access_all,
         ))
         .map_err(|e| std::io::Error::other(e.to_string()))?;
@@ -122,7 +123,9 @@ fn apply_landlock_rules(sandbox_scope: &str) -> std::io::Result<()> {
 
     for path in &system_paths {
         let path_obj = Path::new(path);
-        if path_obj.exists() && let Ok(fd) = PathFd::new(path_obj) {
+        if path_obj.exists()
+            && let Ok(fd) = PathFd::new(path_obj)
+        {
             let _ = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read));
         }
     }
@@ -158,8 +161,7 @@ fn apply_landlock_rules_strict(sandbox_scope: &str) -> std::io::Result<()> {
     // Allow full access ONLY to the exact sandbox scope
     ruleset = ruleset
         .add_rule(PathBeneath::new(
-            PathFd::new(sandbox_path)
-                .map_err(|e| std::io::Error::other(e.to_string()))?,
+            PathFd::new(sandbox_path).map_err(|e| std::io::Error::other(e.to_string()))?,
             access_all,
         ))
         .map_err(|e| std::io::Error::other(e.to_string()))?;
@@ -169,7 +171,9 @@ fn apply_landlock_rules_strict(sandbox_scope: &str) -> std::io::Result<()> {
 
     for path in &system_paths {
         let path_obj = Path::new(path);
-        if path_obj.exists() && let Ok(fd) = PathFd::new(path_obj) {
+        if path_obj.exists()
+            && let Ok(fd) = PathFd::new(path_obj)
+        {
             let _ = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read));
         }
     }

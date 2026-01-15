@@ -118,10 +118,7 @@ fn test_log_file_append_mode() {
     use std::fs::OpenOptions;
     use std::io::Write;
 
-    let mut file = OpenOptions::new()
-        .append(true)
-        .open(&log_file)
-        .unwrap();
+    let mut file = OpenOptions::new().append(true).open(&log_file).unwrap();
     writeln!(file, "line 2").unwrap();
 
     // Verify both lines exist

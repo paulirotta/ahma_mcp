@@ -70,11 +70,13 @@ fn run_validation_mode(cli: &Cli) -> Result<bool> {
                 .and_then(|s| s.to_str())
                 .is_some_and(|s| s == ".ahma");
 
-        if is_legacy_tools_dir && !path.exists()
+        if is_legacy_tools_dir
+            && !path.exists()
             && let Some(parent) = path.parent()
-                && parent.exists() {
-                    return parent.to_path_buf();
-                }
+            && parent.exists()
+        {
+            return parent.to_path_buf();
+        }
 
         path
     }

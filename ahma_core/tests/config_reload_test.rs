@@ -65,7 +65,10 @@ async fn test_dynamic_config_reload() -> Result<()> {
     // 7. Verify new tool is now present
     let tools = client.list_tools(None).await?;
     assert!(tools.tools.iter().any(|t| t.name == "initial_tool"));
-    assert!(tools.tools.iter().any(|t| t.name == "new_tool"), "New tool should be present after reload");
+    assert!(
+        tools.tools.iter().any(|t| t.name == "new_tool"),
+        "New tool should be present after reload"
+    );
 
     // 8. Modify an existing tool
     let modified_tool = r#"
@@ -88,7 +91,11 @@ async fn test_dynamic_config_reload() -> Result<()> {
     sleep(Duration::from_millis(1000)).await;
 
     let tools = client.list_tools(None).await?;
-    let initial = tools.tools.iter().find(|t| t.name == "initial_tool").unwrap();
+    let initial = tools
+        .tools
+        .iter()
+        .find(|t| t.name == "initial_tool")
+        .unwrap();
     assert_eq!(initial.description, Some("Modified initial tool".into()));
 
     // 9. Remove a tool
@@ -96,7 +103,10 @@ async fn test_dynamic_config_reload() -> Result<()> {
     sleep(Duration::from_millis(1000)).await;
 
     let tools = client.list_tools(None).await?;
-    assert!(!tools.tools.iter().any(|t| t.name == "new_tool"), "New tool should be removed after file deletion");
+    assert!(
+        !tools.tools.iter().any(|t| t.name == "new_tool"),
+        "New tool should be removed after file deletion"
+    );
 
     Ok(())
 }

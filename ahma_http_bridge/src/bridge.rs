@@ -139,11 +139,7 @@ async fn handle_session_delete(
         Some(id) => id.to_string(),
         None => {
             warn!("DELETE request without session ID header");
-            return (
-                StatusCode::BAD_REQUEST,
-                "Missing Mcp-Session-Id header",
-            )
-                .into_response();
+            return (StatusCode::BAD_REQUEST, "Missing Mcp-Session-Id header").into_response();
         }
     };
 
@@ -158,7 +154,10 @@ async fn handle_session_delete(
     // Terminate the session
     match state
         .session_manager
-        .terminate_session(&session_id, crate::session::SessionTerminationReason::ClientRequested)
+        .terminate_session(
+            &session_id,
+            crate::session::SessionTerminationReason::ClientRequested,
+        )
         .await
     {
         Ok(()) => {

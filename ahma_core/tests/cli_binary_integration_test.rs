@@ -284,9 +284,7 @@ mod ahma_validate_tests {
 
         let output = Command::new(&binary)
             .current_dir(&workspace)
-            .args([
-                tools_dir.to_str().unwrap(),
-            ])
+            .args([tools_dir.to_str().unwrap()])
             .output()
             .expect("Failed to execute ahma_validate");
 
@@ -322,9 +320,7 @@ mod ahma_validate_tests {
 
         let output = Command::new(&binary)
             .current_dir(&workspace)
-            .args([
-                invalid_file.to_str().unwrap(),
-            ])
+            .args([invalid_file.to_str().unwrap()])
             .output()
             .expect("Failed to execute ahma_validate");
 
@@ -342,9 +338,7 @@ mod ahma_validate_tests {
 
         let output = Command::new(&binary)
             .current_dir(&workspace)
-            .args([
-                "/nonexistent/path/to/tools",
-            ])
+            .args(["/nonexistent/path/to/tools"])
             .output()
             .expect("Failed to execute ahma_validate");
 
@@ -364,9 +358,7 @@ mod ahma_validate_tests {
         if cargo_json.exists() {
             let output = Command::new(&binary)
                 .current_dir(&workspace)
-                .args([
-                    cargo_json.to_str().unwrap(),
-                ])
+                .args([cargo_json.to_str().unwrap()])
                 .output()
                 .expect("Failed to execute ahma_validate");
 
@@ -672,7 +664,7 @@ mod ahma_list_tools_mode_tests {
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        
+
         assert!(
             output.status.success(),
             "CLI mode execution failed. stderr: {}",
@@ -683,4 +675,5 @@ mod ahma_list_tools_mode_tests {
             "Output should contain the echoed message. Got: {}",
             stdout
         );
-    }}
+    }
+}

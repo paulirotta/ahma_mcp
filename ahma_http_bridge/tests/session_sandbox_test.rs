@@ -96,7 +96,9 @@ async fn test_sandbox_scope_rejects_empty_roots() {
     // Client provides empty roots (no workspace folders)
     let empty_roots: Vec<McpRoot> = vec![];
 
-    let result = session_manager.lock_sandbox(&session_id, &empty_roots).await;
+    let result = session_manager
+        .lock_sandbox(&session_id, &empty_roots)
+        .await;
 
     // Empty roots should be rejected
     assert!(

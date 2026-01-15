@@ -6,7 +6,7 @@
 //! - SandboxError formatting
 //! - Platform-specific sandbox checks
 
-use ahma_core::sandbox::{SandboxError, is_test_mode, is_no_temp_files};
+use ahma_core::sandbox::{SandboxError, is_no_temp_files, is_test_mode};
 use std::path::{Path, PathBuf};
 use tempfile::tempdir;
 
@@ -177,11 +177,11 @@ fn test_normalize_path_trailing_slash_removed() {
 fn test_is_test_mode_enabled_by_cargo() {
     // When running under cargo test, test mode should be detected
     // This test is a bit meta - if it runs, we're in cargo test context
-    
+
     // The function should return true when AHMA_TEST_MODE is set or
     // when detected as running in cargo test
     // We can't reliably test this without side effects on global state
-    
+
     // At minimum, verify the function doesn't panic
     let _ = is_test_mode();
 }
@@ -240,10 +240,10 @@ fn test_path_join_for_relative() {
 fn test_canonicalize_temp_directory() {
     let temp_dir = tempdir().unwrap();
     let canonical = std::fs::canonicalize(temp_dir.path()).unwrap();
-    
+
     // Canonical path should be absolute
     assert!(canonical.is_absolute());
-    
+
     // Should point to the same location
     assert!(canonical.exists());
 }
@@ -260,12 +260,12 @@ fn test_canonicalize_symlink_resolution() {
     let temp_dir = tempdir().unwrap();
     let original = temp_dir.path().join("original_dir");
     std::fs::create_dir(&original).unwrap();
-    
+
     #[cfg(unix)]
     {
         let symlink = temp_dir.path().join("symlink");
         std::os::unix::fs::symlink(&original, &symlink).unwrap();
-        
+
         let canonical = std::fs::canonicalize(&symlink).unwrap();
         // Canonical path should resolve to the original, not the symlink
         assert!(!canonical.ends_with("symlink"));
@@ -276,9 +276,11 @@ fn test_canonicalize_symlink_resolution() {
 
 #[test]
 fn test_any_scope_matches() {
-    let scopes = [PathBuf::from("/home/user/project1"),
+    let scopes = [
+        PathBuf::from("/home/user/project1"),
         PathBuf::from("/home/user/project2"),
-        PathBuf::from("/shared/workspace")];
+        PathBuf::from("/shared/workspace"),
+    ];
 
     let path1 = PathBuf::from("/home/user/project1/src/main.rs");
     let path2 = PathBuf::from("/home/user/project2/lib/mod.rs");
@@ -297,7 +299,7 @@ fn test_any_scope_matches() {
 fn test_current_os_supported() {
     let os = std::env::consts::OS;
     let supported = matches!(os, "linux" | "macos");
-    
+
     // Just log for informational purposes
     if !supported {
         println!("Running on unsupported OS: {}", os);
@@ -309,19 +311,24 @@ fn test_current_os_supported() {
 fn test_linux_kernel_version_parsing() {
     // Test kernel version string parsing logic
     let test_cases = vec![
-        ("5.13.0-generic", true),   // Exactly minimum
-        ("5.14.2-arch1", true),     // Above minimum
-        ("6.0.0", true),            // Major version 6
-        ("5.12.0", false),          // Below minimum
-        ("4.19.0", false),          // Old LTS
+        ("5.13.0-generic", true), // Exactly minimum
+        ("5.14.2-arch1", true),   // Above minimum
+        ("6.0.0", true),          // Major version 6
+        ("5.12.0", false),        // Below minimum
+        ("4.19.0", false),        // Old LTS
     ];
 
     for (version_str, expected_sufficient) in test_cases {
         let parts: Vec<&str> = version_str.split('.').collect();
         if parts.len() >= 2 {
             let major: u32 = parts[0].parse().unwrap_or(0);
-            let minor: u32 = parts[1].split('-').next().unwrap_or("0").parse().unwrap_or(0);
-            
+            let minor: u32 = parts[1]
+                .split('-')
+                .next()
+                .unwrap_or("0")
+                .parse()
+                .unwrap_or(0);
+
             let is_sufficient = major > 5 || (major == 5 && minor >= 13);
             assert_eq!(
                 is_sufficient, expected_sufficient,
@@ -336,11 +343,11 @@ fn test_linux_kernel_version_parsing() {
 #[test]
 fn test_macos_sandbox_exec_exists() {
     use std::process::Command;
-    
+
     let result = Command::new("which").arg("sandbox-exec").output();
     assert!(result.is_ok());
     let output = result.unwrap();
-    
+
     // sandbox-exec should be found on macOS
     if output.status.success() {
         let path = String::from_utf8_lossy(&output.stdout);
@@ -366,10 +373,7 @@ fn test_format_scopes_single() {
 
 #[test]
 fn test_format_scopes_multiple() {
-    let scopes = vec![
-        PathBuf::from("/project1"),
-        PathBuf::from("/project2"),
-    ];
+    let scopes = vec![PathBuf::from("/project1"), PathBuf::from("/project2")];
     let formatted = format_scopes_for_test(&scopes);
     assert!(formatted.contains("project1"));
     assert!(formatted.contains("project2"));

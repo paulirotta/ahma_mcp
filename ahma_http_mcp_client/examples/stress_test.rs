@@ -183,7 +183,7 @@ impl StressClient {
         let sse_client = self.client.clone();
         let sse_url = url.clone();
         let sse_session_id = session_id.clone();
-        
+
         let sse_response = sse_client
             .get(&sse_url)
             .header("mcp-session-id", &sse_session_id)
@@ -215,7 +215,7 @@ impl StressClient {
         let post_client = self.client.clone();
         let post_url = url.clone();
         let post_session_id = session_id.clone();
-        
+
         let mut stream = sse_response.bytes_stream();
         let mut buffer = String::new();
 
@@ -223,19 +223,19 @@ impl StressClient {
         let cwd = std::env::current_dir()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|_| ".".to_string());
-        
+
         // Read SSE events looking for roots/list request
         let timeout = tokio::time::timeout(Duration::from_secs(10), async {
             while let Some(chunk_result) = stream.next().await {
                 let chunk = chunk_result.context("Failed to read SSE chunk")?;
                 let chunk_str = String::from_utf8_lossy(&chunk);
                 buffer.push_str(&chunk_str);
-                
+
                 // SSE events are separated by double newline (\n\n)
                 while let Some(event_end) = buffer.find("\n\n") {
                     let event_block = buffer[..event_end].to_string();
                     buffer = buffer[event_end + 2..].to_string();
-                    
+
                     // Extract data lines from the event
                     let mut data_parts = Vec::new();
                     for line in event_block.lines() {
@@ -245,13 +245,13 @@ impl StressClient {
                             data_parts.push(content.trim_start());
                         }
                     }
-                    
+
                     if data_parts.is_empty() {
                         continue;
                     }
-                    
+
                     let data = data_parts.join("\n");
-                    
+
                     if let Ok(msg) = serde_json::from_str::<Value>(&data) {
                         // Check if this is a roots/list request
                         if msg.get("method").and_then(|m| m.as_str()) == Some("roots/list") {
@@ -273,11 +273,14 @@ impl StressClient {
                                     .send()
                                     .await
                                     .context("Failed to respond to roots/list")?;
-                                
+
                                 if !response.status().is_success() {
-                                    return Err(anyhow!("roots/list response failed: {}", response.status()));
+                                    return Err(anyhow!(
+                                        "roots/list response failed: {}",
+                                        response.status()
+                                    ));
                                 }
-                                
+
                                 // Handshake complete!
                                 return Ok(());
                             }
@@ -286,7 +289,8 @@ impl StressClient {
                 }
             }
             Err(anyhow!("SSE stream ended without receiving roots/list"))
-        }).await;
+        })
+        .await;
 
         match timeout {
             Ok(Ok(())) => {
@@ -295,7 +299,9 @@ impl StressClient {
                 Ok(())
             }
             Ok(Err(e)) => Err(e),
-            Err(_) => Err(anyhow!("Timeout waiting for roots/list request from server (10s)")),
+            Err(_) => Err(anyhow!(
+                "Timeout waiting for roots/list request from server (10s)"
+            )),
         }
     }
 
@@ -440,7 +446,7 @@ impl ServerManager {
 
                 // Stop immediately on any error output
                 // Detect fatal errors that should abort the stress test
-                let is_fatal_error = 
+                let is_fatal_error =
                     // CLI argument errors (e.g., "error: unexpected argument")
                     line.starts_with("error:") ||
                     // Runtime errors
@@ -691,11 +697,11 @@ async fn main() -> Result<()> {
         // Check for excessive client errors (abort if all requests are failing)
         let success = success_count.load(Ordering::Relaxed);
         let errors = error_count.load(Ordering::Relaxed);
-        
+
         // If we have many errors and no successes, something is fundamentally broken
         if errors >= 10 && success == 0 {
             stop_flag.store(true, Ordering::SeqCst);
-            
+
             eprintln!();
             eprintln!("╔═══════════════════════════════════════════════════════════╗");
             eprintln!("║       ❌ TOO MANY CLIENT ERRORS - ABORTING                 ║");
@@ -709,7 +715,7 @@ async fn main() -> Result<()> {
             eprintln!("    - 401/403: Authentication issues");
             eprintln!("    - 404: Wrong endpoint URL");
             eprintln!();
-            
+
             join_set.abort_all();
             let _ = server.kill().await;
             std::process::exit(1);

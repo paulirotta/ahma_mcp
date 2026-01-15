@@ -571,10 +571,7 @@ mod ahma_validate_extended_tests {
 
             let verbose_output = Command::new(&binary)
                 .current_dir(&workspace)
-                .args([
-                    tools_dir.to_str().unwrap(),
-                    "--verbose",
-                ])
+                .args([tools_dir.to_str().unwrap(), "--verbose"])
                 .output()
                 .expect("Failed to execute ahma_validate --verbose");
 
@@ -597,9 +594,7 @@ mod ahma_validate_extended_tests {
             if tool_path.exists() {
                 let output = Command::new(&binary)
                     .current_dir(&workspace)
-                    .args([
-                        tool_path.to_str().unwrap(),
-                    ])
+                    .args([tool_path.to_str().unwrap()])
                     .output()
                     .unwrap_or_else(|_| panic!("Failed to validate {}", tool_name));
 

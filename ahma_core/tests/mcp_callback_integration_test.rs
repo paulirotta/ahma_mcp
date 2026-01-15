@@ -25,7 +25,8 @@ async fn test_mcp_callback_sender_flow() {
     let server_transport = AsyncRwTransport::new_server(server_read, server_write);
 
     // Start the server peer
-    let server_peer = serve_directly::<RoleServer, DummyServer, _, _, _>(DummyServer, server_transport, None);
+    let server_peer =
+        serve_directly::<RoleServer, DummyServer, _, _, _>(DummyServer, server_transport, None);
 
     // Start the client peer
     let _client_peer = serve_directly::<RoleClient, (), _, _, _>((), client_transport, None);
@@ -84,7 +85,8 @@ async fn test_mcp_callback_sender_skips_cursor() {
     let client_transport = AsyncRwTransport::new_client(client_read, client_write);
     let server_transport = AsyncRwTransport::new_server(server_read, server_write);
 
-    let server_peer = serve_directly::<RoleServer, DummyServer, _, _, _>(DummyServer, server_transport, None);
+    let server_peer =
+        serve_directly::<RoleServer, DummyServer, _, _, _>(DummyServer, server_transport, None);
     let _client_peer = serve_directly::<RoleClient, (), _, _, _>((), client_transport, None);
 
     let sender = McpCallbackSender::new(
@@ -115,7 +117,8 @@ async fn test_mcp_callback_sender_no_token() {
     let client_transport = AsyncRwTransport::new_client(client_read, client_write);
     let server_transport = AsyncRwTransport::new_server(server_read, server_write);
 
-    let server_peer = serve_directly::<RoleServer, DummyServer, _, _, _>(DummyServer, server_transport, None);
+    let server_peer =
+        serve_directly::<RoleServer, DummyServer, _, _, _>(DummyServer, server_transport, None);
     let _client_peer = serve_directly::<RoleClient, (), _, _, _>((), client_transport, None);
 
     let sender = McpCallbackSender::new(
