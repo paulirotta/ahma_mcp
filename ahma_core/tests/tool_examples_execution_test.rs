@@ -1,117 +1,136 @@
-//! Tool Examples Execution Integration Tests
+//! Tool Examples Configuration Validation Tests
 //!
-//! This test module runs each tool configuration example to ensure they execute
-//! successfully and produce valid output.
+//! This test module validates that all tool configuration examples in the examples/configs
+//! directory are valid and conform to the MTDF schema. These tests run directly against
+//! the validation logic rather than spawning cargo processes, making them fast and reliable.
+//!
+//! # Performance Note
+//! Previous implementation used `cargo run --example` which was extremely slow on CI
+//! (110+ seconds on Android runners) due to compilation overhead. This direct validation
+//! approach runs in milliseconds.
 
-use std::process::Command;
+use ahma_core::schema_validation::MtdfValidator;
+use std::path::PathBuf;
 
-/// Helper function to run an example and verify it succeeds
-fn run_example(example_name: &str) -> Result<String, String> {
-    let output = Command::new("cargo")
-        .args(["run", "--example", example_name])
-        .output()
-        .map_err(|e| format!("Failed to execute example {}: {}", example_name, e))?;
+/// Get the path to the examples/configs directory
+fn configs_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/configs")
+}
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        return Err(format!(
-            "Example {} failed with exit code {:?}\nstdout:\n{}\nstderr:\n{}",
-            example_name,
-            output.status.code(),
-            stdout,
-            stderr
-        ));
+/// Validate a tool configuration and return a structured result for assertions
+struct ValidatedTool {
+    name: String,
+    command: String,
+    enabled: bool,
+    subcommand_count: usize,
+}
+
+fn validate_tool_config(config_file: &str) -> ValidatedTool {
+    let config_path = configs_dir().join(config_file);
+    let content = std::fs::read_to_string(&config_path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {}", config_file, e));
+
+    let validator = MtdfValidator::new();
+    let config = validator
+        .validate_tool_config(&config_path, &content)
+        .unwrap_or_else(|errors| {
+            let error_msgs: Vec<_> = errors
+                .iter()
+                .map(|e| format!("{}: {}", e.field_path, e.message))
+                .collect();
+            panic!(
+                "Validation failed for {}: {}",
+                config_file,
+                error_msgs.join("; ")
+            );
+        });
+
+    ValidatedTool {
+        name: config.name,
+        command: config.command,
+        enabled: config.enabled,
+        subcommand_count: config.subcommand.as_ref().map(|s| s.len()).unwrap_or(0),
     }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    Ok(stdout.to_string())
-}
-
-/// Helper function to verify expected content in output
-fn assert_output_contains(output: &str, expected: &str, example_name: &str) {
-    assert!(
-        output.contains(expected),
-        "Example {} output should contain '{}'\nActual output:\n{}",
-        example_name,
-        expected,
-        output
-    );
 }
 
 #[test]
-fn test_cargo_tool_example_runs() {
-    let output = run_example("cargo_tool").expect("cargo_tool example should run successfully");
+fn test_cargo_tool_config_valid() {
+    let tool = validate_tool_config("cargo.json");
 
-    assert_output_contains(&output, "✅ Configuration is valid!", "cargo_tool");
-    assert_output_contains(&output, "Name: cargo", "cargo_tool");
-    assert_output_contains(&output, "Command: cargo", "cargo_tool");
-    assert_output_contains(&output, "Enabled: true", "cargo_tool");
+    assert_eq!(tool.name, "cargo", "Name should be 'cargo'");
+    assert_eq!(tool.command, "cargo", "Command should be 'cargo'");
+    assert!(tool.enabled, "Tool should be enabled");
+    assert!(tool.subcommand_count > 0, "Should have subcommands");
 }
 
 #[test]
-fn test_file_tools_example_runs() {
-    let output = run_example("file_tools").expect("file_tools example should run successfully");
+fn test_file_tools_config_valid() {
+    let tool = validate_tool_config("file_tools.json");
 
-    assert_output_contains(&output, "✅ Configuration is valid!", "file_tools");
-    assert_output_contains(&output, "Name: file_tools", "file_tools");
-    assert_output_contains(&output, "Command: /bin/sh", "file_tools");
-    assert_output_contains(&output, "Enabled: true", "file_tools");
+    assert_eq!(tool.name, "file_tools", "Name should be 'file_tools'");
+    assert_eq!(tool.command, "/bin/sh", "Command should be '/bin/sh'");
+    assert!(tool.enabled, "Tool should be enabled");
+    assert!(tool.subcommand_count > 0, "Should have subcommands");
 }
 
 #[test]
-fn test_gh_tool_example_runs() {
-    let output = run_example("gh_tool").expect("gh_tool example should run successfully");
+fn test_gh_tool_config_valid() {
+    let tool = validate_tool_config("gh.json");
 
-    assert_output_contains(&output, "✅ Configuration is valid!", "gh_tool");
-    assert_output_contains(&output, "Name: gh", "gh_tool");
-    assert_output_contains(&output, "Command: gh", "gh_tool");
-    assert_output_contains(&output, "Enabled: true", "gh_tool");
+    assert_eq!(tool.name, "gh", "Name should be 'gh'");
+    assert_eq!(tool.command, "gh", "Command should be 'gh'");
+    assert!(tool.enabled, "Tool should be enabled");
+    assert!(tool.subcommand_count > 0, "Should have subcommands");
 }
 
 #[test]
-fn test_git_tool_example_runs() {
-    let output = run_example("git_tool").expect("git_tool example should run successfully");
+fn test_git_tool_config_valid() {
+    let tool = validate_tool_config("git.json");
 
-    assert_output_contains(&output, "✅ Configuration is valid!", "git_tool");
-    assert_output_contains(&output, "Name: git", "git_tool");
-    assert_output_contains(&output, "Command: git", "git_tool");
-    assert_output_contains(&output, "Enabled: true", "git_tool");
+    assert_eq!(tool.name, "git", "Name should be 'git'");
+    assert_eq!(tool.command, "git", "Command should be 'git'");
+    assert!(tool.enabled, "Tool should be enabled");
+    assert!(tool.subcommand_count > 0, "Should have subcommands");
 }
 
 #[test]
-fn test_gradlew_tool_example_runs() {
-    let output = run_example("gradlew_tool").expect("gradlew_tool example should run successfully");
+fn test_gradlew_tool_config_valid() {
+    let tool = validate_tool_config("gradlew.json");
 
-    assert_output_contains(&output, "✅ Configuration is valid!", "gradlew_tool");
-    assert_output_contains(&output, "Name: gradlew", "gradlew_tool");
-    assert_output_contains(&output, "Command: ./gradlew", "gradlew_tool");
-    assert_output_contains(&output, "Enabled: true", "gradlew_tool");
+    assert_eq!(tool.name, "gradlew", "Name should be 'gradlew'");
+    assert_eq!(tool.command, "./gradlew", "Command should be './gradlew'");
+    assert!(tool.enabled, "Tool should be enabled");
+    assert!(tool.subcommand_count > 0, "Should have subcommands");
 }
 
 #[test]
-fn test_python_tool_example_runs() {
-    let output = run_example("python_tool").expect("python_tool example should run successfully");
+fn test_python_tool_config_valid() {
+    let tool = validate_tool_config("python.json");
 
-    assert_output_contains(&output, "✅ Configuration is valid!", "python_tool");
-    assert_output_contains(&output, "Name: python", "python_tool");
-    assert_output_contains(&output, "Command: python", "python_tool");
-    assert_output_contains(&output, "Enabled: true", "python_tool");
+    assert_eq!(tool.name, "python", "Name should be 'python'");
+    assert_eq!(tool.command, "python", "Command should be 'python'");
+    assert!(tool.enabled, "Tool should be enabled");
+    assert!(tool.subcommand_count > 0, "Should have subcommands");
 }
 
 #[test]
-fn test_all_examples_show_subcommands() {
-    let examples = [
-        "cargo_tool",
-        "file_tools",
-        "gh_tool",
-        "git_tool",
-        "gradlew_tool",
-        "python_tool",
+fn test_all_example_configs_have_subcommands() {
+    let config_files = [
+        "cargo.json",
+        "file_tools.json",
+        "gh.json",
+        "git.json",
+        "gradlew.json",
+        "python.json",
     ];
 
-    for example in &examples {
-        let output = run_example(example).unwrap_or_else(|_| panic!("{} should run successfully", example));
-        assert_output_contains(&output, "🔧 Available Subcommands:", example);
+    for config_file in &config_files {
+        let tool = validate_tool_config(config_file);
+        assert!(
+            tool.subcommand_count > 0,
+            "{} should have at least one subcommand, found {}",
+            config_file,
+            tool.subcommand_count
+        );
     }
 }

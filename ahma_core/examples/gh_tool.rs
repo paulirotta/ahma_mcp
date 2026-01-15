@@ -48,7 +48,7 @@ fn main() {
             println!("\n🔧 Available Subcommands:");
             if let Some(subcommands) = &config.subcommand {
                 for subcommand in subcommands {
-                println!("   - {}: {}", subcommand.name, subcommand.description);
+                    println!("   - {}: {}", subcommand.name, subcommand.description);
                 }
             }
         }

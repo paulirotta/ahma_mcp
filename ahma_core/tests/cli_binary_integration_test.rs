@@ -8,9 +8,15 @@
 //! - Each binary should have tests for: --help, --version, basic functionality
 //! - Tests use temp directories as per R13.5 (Test File Isolation)
 //! - Tests verify exit codes and output content
+//!
+//! Performance optimization:
+//! - Binary paths are cached using OnceLock to avoid redundant builds
+//! - When running via `cargo nextest` or `cargo test`, binaries are already built
+//! - Only falls back to building if the binary doesn't exist
 
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::{Mutex, OnceLock};
 use tempfile::TempDir;
 
 fn workspace_dir() -> PathBuf {
@@ -20,10 +26,44 @@ fn workspace_dir() -> PathBuf {
         .to_path_buf()
 }
 
-fn build_binary(package: &str, binary: &str) -> PathBuf {
-    let workspace = workspace_dir();
+/// Cached binary paths to avoid redundant builds across tests.
+/// Key: (package, binary) tuple as string "package:binary"
+static BINARY_CACHE: OnceLock<Mutex<std::collections::HashMap<String, PathBuf>>> = OnceLock::new();
 
-    // Build the binary
+/// Get or build a binary, caching the result.
+///
+/// This function is optimized for test performance:
+/// 1. First checks if the binary already exists (common when running via cargo test/nextest)
+/// 2. Only builds if the binary doesn't exist
+/// 3. Caches the path to avoid redundant filesystem checks
+fn build_binary(package: &str, binary: &str) -> PathBuf {
+    let cache = BINARY_CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
+    let key = format!("{}:{}", package, binary);
+
+    // Fast path: check cache first
+    {
+        let cache_guard = cache.lock().unwrap();
+        if let Some(path) = cache_guard.get(&key) {
+            return path.clone();
+        }
+    }
+
+    // Determine target directory
+    let workspace = workspace_dir();
+    let target_dir = std::env::var("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| workspace.join("target"));
+
+    let binary_path = target_dir.join("debug").join(binary);
+
+    // Check if binary already exists (fast path for cargo test/nextest)
+    if binary_path.exists() {
+        let mut cache_guard = cache.lock().unwrap();
+        cache_guard.insert(key, binary_path.clone());
+        return binary_path;
+    }
+
+    // Slow path: build the binary (should rarely happen in normal test runs)
     let output = Command::new("cargo")
         .current_dir(&workspace)
         .args(["build", "--package", package, "--bin", binary])
@@ -37,12 +77,11 @@ fn build_binary(package: &str, binary: &str) -> PathBuf {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    // Check for CARGO_TARGET_DIR
-    let target_dir = std::env::var("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| workspace.join("target"));
+    // Cache the result
+    let mut cache_guard = cache.lock().unwrap();
+    cache_guard.insert(key, binary_path.clone());
 
-    target_dir.join("debug").join(binary)
+    binary_path
 }
 
 /// Create a command for a binary with test mode enabled (bypasses sandbox checks)

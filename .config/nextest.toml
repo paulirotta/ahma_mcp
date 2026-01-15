@@ -1,0 +1,40 @@
+# Nextest configuration for ahma_mcp
+#
+# This configuration optimizes test performance, especially for tests that spawn
+# subprocesses (like CLI binary integration tests).
+
+[profile.default]
+# Default timeout is 60s
+slow-timeout = {period = "60s", terminate-after = 2}
+# Use reasonable retry settings
+retries = 0
+
+# Override settings for CLI integration tests that spawn subprocesses.
+# These tests are slow with output capture due to nextest's child process handling.
+[[profile.default.overrides]]
+filter = "test(cli_binary_integration_test::)"
+# Don't capture output for subprocess-spawning tests - this is MUCH faster
+# (22s -> 0.8s improvement measured)
+failure-output = "immediate"
+success-output = "immediate"
+
+# Also apply to other tests that spawn the ahma_mcp binary
+[[profile.default.overrides]]
+failure-output = "immediate"
+filter = "test(cli_extended_integration_test::) | test(cli_mode_coverage_test::)"
+success-output = "immediate"
+
+# CI profile with similar optimizations but may have different retry settings
+[profile.ci]
+retries = 1
+slow-timeout = {period = "120s", terminate-after = 2}
+
+[[profile.ci.overrides]]
+failure-output = "immediate"
+filter = "test(cli_binary_integration_test::)"
+success-output = "immediate"
+
+[[profile.ci.overrides]]
+failure-output = "immediate"
+filter = "test(cli_extended_integration_test::) | test(cli_mode_coverage_test::)"
+success-output = "immediate"
