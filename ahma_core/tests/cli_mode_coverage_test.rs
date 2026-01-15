@@ -116,17 +116,20 @@ mod mode_flags {
                 // Kill the process
                 let _ = child.kill();
                 let output = child.wait_with_output().expect("Failed to read output");
+                let stdout = String::from_utf8_lossy(&output.stdout);
                 let stderr = String::from_utf8_lossy(&output.stderr);
+                let combined = format!("{}{}", stdout, stderr);
 
-                // Should mention HTTP or server starting
+                // Should mention HTTP or server starting, or output AHMA_BOUND_PORT
                 assert!(
-                    stderr.contains("HTTP")
-                        || stderr.contains("http")
-                        || stderr.contains("server")
-                        || stderr.contains("listening")
-                        || stderr.is_empty(), // May not have written yet
+                    combined.contains("HTTP")
+                        || combined.contains("http")
+                        || combined.contains("server")
+                        || combined.contains("listening")
+                        || combined.contains("AHMA_BOUND_PORT")
+                        || combined.is_empty(), // May not have written yet
                     "Mode http should be recognized. Got: {}",
-                    stderr
+                    combined
                 );
             }
             Err(e) => {
