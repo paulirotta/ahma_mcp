@@ -4,6 +4,40 @@
 //! HTTP server with per-session sandbox scopes. Each session spawns a separate
 //! `ahma_mcp` subprocess with its own sandbox scope derived from the client's
 //! workspace roots.
+//!
+//! ## Overview
+//!
+//! In HTTP mode, the server spawns a separate `ahma_mcp` subprocess per MCP session.
+//! Each subprocess has its own sandbox scope derived from the client's workspace roots,
+//! providing complete isolation between concurrent sessions.
+//!
+//! ## How It Works
+//!
+//! ### Protocol Flow
+//!
+//! 1. **Receive initialize request**: Generate session ID (UUID).
+//! 2. **Spawn ahma_mcp subprocess**: Start the MCP engine for this session.
+//! 3. **Forward initialize**: Hand over the initialization to the subprocess.
+//! 4. **Subprocess requests roots/list**: The engine asks for workspace context.
+//! 5. **Bridge intercept**: Capture the roots to define the sandbox boundary.
+//!
+//! ### Sandbox Scope Binding
+//!
+//! The sandbox scope is determined lazily via the MCP `roots/list` protocol:
+//! 1. Client sends `initialize` with `capabilities.roots: { listChanged: true }`.
+//! 2. Server spawns subprocess without sandbox restriction initially.
+//! 3. Subprocess sends `roots/list` request to get workspace folders.
+//! 4. Bridge intercepts and caches the first root as sandbox scope.
+//! 5. Subsequent file operations are validated against this scope.
+//!
+//! **Security Invariant**: The sandbox scope is set **once** when the first `roots/list`
+//! response is received and cannot be changed for that session.
+//!
+//! ### Handling Roots Changes
+//!
+//! For security, session isolation mode rejects roots changes after the sandbox is locked.
+//! If `notifications/roots/list_changed` is received after locking, the subprocess is
+//! immediately terminated to prevent sandbox escape.
 
 use crate::error::{BridgeError, Result};
 use chrono::Local;
@@ -69,7 +103,18 @@ impl HandshakeState {
     }
 }
 
-/// MCP Root as defined in the protocol
+/// Represents a workspace root provided by the client's `roots/list` capability.
+///
+/// Used to determine the valid file access scope for the session's sandbox.
+///
+/// # Example JSON
+///
+/// ```json
+/// {
+///   "uri": "file:///Users/jdoe/project",
+///   "name": "My Project"
+/// }
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpRoot {
     /// URI of the root (must be file://)
@@ -101,7 +146,21 @@ pub enum SessionTerminationReason {
     Timeout,
 }
 
-/// A single MCP session with its subprocess and state
+/// Represents an active client session.
+///
+/// This struct holds the state for a single connection, including:
+/// - The subprocess handle.
+/// - The communication channels (SSE broadcast, request/response tracking).
+/// - The security context (sandbox scopes).
+///
+/// Instances are created by `SessionManager` and accessed internally by the bridge.
+///
+/// # Security
+///
+/// The session ensures strict isolation by:
+/// 1. Managing a dedicated subprocess
+/// 2. Enforcing sandbox locking once roots are determined
+/// 3. Validating handshake state transitions
 pub struct Session {
     /// Unique session identifier
     pub id: String,
@@ -138,6 +197,9 @@ impl Session {
     }
 
     /// Check if the sandbox is locked
+    ///
+    /// The sandbox becomes locked after the first `roots/list` response is received
+    /// from the client. Before this point, tools are blocked from executing.
     pub fn is_sandbox_locked(&self) -> bool {
         self.sandbox_locked.load(Ordering::SeqCst)
     }
@@ -352,20 +414,31 @@ impl Session {
     }
 }
 
-/// Configuration for session manager
+/// Configuration for the `SessionManager`.
 #[derive(Debug, Clone)]
 pub struct SessionManagerConfig {
-    /// Command to run the MCP server subprocess
+    /// The executable command to start the MCP server (e.g., "ahma_mcp").
     pub server_command: String,
-    /// Base arguments to pass to the MCP server (before --sandbox-scope)
+    /// Arguments to pass to the server executable.
     pub server_args: Vec<String>,
-    /// Default sandbox scope if client provides no roots
+    /// The fallback directory to use for the sandbox if the client doesn't provide roots.
     pub default_scope: PathBuf,
-    /// Enable colored terminal output for subprocess I/O
+    /// Whether to preserve ANSI colors in the server's output streams.
     pub enable_colored_output: bool,
 }
 
-/// Manages multiple MCP sessions, each with its own subprocess and sandbox scope
+/// Manages the lifecycle of concurrent MCP sessions.
+///
+/// This component is responsible for:
+/// - creating new sessions with unique IDs.
+/// - spawning isolated subprocesses for each session.
+/// - tracking active sessions in a thread-safe map.
+/// - handling session termination.
+///
+/// Each session operates in its own `ahma_mcp` subprocess, ensuring that file access
+/// rights and state are strictly isolated between different clients.
+///
+/// Use `create_session` to start a new handshake, and `lock_sandbox` to finalize security.
 pub struct SessionManager {
     /// Active sessions indexed by session ID
     sessions: DashMap<String, Arc<Session>>,
@@ -440,7 +513,7 @@ impl SessionManager {
         String::from_utf8(out).ok()
     }
 
-    /// Create a new session manager
+    /// Creates a new `SessionManager` with the given configuration.
     pub fn new(config: SessionManagerConfig) -> Self {
         Self {
             sessions: DashMap::new(),
@@ -448,9 +521,17 @@ impl SessionManager {
         }
     }
 
-    /// Create a new session, spawning a subprocess
+    /// Initializes a new session and spawns a specific `ahma_mcp` subprocess for it.
     ///
-    /// Returns the session ID to be returned to the client as `Mcp-Session-Id`
+    /// This initiates the "deferred sandbox" flow:
+    /// 1. A new session ID is generated.
+    /// 2. The subprocess is started with `--defer-sandbox`.
+    /// 3. The subprocess waits for the bridge to provide the sandbox scope (derived from client roots).
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(String)`: The new session ID (UUID v4). This ID must be included in the `Mcp-Session-Id` header for all subsequent requests.
+    /// * `Err(BridgeError)`: If the subprocess could not be spawned.
     pub async fn create_session(&self) -> Result<String> {
         let session_id = Uuid::new_v4().to_string();
 
@@ -813,40 +894,52 @@ impl SessionManager {
                 }
 
                 // Handle incoming messages (Stdio -> HTTP/SSE)
-                Ok(Some(line)) = stdout_reader.next_line() => {
-                    if line.is_empty() { continue; }
-                    debug!(session_id = %session.id, "Received from subprocess: {}", line);
+                stdout_result = stdout_reader.next_line() => {
+                    match stdout_result {
+                        Ok(Some(line)) => {
+                            if line.is_empty() { continue; }
+                            debug!(session_id = %session.id, "Received from subprocess: {}", line);
 
-                    // Echo STDOUT in green if colored output is enabled
-                    if colored_output {
-                        let timestamp = format!("[{}]", Local::now().format("%H:%M:%S%.3f"));
-                        if let Ok(parsed) = serde_json::from_str::<Value>(&line) {
-                            let pretty = serde_json::to_string_pretty(&parsed).unwrap_or_else(|_| line.clone());
-                            eprintln!("{} {} {}\n{}", timestamp, format!("[{}]", &session.id[..8]).green(), "← STDOUT:".green(), pretty.green());
-                        } else {
-                            eprintln!("{} {} {}\n{}", timestamp, format!("[{}]", &session.id[..8]).green(), "← STDOUT:".green(), line.green());
-                        }
-                    }
+                            // Echo STDOUT in green if colored output is enabled
+                            if colored_output {
+                                let timestamp = format!("[{}]", Local::now().format("%H:%M:%S%.3f"));
+                                if let Ok(parsed) = serde_json::from_str::<Value>(&line) {
+                                    let pretty = serde_json::to_string_pretty(&parsed).unwrap_or_else(|_| line.clone());
+                                    eprintln!("{} {} {}\n{}", timestamp, format!("[{}]", &session.id[..8]).green(), "← STDOUT:".green(), pretty.green());
+                                } else {
+                                    eprintln!("{} {} {}\n{}", timestamp, format!("[{}]", &session.id[..8]).green(), "← STDOUT:".green(), line.green());
+                                }
+                            }
 
-                    if let Ok(value) = serde_json::from_str::<Value>(&line) {
-                        // Check if it's a response to a pending request
-                        if let Some(id) = value.get("id") {
-                            let id_str = if id.is_string() {
-                                id.as_str().unwrap().to_string()
+                            if let Ok(value) = serde_json::from_str::<Value>(&line) {
+                                // Check if it's a response to a pending request
+                                if let Some(id) = value.get("id") {
+                                    let id_str = if id.is_string() {
+                                        id.as_str().unwrap().to_string()
+                                    } else {
+                                        id.to_string()
+                                    };
+
+                                    if let Some((_, sender)) = session.pending_requests.remove(&id_str) {
+                                        let _ = sender.send(value);
+                                        continue;
+                                    }
+                                }
+
+                                // Not a response to a pending request - broadcast as SSE event
+                                let _ = session.broadcast_tx.send(line);
                             } else {
-                                id.to_string()
-                            };
-
-                            if let Some((_, sender)) = session.pending_requests.remove(&id_str) {
-                                let _ = sender.send(value);
-                                continue;
+                                warn!(session_id = %session.id, "Failed to parse JSON from subprocess: {}", line);
                             }
                         }
-
-                        // Not a response to a pending request - broadcast as SSE event
-                        let _ = session.broadcast_tx.send(line);
-                    } else {
-                        warn!(session_id = %session.id, "Failed to parse JSON from subprocess: {}", line);
+                        Ok(None) => {
+                            warn!(session_id = %session.id, "Subprocess stdout closed - assuming crash or exit");
+                            break;
+                        }
+                        Err(e) => {
+                            error!(session_id = %session.id, "Failed to read stdout: {}", e);
+                            break;
+                        }
                     }
                 }
 

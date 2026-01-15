@@ -1,46 +1,65 @@
-//! # Ahma MCP Lib
+//! # Ahma MCP Core
 //!
-//! This crate provides the core functionality for the `ahma_mcp` server and CLI.
-//! It is structured into several modules, each responsible for a distinct part of the
-//! application's logic.
+//! Ahma (Finnish for wolverine) is a fast and fearless engine for wrapping CLI tools for AI use.
+//! It provides the foundational library that powers the Ahma MCP server.
+//!
+//! ## Core Mission
+//!
+//! `ahma_mcp` is a universal, high-performance Model Context Protocol (MCP) server designed to
+//! dynamically adapt any command-line tool for use by AI agents. Its purpose is to provide a
+//! consistent, powerful, and non-blocking bridge between AI and the vast ecosystem of
+//! command-line utilities.
+//!
+//! ## Key Functional Requirements
+//!
+//! - **Dynamic Tool Adaptation**: Adapt CLI tools via JSON files (MTDF). Hot-reload support.
+//! - **Async-First Execution**: Background operation management via `operation_id` and progress notifications.
+//! - **Performance**: Pre-warmed shell pool (`zsh`) for 5-20ms command startup latency.
+//! - **Safe Scoping**: Kernel-level sandboxing (Landlock on Linux, Seatbelt on macOS).
+//! - **Selective Sync Override**: Support forcing operations to run synchronously when needed.
+//!
+//! ## Architecture & Core Concepts
+//!
+//! ### Kernel-Level Sandboxing
+//!
+//! Ahma implements **kernel-level sandboxing** to protect your system. The sandbox scope is set
+//! once at server startup and cannot be changed during the session.
+//! - **Linux (Landlock)**: Uses Landlock for FS restrictions (kernel 5.13+).
+//! - **macOS (Seatbelt)**: Uses `sandbox-exec` with generated SBPL profiles.
+//! - **Detection**: Ahma automatically detects nested sandboxes (e.g., inside Cursor/VS Code)
+//!   and gracefully degrades to the outer sandbox's protection.
+//!
+//! ### Async-First Workflow
+//!
+//! Tools execute asynchronously by default. This allows the AI agent to continue its workflow
+//! while long-running operations (like builds or tests) run in the background.
+//! - **`status`**: Non-blocking progress checks.
+//! - **`await`**: Blocking wait for completion (use sparingly).
+//!
+//! ### Spec-Driven Development (SDD)
+//!
+//! This project follows a lightweight SDD workflow:
+//! 1. **Specify**: Define "what" and "why" in a feature spec.
+//! 2. **Plan**: Translate requirements into technical implementation steps.
+//! 3. **Implement**: Code the solution following the approved plan.
+//! 4. **Verify**: Ensure compliance via automated tests and schema sync.
+//!
+//! ## AI Integration Guide
+//!
+//! For AI agents interacting with this library or the resulting MCP server:
+//! - **Tool Calls**: Prefer `sandboxed_shell` for complex pipelines.
+//! - **Concurrency**: You can run multiple tools in parallel by not awaiting immediately.
+//! - **Schema**: Always validate configurations against `docs/mtdf-schema.json`.
 //!
 //! ## Modules
 //!
-//! - **`adapter`**: Contains the `Adapter` struct, which is the primary engine for
-//!   executing external command-line tools. It manages a `ShellPool` to run commands
-//!   concurrently and safely, handling command construction, execution, and output
-//!   capture.
-//!
-//! - **`config`**: Defines the data structures for tool configuration, primarily the
-//!   `Config`, `Subcommand`, and `CliOption` structs. These are deserialized from JSON
-//!   files and provide the blueprint for how `ahma_mcp` understands and interacts with
-//!   a CLI tool.
-//!
-//! - **`constants`**: A central place for defining application-wide constants, such as
-//!   default timeout values or common string literals.
-//!
-//! - **`mcp_service`**: Implements the `rmcp::ServerHandler` trait in the `AhmaMcpService`
-//!   struct. This is the core of the MCP server, responsible for handling requests like
-//!   `get_info`, `list_tools`, and `call_tool`. It uses the loaded configurations to
-//!   dynamically generate tool definitions and execute commands via the `Adapter`.
-//!
-//! - **`operation_monitor`**: Provides a system for tracking the progress of long-running,
-//!   asynchronous operations. It allows the server to send notifications back to the
-//!   client about the status of background tasks.
-//!
-//! - **`shell_pool`**: A resource management utility that maintains a pool of reusable
-//!   shell processes (`zsh`). This avoids the overhead of spawning a new shell for every
-//!   command, improving performance, especially under heavy load.
-//!
-//! - **`terminal_output`**: Contains helpers for processing and sanitizing raw terminal
-//!   output, such as stripping ANSI escape codes to provide clean text to the client.
-//!
-//! - **`tool_hints`**: Logic for generating helpful, context-aware hints that are appended
-//!   to tool descriptions, guiding the user on best practices (e.g., using async for
-//!   long-running commands).
-//!
-//! - **`utils`**: A collection of miscellaneous utility functions used across the
-//!   application.
+//! - **`adapter`**: Primary engine for executing external command-line tools.
+//! - **`config`**: MTDF (Multi-Tool Definition Format) configuration models.
+//! - **`mcp_service`**: Implements the `rmcp::ServerHandler` for the MCP protocol.
+//! - **`operation_monitor`**: Tracks progress of background tasks.
+//! - **`shell_pool`**: Reusable shell processes (`zsh`) to minimize overhead.
+//! - **`sandbox`**: Security enforcement logic.
+//! - **`callback_system`**: Event notification system.
 
 // Public modules
 pub mod adapter;

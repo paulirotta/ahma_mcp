@@ -83,7 +83,19 @@ pub struct AhmaMcpService {
 }
 
 impl AhmaMcpService {
-    /// Creates a new `AhmaMcpService`.
+    /// Creates a new `AhmaMcpService` instance.
+    ///
+    /// This service implements the `rmcp::ServerHandler` trait and manages tool execution
+    /// via the provided `Adapter`.
+    ///
+    /// # Arguments
+    ///
+    /// * `adapter` - The tool execution engine.
+    /// * `operation_monitor` - Monitor for tracking background task progress.
+    /// * `configs` - Map of loaded tool configurations.
+    /// * `guidance` - Optional guidance configuration for AI usage hints.
+    /// * `force_synchronous` - If true, overrides async defaults (e.g., for debugging).
+    /// * `defer_sandbox` - If true, delays sandbox initialization (for HTTP bridge scenarios).
     pub async fn new(
         adapter: Arc<Adapter>,
         operation_monitor: Arc<crate::operation_monitor::OperationMonitor>,

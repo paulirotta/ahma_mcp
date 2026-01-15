@@ -393,7 +393,7 @@ async fn test_advanced_cancellation_scenarios() -> Result<()> {
     let callback = ErrorTestCallback::new();
 
     let _operation_id = adapter
-        .execute_async_in_dir_with_callback(
+        .execute_async_in_dir(
             "cancel_test",
             "sleep",
             Some({
@@ -439,7 +439,7 @@ async fn test_callback_error_handling() -> Result<()> {
     failing_callback.fail_after_calls(1);
 
     let operation_id = adapter
-        .execute_async_in_dir_with_callback(
+        .execute_async_in_dir(
             "callback_error_test",
             "echo",
             Some({
@@ -509,7 +509,7 @@ async fn test_timeout_error_classification() -> Result<()> {
     let timeout_callback = ErrorTestCallback::new();
 
     let _async_operation_id = adapter
-        .execute_async_in_dir_with_callback(
+        .execute_async_in_dir(
             "async_timeout_test",
             "sleep",
             Some({

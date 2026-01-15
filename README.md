@@ -12,13 +12,20 @@ _Create agents from your command line tools with one JSON file, then watch them 
 
 This project is actively used and still undergoing rapid evolution. http MCP is still a work in progress, setup isn't as smooth as we like yet and expect breaking changes including CLI parameters.
 
-## Documentation
+## Documentation Strategy
 
-- **[AGENTS.md](AGENTS.md)**: AI agent development guide (setup, testing, code style, tool usage)
-- **[REQUIREMENTS.md](REQUIREMENTS.md)**: Product requirements and architecture
-- **Crate-specific docs**: Each crate has AGENTS.md (symlinked) and REQUIREMENTS.md for crate-specific requirements
+Ahma MCP follows a **code-first documentation** approach. Architectural details and technical guides are embedded directly in the source code using Rust doc comments (`//!`). This ensures documentation stays in sync with implementation.
 
-**Note on AGENTS.md symlinks**: Each crate directory (`ahma_core/`, `ahma_http_bridge/`, etc.) contains a symlink to the root `AGENTS.md`. This ensures AI coding assistants always have access to development guidance regardless of which directory is opened as the project root. If you're working in a crate subdirectory, the AGENTS.md you see is the same workspace-wide file.
+- **[Ahma Core API & Architecture](https://paulirotta.github.io/ahma_mcp/doc/ahma_core/index.html)**: Main engine, sandboxing, and SDD philosophy.
+- **[Ahma HTTP Bridge](https://paulirotta.github.io/ahma_mcp/doc/ahma_http_bridge/index.html)**: Session isolation and HTTP protocol bridge details.
+- **[USAGE_GUIDE.md](docs/USAGE_GUIDE.md)**: Productive workflows and CLI flag inheritance.
+
+## AI Agent Context
+
+If you are an AI agent interacting with this repository:
+- **Sandbox Boundary**: You have full access within `${workspaceFolder}` but zero access outside it. Use `sandboxed_shell` for multi-step tasks.
+- **Async Concurrency**: Most tools are async by default. Use `status` to monitor progress and continue with other tasks.
+- **MTDF Schema**: Reference [docs/mtdf-schema.json](docs/mtdf-schema.json) when creating or modifying tool configurations (.ahma/tools/*.json).
 
 ## Key Features
 

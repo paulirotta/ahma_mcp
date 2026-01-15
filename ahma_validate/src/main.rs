@@ -8,6 +8,27 @@ use std::{
 use tracing::{error, info, instrument};
 
 /// Ahma MCP Tool Configuration Validator
+///
+/// This CLI tool validates tool configuration files against the MTDF schema.
+/// It verifies that the JSON structure matches expected schemas and checks for
+/// internal consistency.
+///
+/// # Examples
+///
+/// Validate the default `.ahma` directory:
+/// ```bash
+/// ahma_validate
+/// ```
+///
+/// Validate a specific file:
+/// ```bash
+/// ahma_validate --validation-target my_tool.json
+/// ```
+///
+/// Validate multiple targets (files and directories):
+/// ```bash
+/// ahma_validate --validation-target "tool1.json,tool2.json,./config"
+/// ```
 #[derive(Parser, Debug)]
 #[command(
     author,
@@ -25,6 +46,10 @@ struct Cli {
     debug: bool,
 }
 
+/// Entry point for the application.
+///
+/// Parses command line arguments, initializes logging, and executes the validation logic.
+/// Returns an error if validation fails for any target or if an unexpected error occurs.
 #[instrument]
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -43,6 +68,54 @@ fn main() -> Result<()> {
     }
 }
 
+/// Normalizes the validation target path for legacy compatibility.
+///
+/// This function checks for a legacy directory structure where a `tools` directory
+/// inside `.ahma` was used. If the `tools` directory is specified but does not exist,
+/// it attempts to fall back to the parent directory if it exists.
+///
+/// # Arguments
+///
+/// * `path` - The path to normalize.
+///
+/// # Returns
+///
+/// The normalized `PathBuf`.
+fn normalize_validation_target(path: PathBuf) -> PathBuf {
+    let is_legacy_tools_dir = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .is_some_and(|s| s == "tools")
+        && path
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|s| s.to_str())
+            .is_some_and(|s| s == ".ahma");
+
+    if is_legacy_tools_dir
+        && !path.exists()
+        && let Some(parent) = path.parent()
+        && parent.exists()
+    {
+        return parent.to_path_buf();
+    }
+
+    path
+}
+
+/// Runs the tool validation process based on the CLI arguments.
+///
+/// It processes each target specified in `cli.validation_target` (splitting by comma if needed),
+/// normalizes paths, discovers JSON files, and runs the `MtdfValidator` against them.
+///
+/// # Arguments
+///
+/// * `cli` - The parsed command line arguments.
+///
+/// # Returns
+///
+/// `Ok(true)` if all configurations are valid, `Ok(false)` if any configuration is invalid,
+/// or an `Err` if a fatal error occurred (e.g., file read error).
 fn run_validation_mode(cli: &Cli) -> Result<bool> {
     let mut all_valid = true;
 
@@ -58,28 +131,6 @@ fn run_validation_mode(cli: &Cli) -> Result<bool> {
     } else {
         vec![cli.validation_target.clone()]
     };
-
-    fn normalize_validation_target(path: PathBuf) -> PathBuf {
-        let is_legacy_tools_dir = path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .is_some_and(|s| s == "tools")
-            && path
-                .parent()
-                .and_then(|p| p.file_name())
-                .and_then(|s| s.to_str())
-                .is_some_and(|s| s == ".ahma");
-
-        if is_legacy_tools_dir
-            && !path.exists()
-            && let Some(parent) = path.parent()
-            && parent.exists()
-        {
-            return parent.to_path_buf();
-        }
-
-        path
-    }
 
     let mut files_to_validate = Vec::new();
     for target in targets {
@@ -122,6 +173,34 @@ fn run_validation_mode(cli: &Cli) -> Result<bool> {
     Ok(all_valid)
 }
 
+/// Scans a directory for JSON files.
+///
+/// This function looks for files with the `.json` extension in the specified directory.
+/// It does not search recursively into subdirectories.
+///
+/// # Arguments
+///
+/// * `dir` - The directory path to search.
+///
+/// # Returns
+///
+/// A `Result` containing a `Vec<PathBuf>` of found JSON files, or an error if reading the directory fails.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use std::path::Path;
+/// # fn main() -> anyhow::Result<()> {
+/// // Assuming "tools" is a directory containing JSON files
+/// let files = get_json_files(Path::new("tools"))?;
+/// for file in files {
+///     println!("Found tool config: {:?}", file);
+/// }
+/// # Ok(())
+/// # }
+/// # // Mock the function signature for the example since it is private
+/// # fn get_json_files(dir: &Path) -> anyhow::Result<Vec<std::path::PathBuf>> { Ok(vec![]) }
+/// ```
 fn get_json_files(dir: &Path) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     for entry in fs::read_dir(dir)? {

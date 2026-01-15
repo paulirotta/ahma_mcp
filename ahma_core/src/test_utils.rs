@@ -33,7 +33,36 @@ pub fn is_tool_disabled(tool_name: &str) -> bool {
 }
 
 /// Macro to skip a synchronous test if a tool is disabled.
-/// Usage: `skip_if_disabled!("tool_name");`
+///
+/// A tool is considered disabled if a configuration file named `{tool_name}.json`
+/// exists in the `.ahma/` directory at the project root and contains `"enabled": false`.
+/// If the file does not exist, the tool is assumed to be enabled.
+///
+/// This is used to skip tests that require external tools (like `gh` or `python`)
+/// when they are not available or should not be used in the current environment.
+///
+/// # Example of a disabled tool definition in `.ahma/tool_name.json`:
+/// ```json
+/// {
+///   "enabled": false
+/// }
+/// ```
+///
+/// Macro to skip a synchronous test if a tool is disabled.
+///
+/// This checks if a tool is disabled in the project configuration (e.g., in `.ahma/tool_name.json`)
+/// and returns early from the current function if it is. This is useful for avoiding
+/// test failures when optional tools are disabled in the environment.
+///
+/// # Example
+///
+/// ```rust
+/// #[test]
+/// fn test_my_tool_sync() {
+///     skip_if_disabled!("my_tool");
+///     // ... test implementation
+/// }
+/// ```
 #[macro_export]
 macro_rules! skip_if_disabled {
     ($tool_name:expr) => {
@@ -45,7 +74,21 @@ macro_rules! skip_if_disabled {
 }
 
 /// Macro to skip an async test that returns Result if a tool is disabled.
-/// Usage: `skip_if_disabled_async_result!("tool_name");`
+///
+/// This is used to prevent integration tests from running when their required tools
+/// are explicitly disabled in the project configuration. This variant returns `Ok(())`
+/// to satisfy tests that return a `Result<_, _>`.
+///
+/// # Example
+///
+/// ```rust
+/// #[tokio::test]
+/// async fn test_my_tool() -> anyhow::Result<()> {
+///     skip_if_disabled_async_result!("my_tool");
+///     // ... test implementation
+///     Ok(())
+/// }
+/// ```
 #[macro_export]
 macro_rules! skip_if_disabled_async_result {
     ($tool_name:expr) => {
@@ -57,7 +100,21 @@ macro_rules! skip_if_disabled_async_result {
 }
 
 /// Macro to skip an async test (no return value) if a tool is disabled.
-/// Usage: `skip_if_disabled_async!("tool_name");`
+///
+/// This is used to prevent integration tests from running when their required tools
+/// are explicitly disabled in the project configuration. This is particularly useful
+/// for avoiding failures in environments where certain heavy or external tools are
+/// not available or should be ignored.
+///
+/// # Example
+///
+/// ```rust
+/// #[tokio::test]
+/// async fn test_my_tool() {
+///     skip_if_disabled_async!("my_tool");
+///     // ... test implementation
+/// }
+/// ```
 #[macro_export]
 macro_rules! skip_if_disabled_async {
     ($tool_name:expr) => {

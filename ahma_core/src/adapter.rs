@@ -88,7 +88,29 @@ pub struct AsyncExecOptions<'a> {
     pub subcommand_config: Option<&'a crate::config::SubcommandConfig>,
 }
 
-/// The main adapter that handles command execution.
+/// The core execution engine for external tools.
+///
+/// The `Adapter` coordinates the execution of CLI commands, managing the lifecycle of
+/// shell processes, operation tracking, and resource cleanup. It serves as the bridge
+/// between incoming tool requests and the underlying system shell.
+///
+/// # Responsibilities
+///
+/// *   **Command Execution**: Executes tools using either a pre-warmed shell pool (for async
+///     performance) or standard process spawning.
+/// *   **Resource Management**: Manages temporary files created for complex arguments and
+///     ensures they are cleaned up.
+/// *   **Shell Pooling**: Integrates with `ShellPoolManager` to reuse shell processes,
+///     reducing latency for frequent commands.
+/// *   **Operation Tracking**: Uses `OperationMonitor` to track the status (running, completed,
+///     failed) of asynchronous operations.
+/// *   **Sandboxing**: Enforces path security by validating operations against a root directory.
+/// *   **Retry Logic**: Applies configured retry policies for transient failures.
+///
+/// # Thread Safety
+///
+/// The `Adapter` is designed to be shared across threads (`Arc<Adapter>`) and uses internal
+/// synchronization to manage state safely.
 #[derive(Debug)]
 pub struct Adapter {
     /// Operation monitor for async tasks.
@@ -106,7 +128,15 @@ pub struct Adapter {
 }
 
 impl Adapter {
-    /// Create a new adapter with a specific timeout.
+    /// Creates a new `Adapter` instance.
+    ///
+    /// The adapter requires an `OperationMonitor` for tracking async tasks and a `ShellPoolManager`
+    /// for efficient shell execution.
+    ///
+    /// # Arguments
+    ///
+    /// * `monitor` - Shared reference to the operation monitor
+    /// * `shell_pool` - Shared reference to the shell pool manager
     pub fn new(monitor: Arc<OperationMonitor>, shell_pool: Arc<ShellPoolManager>) -> Result<Self> {
         Ok(Self {
             monitor,
@@ -118,7 +148,15 @@ impl Adapter {
         })
     }
 
-    /// Sets a custom root path for the adapter (useful for testing).
+    /// Sets a custom root path for the adapter.
+    ///
+    /// The root path acts as the base directory for the adapter's operations.
+    /// It is used as the security context for validating file access and
+    /// resolving relative paths. By default, this is the current working directory
+    /// of the process.
+    ///
+    /// This is particularly useful for testing to isolate operations to a temporary
+    /// directory, or when the adapter should be restricted to a specific workspace folder.
     pub fn with_root(mut self, root: std::path::PathBuf) -> Self {
         self.root_path = root;
         self
@@ -210,6 +248,22 @@ impl Adapter {
     }
 
     /// Synchronously executes a command and returns the result directly.
+    ///
+    /// This method bypasses the async operation queue and runs the command directly, waiting for it to complete.
+    /// It captures and returns the combined stdout and stderr.
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - The command to execute (e.g., "ls", "grep").
+    /// * `args` - Optional map of arguments (see `prepare_command_and_args`).
+    /// * `working_dir` - Directory to execute the command in. Must be within allowed sandbox scopes.
+    /// * `timeout_seconds` - Optional timeout in seconds (overrides default).
+    /// * `subcommand_config` - Optional configuration for dealing with subcommands and aliases.
+    ///
+    /// # Returns
+    ///
+    /// Returns the command output (stdout + stderr) as a `String` if successful.
+    /// Returns an error if execution fails or times out.
     pub async fn execute_sync_in_dir(
         &self,
         command: &str,
@@ -337,32 +391,25 @@ impl Adapter {
         }
     }
 
-    /// Asynchronously starts a command, returns a job_id, and pushes the result later.
+    /// Asynchronously starts a command, returning an operation ID immediately.
+    ///
+    /// This method queues the command for execution in a background task, potentially using a
+    /// pre-warmed shell from the pool. The result will be reported via the `OperationMonitor`
+    /// and any registered callbacks.
+    ///
+    /// # Arguments
+    ///
+    /// * `tool_name` - The logical name of the tool (for logging/monitoring).
+    /// * `command` - The base command to run.
+    /// * `args` - Optional arguments for the command.
+    /// * `working_directory` - Directory to execute in.
+    /// * `timeout` - Optional timeout in seconds.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `String` containing the `operation_id` (e.g., "op_123").
+    /// The actual command result is not returned here.
     pub async fn execute_async_in_dir(
-        &self,
-        tool_name: &str,
-        command: &str,
-        args: Option<Map<String, serde_json::Value>>,
-        working_directory: &str,
-        timeout: Option<u64>,
-    ) -> Result<String> {
-        self.execute_async_in_dir_with_options(
-            tool_name,
-            command,
-            working_directory,
-            AsyncExecOptions {
-                operation_id: None,
-                args,
-                timeout,
-                callback: None,
-                subcommand_config: None,
-            },
-        )
-        .await
-    }
-
-    /// Asynchronously starts a command with callback support for notifications
-    pub async fn execute_async_in_dir_with_callback(
         &self,
         tool_name: &str,
         command: &str,
@@ -691,6 +738,13 @@ impl Adapter {
         Ok(op_id_clone)
     }
 
+    /// Parses the command string and arguments into a program and argument list.
+    ///
+    /// This helper handles complications such as:
+    /// - Splitting the base command string (e.g., "python script.py" -> program: "python", args: ["script.py"])
+    /// - Converting structured JSON arguments into CLI flags and positional arguments
+    /// - Applying subcommand configurations (aliases, hardcoded args)
+    /// - Creating temporary files for multi-line string arguments
     async fn prepare_command_and_args(
         &self,
         command: &str,
@@ -1065,7 +1119,21 @@ impl Adapter {
         Ok(file_path)
     }
 
-    /// Safely escapes a string for shell argument passing as a fallback when file handling isn't available
+    /// prepare a string for shell argument passing by escaping special characters.
+    ///
+    /// This function wraps the string in single quotes and handles any embedded single quotes.
+    ///
+    /// # Purpose
+    ///
+    /// "Escaping" here means neutralizing special characters (like spaces, `$`, quotes, etc.)
+    /// so the shell treats the value as a single piece of text (a literal string) rather than
+    /// interpreting it as code or multiple arguments. This prevents "shell injection" attacks.
+    ///
+    /// # When to use
+    ///
+    /// Use this only as a fallback when you cannot use file-based data passing. Passing data
+    /// through temporary files is generally robust, but if you must construct a raw command
+    /// string with arguments, this function ensures those arguments are safe.
     pub fn escape_shell_argument(value: &str) -> String {
         // Use single quotes and escape any embedded single quotes
         if value.contains('\'') {

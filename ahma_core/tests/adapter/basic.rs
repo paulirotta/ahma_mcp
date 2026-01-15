@@ -128,7 +128,8 @@ async fn test_execute_sync_with_subcommand_config() {
             file_arg: Some(false),
             file_flag: None,
         }]),
-        positional_args_first: None, positional_args: Some(vec![CommandOption {
+        positional_args_first: None,
+        positional_args: Some(vec![CommandOption {
             name: "message".to_string(),
             alias: None,
             option_type: "string".to_string(),
@@ -267,7 +268,7 @@ async fn test_execute_async_with_callback() {
     );
 
     let result = adapter
-        .execute_async_in_dir_with_callback(
+        .execute_async_in_dir(
             "echo",
             "echo",
             Some(args),

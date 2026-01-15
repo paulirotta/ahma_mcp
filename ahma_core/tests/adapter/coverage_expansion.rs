@@ -368,7 +368,7 @@ async fn test_async_execution_with_none_callback() {
 
     // Test async execution with None callback (should not panic)
     let result = adapter
-        .execute_async_in_dir_with_callback(
+        .execute_async_in_dir(
             "none_callback_test",
             "echo",
             Some({

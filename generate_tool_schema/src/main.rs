@@ -1,8 +1,19 @@
 #!/usr/bin/env rust-script
-//! Generate MTDF JSON Schema
+//! # Generate Tool Schema
 //!
-//! This binary generates the JSON schema for the Multi-Tool Definition Format (MTDF)
-//! and writes it to docs/mtdf-schema.json
+//! A CLI tool that generates the JSON Schema for the Multi-Tool Definition Format (MTDF).
+//! This schema is used to validate tool configuration files in the AHMA ecosystem.
+//!
+//! ## Usage
+//!
+//! Run the binary directly with cargo:
+//!
+//! ```sh
+//! cargo run -p generate_tool_schema -- [OUTPUT_DIR]
+//! ```
+//!
+//! If `OUTPUT_DIR` is not provided, it defaults to `docs`.
+//! The schema file is written to `[OUTPUT_DIR]/mtdf-schema.json`.
 
 use ahma_core::config::ToolConfig;
 use ahma_core::utils::logging::init_logging;
@@ -10,14 +21,52 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-/// Generate the JSON schema for ToolConfig as a pretty-printed JSON string.
+/// Generates the JSON schema for [`ToolConfig`] as a pretty-printed JSON string.
+///
+/// This function uses `schemars` to introspect the `ToolConfig` struct and produce
+/// a standard JSON Schema (draft-07).
+///
+/// # Returns
+///
+/// Returns a `Result` containing the formatted JSON string or a `serde_json::Error`
+/// if serializing the schema fails.
+///
+/// # Examples
+///
+/// ```
+/// // returns valid JSON string representing the schema
+/// let schema = generate_tool_schema::generate_schema_json().unwrap();
+/// assert!(schema.contains("\"$schema\":"));
+/// ```
 pub fn generate_schema_json() -> Result<String, serde_json::Error> {
     let schema = schemars::schema_for!(ToolConfig);
     serde_json::to_string_pretty(&schema)
 }
 
-/// Parse the output directory from command line arguments.
-/// Returns the first argument as a PathBuf, or defaults to "docs".
+/// Parses the output directory from command line arguments.
+///
+/// # Arguments
+///
+/// * `args` - An iterator over command line arguments.
+///
+/// # Returns
+///
+/// Returns the first argument as a `PathBuf` if present, otherwise defaults to "docs".
+///
+/// # Examples
+///
+/// ```
+/// use std::path::PathBuf;
+/// use generate_tool_schema::parse_output_dir;
+///
+/// // With arguments
+/// let args = vec!["program_name", "custom/out"];
+/// assert_eq!(parse_output_dir(args.into_iter()), PathBuf::from("custom/out"));
+///
+/// // Without arguments (uses default)
+/// let args = vec!["program_name"];
+/// assert_eq!(parse_output_dir(args.into_iter()), PathBuf::from("docs"));
+/// ```
 pub fn parse_output_dir<I, S>(mut args: I) -> PathBuf
 where
     I: Iterator<Item = S>,
@@ -28,9 +77,31 @@ where
         .unwrap_or_else(|| PathBuf::from("docs"))
 }
 
-/// Write the schema JSON to a file in the specified directory.
-/// Creates the directory if it doesn't exist.
-/// Returns the path where the schema was written.
+/// Writes the schema JSON content to a file in the specified directory.
+///
+/// This function will recursively create the directory structure if it does not exist.
+/// The file will be named `mtdf-schema.json`.
+///
+/// # Arguments
+///
+/// * `output_dir` - The directory where the file should be written.
+/// * `schema_json` - The JSON content to write.
+///
+/// # Returns
+///
+/// Returns the full path to the written file, or an `io::Error` if the operation fails.
+///
+/// # Examples
+///
+/// ```
+/// use std::path::PathBuf;
+/// use generate_tool_schema::write_schema_to_file;
+///
+/// let output_dir = PathBuf::from("/tmp/schema_output");
+/// let schema_json = "{}";
+/// // writes /tmp/schema_output/mtdf-schema.json
+/// let path = write_schema_to_file(&output_dir, schema_json).unwrap();
+/// ```
 pub fn write_schema_to_file(
     output_dir: &PathBuf,
     schema_json: &str,
@@ -41,8 +112,29 @@ pub fn write_schema_to_file(
     Ok(docs_path)
 }
 
-/// Generate a preview of the schema JSON, showing the first N lines.
-/// Returns a formatted string with the preview.
+/// Generates a preview string of the schema JSON.
+///
+/// This is used for console output to show the user what was generated.
+/// It indents the content with 4 spaces and truncates it if it exceeds `max_lines`.
+///
+/// # Arguments
+///
+/// * `schema_json` - The full JSON string.
+/// * `max_lines` - The maximum number of lines to show before truncating.
+///
+/// # Returns
+///
+/// A formatted string ready for printing to stdout.
+///
+/// # Examples
+///
+/// ```
+/// use generate_tool_schema::generate_preview;
+///
+/// let json = "{\n  \"key\": \"val\"\n}";
+/// let preview = generate_preview(json, 5);
+/// assert!(preview.contains("    {"));
+/// ```
 pub fn generate_preview(schema_json: &str, max_lines: usize) -> String {
     let total_lines = schema_json.lines().count();
     let lines: Vec<&str> = schema_json.lines().take(max_lines).collect();

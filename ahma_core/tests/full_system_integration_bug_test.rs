@@ -94,7 +94,7 @@ mod tests {
 
         // Start an operation
         let operation_id = adapter
-            .execute_async_in_dir("cargo", "version", None, current_dir_str, Some(30))
+            .execute_async_in_dir("cargo", "version", None, current_dir_str, Some(30), None)
             .await
             .expect("Failed to execute async operation");
         println!("🚀 Started operation: {}", operation_id);
@@ -173,11 +173,11 @@ mod tests {
         // Start multiple operations
         let op_ids = vec![
             adapter
-                .execute_async_in_dir("cargo", "version", None, current_dir_str, Some(30))
+                .execute_async_in_dir("cargo", "version", None, current_dir_str, Some(30), None)
                 .await
                 .expect("Failed to execute first async operation"),
             adapter
-                .execute_async_in_dir("cargo", "--version", None, current_dir_str, Some(30))
+                .execute_async_in_dir("cargo", "--version", None, current_dir_str, Some(30), None)
                 .await
                 .expect("Failed to execute second async operation"),
         ];

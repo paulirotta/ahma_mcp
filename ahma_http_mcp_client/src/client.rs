@@ -36,7 +36,20 @@ type ConfiguredOAuthClient = oauth2::Client<
 >;
 
 const TOKEN_FILE_NAME: &str = "mcp_http_token.json";
+/// Environment variable to override the token storage path.
 const TOKEN_PATH_ENV: &str = "AHMA_HTTP_CLIENT_TOKEN_PATH";
+
+/// HTTP Transport implementation for the Model Context Protocol (MCP).
+///
+/// This transport sends JSON-RPC messages over HTTP POST requests and supports
+/// receiving responses. It handles OAuth2 authentication with Atlassian-compatible
+/// providers, managing the token lifecycle (storage, loading).
+///
+/// # Token Storage
+///
+/// Tokens are stored in a JSON file. By default, this is `mcp_http_token.json` in the system's
+/// temporary directory. You can override the full path to this file by setting the
+/// `AHMA_HTTP_CLIENT_TOKEN_PATH` environment variable.
 pub struct HttpMcpTransport {
     client: reqwest::Client,
     mcp_url: Url,
@@ -48,6 +61,29 @@ pub struct HttpMcpTransport {
 }
 
 impl HttpMcpTransport {
+    /// Creates a new `HttpMcpTransport`.
+    ///
+    /// The `url` should point to the MCP server's endpoint.
+    /// If OAuth2 authentication is required (e.g. for Atlassian), provide `atlassian_client_id`
+    /// and `atlassian_client_secret`.
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - The URL of the MCP server.
+    /// * `atlassian_client_id` - Optional OAuth2 Client ID.
+    /// * `atlassian_client_secret` - Optional OAuth2 Client Secret.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use ahma_http_mcp_client::client::HttpMcpTransport;
+    /// # use url::Url;
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let url = Url::parse("http://localhost:8000/mcp")?;
+    /// let transport = HttpMcpTransport::new(url, None, None)?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn new(
         url: Url,
         atlassian_client_id: Option<String>,
@@ -85,6 +121,18 @@ impl HttpMcpTransport {
         Ok(transport)
     }
 
+    /// Checks if a valid token exists, and if not, initiates the OAuth2 flow.
+    ///
+    /// If an OAuth2 client was configured during creation (via `atlassian_client_id` and secret),
+    /// this method will:
+    /// 1. Check if a token is already loaded in memory.
+    /// 2. (Future) Check for token expiration and refresh if needed.
+    /// 3. If no token is present, start the interactive OAuth2 flow, prompting the user
+    ///    to open a URL in their browser.
+    /// 4. Wait for the callback on `localhost:8080`, exchange the code for a token,
+    ///    and save it locally.
+    ///
+    /// If no OAuth2 client is configured, this returns an error if no token is present.
     #[allow(dead_code)] // Will be used when HTTP client is integrated
     pub async fn ensure_authenticated(&self) -> Result<()> {
         let token_lock = self.token.lock().await;

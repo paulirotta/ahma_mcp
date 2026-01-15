@@ -44,7 +44,7 @@ use serde_json::{Map, Value};
 use std::{collections::HashMap, path::Path};
 
 /// Represents the complete configuration for a command-line tool.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ToolConfig {
     pub name: String,
@@ -91,7 +91,7 @@ pub struct ToolConfig {
 }
 
 /// Configuration for a subcommand, allowing for nested commands.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct SubcommandConfig {
     pub name: String,

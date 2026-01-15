@@ -1,6 +1,11 @@
-//! # MCP Client for Testing
+//! # MCP Client for Integration Testing
 //!
 //! This module provides a simple client wrapper for testing the MCP service.
+//! It is designed to spawn the `ahma_mcp` binary in a subprocess and interact
+//! with it via the MCP protocol.
+//!
+//! **Note**: This client is primarily for integration tests and isn't intended
+//! for general purpose MCP client usage.
 
 use anyhow::Result;
 use rmcp::{
@@ -13,6 +18,7 @@ use serde_json::json;
 use std::borrow::Cow;
 use tokio::process::Command;
 
+/// A test client that wraps a running `ahma_mcp` server process.
 #[derive(Debug)]
 pub struct Client {
     service: Option<RunningService<RoleClient, ()>>,
@@ -25,14 +31,35 @@ impl Default for Client {
 }
 
 impl Client {
+    /// Creates a new, uninitialized client. call `start_process` to launch the server.
     pub fn new() -> Self {
         Self { service: None }
     }
 
+    /// Spawns the `ahma_mcp` server process and connects to it.
+    ///
+    /// # Arguments
+    ///
+    /// * `tools_dir` - Optional path to a directory containing tool definitions/configurations.
+    ///   If provided, this is passed as the `--tools-dir` argument to the server.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use ahma_core::client::Client;
+    ///
+    /// # async fn run() -> anyhow::Result<()> {
+    /// let mut client = Client::new();
+    /// // Start server with tools from "test-data/tools"
+    /// client.start_process(Some("test-data/tools")).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn start_process(&mut self, tools_dir: Option<&str>) -> Result<()> {
         self.start_process_with_args(tools_dir, &[]).await
     }
 
+    /// Spawns the server with additional command-line arguments.
     pub async fn start_process_with_args(
         &mut self,
         tools_dir: Option<&str>,

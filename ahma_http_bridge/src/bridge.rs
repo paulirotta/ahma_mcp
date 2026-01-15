@@ -19,21 +19,47 @@ use tokio_stream::wrappers::BroadcastStream;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::{debug, error, info, warn};
 
-/// Configuration for the HTTP bridge
+/// Configuration for the HTTP bridge server.
+///
+/// Use `Default` to get a baseline configuration or construct manually for full control.
+///
+/// # Example
+///
+/// ```rust
+/// use ahma_http_bridge::BridgeConfig;
+/// use std::path::PathBuf;
+///
+/// let config = BridgeConfig {
+///     bind_addr: "0.0.0.0:8080".parse().unwrap(),
+///     server_command: "/usr/local/bin/my-mcp-server".into(),
+///     server_args: vec!["--verbose".into()],
+///     // Security: Always set a restrictive default scope!
+///     default_sandbox_scope: PathBuf::from("/tmp/sandbox"),
+///     ..Default::default()
+/// };
+/// ```
 #[derive(Debug, Clone)]
 pub struct BridgeConfig {
-    /// Address to bind the HTTP server to
+    /// local address to bind the HTTP server to (e.g., `127.0.0.1:3000`).
+    /// Use port 0 to bind to a random available port.
     pub bind_addr: SocketAddr,
-    /// Command to run the MCP server
+
+    /// Path or command name of the MCP server executable to spawn.
+    /// This command will be executed as a subprocess for each session.
     pub server_command: String,
-    /// Arguments to pass to the MCP server
+
+    /// Command-line arguments to pass to the MCP server.
     pub server_args: Vec<String>,
-    /// Enable colored terminal output for STDIN/STDOUT/STDERR (debug mode only)
+
+    /// If true, preserves ANSI color codes in the subprocess output (useful for debugging).
+    /// If false, colors are stripped or disabled depending on the subprocess behavior.
     pub enable_colored_output: bool,
-    /// Default sandbox scope if client provides no roots.
+
+    /// Fallback sandbox directory used if the client does not provide workspace roots.
     ///
-    /// Session isolation is always enabled: each MCP session gets its own subprocess.
-    /// This default scope is only used if the client provides no workspace roots.
+    /// In session isolation mode, each session gets a unique subprocess. If the client
+    /// handshake doesn't specify roots (e.g. empty `roots/list` response), this path
+    /// limits the subprocess's file access.
     pub default_sandbox_scope: PathBuf,
 }
 
@@ -58,10 +84,35 @@ struct BridgeState {
 /// MCP Session-Id header name (per MCP spec 2025-03-26)
 const MCP_SESSION_ID_HEADER: &str = "mcp-session-id";
 
-/// Start the HTTP bridge server
+/// Starts the HTTP bridge server and blocks until shutdown.
 ///
-/// If `config.bind_addr` uses port 0, the OS will assign an available port.
-/// The actual bound address is printed to stderr as `AHMA_BOUND_PORT=<port>` for test infrastructure.
+/// This function initializes the session manager, sets up the Axum router for MCP
+/// endpoints, and binds to the specified address.
+///
+/// # Returns
+///
+/// * `Ok(())` upon graceful shutdown (currently runs indefinitely).
+/// * `Err(BridgeError)` if binding fails or the server encounters a fatal error.
+///
+/// # Port Binding
+///
+/// If `config.bind_addr` specifies port 0, the OS will assign a random available port.
+/// The actual bound port is printed to stderr as `AHMA_BOUND_PORT=<port>` to assist
+/// with test infrastructure integration.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use ahma_http_bridge::{BridgeConfig, start_bridge};
+///
+/// #[tokio::main]
+/// async fn main() {
+///    let config = BridgeConfig::default();
+///    if let Err(e) = start_bridge(config).await {
+///        eprintln!("Bridge failed: {}", e);
+///    }
+/// }
+/// ```
 pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
     info!("Starting HTTP bridge on {}", config.bind_addr);
 
@@ -123,7 +174,15 @@ async fn health_check() -> impl IntoResponse {
 /// Per MCP specification: HTTP DELETE with `Mcp-Session-Id` header terminates
 /// the session and its subprocess.
 ///
-/// Returns:
+/// # Example
+///
+/// ```bash
+/// curl -X DELETE http://localhost:3000/mcp \
+///   -H "mcp-session-id: <session-uuid>"
+/// ```
+///
+/// # Returns
+///
 /// - 204 No Content on successful termination
 /// - 400 Bad Request if session ID header is missing
 /// - 404 Not Found if session doesn't exist
@@ -189,6 +248,20 @@ async fn handle_session_delete(
 /// Note: Returns 404 (not 400/501) when session ID is missing or invalid. This prevents
 /// clients from detecting SSE support during initial probing, avoiding OAuth prompts
 /// for servers that don't require authentication.
+///
+/// # client Example
+///
+/// Clients should open this stream immediately after receiving a Session ID.
+///
+/// ```javascript
+/// const eventSource = new EventSource("http://localhost:3000/mcp", {
+///     headers: { "mcp-session-id": sessionId }
+/// });
+/// eventSource.onmessage = (event) => {
+///     const msg = JSON.parse(event.data);
+///     console.log("Received:", msg);
+/// };
+/// ```
 async fn handle_sse_stream(State(state): State<Arc<BridgeState>>, headers: HeaderMap) -> Response {
     // Get session ID from header - required for SSE
     // Return 404 (not 400) to hide SSE from clients without a session

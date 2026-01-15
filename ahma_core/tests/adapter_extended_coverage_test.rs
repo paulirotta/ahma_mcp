@@ -262,6 +262,7 @@ async fn test_execute_async_returns_operation_id() {
             None,
             temp.path().to_str().unwrap(),
             Some(30),
+            None,
         )
         .await;
 
@@ -508,6 +509,7 @@ async fn test_adapter_shutdown() {
             }),
             temp.path().to_str().unwrap(),
             Some(30),
+            None,
         )
         .await
         .unwrap();
@@ -716,6 +718,7 @@ async fn test_async_cancellation_before_execution() {
             None,
             temp.path().to_str().unwrap(),
             Some(60),
+            None,
         )
         .await
         .unwrap();
@@ -763,7 +766,7 @@ async fn test_async_with_callback_none() {
     );
 
     let op_id = adapter
-        .execute_async_in_dir_with_callback(
+        .execute_async_in_dir(
             "echo_tool",
             "echo hello",
             None,
@@ -808,7 +811,7 @@ async fn test_async_timeout_path() {
     );
 
     let op_id = adapter
-        .execute_async_in_dir_with_callback(
+        .execute_async_in_dir(
             "sleep_tool",
             "sleep 60", // Long sleep that will timeout
             None,

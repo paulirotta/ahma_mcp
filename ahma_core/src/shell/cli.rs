@@ -212,17 +212,8 @@ pub async fn run() -> Result<()> {
             if let Err(e) = sandbox::test_sandbox_exec_available() {
                 match e {
                     SandboxError::NestedSandboxDetected => {
-                        tracing::warn!(
-                            "Nested sandbox detected - Ahma is running inside another sandbox (e.g., Cursor IDE)"
-                        );
-                        tracing::warn!(
-                            "Ahma's sandbox will be disabled; the outer sandbox provides security"
-                        );
-                        tracing::info!(
-                            "To suppress this warning, use --no-sandbox or set AHMA_NO_SANDBOX=1"
-                        );
-                        sandbox::enable_test_mode();
-                        no_sandbox = true;
+                        // Per R7.6.2: Refuse to start in nested environment without explicit override
+                        sandbox::exit_with_sandbox_error(&e);
                     }
                     _ => {
                         // Other sandbox errors should be fatal

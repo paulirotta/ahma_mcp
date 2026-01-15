@@ -9,14 +9,16 @@ Utility for generating JSON schemas for Ahma MCP tool configurations.
 ## Usage
 
 ```bash
-# Generate schema for all tools
-generate_tool_schema --output-dir ./schemas
+# Generate schema in the default directory (docs/)
+cargo run -p generate_tool_schema
 
-# Generate schema for a specific tool type
-generate_tool_schema --tool-type command --output ./command-schema.json
+# Generate schema in a custom directory
+cargo run -p generate_tool_schema -- ./schemas
 ```
 
 ## Output
+
+The tool generates a single file: `mtdf-schema.json` in the specified output directory.
 
 Generates JSON schema files that can be used for:
 - IDE autocomplete and validation
