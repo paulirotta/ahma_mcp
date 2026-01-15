@@ -92,7 +92,9 @@ jobs:
       - name: Cache sccache artifacts
         uses: actions/cache@v4
         with:
-          path: ~/.cache/sccache
+          path: |
+            ~/.cache/sccache
+            ~/Library/Caches/Mozilla.sccache
           key: sccache-build-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
             sccache-build-${{ runner.os }}-
@@ -186,7 +188,9 @@ jobs:
       - name: Cache sccache artifacts
         uses: actions/cache@v4
         with:
-          path: ~/.cache/sccache
+          path: |
+            ~/.cache/sccache
+            ~/Library/Caches/Mozilla.sccache
           key: sccache-nextest-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
             sccache-nextest-${{ runner.os }}-
@@ -291,14 +295,20 @@ jobs:
           key: cargo-android-target-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
             cargo-android-target-${{ runner.os }}-
+            cargo-nextest-target-${{ runner.os }}-
+            cargo-build-target-${{ runner.os }}-
 
       - name: Cache sccache artifacts
         uses: actions/cache@v4
         with:
-          path: ~/Library/Caches/Mozilla.sccache
+          path: |
+            ~/.cache/sccache
+            ~/Library/Caches/Mozilla.sccache
           key: sccache-android-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
             sccache-android-${{ runner.os }}-
+            sccache-nextest-${{ runner.os }}-
+            sccache-build-${{ runner.os }}-
 
       - uses: cargo-bins/cargo-binstall@main
 
@@ -410,6 +420,8 @@ jobs:
           key: cargo-coverage-target-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
             cargo-coverage-target-${{ runner.os }}-
+            cargo-nextest-target-${{ runner.os }}-
+            cargo-build-target-${{ runner.os }}-
 
       - name: Cache sccache artifacts
         uses: actions/cache@v4
@@ -418,6 +430,8 @@ jobs:
           key: sccache-coverage-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
             sccache-coverage-${{ runner.os }}-
+            sccache-nextest-${{ runner.os }}-
+            sccache-build-${{ runner.os }}-
 
       - name: Setup Cargo Binstall
         uses: cargo-bins/cargo-binstall@main
