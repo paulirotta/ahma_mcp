@@ -27,9 +27,9 @@ permissions:
 # to your branch to give priority to your changes. Then rebase from your branch back
 # to 'main', test, then push.
 
-concurrency:
-  group: build # Only one build at a time, otherwise cache is not used effectively
-  cancel-in-progress: false
+#concurrency:
+#  group: build # Only one build at a time, otherwise cache is not used effectively
+#  cancel-in-progress: false
 
 on:
   push:
