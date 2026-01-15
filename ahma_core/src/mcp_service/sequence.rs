@@ -531,6 +531,53 @@ pub fn env_list_contains(env_key: &str, value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    static ENV_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+
+    fn with_env_lock<T>(f: impl FnOnce() -> T) -> T {
+        let _guard = ENV_MUTEX
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("env mutex poisoned");
+        f()
+    }
+
+    struct EnvVarGuard {
+        key: &'static str,
+        old: Option<String>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            let old = std::env::var(key).ok();
+            unsafe {
+                std::env::set_var(key, value);
+            }
+            Self { key, old }
+        }
+
+        fn remove(key: &'static str) -> Self {
+            let old = std::env::var(key).ok();
+            unsafe {
+                std::env::remove_var(key);
+            }
+            Self { key, old }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            match &self.old {
+                Some(v) => unsafe {
+                    std::env::set_var(self.key, v);
+                },
+                None => unsafe {
+                    std::env::remove_var(self.key);
+                },
+            }
+        }
+    }
 
     fn make_test_sequence_step(
         tool: &str,
@@ -570,82 +617,64 @@ mod tests {
 
     #[test]
     fn test_env_list_contains_single_match() {
-        unsafe {
-            std::env::set_var("AHMA_TEST_SEQ_001", "cargo");
-        }
-        assert!(env_list_contains("AHMA_TEST_SEQ_001", "cargo"));
-        unsafe {
-            std::env::remove_var("AHMA_TEST_SEQ_001");
-        }
+        with_env_lock(|| {
+            let _guard = EnvVarGuard::set("AHMA_TEST_SEQ_001", "cargo");
+            assert!(env_list_contains("AHMA_TEST_SEQ_001", "cargo"));
+        });
     }
 
     #[test]
     fn test_env_list_contains_multiple_items() {
-        unsafe {
-            std::env::set_var("AHMA_TEST_SEQ_002", "cargo,git,npm");
-        }
-        assert!(env_list_contains("AHMA_TEST_SEQ_002", "cargo"));
-        assert!(env_list_contains("AHMA_TEST_SEQ_002", "git"));
-        assert!(env_list_contains("AHMA_TEST_SEQ_002", "npm"));
-        assert!(!env_list_contains("AHMA_TEST_SEQ_002", "python"));
-        unsafe {
-            std::env::remove_var("AHMA_TEST_SEQ_002");
-        }
+        with_env_lock(|| {
+            let _guard = EnvVarGuard::set("AHMA_TEST_SEQ_002", "cargo,git,npm");
+            assert!(env_list_contains("AHMA_TEST_SEQ_002", "cargo"));
+            assert!(env_list_contains("AHMA_TEST_SEQ_002", "git"));
+            assert!(env_list_contains("AHMA_TEST_SEQ_002", "npm"));
+            assert!(!env_list_contains("AHMA_TEST_SEQ_002", "python"));
+        });
     }
 
     #[test]
     fn test_env_list_contains_case_insensitive() {
-        unsafe {
-            std::env::set_var("AHMA_TEST_SEQ_003", "Cargo,GIT");
-        }
-        assert!(env_list_contains("AHMA_TEST_SEQ_003", "cargo"));
-        assert!(env_list_contains("AHMA_TEST_SEQ_003", "CARGO"));
-        assert!(env_list_contains("AHMA_TEST_SEQ_003", "git"));
-        unsafe {
-            std::env::remove_var("AHMA_TEST_SEQ_003");
-        }
+        with_env_lock(|| {
+            let _guard = EnvVarGuard::set("AHMA_TEST_SEQ_003", "Cargo,GIT");
+            assert!(env_list_contains("AHMA_TEST_SEQ_003", "cargo"));
+            assert!(env_list_contains("AHMA_TEST_SEQ_003", "CARGO"));
+            assert!(env_list_contains("AHMA_TEST_SEQ_003", "git"));
+        });
     }
 
     #[test]
     fn test_env_list_contains_with_spaces() {
-        unsafe {
-            std::env::set_var("AHMA_TEST_SEQ_004", "cargo , git , npm");
-        }
-        assert!(env_list_contains("AHMA_TEST_SEQ_004", "cargo"));
-        assert!(env_list_contains("AHMA_TEST_SEQ_004", "git"));
-        assert!(env_list_contains("AHMA_TEST_SEQ_004", "npm"));
-        unsafe {
-            std::env::remove_var("AHMA_TEST_SEQ_004");
-        }
+        with_env_lock(|| {
+            let _guard = EnvVarGuard::set("AHMA_TEST_SEQ_004", "cargo , git , npm");
+            assert!(env_list_contains("AHMA_TEST_SEQ_004", "cargo"));
+            assert!(env_list_contains("AHMA_TEST_SEQ_004", "git"));
+            assert!(env_list_contains("AHMA_TEST_SEQ_004", "npm"));
+        });
     }
 
     #[test]
     fn test_env_list_contains_empty_and_missing() {
-        unsafe {
-            std::env::set_var("AHMA_TEST_SEQ_005", "");
-        }
-        assert!(!env_list_contains("AHMA_TEST_SEQ_005", "cargo"));
-        unsafe {
-            std::env::remove_var("AHMA_TEST_SEQ_005");
-        }
+        with_env_lock(|| {
+            let _guard = EnvVarGuard::set("AHMA_TEST_SEQ_005", "");
+            assert!(!env_list_contains("AHMA_TEST_SEQ_005", "cargo"));
+        });
 
-        unsafe {
-            std::env::remove_var("AHMA_TEST_SEQ_MISSING");
-        }
-        assert!(!env_list_contains("AHMA_TEST_SEQ_MISSING", "cargo"));
+        with_env_lock(|| {
+            let _guard = EnvVarGuard::remove("AHMA_TEST_SEQ_MISSING");
+            assert!(!env_list_contains("AHMA_TEST_SEQ_MISSING", "cargo"));
+        });
     }
 
     #[test]
     fn test_env_list_contains_filters_empty_entries() {
-        unsafe {
-            std::env::set_var("AHMA_TEST_SEQ_006", "cargo,,git,,npm");
-        }
-        assert!(env_list_contains("AHMA_TEST_SEQ_006", "cargo"));
-        assert!(env_list_contains("AHMA_TEST_SEQ_006", "git"));
-        assert!(!env_list_contains("AHMA_TEST_SEQ_006", ""));
-        unsafe {
-            std::env::remove_var("AHMA_TEST_SEQ_006");
-        }
+        with_env_lock(|| {
+            let _guard = EnvVarGuard::set("AHMA_TEST_SEQ_006", "cargo,,git,,npm");
+            assert!(env_list_contains("AHMA_TEST_SEQ_006", "cargo"));
+            assert!(env_list_contains("AHMA_TEST_SEQ_006", "git"));
+            assert!(!env_list_contains("AHMA_TEST_SEQ_006", ""));
+        });
     }
 
     // ============= format_step_started_message tests =============
@@ -731,47 +760,41 @@ mod tests {
 
     #[test]
     fn test_should_skip_step_toplevel() {
-        unsafe {
-            std::env::set_var("AHMA_SKIP_SEQUENCE_TOOLS", "cargo,git");
-        }
-        let kind = SequenceKind::TopLevel;
-        let step_cargo = make_test_sequence_step("cargo", "build", None);
-        let step_npm = make_test_sequence_step("npm", "install", None);
+        with_env_lock(|| {
+            let _guard = EnvVarGuard::set("AHMA_SKIP_SEQUENCE_TOOLS", "cargo,git");
+            let kind = SequenceKind::TopLevel;
+            let step_cargo = make_test_sequence_step("cargo", "build", None);
+            let step_npm = make_test_sequence_step("npm", "install", None);
 
-        assert!(should_skip_step(&kind, &step_cargo));
-        assert!(!should_skip_step(&kind, &step_npm));
-        unsafe {
-            std::env::remove_var("AHMA_SKIP_SEQUENCE_TOOLS");
-        }
+            assert!(should_skip_step(&kind, &step_cargo));
+            assert!(!should_skip_step(&kind, &step_npm));
+        });
     }
 
     #[test]
     fn test_should_skip_step_subcommand() {
-        unsafe {
-            std::env::set_var("AHMA_SKIP_SEQUENCE_SUBCOMMANDS", "build,test");
-        }
-        let dummy_config = make_dummy_tool_config();
-        let kind = SequenceKind::Subcommand {
-            base_config: &dummy_config,
-        };
-        let step_build = make_test_sequence_step("cargo", "build", None);
-        let step_run = make_test_sequence_step("cargo", "run", None);
+        with_env_lock(|| {
+            let _guard = EnvVarGuard::set("AHMA_SKIP_SEQUENCE_SUBCOMMANDS", "build,test");
+            let dummy_config = make_dummy_tool_config();
+            let kind = SequenceKind::Subcommand {
+                base_config: &dummy_config,
+            };
+            let step_build = make_test_sequence_step("cargo", "build", None);
+            let step_run = make_test_sequence_step("cargo", "run", None);
 
-        assert!(should_skip_step(&kind, &step_build));
-        assert!(!should_skip_step(&kind, &step_run));
-        unsafe {
-            std::env::remove_var("AHMA_SKIP_SEQUENCE_SUBCOMMANDS");
-        }
+            assert!(should_skip_step(&kind, &step_build));
+            assert!(!should_skip_step(&kind, &step_run));
+        });
     }
 
     #[test]
     fn test_should_skip_step_when_not_set() {
-        unsafe {
-            std::env::remove_var("AHMA_SKIP_SEQUENCE_TOOLS");
-        }
-        let kind = SequenceKind::TopLevel;
-        let step = make_test_sequence_step("cargo", "build", None);
-        assert!(!should_skip_step(&kind, &step));
+        with_env_lock(|| {
+            let _guard = EnvVarGuard::remove("AHMA_SKIP_SEQUENCE_TOOLS");
+            let kind = SequenceKind::TopLevel;
+            let step = make_test_sequence_step("cargo", "build", None);
+            assert!(!should_skip_step(&kind, &step));
+        });
     }
 
     #[test]

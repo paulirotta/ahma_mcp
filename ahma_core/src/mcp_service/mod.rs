@@ -1283,7 +1283,9 @@ impl ServerHandler for AhmaMcpService {
             let tool_name = params.name.as_ref();
 
             if tool_name == "status" {
-                return self.handle_status(params.arguments.unwrap_or_default()).await;
+                return self
+                    .handle_status(params.arguments.unwrap_or_default())
+                    .await;
             }
 
             if tool_name == "await" {
@@ -1291,7 +1293,9 @@ impl ServerHandler for AhmaMcpService {
             }
 
             if tool_name == "cancel" {
-                return self.handle_cancel(params.arguments.unwrap_or_default()).await;
+                return self
+                    .handle_cancel(params.arguments.unwrap_or_default())
+                    .await;
             }
 
             // Find tool configuration
@@ -1618,11 +1622,13 @@ mod tests {
         let result = service.handle_status(args).await.expect("status");
         let text = first_text(&result);
         assert!(text.contains("Operations status for 'alpha': 1 active, 0 completed"));
-        assert!(result
-            .content
-            .iter()
-            .filter_map(|c| c.as_text())
-            .any(|t| t.text.contains("=== ACTIVE OPERATIONS ===")));
+        assert!(
+            result
+                .content
+                .iter()
+                .filter_map(|c| c.as_text())
+                .any(|t| t.text.contains("=== ACTIVE OPERATIONS ==="))
+        );
 
         // Filter by specific operation id
         let args = json!({"operation_id": "op_active"})
@@ -1675,11 +1681,13 @@ mod tests {
         let text = first_text(&result);
         assert!(text.contains("has been cancelled successfully"));
         assert!(text.contains("reason='because'"));
-        assert!(result
-            .content
-            .iter()
-            .filter_map(|c| c.as_text())
-            .any(|t| t.text.contains("\"tool_hint\"")));
+        assert!(
+            result
+                .content
+                .iter()
+                .filter_map(|c| c.as_text())
+                .any(|t| t.text.contains("\"tool_hint\""))
+        );
     }
 
     #[tokio::test]
