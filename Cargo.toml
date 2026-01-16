@@ -28,11 +28,8 @@ dirs = "6.0.0"
 futures = "0.3.31"
 landlock = "0.4.4"
 regex = "1.12.2"
-# Note: If crypto build issues occur, try "rustls-ring" instead of "rustls" in dependent crates
 reqwest = {version = "0.13.1", default-features = false}
-# Using git version of rmcp for latest protocol support (2025-11-25)
 rmcp = {version = "0.13.0", features = ["server", "client", "macros", "transport-io", "transport-child-process", "elicitation", "schemars"]}
-# rmcp = {version = "0.13.0", features = ["server", "client", "macros", "transport-io", "transport-child-process", "elicitation", "schemars"]}
 schemars = "1.2.0"
 serde = "1.0.228"
 serde_json = "1.0.149"

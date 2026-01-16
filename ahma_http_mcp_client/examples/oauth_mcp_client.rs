@@ -1,6 +1,6 @@
 use ahma_http_mcp_client::client::HttpMcpTransport;
 use clap::Parser;
-use rmcp::{ServiceExt, model::CallToolRequestParams};
+use rmcp::{ServiceExt, model::CallToolRequestParam};
 use url::Url;
 
 #[derive(Parser, Debug)]
@@ -66,8 +66,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("\nFound search tool: {}", tool.name);
         println!("Searching for '{}'...", args.query);
 
-        let params = CallToolRequestParams {
-            name: tool.name.clone(),
+        let params = CallToolRequestParam {
+            name: tool.name.clone().into(),
             arguments: Some(
                 serde_json::json!({ "query": args.query })
                     .as_object()
@@ -75,7 +75,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .clone(),
             ),
             task: None,
-            meta: None,
         };
 
         match service.call_tool(params).await {

@@ -82,6 +82,7 @@ pub mod shell_pool;
 pub mod terminal_output;
 pub mod tool_availability;
 pub mod tool_hints;
+pub mod transport_patch;
 pub mod utils;
 
 // Test utilities
