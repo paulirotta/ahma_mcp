@@ -826,7 +826,9 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     // Start the config watcher to support hot-reloading of tools
     service_handler.start_config_watcher(cli.tools_dir.clone());
 
-    let service = service_handler.serve(rmcp::transport::stdio()).await?;
+    // Use PatchedStdioTransport to fix rmcp 0.13.0 deserialization issues with VS Code
+    use crate::transport_patch::PatchedStdioTransport;
+    let service = service_handler.serve(PatchedStdioTransport::new_stdio()).await?;
 
     // ============================================================================
     // CRITICAL: Graceful Shutdown Implementation for Development Workflow

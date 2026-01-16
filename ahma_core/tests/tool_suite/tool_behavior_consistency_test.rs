@@ -19,6 +19,7 @@ async fn test_synchronous_cargo_check_returns_actual_results() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("cargo"),
         arguments: Some(serde_json::from_value(json!({ "subcommand": "check" })).unwrap()),
+        task: None,
     };
 
     let result = client.call_tool(call_param).await?;
@@ -70,6 +71,8 @@ async fn test_ls_tool_command_structure() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("ls_default"),
         arguments: None, // ls without arguments should list current directory
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -159,6 +162,7 @@ async fn test_sandboxed_shell_returns_actual_results() -> Result<()> {
             }))
             .unwrap(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(call_param).await?;

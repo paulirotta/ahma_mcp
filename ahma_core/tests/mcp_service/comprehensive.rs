@@ -51,6 +51,8 @@ async fn test_await_tool_comprehensive() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("await"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -74,6 +76,8 @@ async fn test_await_tool_comprehensive() -> Result<()> {
     let valid_call_param = CallToolRequestParam {
         name: Cow::Borrowed("await"),
         arguments: Some(valid_params),
+        task: None,
+
     };
 
     let valid_result = client.call_tool(valid_call_param).await?;
@@ -94,6 +98,8 @@ async fn test_status_tool_comprehensive() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("status"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -117,6 +123,8 @@ async fn test_status_tool_comprehensive() -> Result<()> {
     let specific_call_param = CallToolRequestParam {
         name: Cow::Borrowed("status"),
         arguments: Some(specific_params),
+        task: None,
+
     };
 
     let specific_result = client.call_tool(specific_call_param).await?;
@@ -136,6 +144,8 @@ async fn test_unknown_tool_error_handling() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("nonexistent_tool_xyz"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -185,6 +195,8 @@ async fn test_concurrent_tool_execution() -> Result<()> {
             let call_param = CallToolRequestParam {
                 name: Cow::Borrowed("status"),
                 arguments: Some(params),
+                task: None,
+
             };
 
             let result = client_clone.call_tool(call_param).await;
@@ -223,6 +235,8 @@ async fn test_path_validation_security() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("await"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -294,6 +308,8 @@ async fn test_service_resilience_stress() -> Result<()> {
         let call_param = CallToolRequestParam {
             name: Cow::Borrowed(tool_name),
             arguments: args.as_object().cloned(),
+            task: None,
+
         };
 
         let result = client.call_tool(call_param).await;
@@ -314,6 +330,8 @@ async fn test_service_resilience_stress() -> Result<()> {
     let final_call_param = CallToolRequestParam {
         name: Cow::Borrowed("status"),
         arguments: Some(final_params),
+        task: None,
+
     };
 
     let final_result = client.call_tool(final_call_param).await?;
@@ -332,6 +350,8 @@ async fn test_argument_parsing_edge_cases() -> Result<()> {
     let empty_call_param = CallToolRequestParam {
         name: Cow::Borrowed("status"),
         arguments: None,
+        task: None,
+
     };
 
     let empty_result = client.call_tool(empty_call_param).await?;
@@ -351,6 +371,8 @@ async fn test_argument_parsing_edge_cases() -> Result<()> {
     let complex_call_param = CallToolRequestParam {
         name: Cow::Borrowed("await"),
         arguments: complex_args.as_object().cloned(),
+        task: None,
+
     };
 
     let complex_result = client.call_tool(complex_call_param).await;

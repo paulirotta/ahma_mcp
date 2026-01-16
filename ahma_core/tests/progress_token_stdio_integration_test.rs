@@ -187,6 +187,7 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let req = ClientRequest::CallToolRequest(CallToolRequest::new(params));

@@ -31,6 +31,8 @@ async fn test_status_tool_with_tool_name_filter() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("status"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -65,6 +67,8 @@ async fn test_status_tool_with_operation_id() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("status"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -94,6 +98,8 @@ async fn test_status_tool_empty_filter() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("status"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -116,6 +122,8 @@ async fn test_status_tool_combined_filters() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("status"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -139,6 +147,8 @@ async fn test_await_tool_with_operation_id_not_found() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("await"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -169,6 +179,8 @@ async fn test_await_tool_with_tool_filter_no_pending() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("await"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -199,6 +211,8 @@ async fn test_await_tool_multiple_tool_filters() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("await"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -217,6 +231,8 @@ async fn test_await_tool_empty_params() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("await"),
         arguments: Some(Map::new()),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -249,6 +265,8 @@ async fn test_cancel_tool_missing_operation_id() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("cancel"),
         arguments: Some(Map::new()),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -272,6 +290,8 @@ async fn test_cancel_tool_nonexistent_operation() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("cancel"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -305,6 +325,8 @@ async fn test_cancel_tool_with_reason() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("cancel"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -327,6 +349,8 @@ async fn test_cancel_tool_invalid_operation_id_type() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("cancel"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -349,6 +373,8 @@ async fn test_call_nonexistent_tool() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("completely_fake_tool_that_does_not_exist"),
         arguments: Some(Map::new()),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -395,6 +421,8 @@ async fn test_call_disabled_tool() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("disabled_echo"),
         arguments: Some(Map::new()),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -446,6 +474,8 @@ async fn test_call_tool_invalid_subcommand() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("test_subcmd"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -500,6 +530,8 @@ async fn test_call_tool_disabled_subcommand() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("test_disabled_sub"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -556,6 +588,8 @@ async fn test_synchronous_execution_mode() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("sync_echo"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -614,6 +648,8 @@ async fn test_async_execution_mode() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("async_echo"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -673,6 +709,8 @@ async fn test_explicit_execution_mode_argument() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("mode_test"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -734,6 +772,8 @@ async fn test_nested_subcommand_execution() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("nested_tool"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -785,6 +825,8 @@ async fn test_working_directory_parameter() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("pwd_test"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -834,6 +876,8 @@ async fn test_default_working_directory() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("default_wd"),
         arguments: Some(Map::new()),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -884,6 +928,8 @@ async fn test_timeout_parameter() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("timeout_test"),
         arguments: Some(params),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;

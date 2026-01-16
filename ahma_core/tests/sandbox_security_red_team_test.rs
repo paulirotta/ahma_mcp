@@ -41,6 +41,7 @@ async fn red_team_basic_path_traversal_blocked() {
             }))
             .unwrap(),
         ),
+        task: None,
     };
     let result = client.call_tool(params).await;
     assert!(
@@ -70,6 +71,7 @@ async fn red_team_deep_path_traversal_blocked() {
             }))
             .unwrap(),
         ),
+        task: None,
     };
     let result = client.call_tool(params).await;
     assert!(
@@ -99,6 +101,7 @@ async fn red_team_absolute_path_escape_blocked() {
             }))
             .unwrap(),
         ),
+        task: None,
     };
     let result = client.call_tool(params).await;
     assert!(
@@ -139,6 +142,7 @@ async fn red_team_symlink_escape_blocked() {
             }))
             .unwrap(),
         ),
+        task: None,
     };
     let result = client.call_tool(params).await;
     assert!(
@@ -176,6 +180,7 @@ async fn red_team_symlink_to_home_blocked() {
             }))
             .unwrap(),
         ),
+        task: None,
     };
     let result = client.call_tool(params).await;
     assert!(
@@ -220,6 +225,7 @@ async fn red_team_shell_metacharacters_in_path() {
             }))
             .unwrap(),
         ),
+        task: None,
     };
     let result = client.call_tool(params).await;
     // The command may start async but should fail during execution
@@ -288,6 +294,7 @@ async fn documented_limitation_read_access_unrestricted() {
             }))
             .unwrap(),
         ),
+        task: None,
     };
     let result = client.call_tool(params).await;
 
@@ -329,6 +336,7 @@ async fn documented_limitation_network_unrestricted() {
             }))
             .unwrap(),
         ),
+        task: None,
     };
     let result = client.call_tool(params).await;
     // Just document that network commands can run - this is a known limitation

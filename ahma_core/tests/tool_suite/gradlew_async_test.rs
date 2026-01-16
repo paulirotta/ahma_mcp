@@ -46,6 +46,7 @@ async fn test_gradlew_async_build_commands() -> Result<()> {
                 .unwrap()
                 .clone(),
             ),
+            task: None,
         };
 
         let result = client.call_tool(call_param).await;
@@ -113,6 +114,7 @@ async fn test_gradlew_lint_commands() -> Result<()> {
                 .unwrap()
                 .clone(),
             ),
+            task: None,
         };
 
         let result = client.call_tool(call_param).await;
@@ -158,6 +160,7 @@ async fn test_comprehensive_gradlew_validation() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let help_result = client.call_tool(call_param).await;
@@ -179,6 +182,7 @@ async fn test_comprehensive_gradlew_validation() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let tasks_result = client.call_tool(call_param).await;
@@ -204,6 +208,7 @@ async fn test_comprehensive_gradlew_validation() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let props_result = client.call_tool(call_param).await;

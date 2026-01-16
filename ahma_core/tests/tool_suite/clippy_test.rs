@@ -28,6 +28,7 @@ async fn test_run_clippy() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("cargo"),
         arguments: Some(serde_json::from_value(json!({ "subcommand": "clippy" })).unwrap()),
+        task: None,
     };
 
     let result = client.call_tool(call_param).await?;

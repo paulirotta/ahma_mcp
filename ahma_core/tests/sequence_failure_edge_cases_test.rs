@@ -217,6 +217,7 @@ async fn test_sequence_step_failure_stops_subsequent_steps() -> Result<()> {
     let params = CallToolRequestParam {
         name: Cow::Borrowed("failing_sequence"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -282,6 +283,7 @@ async fn test_sequence_with_missing_subcommand_reference() -> Result<()> {
     let params = CallToolRequestParam {
         name: Cow::Borrowed("missing_subcommand_seq"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
+        task: None,
     };
 
     let result = client.call_tool(params).await;
@@ -384,6 +386,7 @@ async fn test_sequence_failure_with_filesystem_markers() -> Result<()> {
     let params = CallToolRequestParam {
         name: Cow::Borrowed("marker_sequence"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
+        task: None,
     };
 
     let _result = client.call_tool(params).await;
@@ -445,6 +448,7 @@ async fn test_empty_sequence_handling() -> Result<()> {
         let params = CallToolRequestParam {
             name: Cow::Borrowed("empty_sequence"),
             arguments: Some(json!({}).as_object().unwrap().clone()),
+            task: None,
         };
 
         let result = client.call_tool(params).await?;
@@ -507,6 +511,7 @@ async fn test_sequence_all_steps_succeed() -> Result<()> {
     let params = CallToolRequestParam {
         name: Cow::Borrowed("success_sequence"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;

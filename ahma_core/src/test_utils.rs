@@ -57,7 +57,6 @@ pub fn is_tool_disabled(tool_name: &str) -> bool {
 /// # Example
 ///
 /// ```rust
-/// #[test]
 /// fn test_my_tool_sync() {
 ///     skip_if_disabled!("my_tool");
 ///     // ... test implementation

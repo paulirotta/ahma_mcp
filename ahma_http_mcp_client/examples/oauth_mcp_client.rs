@@ -67,13 +67,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Searching for '{}'...", args.query);
 
         let params = CallToolRequestParam {
-            name: tool.name.clone(),
+            name: tool.name.clone().into(),
             arguments: Some(
                 serde_json::json!({ "query": args.query })
                     .as_object()
                     .unwrap()
                     .clone(),
             ),
+            task: None,
         };
 
         match service.call_tool(params).await {

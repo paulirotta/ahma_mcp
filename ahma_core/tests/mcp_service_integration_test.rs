@@ -264,6 +264,7 @@ async fn test_mcp_call_sync_tool_with_positional_args() -> Result<()> {
                 .unwrap()
                 .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -302,6 +303,7 @@ async fn test_mcp_call_tool_with_no_args() -> Result<()> {
     let params = CallToolRequestParam {
         name: Cow::Borrowed("test_echo"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -336,6 +338,7 @@ async fn test_mcp_call_async_tool_returns_operation_id() -> Result<()> {
                 .unwrap()
                 .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -384,6 +387,7 @@ async fn test_mcp_subcommand_routing() -> Result<()> {
                 .unwrap()
                 .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -413,6 +417,7 @@ async fn test_mcp_call_nonexistent_tool_error() -> Result<()> {
     let params = CallToolRequestParam {
         name: Cow::Borrowed("nonexistent_tool_xyz"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
+        task: None,
     };
 
     let result = client.call_tool(params).await;
@@ -458,6 +463,7 @@ async fn test_mcp_call_invalid_subcommand_error() -> Result<()> {
                 .unwrap()
                 .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(params).await;
@@ -507,6 +513,7 @@ async fn test_mcp_shell_command_execution() -> Result<()> {
                 .unwrap()
                 .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -543,6 +550,7 @@ async fn test_mcp_shell_command_failure() -> Result<()> {
     let params = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(json!({"command": "exit 1"}).as_object().unwrap().clone()),
+        task: None,
     };
 
     let result = client.call_tool(params).await;
@@ -617,6 +625,7 @@ async fn test_mcp_working_directory_parameter() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;

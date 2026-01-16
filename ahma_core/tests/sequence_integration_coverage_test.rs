@@ -204,6 +204,7 @@ async fn test_sync_sequence_tool_execution() -> Result<()> {
     let params = CallToolRequestParam {
         name: Cow::Borrowed("sync_sequence"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -242,6 +243,7 @@ async fn test_async_sequence_tool_execution() -> Result<()> {
     let params = CallToolRequestParam {
         name: Cow::Borrowed("async_sequence"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -270,6 +272,7 @@ async fn test_async_sequence_tool_execution() -> Result<()> {
     let status_params = CallToolRequestParam {
         name: Cow::Borrowed("status"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
+        task: None,
     };
     let status_result = client.call_tool(status_params).await?;
     assert!(!status_result.content.is_empty());
@@ -306,6 +309,7 @@ async fn test_subcommand_sequence_execution() -> Result<()> {
                     .unwrap()
                     .clone(),
             ),
+            task: None,
         };
 
         let result = client.call_tool(params).await?;
@@ -344,6 +348,7 @@ async fn test_skip_sequence_step_via_env() -> Result<()> {
         let params = CallToolRequestParam {
             name: Cow::Borrowed("sync_sequence"),
             arguments: Some(json!({}).as_object().unwrap().clone()),
+            task: None,
         };
 
         let result = client.call_tool(params).await?;
@@ -395,6 +400,7 @@ async fn test_skip_subcommand_sequence_step_via_env() -> Result<()> {
                     .unwrap()
                     .clone(),
             ),
+            task: None,
         };
 
         let result = client.call_tool(params).await?;
@@ -448,6 +454,7 @@ async fn test_sequence_with_missing_tool_reference() -> Result<()> {
         let params = CallToolRequestParam {
             name: Cow::Borrowed("bad_sequence"),
             arguments: Some(json!({}).as_object().unwrap().clone()),
+            task: None,
         };
 
         let result = client.call_tool(params).await;

@@ -45,6 +45,7 @@ async fn test_async_operation_triggers_callbacks() -> Result<()> {
                 .unwrap()
                 .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(shell_params).await?;
@@ -67,6 +68,7 @@ async fn test_async_operation_triggers_callbacks() -> Result<()> {
                     .unwrap()
                     .clone(),
             ),
+            task: None,
         };
 
         let await_result = client.call_tool(await_params).await?;
@@ -87,6 +89,7 @@ async fn test_failed_operation_callback() -> Result<()> {
     let shell_params = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(json!({ "command": "exit 1" }).as_object().unwrap().clone()),
+        task: None,
     };
 
     let result = client.call_tool(shell_params).await?;
@@ -107,6 +110,7 @@ async fn test_failed_operation_callback() -> Result<()> {
                     .unwrap()
                     .clone(),
             ),
+            task: None,
         };
 
         let await_result = client.call_tool(await_params).await?;
@@ -133,6 +137,7 @@ async fn test_cancelled_operation_callback() -> Result<()> {
                 .unwrap()
                 .clone(),
         ),
+        task: None,
     };
 
     let start_result = client.call_tool(shell_params).await?;
@@ -152,6 +157,7 @@ async fn test_cancelled_operation_callback() -> Result<()> {
                     .unwrap()
                     .clone(),
             ),
+            task: None,
         };
 
         let cancel_result = client.call_tool(cancel_params).await?;
@@ -166,6 +172,7 @@ async fn test_cancelled_operation_callback() -> Result<()> {
                     .unwrap()
                     .clone(),
             ),
+            task: None,
         };
 
         let await_result = client.call_tool(await_params).await?;
@@ -203,6 +210,7 @@ async fn test_stderr_output_callback() -> Result<()> {
                 .unwrap()
                 .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(shell_params).await?;
@@ -223,6 +231,7 @@ async fn test_stderr_output_callback() -> Result<()> {
                     .unwrap()
                     .clone(),
             ),
+            task: None,
         };
 
         let await_result = client.call_tool(await_params).await?;
@@ -248,6 +257,7 @@ async fn test_concurrent_operations_callbacks() -> Result<()> {
                 .unwrap()
                 .clone(),
         ),
+        task: None,
     };
     let params2 = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
@@ -257,6 +267,7 @@ async fn test_concurrent_operations_callbacks() -> Result<()> {
                 .unwrap()
                 .clone(),
         ),
+        task: None,
     };
 
     // Start both operations
@@ -270,6 +281,7 @@ async fn test_concurrent_operations_callbacks() -> Result<()> {
     let await_params = CallToolRequestParam {
         name: Cow::Borrowed("await"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
+        task: None,
     };
 
     let await_result = client.call_tool(await_params).await?;

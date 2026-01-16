@@ -31,6 +31,7 @@ async fn test_status_tool_no_filters() -> Result<()> {
     let params = CallToolRequestParam {
         name: Cow::Borrowed("status"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -65,6 +66,7 @@ async fn test_status_tool_with_tool_filter() -> Result<()> {
     let shell_params = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(json!({"command": "echo test"}).as_object().unwrap().clone()),
+        task: None,
     };
     let _ = client.call_tool(shell_params).await?;
 
@@ -77,6 +79,7 @@ async fn test_status_tool_with_tool_filter() -> Result<()> {
                 .unwrap()
                 .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -113,6 +116,7 @@ async fn test_status_tool_with_operation_id_filter() -> Result<()> {
                 .unwrap()
                 .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -148,6 +152,7 @@ async fn test_await_tool_no_pending_operations() -> Result<()> {
     let params = CallToolRequestParam {
         name: Cow::Borrowed("await"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -184,6 +189,7 @@ async fn test_await_tool_nonexistent_operation_id() -> Result<()> {
                 .unwrap()
                 .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -220,6 +226,7 @@ async fn test_await_tool_with_tool_filter() -> Result<()> {
                 .unwrap()
                 .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -257,6 +264,7 @@ async fn test_await_for_completed_async_operation() -> Result<()> {
                 .unwrap()
                 .clone(),
         ),
+        task: None,
     };
     let start_result = client.call_tool(shell_params).await?;
 
@@ -294,6 +302,7 @@ async fn test_await_for_completed_async_operation() -> Result<()> {
                     .clone(),
             )
         },
+        task: None,
     };
 
     let result = client.call_tool(await_params).await?;
@@ -322,6 +331,7 @@ async fn test_cancel_tool_missing_operation_id() -> Result<()> {
         let params = CallToolRequestParam {
             name: Cow::Borrowed("cancel"),
             arguments: Some(json!({}).as_object().unwrap().clone()),
+            task: None,
         };
 
         let result = client.call_tool(params).await;
@@ -355,6 +365,7 @@ async fn test_cancel_tool_nonexistent_operation() -> Result<()> {
                     .unwrap()
                     .clone(),
             ),
+            task: None,
         };
 
         let result = client.call_tool(params).await?;
@@ -390,6 +401,7 @@ async fn test_call_nonexistent_tool() -> Result<()> {
     let params = CallToolRequestParam {
         name: Cow::Borrowed("this_tool_definitely_does_not_exist_xyz123"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
+        task: None,
     };
 
     let result = client.call_tool(params).await;
@@ -422,6 +434,7 @@ async fn test_call_tool_invalid_subcommand() -> Result<()> {
                     .unwrap()
                     .clone(),
             ),
+            task: None,
         };
 
         let result = client.call_tool(params).await;
@@ -544,6 +557,7 @@ async fn test_async_operation_full_lifecycle() -> Result<()> {
                 .unwrap()
                 .clone(),
         ),
+        task: None,
     };
     let start_result = client.call_tool(shell_params).await?;
     assert!(!start_result.content.is_empty());
@@ -552,6 +566,7 @@ async fn test_async_operation_full_lifecycle() -> Result<()> {
     let status_params = CallToolRequestParam {
         name: Cow::Borrowed("status"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
+        task: None,
     };
     let status_result = client.call_tool(status_params).await?;
     assert!(!status_result.content.is_empty());
@@ -568,6 +583,7 @@ async fn test_async_operation_full_lifecycle() -> Result<()> {
                 .unwrap()
                 .clone(),
         ),
+        task: None,
     };
     let await_result = client.call_tool(await_params).await?;
     assert!(!await_result.content.is_empty());
@@ -606,6 +622,7 @@ async fn test_file_tools_in_temp_directory() -> Result<()> {
         let params = CallToolRequestParam {
             name: Cow::Borrowed("file_tools_ls"),
             arguments: Some(json!({}).as_object().unwrap().clone()),
+            task: None,
         };
 
         let result = client.call_tool(params).await?;
@@ -647,6 +664,7 @@ async fn test_status_with_multiple_tool_filters() -> Result<()> {
                 .unwrap()
                 .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -681,6 +699,7 @@ async fn test_await_with_multiple_tool_filters() -> Result<()> {
     let params = CallToolRequestParam {
         name: Cow::Borrowed("await"),
         arguments: Some(json!({"tools": "cargo,git"}).as_object().unwrap().clone()),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;

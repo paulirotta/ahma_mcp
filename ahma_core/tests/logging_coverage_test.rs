@@ -69,6 +69,7 @@ async fn test_client_with_debug_logging() -> Result<()> {
     let params = CallToolRequestParam {
         name: Cow::Borrowed("status"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -90,6 +91,7 @@ async fn test_client_with_stderr_logging() -> Result<()> {
     let params = CallToolRequestParam {
         name: Cow::Borrowed("status"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -126,6 +128,7 @@ async fn test_client_with_default_file_logging() -> Result<()> {
     let params = CallToolRequestParam {
         name: Cow::Borrowed("status"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
+        task: None,
     };
 
     let result = client.call_tool(params).await?;

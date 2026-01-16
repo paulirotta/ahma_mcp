@@ -54,6 +54,8 @@ async fn test_basic_shell_command_execution() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -90,6 +92,8 @@ async fn test_working_directory_handling() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -121,6 +125,8 @@ async fn test_complex_shell_commands() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -152,6 +158,8 @@ async fn test_invalid_command_handling() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -179,6 +187,8 @@ async fn test_missing_command_parameter() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -216,6 +226,8 @@ async fn test_invalid_working_directory() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -251,6 +263,8 @@ async fn test_environment_variables() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -282,6 +296,8 @@ async fn test_shell_builtins() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -313,6 +329,8 @@ async fn test_special_characters() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -344,6 +362,8 @@ async fn test_multiple_arguments() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -375,6 +395,8 @@ async fn test_long_running_command() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
+        task: None,
+
     };
 
     // Measure time to ensure it returns quickly (async)
@@ -420,6 +442,8 @@ async fn test_working_directory_not_passed_to_command() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;
@@ -458,6 +482,8 @@ async fn test_different_working_directories() -> Result<()> {
     let call_param1 = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args1),
+        task: None,
+
     };
 
     let result1 = client.call_tool(call_param1).await;
@@ -474,6 +500,8 @@ async fn test_different_working_directories() -> Result<()> {
     let call_param2 = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args2),
+        task: None,
+
     };
 
     let result2 = client.call_tool(call_param2).await;

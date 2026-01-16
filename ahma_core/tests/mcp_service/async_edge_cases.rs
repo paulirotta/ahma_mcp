@@ -32,6 +32,7 @@ async fn test_async_notification_malformed_operation_ids() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(malformed_params).await;
@@ -55,6 +56,7 @@ async fn test_async_notification_extreme_timeout_values() -> Result<()> {
     let no_timeout_params = CallToolRequestParam {
         name: Cow::Borrowed("await"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
+        task: None,
     };
 
     let result = client.call_tool(no_timeout_params).await?;
@@ -71,6 +73,7 @@ async fn test_async_notification_extreme_timeout_values() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(valid_params).await?;
@@ -145,6 +148,7 @@ async fn test_error_handling_malformed_call_tool_params() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(missing_params).await;
@@ -164,6 +168,7 @@ async fn test_error_handling_malformed_call_tool_params() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(invalid_types_params).await;
@@ -183,6 +188,8 @@ async fn test_error_handling_unknown_tools() -> Result<()> {
     let unknown_tool_params = CallToolRequestParam {
         name: Cow::Borrowed("nonexistent_tool_xyz_123"),
         arguments: None,
+        task: None,
+
     };
 
     let result = client.call_tool(unknown_tool_params).await;
@@ -213,6 +220,7 @@ async fn test_async_notification_concurrent_load() -> Result<()> {
                     .unwrap()
                     .clone(),
                 ),
+                task: None,
             };
             client_clone.call_tool(params).await
         });
@@ -251,6 +259,7 @@ async fn test_status_tool_filter_combinations() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(tool_filter_params).await?;
@@ -276,6 +285,7 @@ async fn test_status_tool_filter_combinations() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(combined_filter_params).await?;
@@ -303,6 +313,7 @@ async fn test_async_operation_with_real_execution() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(async_params).await?;
@@ -324,6 +335,8 @@ async fn test_async_operation_with_real_execution() -> Result<()> {
     let status_params = CallToolRequestParam {
         name: Cow::Borrowed("status"),
         arguments: None,
+        task: None,
+
     };
 
     let status_result = client.call_tool(status_params).await?;
@@ -346,6 +359,8 @@ async fn test_error_recovery_and_resilience() -> Result<()> {
         .call_tool(CallToolRequestParam {
             name: Cow::Borrowed("unknown_tool"),
             arguments: None,
+            task: None,
+
         })
         .await;
 
@@ -353,6 +368,8 @@ async fn test_error_recovery_and_resilience() -> Result<()> {
     let working_params = CallToolRequestParam {
         name: Cow::Borrowed("status"),
         arguments: None,
+        task: None,
+
     };
 
     let result = client.call_tool(working_params).await?;
@@ -366,6 +383,8 @@ async fn test_error_recovery_and_resilience() -> Result<()> {
             .call_tool(CallToolRequestParam {
                 name: Cow::Owned(invalid_tool_name),
                 arguments: None,
+                task: None,
+
             })
             .await;
 
@@ -374,6 +393,8 @@ async fn test_error_recovery_and_resilience() -> Result<()> {
             .call_tool(CallToolRequestParam {
                 name: Cow::Borrowed("status"),
                 arguments: None,
+                task: None,
+
             })
             .await?;
         assert!(!good_result.content.is_empty());
