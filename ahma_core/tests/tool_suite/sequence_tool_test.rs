@@ -92,6 +92,7 @@ async fn test_simple_sequence_execution() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(call_param).await?;
@@ -181,6 +182,7 @@ async fn test_sequence_with_invalid_tool() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let error = client
@@ -276,6 +278,7 @@ async fn test_sequence_delay_is_applied() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let start = Instant::now();

@@ -24,6 +24,7 @@ async fn test_path_validation_success() {
             }))
             .unwrap(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(params).await;
@@ -48,6 +49,7 @@ async fn test_path_validation_failure_absolute() {
             }))
             .unwrap(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(params).await;
@@ -90,6 +92,7 @@ async fn test_path_validation_failure_relative() {
             }))
             .unwrap(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(params).await;

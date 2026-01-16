@@ -25,6 +25,8 @@ async fn test_no_timeout_no_operations_uses_default() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: "await".into(),
         arguments: None, // No timeout, no tools filter
+        task: None,
+
     };
 
     let start = Instant::now();
@@ -53,6 +55,8 @@ async fn test_intelligent_timeout_calculation_needed() -> Result<()> {
     let await_param = CallToolRequestParam {
         name: "await".into(),
         arguments: None, // No explicit timeout - should use default/intelligent calculation
+        task: None,
+
     };
 
     let start = Instant::now();
@@ -90,6 +94,7 @@ async fn test_no_timeout_parameter_accepted() -> Result<()> {
             args.insert("tools".to_string(), json!("shell")); // Only tools filter allowed
             args
         }),
+        task: None,
     };
 
     let start = Instant::now();
@@ -128,6 +133,7 @@ async fn test_tool_filtered_intelligent_timeout() -> Result<()> {
             args.insert("tools".to_string(), json!("shell")); // Filter for shell tools only
             args
         }),
+        task: None,
     };
 
     let start = Instant::now();
@@ -165,6 +171,7 @@ async fn test_intelligent_timeout_with_long_operations() -> Result<()> {
             args.insert("command".to_string(), json!("sleep 600")); // 10 minutes
             args
         }),
+        task: None,
     };
 
     let _long_op_result = client.call_tool(long_op_param);
@@ -174,6 +181,8 @@ async fn test_intelligent_timeout_with_long_operations() -> Result<()> {
     let await_param = CallToolRequestParam {
         name: "await".into(),
         arguments: None, // No parameters - uses intelligent timeout
+        task: None,
+
     };
 
     // Test that the await tool calculates intelligent timeout correctly
@@ -200,6 +209,8 @@ async fn test_intelligent_timeout_no_pending_operations() -> Result<()> {
     let await_param = CallToolRequestParam {
         name: "await".into(),
         arguments: None, // No parameters - uses intelligent timeout
+        task: None,
+
     };
 
     let start = Instant::now();

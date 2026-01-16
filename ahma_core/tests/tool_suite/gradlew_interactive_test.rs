@@ -55,6 +55,7 @@ async fn test_gradlew_sync_commands_interactive() -> Result<()> {
                 .unwrap()
                 .clone(),
             ),
+            task: None,
         };
 
         let result = client.call_tool(call_param).await;
@@ -114,6 +115,7 @@ async fn test_gradlew_working_directory_handling() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -152,6 +154,7 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -179,6 +182,7 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -211,6 +215,7 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -250,6 +255,7 @@ async fn test_gradlew_optional_parameters() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -275,6 +281,7 @@ async fn test_gradlew_optional_parameters() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -305,6 +312,7 @@ async fn test_gradlew_optional_parameters() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -387,6 +395,7 @@ async fn test_gradlew_error_handling() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -417,6 +426,7 @@ async fn test_gradlew_error_handling() -> Result<()> {
             .unwrap()
             .clone(),
         ),
+        task: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -433,6 +443,8 @@ async fn test_gradlew_error_handling() -> Result<()> {
     let call_param = CallToolRequestParam {
         name: Cow::Borrowed("gradlew"),
         arguments: Some(Map::new()),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await;

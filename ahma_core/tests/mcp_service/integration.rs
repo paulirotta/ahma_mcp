@@ -47,7 +47,7 @@ async fn test_mcp_service_creation_and_info() {
     let info = service.get_info();
     assert_eq!(
         info.protocol_version,
-        rmcp::model::ProtocolVersion::V_2024_11_05
+        rmcp::model::ProtocolVersion::LATEST
     );
     assert!(
         info.capabilities.tools.is_some(),
@@ -104,7 +104,7 @@ async fn test_mcp_service_stability_under_load() {
     let final_info = service.get_info();
     assert_eq!(
         final_info.protocol_version,
-        rmcp::model::ProtocolVersion::V_2024_11_05
+        rmcp::model::ProtocolVersion::LATEST
     );
 }
 
@@ -130,7 +130,7 @@ async fn test_mcp_service_with_tool_configs() {
     let info = service.get_info();
     assert_eq!(
         info.protocol_version,
-        rmcp::model::ProtocolVersion::V_2024_11_05
+        rmcp::model::ProtocolVersion::LATEST
     );
     assert!(
         info.capabilities.tools.is_some(),

@@ -3,10 +3,10 @@
         "Ahma-stdio": {
             "type": "stdio",
             "cwd": "${workspaceFolder}",
-            "command": "/Users/phoughton/github/ahma_mcp/target/release/ahma_mcp",
+            "command": "/Users/paulhoughton/github/ahma_mcp/target/release/ahma_mcp",
             "args": [
                 "--tools-dir",
-                "/Users/phoughton/github/ahma_mcp/.ahma"
+                "/Users/paulhoughton/github/ahma_mcp/.ahma"
             ]
         },
         "Ahma-http": {

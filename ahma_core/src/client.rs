@@ -107,6 +107,7 @@ impl Client {
                 .unwrap()
                 .clone(),
             ),
+            task: None,
         };
 
         let result = service.call_tool(params).await?;
@@ -140,6 +141,7 @@ impl Client {
                 .unwrap()
                 .clone(),
             ),
+            task: None,
         };
 
         let result = service.call_tool(params).await?;
@@ -160,6 +162,7 @@ impl Client {
                 .unwrap()
                 .clone(),
             ),
+            task: None,
         };
 
         let result = service.call_tool(params).await?;

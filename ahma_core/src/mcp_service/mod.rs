@@ -346,7 +346,10 @@ impl AhmaMcpService {
     }
 
     /// Handles the 'await' tool call.
-    async fn handle_await(&self, params: CallToolRequestParam) -> Result<CallToolResult, McpError> {
+    async fn handle_await(
+        &self,
+        params: CallToolRequestParam,
+    ) -> Result<CallToolResult, McpError> {
         let args = params.arguments.unwrap_or_default();
 
         // Check if a specific operation_id is provided
@@ -1055,7 +1058,7 @@ impl AhmaMcpService {
 impl ServerHandler for AhmaMcpService {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
-            protocol_version: ProtocolVersion::V_2024_11_05,
+            protocol_version: ProtocolVersion::LATEST,
             capabilities: ServerCapabilities {
                 tools: Some(ToolsCapability {
                     list_changed: Some(true),
@@ -1573,6 +1576,7 @@ mod tests {
         CallToolRequestParam {
             name: std::borrow::Cow::Owned(name.to_string()),
             arguments: args.as_object().cloned(),
+            task: None,
         }
     }
 

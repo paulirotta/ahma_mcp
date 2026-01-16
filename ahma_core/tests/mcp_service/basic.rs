@@ -267,7 +267,7 @@ mod mcp_service_tests {
 
         let info = service.get_info();
 
-        assert_eq!(info.protocol_version, ProtocolVersion::V_2024_11_05);
+        assert_eq!(info.protocol_version, ProtocolVersion::LATEST);
         assert!(info.capabilities.tools.is_some());
         assert_eq!(info.server_info.name, env!("CARGO_PKG_NAME"));
         assert_eq!(info.server_info.version, env!("CARGO_PKG_VERSION"));

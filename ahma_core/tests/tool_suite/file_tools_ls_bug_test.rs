@@ -34,6 +34,8 @@ async fn test_ls_command_with_long_flag() {
         .call_tool(CallToolRequestParam {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
+            task: None,
+
         })
         .await;
 
@@ -89,6 +91,8 @@ async fn test_ls_command_without_flags() {
         .call_tool(CallToolRequestParam {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
+            task: None,
+
         })
         .await;
 
@@ -130,6 +134,8 @@ async fn test_ls_command_with_all_flag() {
         .call_tool(CallToolRequestParam {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
+            task: None,
+
         })
         .await;
 
@@ -173,6 +179,8 @@ async fn test_ls_command_with_multiple_flags() {
         .call_tool(CallToolRequestParam {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
+            task: None,
+
         })
         .await;
 

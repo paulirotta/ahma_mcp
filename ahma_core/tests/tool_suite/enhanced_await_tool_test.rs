@@ -25,6 +25,8 @@ async fn test_await_tool_timeout_functionality() -> Result<()> {
     let call_param = rmcp::model::CallToolRequestParam {
         name: "await".into(),
         arguments: Some(serde_json::Map::new()),
+        task: None,
+
     };
 
     // Should return immediately since no operations are running
@@ -60,6 +62,8 @@ async fn test_await_tool_timeout_validation() -> Result<()> {
     let call_param = rmcp::model::CallToolRequestParam {
         name: "await".into(),
         arguments: Some(serde_json::Map::new()),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -69,6 +73,8 @@ async fn test_await_tool_timeout_validation() -> Result<()> {
     let call_param = rmcp::model::CallToolRequestParam {
         name: "await".into(),
         arguments: Some(serde_json::Map::new()),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -93,6 +99,8 @@ async fn test_status_tool_functionality() -> Result<()> {
     let call_param = rmcp::model::CallToolRequestParam {
         name: "status".into(),
         arguments: Some(serde_json::Map::new()),
+        task: None,
+
     };
 
     let result = client.call_tool(call_param).await?;
@@ -132,6 +140,7 @@ async fn test_await_tool_with_tool_filter() -> Result<()> {
             args.insert("tools".to_string(), serde_json::json!("cargo"));
             args
         }),
+        task: None,
     };
 
     let result = timeout(Duration::from_secs(5), client.call_tool(call_param)).await??;

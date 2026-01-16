@@ -26,6 +26,7 @@ async fn test_path_validation_nested_parent_segments() {
             }))
             .unwrap(),
         ),
+        task: None,
     };
     let result = client.call_tool(params).await;
     assert!(
@@ -60,6 +61,7 @@ async fn test_path_validation_unicode_directory() {
             }))
             .unwrap(),
         ),
+        task: None,
     };
     let result = client.call_tool(params).await;
     assert!(
@@ -98,6 +100,7 @@ async fn test_path_validation_symlink_escape() {
                 }))
                 .unwrap(),
             ),
+            task: None,
         };
         let result = client.call_tool(params).await;
         assert!(result.is_err(), "Symlink escaping root should be rejected");
@@ -135,6 +138,7 @@ async fn test_path_validation_symlink_internal() {
                 }))
                 .unwrap(),
             ),
+            task: None,
         };
         let result = client.call_tool(params).await;
         assert!(result.is_ok(), "Internal symlink should be accepted");
@@ -161,6 +165,7 @@ async fn test_path_validation_reserved_names() {
                 }))
                 .unwrap(),
             ),
+            task: None,
         };
         let result = client.call_tool(params).await;
         assert!(

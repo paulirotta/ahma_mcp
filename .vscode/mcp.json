@@ -4,6 +4,9 @@
             "type": "stdio",
             "cwd": "${workspaceFolder}",
             "command": "target/release/ahma_mcp",
+            "args": [
+                "--sync",
+            ]
         },
         "Ahma http": {
             "type": "http",

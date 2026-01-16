@@ -23,6 +23,7 @@ async fn test_await_blocks_correctly() -> Result<()> {
     let call_params = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: json!({"command": "sleep 2"}).as_object().cloned(),
+        task: None,
     };
     let result = client.call_tool(call_params).await?;
 
@@ -56,6 +57,7 @@ async fn test_await_blocks_correctly() -> Result<()> {
     let await_params = CallToolRequestParam {
         name: Cow::Borrowed("await"),
         arguments: json!({"operation_id": job_id}).as_object().cloned(),
+        task: None,
     };
     let await_result = client.call_tool(await_params).await?;
     let await_duration = await_start.elapsed();
@@ -109,6 +111,7 @@ async fn test_await_detects_pending_operation_without_delay() -> Result<()> {
     let call_params = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: json!({"command": "sleep 1"}).as_object().cloned(),
+        task: None,
     };
     let result = client.call_tool(call_params).await?;
 
@@ -130,6 +133,7 @@ async fn test_await_detects_pending_operation_without_delay() -> Result<()> {
     let await_params = CallToolRequestParam {
         name: Cow::Borrowed("await"),
         arguments: json!({"operation_id": job_id}).as_object().cloned(),
+        task: None,
     };
     let await_result = client.call_tool(await_params).await?;
     let await_duration = await_start.elapsed();
