@@ -415,7 +415,9 @@ impl OperationMonitor {
     }
 
     pub async fn wait_for_operation(&self, operation_id: &str) -> Option<Operation> {
-        let timeout = Duration::from_secs(30); // Reduced from 300s to 30s
+        // Use a generous timeout (5 minutes) to handle long-running operations like cargo clippy
+        // The caller can apply their own timeout if they want stricter limits
+        let timeout = Duration::from_secs(300);
 
         // First, check if the operation has already completed.
         {
