@@ -1,7 +1,5 @@
 /// Manual test to verify await functionality
 /// Run this with: cargo test await_manual_verification
-use std::time::Instant;
-
 #[tokio::test]
 async fn await_manual_verification() {
     use ahma_core::{
@@ -34,11 +32,11 @@ async fn await_manual_verification() {
     // Add the operation to the monitor
     monitor.add_operation(operation).await;
 
-    // Simulate operation taking 2 seconds
+    // Complete operation without time-based sleep
     let monitor_clone = monitor.clone();
     let op_id_clone = op_id.clone();
     tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        tokio::task::yield_now().await;
         monitor_clone
             .update_status(
                 &op_id_clone,
@@ -49,18 +47,9 @@ async fn await_manual_verification() {
     });
 
     // Test await functionality - this should block until completion
-    let start = Instant::now();
-    let _result = monitor.wait_for_operation(&op_id).await;
-    let duration = start.elapsed();
-
-    println!("Await took: {:?}", duration);
-
-    // Verify it blocked for at least 1.5 seconds
-    assert!(
-        duration.as_secs_f64() >= 1.5,
-        "Await should have blocked for at least 1.5 seconds, but returned in {:?}",
-        duration
-    );
+    let result = monitor.wait_for_operation(&op_id).await;
+    assert!(result.is_some());
+    assert_eq!(result.unwrap().state, OperationStatus::Completed);
 
     println!("✅ Await fix verification passed!");
 }

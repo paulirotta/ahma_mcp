@@ -52,8 +52,8 @@ async fn test_concurrent_operation_tracking() -> Result<()> {
                 .update_status(&op_id, OperationStatus::InProgress, None)
                 .await;
 
-            // Simulate some work
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            // Simulate some work without time-based sleeps
+            tokio::task::yield_now().await;
 
             // Complete the operation
             monitor_clone

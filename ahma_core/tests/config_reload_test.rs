@@ -1,9 +1,8 @@
-use ahma_core::test_utils::test_client::new_client_with_args;
+use ahma_core::test_utils::{test_client::new_client_with_args, wait_for_condition};
 use anyhow::Result;
 use std::fs;
 use std::time::Duration;
 use tempfile::tempdir;
-use tokio::time::sleep;
 
 #[tokio::test]
 async fn test_dynamic_config_reload() -> Result<()> {
@@ -59,14 +58,26 @@ async fn test_dynamic_config_reload() -> Result<()> {
     fs::write(tools_dir.join("new_tool.json"), new_tool)?;
 
     // 6. Wait for the watcher to detect the change and reload (debounce is 200ms)
-    // We'll wait a bit longer to be safe
-    sleep(Duration::from_millis(1000)).await;
+    let new_tool_seen = wait_for_condition(
+        Duration::from_secs(5),
+        Duration::from_millis(100),
+        || {
+            let client = &client;
+            async move {
+                client
+                    .list_tools(None)
+                    .await
+                    .ok()
+                    .map(|tools| tools.tools.iter().any(|t| t.name == "new_tool"))
+                    .unwrap_or(false)
+            }
+        },
+    )
+    .await;
 
     // 7. Verify new tool is now present
-    let tools = client.list_tools(None).await?;
-    assert!(tools.tools.iter().any(|t| t.name == "initial_tool"));
     assert!(
-        tools.tools.iter().any(|t| t.name == "new_tool"),
+        new_tool_seen,
         "New tool should be present after reload"
     );
 
@@ -88,23 +99,55 @@ async fn test_dynamic_config_reload() -> Result<()> {
 }
 "#;
     fs::write(tools_dir.join("initial_tool.json"), modified_tool)?;
-    sleep(Duration::from_millis(1000)).await;
+    let modified_seen = wait_for_condition(
+        Duration::from_secs(5),
+        Duration::from_millis(100),
+        || {
+            let client = &client;
+            async move {
+                client
+                    .list_tools(None)
+                    .await
+                    .ok()
+                    .and_then(|tools| {
+                        tools
+                            .tools
+                            .iter()
+                            .find(|t| t.name == "initial_tool")
+                            .map(|t| t.description == Some("Modified initial tool".into()))
+                    })
+                    .unwrap_or(false)
+            }
+        },
+    )
+    .await;
 
-    let tools = client.list_tools(None).await?;
-    let initial = tools
-        .tools
-        .iter()
-        .find(|t| t.name == "initial_tool")
-        .unwrap();
-    assert_eq!(initial.description, Some("Modified initial tool".into()));
+    assert!(
+        modified_seen,
+        "Modified initial tool should be present after reload"
+    );
 
     // 9. Remove a tool
     fs::remove_file(tools_dir.join("new_tool.json"))?;
-    sleep(Duration::from_millis(1000)).await;
+    let removed_seen = wait_for_condition(
+        Duration::from_secs(5),
+        Duration::from_millis(100),
+        || {
+            let client = &client;
+            async move {
+                client
+                    .list_tools(None)
+                    .await
+                    .ok()
+                    .map(|tools| !tools.tools.iter().any(|t| t.name == "new_tool"))
+                    .unwrap_or(false)
+            }
+        },
+    )
+    .await;
 
-    let tools = client.list_tools(None).await?;
     assert!(
-        !tools.tools.iter().any(|t| t.name == "new_tool"),
+        removed_seen,
         "New tool should be removed after file deletion"
     );
 

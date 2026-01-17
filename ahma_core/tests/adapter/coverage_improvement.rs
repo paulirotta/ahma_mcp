@@ -22,6 +22,7 @@ use ahma_core::{
     config::{CommandOption, SubcommandConfig},
     operation_monitor::{MonitorConfig, OperationMonitor},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
+    test_utils::wait_for_condition,
 };
 
 /// Helper function to create test adapter with custom configuration
@@ -408,7 +409,15 @@ async fn test_advanced_cancellation_scenarios() -> Result<()> {
         .await?;
 
     // Wait for operation to timeout/cancel
-    tokio::time::sleep(Duration::from_millis(2000)).await;
+    let _ = wait_for_condition(
+        Duration::from_secs(5),
+        Duration::from_millis(50),
+        || {
+            let callback = callback.clone();
+            async move { callback.get_call_count() > 0 }
+        },
+    )
+    .await;
 
     let updates = callback.get_updates().await;
     let has_cancellation_or_error = updates.iter().any(|update| {
@@ -453,8 +462,16 @@ async fn test_callback_error_handling() -> Result<()> {
         )
         .await?;
 
-    // Wait for operation to complete
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    // Wait for callback activity
+    let _ = wait_for_condition(
+        Duration::from_secs(5),
+        Duration::from_millis(50),
+        || {
+            let failing_callback = failing_callback.clone();
+            async move { failing_callback.get_call_count() > 0 }
+        },
+    )
+    .await;
 
     // Operation should complete despite callback errors
     assert!(operation_id.starts_with("op_"));
@@ -524,7 +541,15 @@ async fn test_timeout_error_classification() -> Result<()> {
         .await?;
 
     // Wait for timeout to occur
-    tokio::time::sleep(Duration::from_millis(1500)).await;
+    let _ = wait_for_condition(
+        Duration::from_secs(5),
+        Duration::from_millis(50),
+        || {
+            let timeout_callback = timeout_callback.clone();
+            async move { timeout_callback.get_call_count() > 0 }
+        },
+    )
+    .await;
 
     let updates = timeout_callback.get_updates().await;
     let has_timeout_notification = updates.iter().any(|update| match update {
@@ -620,8 +645,10 @@ async fn test_error_recovery_resilience() -> Result<()> {
         assert_ne!(async_error_id, async_success_id);
     }
 
-    // Wait for async operations to complete
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    // Yield to allow async operations to complete
+    for _ in 0..5 {
+        tokio::task::yield_now().await;
+    }
 
     adapter.shutdown().await;
     Ok(())
@@ -767,7 +794,15 @@ async fn test_complex_async_exec_options() -> Result<()> {
     assert_eq!(operation_id, "custom_test_op_12345");
 
     // Wait for operation to complete
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    let _ = wait_for_condition(
+        Duration::from_secs(5),
+        Duration::from_millis(50),
+        || {
+            let callback = callback.clone();
+            async move { callback.get_call_count() > 0 }
+        },
+    )
+    .await;
 
     // Should have received callback notifications
     let updates = callback.get_updates().await;
@@ -805,8 +840,8 @@ async fn test_graceful_shutdown_scenarios() -> Result<()> {
         operation_ids.push(op_id);
     }
 
-    // Give operations a moment to start
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    // Yield to allow operations to start
+    tokio::task::yield_now().await;
 
     // Test graceful shutdown
     let shutdown_start = Instant::now();

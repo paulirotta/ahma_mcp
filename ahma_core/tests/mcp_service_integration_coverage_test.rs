@@ -286,9 +286,6 @@ async fn test_await_for_completed_async_operation() -> Result<()> {
         }
     }
 
-    // Give it a moment to complete
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
     // Now await for it - should find it completed
     let await_params = CallToolRequestParam {
         name: Cow::Borrowed("await"),
@@ -570,9 +567,6 @@ async fn test_async_operation_full_lifecycle() -> Result<()> {
     };
     let status_result = client.call_tool(status_params).await?;
     assert!(!status_result.content.is_empty());
-
-    // Wait for completion
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
     // Await should find completed operations
     let await_params = CallToolRequestParam {

@@ -12,6 +12,7 @@ use ahma_core::{
     config::SubcommandConfig,
     operation_monitor::{MonitorConfig, OperationMonitor},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
+    test_utils::wait_for_condition,
     utils::logging::init_test_logging,
 };
 use anyhow::Result;
@@ -272,8 +273,10 @@ async fn test_async_operation_lifecycle() -> Result<()> {
 
     assert!(operation_id.starts_with("op_"));
 
-    // Wait for operation to complete
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Yield to allow operation to complete without timing sleeps
+    for _ in 0..3 {
+        tokio::task::yield_now().await;
+    }
 
     // Test multiple concurrent async operations
     let mut operation_ids = Vec::new();
@@ -305,8 +308,10 @@ async fn test_async_operation_lifecycle() -> Result<()> {
         }
     }
 
-    // Wait for all operations to complete
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    // Yield to allow operations to complete without timing sleeps
+    for _ in 0..5 {
+        tokio::task::yield_now().await;
+    }
 
     adapter.shutdown().await;
     Ok(())
@@ -674,8 +679,18 @@ async fn test_async_operations_with_callbacks() -> Result<()> {
 
     assert!(operation_id.starts_with("op_"));
 
-    // Wait for operation to complete
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    // Wait for callback to be invoked
+    let callback_received = wait_for_condition(
+        Duration::from_secs(5),
+        Duration::from_millis(50),
+        || {
+            let call_count = call_count.clone();
+            async move { call_count.load(Ordering::Relaxed) > 0 }
+        },
+    )
+    .await;
+
+    assert!(callback_received, "Timed out waiting for callback invocation");
 
     // Verify callback was called
     let final_count = call_count.load(Ordering::Relaxed);

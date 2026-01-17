@@ -7,6 +7,7 @@
 use crate::client::Client;
 use crate::sandbox;
 use anyhow::Result;
+use std::future::Future;
 use std::sync::Once;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -257,6 +258,123 @@ pub fn get_workspace_path<P: AsRef<Path>>(relative: P) -> PathBuf {
 #[allow(dead_code)]
 pub fn get_tools_dir() -> PathBuf {
     get_workspace_path(".ahma")
+}
+
+/// Wait for an async condition to become true, polling at a fixed interval.
+/// Returns true if the condition succeeds within the timeout.
+pub async fn wait_for_condition<F, Fut>(
+    timeout: Duration,
+    interval: Duration,
+    mut condition: F,
+) -> bool
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = bool>,
+{
+    let start = tokio::time::Instant::now();
+    loop {
+        if condition().await {
+            return true;
+        }
+
+        if start.elapsed() >= timeout {
+            return false;
+        }
+
+        tokio::time::sleep(interval).await;
+    }
+}
+
+/// Wait for an operation to reach a terminal state, checking both active and completed history.
+pub async fn wait_for_operation_terminal(
+    monitor: &crate::operation_monitor::OperationMonitor,
+    operation_id: &str,
+    timeout: Duration,
+    interval: Duration,
+) -> bool {
+    wait_for_condition(timeout, interval, || {
+        let monitor = monitor.clone();
+        let operation_id = operation_id.to_string();
+        async move {
+            if let Some(op) = monitor.get_operation(&operation_id).await {
+                return op.state.is_terminal();
+            }
+
+            let completed = monitor.get_completed_operations().await;
+            completed.iter().any(|op| op.id == operation_id)
+        }
+    })
+    .await
+}
+
+/// CLI testing helpers for reusing cached binaries and shared flags.
+pub mod cli {
+    use super::get_workspace_dir;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+    use std::process::Command;
+    use std::sync::{Mutex, OnceLock};
+
+    /// Cached binary paths to avoid redundant builds across tests.
+    /// Key: (package, binary) tuple as string "package:binary"
+    static BINARY_CACHE: OnceLock<Mutex<HashMap<String, PathBuf>>> = OnceLock::new();
+
+    /// Get or build a binary, caching the result.
+    ///
+    /// This function is optimized for test performance:
+    /// 1. First checks if the binary already exists (common when running via cargo test/nextest)
+    /// 2. Only builds if the binary doesn't exist
+    /// 3. Caches the path to avoid redundant filesystem checks
+    pub fn build_binary_cached(package: &str, binary: &str) -> PathBuf {
+        let cache = BINARY_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+        let key = format!("{}:{}", package, binary);
+
+        // Fast path: check cache first
+        {
+            let cache_guard = cache.lock().unwrap();
+            if let Some(path) = cache_guard.get(&key) {
+                return path.clone();
+            }
+        }
+
+        let workspace = get_workspace_dir();
+        let target_dir = std::env::var("CARGO_TARGET_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| workspace.join("target"));
+
+        let binary_path = target_dir.join("debug").join(binary);
+
+        if binary_path.exists() {
+            let mut cache_guard = cache.lock().unwrap();
+            cache_guard.insert(key, binary_path.clone());
+            return binary_path;
+        }
+
+        let output = Command::new("cargo")
+            .current_dir(&workspace)
+            .args(["build", "--package", package, "--bin", binary])
+            .output()
+            .expect("Failed to run cargo build");
+
+        assert!(
+            output.status.success(),
+            "Failed to build {}: {}",
+            binary,
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let mut cache_guard = cache.lock().unwrap();
+        cache_guard.insert(key, binary_path.clone());
+
+        binary_path
+    }
+
+    /// Create a command for a binary with test mode enabled (bypasses sandbox checks)
+    pub fn test_command(binary: &PathBuf) -> Command {
+        let mut cmd = Command::new(binary);
+        cmd.env("AHMA_TEST_MODE", "1");
+        cmd
+    }
 }
 
 /// Create a test config for integration tests

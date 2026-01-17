@@ -2,11 +2,11 @@ use ahma_core::{
     adapter::Adapter,
     operation_monitor::{MonitorConfig, OperationMonitor, OperationStatus},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
+    test_utils::wait_for_condition,
 };
 use serde_json::{Map, Value};
 use std::{sync::Arc, time::Duration};
 use tempfile::TempDir;
-use tokio::time::sleep;
 
 /// Test that operations can be cancelled successfully
 #[tokio::test]
@@ -66,8 +66,23 @@ async fn test_operation_cancellation_functionality() {
 
     println!("🚀 Started long-running operation: {}", operation_id);
 
-    // Wait a moment to ensure the operation has started
-    sleep(Duration::from_millis(500)).await;
+    // Wait until the operation is at least InProgress
+    let _ = wait_for_condition(
+        Duration::from_secs(5),
+        Duration::from_millis(50),
+        || {
+            let operation_monitor = operation_monitor.clone();
+            let operation_id = operation_id.clone();
+            async move {
+                operation_monitor
+                    .get_operation(&operation_id)
+                    .await
+                    .map(|op| op.state != OperationStatus::Pending)
+                    .unwrap_or(false)
+            }
+        },
+    )
+    .await;
 
     // Check if the operation is still running, or if it completed/failed immediately
     let operation = operation_monitor.get_operation(&operation_id).await;
@@ -81,8 +96,23 @@ async fn test_operation_cancellation_functionality() {
             assert!(cancelled, "Operation cancellation should succeed");
             println!("✓ Operation cancellation succeeded");
 
-            // Wait a moment for the cancellation to be processed
-            sleep(Duration::from_millis(100)).await;
+            // Wait for cancellation to be processed
+            let _ = wait_for_condition(
+                Duration::from_secs(5),
+                Duration::from_millis(50),
+                || {
+                    let operation_monitor = operation_monitor.clone();
+                    let operation_id = operation_id.clone();
+                    async move {
+                        operation_monitor
+                            .get_operation(&operation_id)
+                            .await
+                            .map(|op| op.state == OperationStatus::Cancelled)
+                            .unwrap_or(true)
+                    }
+                },
+            )
+            .await;
 
             // Verify the operation was cancelled
             let cancelled_operation = operation_monitor.get_operation(&operation_id).await;

@@ -123,7 +123,7 @@ struct Cli {
     tools_dir: PathBuf,
 
     /// Default timeout for commands in seconds.
-    #[arg(long, global = true, default_value = "300")]
+    #[arg(long, global = true, default_value = "1800")]
     timeout: u64,
 
     /// Enable debug logging.

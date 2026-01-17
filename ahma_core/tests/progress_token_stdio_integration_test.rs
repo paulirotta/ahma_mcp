@@ -157,8 +157,8 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
         .await
         .context("Failed to start rmcp client + ahma_mcp stdio")?;
 
-    // Wait for initialization to complete
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    // Yield to allow initialization to complete without timing sleeps
+    tokio::task::yield_now().await;
 
     // Use workspace directory for working_directory (inside sandbox scope)
     let working_dir = wd.to_string_lossy().to_string();

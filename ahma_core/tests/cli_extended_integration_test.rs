@@ -8,46 +8,11 @@
 //! - --debug flag behavior
 //! - --log-to-stderr flag behavior
 
-use std::path::PathBuf;
+use ahma_core::test_utils::cli::build_binary_cached as build_binary;
+use ahma_core::test_utils::cli::{build_binary_cached, test_command};
+use ahma_core::test_utils::get_workspace_dir as workspace_dir;
 use std::process::Command;
 use tempfile::TempDir;
-
-fn workspace_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("Failed to locate workspace root")
-        .to_path_buf()
-}
-
-fn build_binary(package: &str, binary: &str) -> PathBuf {
-    let workspace = workspace_dir();
-
-    let output = Command::new("cargo")
-        .current_dir(&workspace)
-        .args(["build", "--package", package, "--bin", binary])
-        .output()
-        .expect("Failed to run cargo build");
-
-    assert!(
-        output.status.success(),
-        "Failed to build {}: {}",
-        binary,
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    // Check for CARGO_TARGET_DIR
-    let target_dir = std::env::var("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| workspace.join("target"));
-
-    target_dir.join("debug").join(binary)
-}
-
-fn test_command(binary: &PathBuf) -> Command {
-    let mut cmd = Command::new(binary);
-    cmd.env("AHMA_TEST_MODE", "1");
-    cmd
-}
 
 // ============================================================================
 // ahma_mcp Flag Combination Tests
@@ -59,7 +24,7 @@ mod flag_combination_tests {
     /// Test --sync flag behavior
     #[test]
     fn test_ahma_mcp_sync_flag() {
-        let binary = build_binary("ahma_core", "ahma_mcp");
+        let binary = build_binary_cached("ahma_core", "ahma_mcp");
 
         let output = test_command(&binary)
             .args(["--help"])
@@ -81,7 +46,7 @@ mod flag_combination_tests {
     /// Test --debug flag behavior
     #[test]
     fn test_ahma_mcp_debug_flag() {
-        let binary = build_binary("ahma_core", "ahma_mcp");
+        let binary = build_binary_cached("ahma_core", "ahma_mcp");
 
         let output = test_command(&binary)
             .args(["--help"])
@@ -103,7 +68,7 @@ mod flag_combination_tests {
     /// Test --log-to-stderr flag behavior
     #[test]
     fn test_ahma_mcp_log_to_stderr_flag() {
-        let binary = build_binary("ahma_core", "ahma_mcp");
+        let binary = build_binary_cached("ahma_core", "ahma_mcp");
 
         let output = test_command(&binary)
             .args(["--help"])

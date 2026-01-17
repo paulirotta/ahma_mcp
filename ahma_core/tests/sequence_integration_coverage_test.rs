@@ -9,6 +9,7 @@
 //! These tests spawn the actual ahma_mcp binary and use real tool configs.
 
 use ahma_core::test_utils::test_client::{new_client_in_dir, new_client_in_dir_with_env};
+use ahma_core::test_utils::wait_for_condition;
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParam;
@@ -266,7 +267,27 @@ async fn test_async_sequence_tool_execution() -> Result<()> {
     );
 
     // Wait for operations to complete
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    let _ = wait_for_condition(
+        std::time::Duration::from_secs(5),
+        std::time::Duration::from_millis(50),
+        || {
+            let client = client.clone();
+            async move {
+                let status_params = CallToolRequestParam {
+                    name: Cow::Borrowed("status"),
+                    arguments: Some(json!({}).as_object().unwrap().clone()),
+                    task: None,
+                };
+                client
+                    .call_tool(status_params)
+                    .await
+                    .ok()
+                    .map(|status_result| !status_result.content.is_empty())
+                    .unwrap_or(false)
+            }
+        },
+    )
+    .await;
 
     // Check status to verify completion
     let status_params = CallToolRequestParam {

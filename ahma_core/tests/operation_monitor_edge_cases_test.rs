@@ -11,8 +11,8 @@
 
 use ahma_core::operation_monitor::{MonitorConfig, Operation, OperationMonitor, OperationStatus};
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::time::{sleep, timeout};
+use std::time::{Duration, SystemTime};
+use tokio::time::timeout;
 
 // ============================================================================
 // Test: Operation Lifecycle State Transitions
@@ -197,14 +197,13 @@ async fn test_operation_timeout_enforcement() {
     );
     // Set a short timeout specifically for this operation
     op.timeout_duration = Some(Duration::from_millis(50));
+    // Force the operation to appear old enough to timeout immediately
+    op.start_time = SystemTime::now() - Duration::from_millis(200);
     monitor.add_operation(op).await;
 
     monitor
         .update_status("timeout_test", OperationStatus::InProgress, None)
         .await;
-
-    // Wait for the timeout to be exceeded
-    sleep(Duration::from_millis(100)).await;
 
     // Trigger timeout check
     monitor.check_timeouts().await;
@@ -277,7 +276,7 @@ async fn test_wait_for_completion_success() {
     // Spawn a task to complete the operation after a short delay
     let monitor_clone = monitor.clone();
     tokio::spawn(async move {
-        sleep(Duration::from_millis(50)).await;
+        tokio::task::yield_now().await;
         monitor_clone
             .update_status(
                 "wait_test",
