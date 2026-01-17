@@ -237,30 +237,42 @@ pub struct SequenceStep {
     pub skip_if_file_missing: Option<String>,
 }
 
+/// Top-level MCP client configuration (mcp.json).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpConfig {
+    /// Server entries keyed by logical name.
     pub servers: HashMap<String, ServerConfig>,
 }
 
+/// Configuration for a single MCP server entry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ServerConfig {
+    /// Spawn an MCP server as a child process over stdio.
     #[serde(rename = "child_process")]
     ChildProcess(ChildProcessConfig),
+    /// Connect to an MCP server over HTTP/SSE.
     #[serde(rename = "http")]
     Http(HttpServerConfig),
 }
 
+/// Child-process transport configuration for an MCP server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChildProcessConfig {
+    /// Executable path or command name.
     pub command: String,
+    /// Arguments passed to the MCP server process.
     pub args: Vec<String>,
 }
 
+/// HTTP transport configuration for an MCP server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpServerConfig {
+    /// Base URL of the MCP HTTP endpoint.
     pub url: String,
+    /// Optional OAuth client id for Atlassian flows.
     pub atlassian_client_id: Option<String>,
+    /// Optional OAuth client secret for Atlassian flows.
     pub atlassian_client_secret: Option<String>,
 }
 

@@ -47,12 +47,17 @@ pub struct McpConfig {
     pub servers: HashMap<String, ServerConfig>,
 }
 
+/// Minimal server config entry from mcp.json used by the CLI tool lister.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServerConfig {
+    /// Transport type ("child_process" or "http").
     #[serde(rename = "type")]
     pub server_type: String,
+    /// Command to launch a child-process server (if applicable).
     pub command: Option<String>,
+    /// Arguments for the child-process server.
     pub args: Option<Vec<String>>,
+    /// Working directory for launching the server.
     pub cwd: Option<String>,
 }
 
@@ -63,24 +68,36 @@ pub struct ToolListResult {
     pub tools: Vec<ToolOutput>,
 }
 
+/// Summary information about the connected MCP server.
 #[derive(Debug, Serialize)]
 pub struct ServerInfoOutput {
+    /// Server name (if reported by the MCP handshake).
     pub name: String,
+    /// Optional server version string.
     pub version: Option<String>,
 }
 
+/// Tool description output for JSON listing.
 #[derive(Debug, Serialize)]
 pub struct ToolOutput {
+    /// Tool name.
     pub name: String,
+    /// Optional tool description.
     pub description: Option<String>,
+    /// Parameter schema (flattened for display).
     pub parameters: Vec<ParameterOutput>,
 }
 
+/// Flattened parameter schema for JSON output.
 #[derive(Debug, Serialize)]
 pub struct ParameterOutput {
+    /// Parameter name.
     pub name: String,
+    /// Parameter type (string/number/array/etc).
     pub param_type: String,
+    /// Whether the parameter is required.
     pub required: bool,
+    /// Optional parameter description.
     pub description: Option<String>,
 }
 
@@ -228,6 +245,13 @@ pub async fn list_tools_http(url: &str) -> Result<ToolListResult> {
 }
 
 #[allow(dead_code)]
+/// Extract parameter definitions from a JSON schema object.
+///
+/// # Arguments
+/// * `schema` - JSON schema value with `properties` and `required` entries.
+///
+/// # Returns
+/// A list of `ParameterOutput` entries suitable for display.
 pub fn extract_parameters_from_json(schema: &serde_json::Value) -> Vec<ParameterOutput> {
     let mut params = Vec::new();
 
@@ -302,6 +326,7 @@ fn convert_tool_to_output(tool: Tool) -> ToolOutput {
     }
 }
 
+/// Print a human-readable tool list to stdout.
 pub fn print_text_output(result: &ToolListResult) {
     println!("MCP Server Tools");
     println!("================");
@@ -345,6 +370,7 @@ pub fn print_text_output(result: &ToolListResult) {
     }
 }
 
+/// Print a JSON tool list to stdout.
 pub fn print_json_output(result: &ToolListResult) -> Result<()> {
     let json = serde_json::to_string_pretty(result)?;
     println!("{}", json);

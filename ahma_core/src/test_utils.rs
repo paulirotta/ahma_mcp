@@ -1,3 +1,9 @@
+//! Test helper utilities for Ahma MCP.
+//!
+//! This module provides reusable helpers for integration and unit tests,
+//! including sandbox setup, temporary project scaffolding, and MCP client
+//! conveniences. These APIs are intended for test-only code paths.
+
 use crate::client::Client;
 use crate::sandbox;
 use anyhow::Result;
@@ -78,6 +84,8 @@ pub fn is_tool_disabled(tool_name: &str) -> bool {
 /// # Example
 ///
 /// ```rust
+/// use ahma_core::skip_if_disabled;
+///
 /// fn test_my_tool_sync() {
 ///     skip_if_disabled!("my_tool");
 ///     // ... test implementation
@@ -150,6 +158,10 @@ macro_rules! skip_if_disabled_async {
 /// This function is idempotent - calling it multiple times is safe.
 static SANDBOX_INIT: Once = Once::new();
 
+/// Initialize the sandbox for tests (idempotent).
+///
+/// This sets the sandbox scope to `/` and enables test mode, allowing tests to
+/// access temporary directories without restriction.
 pub fn init_test_sandbox() {
     SANDBOX_INIT.call_once(|| {
         // Enable test mode to bypass sandbox requirement
@@ -306,7 +318,7 @@ pub fn strip_ansi(input: &str) -> String {
     out
 }
 
-// Test client module
+/// Test client helpers for spawning and interacting with the MCP server.
 pub mod test_client {
     use super::{get_workspace_dir, get_workspace_path};
     use anyhow::Result;
@@ -610,6 +622,7 @@ pub mod test_client {
 }
 
 // Test project module
+/// Temporary project scaffolding helpers for integration tests.
 pub mod test_project {
     #![allow(dead_code)]
 
@@ -745,6 +758,7 @@ async fn main() {
     }
 }
 
+/// Shared test helper functions used across crates.
 #[allow(clippy::module_inception, dead_code)]
 pub mod test_utils {
     use crate::{
@@ -758,6 +772,7 @@ pub mod test_utils {
     use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
     use tempfile::{TempDir, tempdir};
 
+    /// Initialize verbose logging for tests.
     pub fn init_test_logging() {
         let _ = crate::utils::logging::init_logging("trace", false);
     }

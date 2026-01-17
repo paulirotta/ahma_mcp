@@ -1,3 +1,5 @@
+//! Error types for HTTP MCP client operations.
+
 use thiserror::Error;
 
 /// Errors that can occur when using the HTTP MCP client.

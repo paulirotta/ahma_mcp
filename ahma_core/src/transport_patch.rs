@@ -1,3 +1,13 @@
+//! Patched transport for MCP stdio connections.
+//!
+//! This module adapts the `rmcp` transport to support both line-delimited JSON
+//! and Content-Length framed messages on stdin/stdout. It is primarily used by
+//! the HTTP bridge and testing utilities.
+//!
+//! ## Security
+//! This transport only handles framing. It does not perform authentication or
+//! validation; callers should enforce sandboxing and schema checks elsewhere.
+
 use rmcp::{
     service::{RoleServer, RxJsonRpcMessage, TxJsonRpcMessage},
     transport::Transport,
@@ -10,6 +20,7 @@ use tokio::io::{
 };
 use tokio::sync::Mutex;
 
+/// Transport wrapper supporting mixed MCP framing styles.
 #[derive(Clone)]
 pub struct PatchedTransport<R, W> {
     reader: Arc<Mutex<R>>,
@@ -21,6 +32,11 @@ where
     R: AsyncBufRead + Send + Unpin + 'static,
     W: AsyncWrite + Send + Unpin + 'static,
 {
+    /// Create a patched transport from an async reader and writer.
+    ///
+    /// # Arguments
+    /// * `reader` - Async buffered reader (stdin or TCP stream).
+    /// * `writer` - Async writer (stdout or TCP stream).
     pub fn new(reader: R, writer: W) -> Self {
         Self {
             reader: Arc::new(Mutex::new(reader)),
@@ -29,9 +45,11 @@ where
     }
 }
 
+/// Convenience alias for stdio-based patched transport.
 pub type PatchedStdioTransport = PatchedTransport<BufReader<tokio::io::Stdin>, tokio::io::Stdout>;
 
 impl PatchedStdioTransport {
+    /// Create a patched transport bound to process stdin/stdout.
     pub fn new_stdio() -> Self {
         Self::new(BufReader::new(tokio::io::stdin()), tokio::io::stdout())
     }

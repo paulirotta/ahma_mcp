@@ -1,3 +1,13 @@
+//! Tool availability probing and install guidance.
+//!
+//! This module runs lightweight probes to decide whether tools and subcommands
+//! are available in the current environment. It returns a summary containing
+//! filtered tool configs and human-friendly guidance for missing dependencies.
+//!
+//! ## Security
+//! Availability probes are executed inside the configured sandbox scope to avoid
+//! untrusted filesystem access.
+
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -14,25 +24,38 @@ use crate::shell_pool::{ShellCommand, ShellPoolManager};
 
 const DEFAULT_PROBE_TIMEOUT_MS: u64 = 10_000;
 
+/// Summary of a disabled tool and why it was disabled.
 #[derive(Debug, Clone)]
 pub struct DisabledTool {
+    /// Tool name (matching the config key).
     pub name: String,
+    /// Human-readable message describing the failure.
     pub message: String,
+    /// Optional install guidance for the tool.
     pub install_instructions: Option<String>,
 }
 
+/// Summary of a disabled subcommand and why it was disabled.
 #[derive(Debug, Clone)]
 pub struct DisabledSubcommand {
+    /// Parent tool name.
     pub tool: String,
+    /// Subcommand path (e.g., "git commit").
     pub subcommand_path: String,
+    /// Human-readable message describing the failure.
     pub message: String,
+    /// Optional install guidance for the subcommand.
     pub install_instructions: Option<String>,
 }
 
+/// Aggregate results of running availability probes.
 #[derive(Debug, Clone)]
 pub struct AvailabilitySummary {
+    /// Tool configs that remain enabled after probing.
     pub filtered_configs: HashMap<String, ToolConfig>,
+    /// Tools that were disabled due to failed probes.
     pub disabled_tools: Vec<DisabledTool>,
+    /// Subcommands that were disabled due to failed probes.
     pub disabled_subcommands: Vec<DisabledSubcommand>,
 }
 

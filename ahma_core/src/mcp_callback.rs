@@ -61,6 +61,13 @@ pub struct McpCallbackSender {
 }
 
 impl McpCallbackSender {
+    /// Create a new MCP callback sender for a single operation.
+    ///
+    /// # Arguments
+    /// * `peer` - MCP peer used to emit progress notifications.
+    /// * `operation_id` - Internal operation identifier (used for logging).
+    /// * `progress_token` - Client-provided progress token for MCP notifications.
+    /// * `client_type` - Client flavor for compatibility behavior.
     pub fn new(
         peer: Peer<RoleServer>,
         operation_id: String,

@@ -15,5 +15,7 @@
 //!   upon the `chrono` crate to provide date and time manipulation features.
 
 pub mod logging;
+/// Serde helpers for `SystemTime` values.
 pub mod time;
+/// Timestamp formatting helpers.
 pub mod timestamp;

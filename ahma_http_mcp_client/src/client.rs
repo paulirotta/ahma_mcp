@@ -1,3 +1,9 @@
+//! HTTP MCP transport implementation.
+//!
+//! This module provides the `HttpMcpTransport`, which implements the MCP transport
+//! over HTTP and manages optional OAuth2 authentication for Atlassian-compatible
+//! providers.
+
 use crate::error::{McpHttpError, Result};
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, RedirectUrl,

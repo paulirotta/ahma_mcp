@@ -43,8 +43,11 @@
 //! }
 //! ```
 
+/// HTTP bridge server implementation.
 pub mod bridge;
+/// Error types for bridge operations.
 pub mod error;
+/// Session lifecycle management for HTTP clients.
 pub mod session;
 
 pub use bridge::{BridgeConfig, start_bridge};

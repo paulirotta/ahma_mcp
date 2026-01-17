@@ -1,3 +1,13 @@
+//! Path security validation for sandboxed operations.
+//!
+//! This module ensures that resolved file paths stay within a configured root
+//! (sandbox scope). It canonicalizes paths to detect symlink escapes and
+//! normalizes relative segments to prevent traversal outside the sandbox.
+//!
+//! ## Security
+//! Callers must validate any user-provided paths before file access. This module
+//! is a defense-in-depth layer in addition to kernel sandboxing.
+
 use anyhow::{Result, anyhow};
 use std::path::{Component, Path, PathBuf};
 use tokio::fs;
