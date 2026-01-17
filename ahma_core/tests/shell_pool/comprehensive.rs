@@ -105,7 +105,7 @@ async fn test_resource_cleanup_validation() -> Result<()> {
         enabled: true,
         shells_per_directory: 3,
         max_total_shells: 15,
-        shell_idle_timeout: Duration::from_millis(500), // Short timeout for testing
+        shell_idle_timeout: Duration::from_millis(0),
         pool_cleanup_interval: Duration::from_millis(100),
         shell_spawn_timeout: Duration::from_secs(5),
         command_timeout: Duration::from_secs(30),
@@ -146,8 +146,8 @@ async fn test_resource_cleanup_validation() -> Result<()> {
         manager.return_shell(shell).await;
     }
 
-    // Wait for cleanup to occur
-    tokio::time::sleep(Duration::from_millis(500)).await; // Reduced from 1000ms to 500ms
+    // Trigger cleanup deterministically
+    manager.cleanup_idle_pools().await;
 
     // Check that idle shells were cleaned up
     let final_stats = manager.get_stats().await;
@@ -332,8 +332,8 @@ async fn test_shell_pool_lifecycle_and_health_checking() -> Result<()> {
     // Return shell to pool
     manager.return_shell(shell).await;
 
-    // Wait for background health checks and cleanup
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Trigger cleanup deterministically
+    manager.cleanup_idle_pools().await;
 
     // Pool should still exist but might have fewer shells due to cleanup
     let final_stats = manager.get_stats().await;
@@ -543,8 +543,8 @@ async fn test_concurrent_access_patterns() -> Result<()> {
                     manager_clone.return_shell(shell).await;
                 }
 
-                // Small delay between operations
-                tokio::time::sleep(Duration::from_millis(10)).await;
+                // Yield between operations without timing
+                tokio::task::yield_now().await;
             }
 
             (i, successful_operations)
@@ -667,10 +667,9 @@ async fn test_memory_usage_stability_under_sustained_load() -> Result<()> {
             assert!(stats.total_shells <= stats.max_shells);
         }
 
-        // Small delay to allow cleanup - reduced frequency
+        // Yield to allow background tasks without timing
         if cycle % 3 == 0 {
-            // Reduced from every 5 to every 3 cycles
-            tokio::time::sleep(Duration::from_millis(25)).await; // Reduced from 50ms to 25ms
+            tokio::task::yield_now().await;
         }
     }
 

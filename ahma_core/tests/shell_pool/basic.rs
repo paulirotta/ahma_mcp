@@ -264,8 +264,8 @@ async fn test_shell_pool_manager_background_tasks_disabled() {
     // Should not panic when starting background tasks even if disabled
     manager.start_background_tasks();
 
-    // Give a moment for any potential startup
-    tokio::time::sleep(Duration::from_millis(10)).await;
+    // Yield to allow any potential startup without sleeping
+    tokio::task::yield_now().await;
 }
 
 #[tokio::test]

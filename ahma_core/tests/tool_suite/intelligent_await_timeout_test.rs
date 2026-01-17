@@ -173,7 +173,7 @@ async fn test_intelligent_timeout_with_long_operations() -> Result<()> {
     };
 
     let _long_op_result = client.call_tool(long_op_param);
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    tokio::task::yield_now().await;
 
     // Use await tool with intelligent timeout (no timeout parameter)
     let await_param = CallToolRequestParam {

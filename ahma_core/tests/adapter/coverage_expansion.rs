@@ -286,8 +286,8 @@ async fn test_operation_id_generation_uniqueness() {
     // Verify we got the expected number of unique IDs
     assert_eq!(unique_ids.len(), 20, "Should have 20 unique operation IDs");
 
-    // Give a small amount of time for operations to start before shutdown
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    // Yield to allow operations to start before shutdown
+    tokio::task::yield_now().await;
 
     adapter1.shutdown().await;
     adapter2.shutdown().await;
@@ -318,8 +318,10 @@ async fn test_async_execution_task_error_handling() {
     let op_id = result.unwrap();
     assert!(op_id.starts_with("op_"));
 
-    // Wait for the operation to attempt execution and fail
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Yield to allow the operation to attempt execution and fail
+    for _ in 0..3 {
+        tokio::task::yield_now().await;
+    }
 
     adapter.shutdown().await;
 }
@@ -349,8 +351,8 @@ async fn test_shutdown_with_active_tasks() {
         operation_ids.push(op_id);
     }
 
-    // Give operations a moment to start
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    // Yield to allow operations to start
+    tokio::task::yield_now().await;
 
     // Shutdown should complete
     adapter.shutdown().await;
@@ -386,8 +388,10 @@ async fn test_async_execution_with_none_callback() {
     let op_id = result.unwrap();
     assert!(op_id.starts_with("op_"));
 
-    // Wait for completion
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Yield to allow completion
+    for _ in 0..3 {
+        tokio::task::yield_now().await;
+    }
 
     adapter.shutdown().await;
 }
@@ -419,8 +423,10 @@ async fn test_execute_async_with_empty_options() {
     let op_id = result.unwrap();
     assert!(op_id.starts_with("op_"));
 
-    // Wait for completion
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Yield to allow completion
+    for _ in 0..3 {
+        tokio::task::yield_now().await;
+    }
 
     adapter.shutdown().await;
 }
@@ -533,8 +539,10 @@ async fn test_async_execution_with_custom_operation_id() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), custom_id);
 
-    // Wait for completion
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Yield to allow completion
+    for _ in 0..3 {
+        tokio::task::yield_now().await;
+    }
 
     adapter.shutdown().await;
 }
@@ -652,8 +660,10 @@ async fn test_multiple_concurrent_async_operations() {
         assert!(op_id.starts_with("op_"));
     }
 
-    // Wait for all async operations to finish processing
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    // Yield to allow async operations to finish processing
+    for _ in 0..5 {
+        tokio::task::yield_now().await;
+    }
 
     adapter.shutdown().await;
 }

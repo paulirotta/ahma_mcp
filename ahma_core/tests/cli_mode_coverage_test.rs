@@ -7,44 +7,13 @@
 //! - Error paths for invalid configurations
 //! - Sandbox scope initialization paths
 
-use std::path::PathBuf;
+use ahma_core::test_utils::cli::{build_binary_cached, test_command};
+use ahma_core::test_utils::get_workspace_dir as workspace_dir;
 use std::process::Command;
-use std::time::Duration;
 use tempfile::TempDir;
 
-fn workspace_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("Failed to locate workspace root")
-        .to_path_buf()
-}
-
-fn build_binary() -> PathBuf {
-    let workspace = workspace_dir();
-
-    let output = Command::new("cargo")
-        .current_dir(&workspace)
-        .args(["build", "--package", "ahma_core", "--bin", "ahma_mcp"])
-        .output()
-        .expect("Failed to run cargo build");
-
-    assert!(
-        output.status.success(),
-        "Failed to build ahma_mcp: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let target_dir = std::env::var("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| workspace.join("target"));
-
-    target_dir.join("debug").join("ahma_mcp")
-}
-
-fn test_command(binary: &PathBuf) -> Command {
-    let mut cmd = Command::new(binary);
-    cmd.env("AHMA_TEST_MODE", "1");
-    cmd
+fn build_binary() -> std::path::PathBuf {
+    build_binary_cached("ahma_core", "ahma_mcp")
 }
 
 // ============================================================================
@@ -111,8 +80,8 @@ mod mode_flags {
 
         match output {
             Ok(mut child) => {
-                // Give it a moment to start
-                std::thread::sleep(Duration::from_millis(100));
+                // Yield to allow the process to start without sleeping
+                std::thread::yield_now();
                 // Kill the process
                 let _ = child.kill();
                 let output = child.wait_with_output().expect("Failed to read output");

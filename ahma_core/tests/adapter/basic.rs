@@ -1,6 +1,7 @@
 use ahma_core::adapter::{Adapter, AsyncExecOptions, ExecutionMode};
 use ahma_core::config::{CommandOption, SubcommandConfig};
 use ahma_core::operation_monitor::{MonitorConfig, OperationMonitor};
+use ahma_core::test_utils::wait_for_condition;
 use ahma_core::shell_pool::{ShellPoolConfig, ShellPoolManager};
 use serde_json::{Map, Value};
 use std::sync::Arc;
@@ -191,8 +192,8 @@ async fn test_execute_async_basic() {
     let op_id = operation_id.unwrap();
     assert!(op_id.starts_with("op_"));
 
-    // Give the async operation time to complete
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    // Yield to allow the async operation to make progress
+    tokio::task::yield_now().await;
 }
 
 #[tokio::test]
@@ -280,8 +281,21 @@ async fn test_execute_async_with_callback() {
 
     assert!(result.is_ok());
 
-    // Give the async operation time to complete and send callback
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Wait for the async operation to send callback updates
+    let updates_ready = wait_for_condition(
+        Duration::from_secs(5),
+        Duration::from_millis(50),
+        || {
+            let updates = callback_updates.clone();
+            async move {
+                let guard = updates.lock().await;
+                !guard.is_empty()
+            }
+        },
+    )
+    .await;
+
+    assert!(updates_ready, "Timed out waiting for callback updates");
 
     let updates = callback_updates.lock().await;
     println!("Callback updates received: {}", updates.len());

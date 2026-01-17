@@ -7,7 +7,7 @@ use ahma_core::adapter::{Adapter, AsyncExecOptions, ExecutionMode};
 use ahma_core::config::{CommandOption, SubcommandConfig};
 use ahma_core::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_core::shell_pool::{ShellPoolConfig, ShellPoolManager};
-use ahma_core::test_utils::init_test_sandbox;
+use ahma_core::test_utils::{init_test_sandbox, wait_for_condition};
 use serde_json::{Map, Value, json};
 use std::sync::Arc;
 use std::time::Duration;
@@ -729,7 +729,22 @@ async fn test_async_cancellation_before_execution() {
         .await;
 
     // Give the task time to see the cancellation
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    let _ = wait_for_condition(
+        Duration::from_secs(5),
+        Duration::from_millis(50),
+        || {
+            let monitor = monitor.clone();
+            let op_id = op_id.clone();
+            async move {
+                monitor
+                    .get_operation(&op_id)
+                    .await
+                    .map(|op| op.state != OperationStatus::Pending)
+                    .unwrap_or(false)
+            }
+        },
+    )
+    .await;
 
     // The operation should be cancellable (even if it started executing)
     assert!(cancel_result, "Cancellation should succeed");
@@ -778,7 +793,22 @@ async fn test_async_with_callback_none() {
         .unwrap();
 
     // Wait for completion
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    let _ = wait_for_condition(
+        Duration::from_secs(5),
+        Duration::from_millis(50),
+        || {
+            let monitor = monitor.clone();
+            let op_id = op_id.clone();
+            async move {
+                monitor
+                    .get_operation(&op_id)
+                    .await
+                    .map(|op| op.state.is_terminal())
+                    .unwrap_or(false)
+            }
+        },
+    )
+    .await;
 
     // Check the operation completed
     if let Some(op) = monitor.get_operation(&op_id).await {
@@ -823,7 +853,22 @@ async fn test_async_timeout_path() {
         .unwrap();
 
     // Wait for timeout (1 second + buffer)
-    tokio::time::sleep(Duration::from_millis(2500)).await;
+    let _ = wait_for_condition(
+        Duration::from_secs(5),
+        Duration::from_millis(50),
+        || {
+            let monitor = monitor.clone();
+            let op_id = op_id.clone();
+            async move {
+                monitor
+                    .get_operation(&op_id)
+                    .await
+                    .map(|op| op.state.is_terminal())
+                    .unwrap_or(false)
+            }
+        },
+    )
+    .await;
 
     // Check the operation was cancelled due to timeout
     if let Some(op) = monitor.get_operation(&op_id).await {

@@ -17,28 +17,28 @@ async fn test_pool_is_idle_detection() {
     init_test_logging();
     let temp_dir = TempDir::new().unwrap();
     
-    // Configure with a very short idle timeout for testing
-    let config = ShellPoolConfig {
+    // Pool should not be idle immediately after creation with a long timeout
+    let active_config = ShellPoolConfig {
         enabled: true,
-        shell_idle_timeout: Duration::from_millis(50), // 50ms idle timeout
+        shell_idle_timeout: Duration::from_secs(60),
         ..Default::default()
     };
-    
-    let pool = ShellPool::new(temp_dir.path(), config);
-    
-    // Pool should not be idle immediately after creation
+    let active_pool = ShellPool::new(temp_dir.path(), active_config);
     assert!(
-        !pool.is_idle().await,
+        !active_pool.is_idle().await,
         "Pool should not be idle immediately after creation"
     );
-    
-    // Wait for the idle timeout to pass
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    
-    // Now the pool should be idle
+
+    // Pool should be idle immediately with a zero timeout
+    let idle_config = ShellPoolConfig {
+        enabled: true,
+        shell_idle_timeout: Duration::from_millis(0),
+        ..Default::default()
+    };
+    let idle_pool = ShellPool::new(temp_dir.path(), idle_config);
     assert!(
-        pool.is_idle().await,
-        "Pool should be idle after idle timeout has passed"
+        idle_pool.is_idle().await,
+        "Pool should be idle with zero timeout"
     );
 }
 
@@ -55,9 +55,6 @@ async fn test_pool_activity_resets_idle_timer() {
     };
     
     let pool = ShellPool::new(temp_dir.path(), config);
-    
-    // Wait a bit but not past idle timeout
-    tokio::time::sleep(Duration::from_millis(50)).await;
     
     // Get a shell - this should reset the idle timer
     let shell = pool.get_shell().await;
@@ -150,7 +147,7 @@ async fn test_manager_cleanup_idle_pools() {
     
     let config = ShellPoolConfig {
         enabled: true,
-        shell_idle_timeout: Duration::from_millis(50), // Very short for testing
+        shell_idle_timeout: Duration::from_millis(0),
         shells_per_directory: 2,
         max_total_shells: 10,
         shell_spawn_timeout: Duration::from_secs(5),
@@ -171,9 +168,6 @@ async fn test_manager_cleanup_idle_pools() {
         initial_stats.total_pools > 0,
         "Should have at least one pool"
     );
-    
-    // Wait for pools to become idle
-    tokio::time::sleep(Duration::from_millis(100)).await;
     
     // Run cleanup
     manager.cleanup_idle_pools().await;

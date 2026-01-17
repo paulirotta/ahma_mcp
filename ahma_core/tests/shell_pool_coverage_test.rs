@@ -412,7 +412,7 @@ async fn test_shell_pool_manager_cleanup_idle_pools() {
         enabled: true,
         shells_per_directory: 1,
         max_total_shells: 5,
-        shell_idle_timeout: Duration::from_millis(1), // Very short for testing
+        shell_idle_timeout: Duration::from_millis(0),
         shell_spawn_timeout: Duration::from_secs(5),
         ..Default::default()
     };
@@ -423,9 +423,6 @@ async fn test_shell_pool_manager_cleanup_idle_pools() {
     if let Some(shell) = manager.get_shell(temp_dir.path().to_str().unwrap()).await {
         manager.return_shell(shell).await;
     }
-
-    // Wait for idle timeout to expire
-    tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Run cleanup - should remove idle pools
     manager.cleanup_idle_pools().await;

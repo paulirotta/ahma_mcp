@@ -1,4 +1,6 @@
-use ahma_core::test_utils::{get_workspace_path, init_test_sandbox};
+use ahma_core::test_utils::{
+    get_workspace_path, init_test_sandbox, wait_for_operation_terminal,
+};
 use ahma_core::utils::logging::init_test_logging;
 /// Test multi-line argument handling functionality
 ///
@@ -164,7 +166,18 @@ async fn test_multiline_argument_with_echo() {
         .await;
 
     // Wait for the operation to complete
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    let completed = wait_for_operation_terminal(
+        &monitor,
+        "test_echo_multiline",
+        Duration::from_secs(5),
+        Duration::from_millis(50),
+    )
+    .await;
+
+    assert!(
+        completed,
+        "Timed out waiting for echo operation to complete"
+    );
 
     // Check the operation result through the monitor
     let operation = monitor.get_operation("test_echo_multiline").await;
@@ -448,7 +461,6 @@ async fn test_multiline_git_commit_message() {
     println!("Git commit result: {:?}", result);
 
     // Check what operations exist in the monitor
-    tokio::time::sleep(Duration::from_millis(100)).await;
     let all_operations = monitor.get_all_active_operations().await;
     println!("All operations after execution: {:?}", all_operations);
 
@@ -458,34 +470,28 @@ async fn test_multiline_git_commit_message() {
         result
     );
 
-    // Wait for the operation to complete - optimized waiting strategy
-    let mut wait_time = 0;
-    let mut completed = false;
-    while wait_time < 20 && !completed {
-        // Reduced from 50 to 20 iterations
-        tokio::time::sleep(Duration::from_millis(50)).await; // Reduced from 100ms to 50ms
-        if let Some(operation) = monitor.get_operation("test_multiline_commit").await {
-            println!("Operation status: {:?}", operation.state);
-            if matches!(
-                operation.state,
-                ahma_core::operation_monitor::OperationStatus::Completed
-                    | ahma_core::operation_monitor::OperationStatus::Failed
-            ) {
-                completed = true;
-                println!("Operation completed with status: {:?}", operation.state);
-                if let Some(result_data) = &operation.result {
-                    println!("Operation result: {:?}", result_data);
-                }
-                if matches!(
-                    operation.state,
-                    ahma_core::operation_monitor::OperationStatus::Failed
-                ) {
-                    eprintln!("Operation failed: {:?}", operation);
-                }
-            }
+    // Wait for the operation to complete
+    let completed = wait_for_operation_terminal(
+        &monitor,
+        "test_multiline_commit",
+        Duration::from_secs(10),
+        Duration::from_millis(50),
+    )
+    .await;
+
+    if let Some(operation) = monitor.get_operation("test_multiline_commit").await {
+        if let Some(result_data) = &operation.result {
+            println!("Operation result: {:?}", result_data);
         }
-        wait_time += 1;
+        if matches!(
+            operation.state,
+            ahma_core::operation_monitor::OperationStatus::Failed
+        ) {
+            eprintln!("Operation failed: {:?}", operation);
+        }
     }
+
+    assert!(completed, "Timed out waiting for git commit operation");
 
     // Debug: Check if there are any files staged
     let status_result = std::process::Command::new("git")

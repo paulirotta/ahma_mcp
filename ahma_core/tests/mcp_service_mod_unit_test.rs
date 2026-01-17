@@ -320,7 +320,7 @@ async fn test_config_watcher_debounce_logic() {
         // Send multiple events rapidly
         for _ in 0..5 {
             let _ = sender.send(()).await;
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            tokio::task::yield_now().await;
         }
     });
 

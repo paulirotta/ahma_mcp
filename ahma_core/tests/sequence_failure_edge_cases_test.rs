@@ -8,7 +8,7 @@
 //!
 //! These are real integration tests using tempdir and actual binary execution.
 
-use ahma_core::test_utils::test_client::new_client_in_dir;
+use ahma_core::test_utils::{test_client::new_client_in_dir, wait_for_condition};
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParam;
@@ -391,8 +391,13 @@ async fn test_sequence_failure_with_filesystem_markers() -> Result<()> {
 
     let _result = client.call_tool(params).await;
 
-    // Give a moment for filesystem operations to complete
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Wait for filesystem operations to complete
+    let _ = wait_for_condition(
+        std::time::Duration::from_secs(2),
+        std::time::Duration::from_millis(20),
+        || async { step1_marker.exists() || step3_marker.exists() },
+    )
+    .await;
 
     // Check the marker files
     let step1_ran = step1_marker.exists();

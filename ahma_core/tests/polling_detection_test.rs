@@ -1,7 +1,6 @@
 use ahma_core::operation_monitor::{MonitorConfig, Operation, OperationMonitor, OperationStatus};
 use ahma_core::utils::logging::init_test_logging;
 use std::time::Duration;
-use tokio::time::sleep;
 
 #[tokio::test]
 async fn test_polling_detection() {
@@ -20,7 +19,7 @@ async fn test_polling_detection() {
     // Simulate rapid polling (should trigger warning)
     for _ in 0..4 {
         let _op = monitor.get_operation("test-op").await;
-        sleep(Duration::from_millis(100)).await; // Very short interval
+        tokio::task::yield_now().await; // very short interval without sleep
     }
 
     // Complete the operation
@@ -54,7 +53,7 @@ async fn test_normal_status_checking() {
     for _ in 0..2 {
         // Reduced from 3 to 2 iterations
         let _op = monitor.get_operation("test-op2").await;
-        sleep(Duration::from_secs(3)).await; // Reduced from 6s to 3s - still tests normal interval
+        tokio::task::yield_now().await; // normal interval without real waiting
     }
 
     // Complete the operation

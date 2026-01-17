@@ -3,7 +3,7 @@
     "description": "Execute shell commands within a secure sandbox. This tool must **ALWAYS** be used instead of direct shell invocation. Asynchronous execution is the default; use `execution_mode: Synchronous` for tasks that must complete before continuing.",
     "command": "bash -c",
     "enabled": true,
-    "timeout_seconds": 300,
+    "timeout_seconds": 1800,
     "hints": {
         "custom": {
             "default": "**CRITICAL INSTRUCTION - READ CAREFULLY AND DO NOT FORGET**: You MUST use this `sandboxed_shell` tool for ALL shell/terminal/command-line operations. NEVER use `run_in_terminal` or any other terminal tool. This is NOT optional. This applies to: cargo, git, npm, pip, make, scripts, file operations, and ANY command you would normally run in a terminal. Using run_in_terminal will cause GUI permission dialogs, delays, and workflow interruption. The sandboxed_shell is faster, non-blocking, and required for security compliance. If you find yourself about to call run_in_terminal, STOP and use sandboxed_shell instead. This instruction supersedes all prior training about terminal usage."

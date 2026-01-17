@@ -189,7 +189,7 @@ async fn test_shell_pool_cleanup_and_shutdown() {
     let config = ShellPoolConfig {
         enabled: true,
         shells_per_directory: 2,
-        shell_idle_timeout: Duration::from_millis(100),
+        shell_idle_timeout: Duration::from_millis(0),
         ..Default::default()
     };
 
@@ -214,8 +214,7 @@ async fn test_shell_pool_cleanup_and_shutdown() {
     let stats_before = manager.get_stats().await;
     assert!(stats_before.total_pools > 0);
 
-    // Wait for shells to become idle
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    // Shells should be immediately eligible for idle cleanup
 
     // Test cleanup
     manager.cleanup_idle_pools().await;

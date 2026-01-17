@@ -4,7 +4,6 @@
 use ahma_core::operation_monitor::{MonitorConfig, Operation, OperationMonitor, OperationStatus};
 use anyhow::Result;
 use std::time::{Duration, Instant};
-use tokio::time::sleep;
 
 #[tokio::test]
 async fn test_operation_monitor_concurrent_operations() -> Result<()> {
@@ -33,8 +32,8 @@ async fn test_operation_monitor_concurrent_operations() -> Result<()> {
             // Register the operation
             monitor_clone.add_operation(operation).await;
 
-            // Simulate some work
-            sleep(Duration::from_millis(10)).await;
+            // Simulate some work without time-based sleeps
+            tokio::task::yield_now().await;
 
             // Complete the operation using update_status
             let result = serde_json::json!({"result": format!("completed_{}", i)});
