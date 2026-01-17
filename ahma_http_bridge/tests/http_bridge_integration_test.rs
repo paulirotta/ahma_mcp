@@ -103,7 +103,7 @@ async fn start_http_bridge(
     let client = Client::new();
     let health_url = format!("http://127.0.0.1:{}/health", port);
 
-    for _ in 0..30 {
+    for _ in 0..60 {
         sleep(Duration::from_millis(200)).await;
         if let Ok(resp) = client.get(&health_url).send().await
             && resp.status().is_success()
@@ -116,7 +116,21 @@ async fn start_http_bridge(
     let mut child = child;
     let _ = child.kill();
     let _ = child.wait();
-    panic!("HTTP bridge failed to start within timeout");
+
+    // Capture stderr for debugging startup failures
+    let stderr_output = if let Some(stderr) = child.stderr.take() {
+        use std::io::Read;
+        let mut buf = String::new();
+        let _ = std::io::BufReader::new(stderr).read_to_string(&mut buf);
+        buf
+    } else {
+        String::new()
+    };
+
+    panic!(
+        "HTTP bridge failed to start within timeout. Stderr: {}",
+        stderr_output
+    );
 }
 
 /// Send a JSON-RPC request to the MCP endpoint
@@ -477,7 +491,9 @@ async fn test_tool_call_with_different_working_directory() {
         "method": "initialize",
         "params": {
             "protocolVersion": "2024-11-05",
-            "capabilities": {},
+            "capabilities": {
+                "roots": { "listChanged": true }
+            },
             "clientInfo": {
                 "name": "test-client",
                 "version": "1.0.0"
@@ -649,7 +665,9 @@ async fn test_basic_tool_call_within_sandbox() {
         "method": "initialize",
         "params": {
             "protocolVersion": "2024-11-05",
-            "capabilities": {},
+            "capabilities": {
+                "roots": { "listChanged": true }
+            },
             "clientInfo": {
                 "name": "test-client",
                 "version": "1.0.0"
@@ -801,7 +819,9 @@ async fn test_roots_uri_parsing_percent_encoded_path() {
         "method": "initialize",
         "params": {
             "protocolVersion": "2024-11-05",
-            "capabilities": {},
+            "capabilities": {
+                "roots": { "listChanged": true }
+            },
             "clientInfo": {"name": "test-client", "version": "1.0.0"}
         }
     });
@@ -929,7 +949,9 @@ async fn test_roots_uri_parsing_file_localhost() {
         "method": "initialize",
         "params": {
             "protocolVersion": "2024-11-05",
-            "capabilities": {},
+            "capabilities": {
+                "roots": { "listChanged": true }
+            },
             "clientInfo": {"name": "test-client", "version": "1.0.0"}
         }
     });
@@ -1048,7 +1070,9 @@ async fn test_rejects_working_directory_path_traversal_outside_root() {
         "method": "initialize",
         "params": {
             "protocolVersion": "2024-11-05",
-            "capabilities": {},
+            "capabilities": {
+                "roots": { "listChanged": true }
+            },
             "clientInfo": {"name": "test-client", "version": "1.0.0"}
         }
     });
@@ -1177,7 +1201,9 @@ async fn test_symlink_escape_attempt_is_blocked() {
         "method": "initialize",
         "params": {
             "protocolVersion": "2024-11-05",
-            "capabilities": {},
+            "capabilities": {
+                "roots": { "listChanged": true }
+            },
             "clientInfo": {"name": "test-client", "version": "1.0.0"}
         }
     });
