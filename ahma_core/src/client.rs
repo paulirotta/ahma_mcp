@@ -209,10 +209,17 @@ fn first_text_content(contents: &[Content]) -> Result<String> {
         .ok_or_else(|| anyhow::anyhow!("No text content in response"))
 }
 
+/// Parsed response payload for async tool calls.
+///
+/// The MCP server returns a JSON payload when a tool call is queued. This
+/// struct captures the standardized fields used by the CLI helper.
 #[derive(serde::Deserialize, Debug)]
 pub struct ToolCallResult {
+    /// Status string (e.g. "queued" or "running").
     pub status: String,
+    /// Unique operation/job identifier.
     pub job_id: String,
+    /// Human-readable summary message.
     pub message: String,
 }
 

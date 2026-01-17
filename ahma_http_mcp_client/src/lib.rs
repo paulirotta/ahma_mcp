@@ -33,5 +33,7 @@
 //! # }
 //! ```
 
+/// HTTP transport implementation for MCP clients.
 pub mod client;
+/// Error types for HTTP MCP client operations.
 pub mod error;

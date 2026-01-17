@@ -50,6 +50,9 @@ use tracing_subscriber::{EnvFilter, fmt::layer, prelude::*};
 
 static INIT: Once = Once::new();
 
+/// Initialize verbose logging for tests.
+///
+/// This configures a `trace`-level subscriber that logs to stderr.
 pub fn init_test_logging() {
     init_logging("trace", false).expect("Failed to initialize test logging");
 }

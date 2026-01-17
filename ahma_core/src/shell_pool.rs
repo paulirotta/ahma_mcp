@@ -89,20 +89,31 @@ impl Default for ShellPoolConfig {
     }
 }
 
+/// Serializable command payload sent to a pre-warmed shell.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShellCommand {
+    /// Unique command identifier for correlation.
     pub id: String,
+    /// Command and arguments (argv style).
     pub command: Vec<String>,
+    /// Working directory for execution.
     pub working_dir: String,
+    /// Timeout for execution in milliseconds.
     pub timeout_ms: u64,
 }
 
+/// Response payload returned by a pre-warmed shell.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShellResponse {
+    /// Command identifier matching the request.
     pub id: String,
+    /// Process exit code.
     pub exit_code: i32,
+    /// Captured stdout output.
     pub stdout: String,
+    /// Captured stderr output.
     pub stderr: String,
+    /// Total execution time in milliseconds.
     pub duration_ms: u64,
 }
 

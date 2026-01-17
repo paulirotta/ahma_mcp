@@ -26,4 +26,5 @@ pub enum BridgeError {
     HttpServer(String),
 }
 
+/// Convenience result type for bridge operations.
 pub type Result<T> = std::result::Result<T, BridgeError>;

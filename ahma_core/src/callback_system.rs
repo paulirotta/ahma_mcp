@@ -6,10 +6,10 @@
 //!
 //! ## Key Components
 //!
-//! - [`ProgressUpdate`]: Enumeration of different progress event types
-//! - [`CallbackSender`]: Trait for implementing custom progress callback handlers
-//! - [`ChannelCallbackSender`]: Channel-based callback implementation for async communication
-//! - [`LoggingCallbackSender`]: Simple logging-based callback for debugging and monitoring
+//! - [`crate::callback_system::ProgressUpdate`]: Enumeration of different progress event types
+//! - [`crate::callback_system::CallbackSender`]: Trait for implementing custom progress callback handlers
+//! - [`crate::callback_system::ChannelCallbackSender`]: Channel-based callback implementation for async communication
+//! - [`crate::callback_system::LoggingCallbackSender`]: Simple logging-based callback for debugging and monitoring
 //!
 //! ## Usage Example
 //!
@@ -379,6 +379,11 @@ pub struct ChannelCallbackSender {
 }
 
 impl ChannelCallbackSender {
+    /// Create a channel-based callback sender.
+    ///
+    /// # Arguments
+    /// * `sender` - Channel used to push `ProgressUpdate` events.
+    /// * `cancellation_token` - Token used to check for cancellation.
     pub fn new(
         sender: mpsc::UnboundedSender<ProgressUpdate>,
         cancellation_token: tokio_util::sync::CancellationToken,
@@ -424,6 +429,10 @@ pub struct LoggingCallbackSender {
 }
 
 impl LoggingCallbackSender {
+    /// Create a logging callback sender for an operation.
+    ///
+    /// # Arguments
+    /// * `operation_name` - Prefix used in log messages.
     pub fn new(operation_name: String) -> Self {
         Self { operation_name }
     }

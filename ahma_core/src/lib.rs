@@ -62,30 +62,52 @@
 //! - **`callback_system`**: Event notification system.
 
 // Public modules
+/// Core adapter for tool execution.
 pub mod adapter;
+/// Progress callback system for async operations.
 pub mod callback_system;
 mod check_service_ext;
+/// Client helpers for talking to Ahma MCP.
 pub mod client;
+/// Client type helpers and compatibility flags.
 pub mod client_type;
+/// Tool configuration models and loaders.
 pub mod config;
+/// Constants used for guidance and tool hints.
 pub mod constants;
+/// Logging helpers for the core crate.
 pub mod logging;
+/// MCP callback sender integration.
 pub mod mcp_callback;
+/// MCP server implementation.
 pub mod mcp_service;
+/// Operation monitor for async tasks.
 pub mod operation_monitor;
+/// Path security checks for sandbox enforcement.
 pub mod path_security;
+/// Retry policies and helpers.
 pub mod retry;
+/// Sandbox configuration and enforcement.
 pub mod sandbox;
+/// JSON schema validation utilities.
 pub mod schema_validation;
+/// CLI shell entry points.
 pub mod shell;
+/// Shell pooling and execution.
 pub mod shell_pool;
+/// Terminal output helpers for callbacks.
 pub mod terminal_output;
+/// Tool availability checks and guidance.
 pub mod tool_availability;
+/// Tool hint formatting.
 pub mod tool_hints;
+/// Transport patching for stdio MCP.
 pub mod transport_patch;
+/// Shared utilities.
 pub mod utils;
 
 // Test utilities
+/// Test helpers for integration and unit tests.
 pub mod test_utils;
 
 // Re-export main types for easier use

@@ -10,6 +10,7 @@
 //! - **`list_tools`**: Functionality for listing MCP tools from servers
 
 pub mod cli;
+/// Utilities for listing MCP tools from servers.
 pub mod list_tools;
 
 // Re-export commonly used types

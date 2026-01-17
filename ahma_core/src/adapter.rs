@@ -68,9 +68,15 @@ fn generate_operation_id() -> String {
     format!("op_{}", id)
 }
 
+/// Execution strategy for tool calls.
+///
+/// Determines whether a tool is executed immediately on the current task or
+/// dispatched asynchronously with progress updates sent to the client.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExecutionMode {
+    /// Run the tool inline and return the final output to the caller.
     Synchronous,
+    /// Run the tool asynchronously and push results via callbacks.
     AsyncResultPush,
 }
 

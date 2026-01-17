@@ -348,6 +348,17 @@ fn normalize_tools_dir(tools_dir: PathBuf) -> PathBuf {
     }
 }
 
+/// Find the best matching tool configuration by name prefix.
+///
+/// # Arguments
+/// * `configs` - Loaded tool configs keyed by tool name.
+/// * `tool_name` - Raw tool name (may include subcommand suffix).
+///
+/// # Returns
+/// The matching key and config with the longest prefix match.
+///
+/// # Errors
+/// Returns an error when no enabled tool matches the provided name.
 pub fn find_matching_tool<'a>(
     configs: &'a HashMap<String, ToolConfig>,
     tool_name: &str,
@@ -366,6 +377,14 @@ pub fn find_matching_tool<'a>(
         .ok_or_else(|| anyhow!("No matching tool configuration found for '{}'", tool_name))
 }
 
+/// Find a tool configuration by exact key or configured name.
+///
+/// # Arguments
+/// * `configs` - Loaded tool configs keyed by tool name.
+/// * `tool_name` - Name to look up.
+///
+/// # Returns
+/// A tuple of the key and config if found, otherwise `None`.
 pub fn find_tool_config<'a>(
     configs: &'a HashMap<String, ToolConfig>,
     tool_name: &str,
@@ -380,6 +399,19 @@ pub fn find_tool_config<'a>(
         .map(|(key, config)| (key.as_str(), config))
 }
 
+/// Resolve a CLI tool name into a subcommand configuration and argv prefix.
+///
+/// # Arguments
+/// * `config_key` - Tool config key (prefix used for matching).
+/// * `config` - Tool configuration.
+/// * `tool_name` - Raw CLI tool name (may include `_subcommand`).
+/// * `subcommand_override` - Optional override for subcommand selection.
+///
+/// # Returns
+/// A reference to the resolved subcommand config and the argv prefix.
+///
+/// # Errors
+/// Returns an error when the subcommand path is invalid or not found.
 pub fn resolve_cli_subcommand<'a>(
     config_key: &str,
     config: &'a ToolConfig,
@@ -540,6 +572,9 @@ pub async fn run_cli_sequence(
     Ok(())
 }
 
+/// Parse a comma-delimited environment variable into a set.
+///
+/// Returns `None` when the variable is unset or empty.
 pub fn parse_env_list(key: &str) -> Option<HashSet<String>> {
     env::var(key).ok().map(|list| {
         list.split(',')
@@ -549,6 +584,9 @@ pub fn parse_env_list(key: &str) -> Option<HashSet<String>> {
     })
 }
 
+/// Returns true if a value should be skipped based on a set filter.
+///
+/// When the set is `None`, no skipping is performed.
 pub fn should_skip(set: &Option<HashSet<String>>, value: &str) -> bool {
     set.as_ref()
         .map(|items| items.contains(&value.to_ascii_lowercase()))
