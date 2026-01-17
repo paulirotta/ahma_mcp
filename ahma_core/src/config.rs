@@ -304,33 +304,16 @@ pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<Strin
     // Hardcoded tool names that should not be overridden by user configurations
     const RESERVED_TOOL_NAMES: &[&str] = &["await", "status"];
 
-    // Backwards compatibility: older layouts stored tool configs in `.ahma/tools/`.
-    // If a caller passes that path but it doesn't exist, transparently fall back to `.ahma/`.
-    let mut resolved_tools_dir = tools_dir.to_path_buf();
-    if !fs::try_exists(tools_dir).await.unwrap_or(false) {
-        let is_legacy_tools_dir = tools_dir
-            .file_name()
-            .and_then(|s| s.to_str())
-            .is_some_and(|s| s == "tools")
-            && tools_dir
-                .parent()
-                .and_then(|p| p.file_name())
-                .and_then(|s| s.to_str())
-                .is_some_and(|s| s == ".ahma");
+    // Identify all directories to load from. We always load from tools_dir,
+    // and if it exists, also from ahma_core/examples/configs relative to workspace root.
+    let mut all_dirs = vec![tools_dir.to_path_buf()];
 
-        if is_legacy_tools_dir
-            && let Some(parent) = tools_dir.parent()
-            && fs::try_exists(parent).await.unwrap_or(false)
-        {
-            resolved_tools_dir = parent.to_path_buf();
+    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        let workspace_root = Path::new(&manifest_dir).parent().unwrap();
+        let examples_dir = workspace_root.join("ahma_core/examples/configs");
+        if examples_dir.exists() && examples_dir != tools_dir {
+            all_dirs.insert(0, examples_dir); // Add to beginning so tools_dir overrides examples
         }
-    }
-
-    let tools_dir = resolved_tools_dir.as_path();
-
-    // Return empty map if directory doesn't exist
-    if !fs::try_exists(tools_dir).await.unwrap_or(false) {
-        return Ok(HashMap::new());
     }
 
     let mut configs = HashMap::new();
@@ -366,28 +349,34 @@ pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<Strin
         None
     }
 
-    // Read directory entries
-    let mut dir = fs::read_dir(tools_dir).await?;
-    while let Some(entry) = dir.next_entry().await? {
-        let path = entry.path();
+    for dir in all_dirs {
+        if !fs::try_exists(&dir).await.unwrap_or(false) {
+            continue;
+        }
 
-        // Only process .json files
-        if path.extension().and_then(|s| s.to_str()) == Some("json")
-            && let Some(config) = read_tool_config_with_retry(&path).await
-        {
-            // Guard rail: Check for conflicts with hardcoded tool names
-            if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
-                anyhow::bail!(
-                    "Tool name '{}' conflicts with a hardcoded system tool. Reserved tool names: {:?}. Please rename your tool in {}",
-                    config.name,
-                    RESERVED_TOOL_NAMES,
-                    path.display()
-                );
+        // Read directory entries
+        let mut entries = fs::read_dir(dir).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+
+            // Only process .json files
+            if path.extension().and_then(|s| s.to_str()) == Some("json")
+                && let Some(config) = read_tool_config_with_retry(&path).await
+            {
+                // Guard rail: Check for conflicts with hardcoded tool names
+                if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
+                    anyhow::bail!(
+                        "Tool name '{}' conflicts with a hardcoded system tool. Reserved tool names: {:?}. Please rename your tool in {}",
+                        config.name,
+                        RESERVED_TOOL_NAMES,
+                        path.display()
+                    );
+                }
+
+                // Include all tools (enabled or disabled)
+                // Disabled tools will be rejected at execution time with a helpful message
+                configs.insert(config.name.clone(), config);
             }
-
-            // Include all tools (enabled or disabled)
-            // Disabled tools will be rejected at execution time with a helpful message
-            configs.insert(config.name.clone(), config);
         }
     }
 
@@ -412,33 +401,16 @@ pub fn load_tool_configs_sync(tools_dir: &Path) -> anyhow::Result<HashMap<String
     // Hardcoded tool names that should not be overridden by user configurations
     const RESERVED_TOOL_NAMES: &[&str] = &["await", "status"];
 
-    // Backwards compatibility: older layouts stored tool configs in `.ahma/tools/`.
-    // If a caller passes that path but it doesn't exist, transparently fall back to `.ahma/`.
-    let mut resolved_tools_dir = tools_dir.to_path_buf();
-    if !tools_dir.exists() {
-        let is_legacy_tools_dir = tools_dir
-            .file_name()
-            .and_then(|s| s.to_str())
-            .is_some_and(|s| s == "tools")
-            && tools_dir
-                .parent()
-                .and_then(|p| p.file_name())
-                .and_then(|s| s.to_str())
-                .is_some_and(|s| s == ".ahma");
+    // Identify all directories to load from. We always load from tools_dir,
+    // and if it exists, also from ahma_core/examples/configs relative to workspace root.
+    let mut all_dirs = vec![tools_dir.to_path_buf()];
 
-        if is_legacy_tools_dir
-            && let Some(parent) = tools_dir.parent()
-            && parent.exists()
-        {
-            resolved_tools_dir = parent.to_path_buf();
+    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        let workspace_root = Path::new(&manifest_dir).parent().unwrap();
+        let examples_dir = workspace_root.join("ahma_core/examples/configs");
+        if examples_dir.exists() && examples_dir != tools_dir {
+            all_dirs.insert(0, examples_dir); // Add to beginning so tools_dir overrides examples
         }
-    }
-
-    let tools_dir = resolved_tools_dir.as_path();
-
-    // Return empty map if directory doesn't exist
-    if !tools_dir.exists() {
-        return Ok(HashMap::new());
     }
 
     let mut configs = HashMap::new();
@@ -472,28 +444,34 @@ pub fn load_tool_configs_sync(tools_dir: &Path) -> anyhow::Result<HashMap<String
         None
     }
 
-    // Read directory entries
-    for entry in fs::read_dir(tools_dir)? {
-        let entry = entry?;
-        let path = entry.path();
+    for dir in all_dirs {
+        if !dir.exists() {
+            continue;
+        }
 
-        // Only process .json files
-        if path.extension().and_then(|s| s.to_str()) == Some("json")
-            && let Some(config) = read_tool_config_with_retry(&path)
-        {
-            // Guard rail: Check for conflicts with hardcoded tool names
-            if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
-                anyhow::bail!(
-                    "Tool name '{}' conflicts with a hardcoded system tool. Reserved tool names: {:?}. Please rename your tool in {}",
-                    config.name,
-                    RESERVED_TOOL_NAMES,
-                    path.display()
-                );
+        // Read directory entries
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            // Only process .json files
+            if path.extension().and_then(|s| s.to_str()) == Some("json")
+                && let Some(config) = read_tool_config_with_retry(&path)
+            {
+                // Guard rail: Check for conflicts with hardcoded tool names
+                if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
+                    anyhow::bail!(
+                        "Tool name '{}' conflicts with a hardcoded system tool. Reserved tool names: {:?}. Please rename your tool in {}",
+                        config.name,
+                        RESERVED_TOOL_NAMES,
+                        path.display()
+                    );
+                }
+
+                // Include all tools (enabled or disabled)
+                // Disabled tools will be rejected at execution time with a helpful message
+                configs.insert(config.name.clone(), config);
             }
-
-            // Include all tools (enabled or disabled)
-            // Disabled tools will be rejected at execution time with a helpful message
-            configs.insert(config.name.clone(), config);
         }
     }
 

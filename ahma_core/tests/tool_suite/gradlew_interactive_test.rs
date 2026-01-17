@@ -29,6 +29,8 @@ fn get_android_test_project_path() -> String {
 #[tokio::test]
 #[ignore = "Slow test: Gradle startup takes ~10s per command. Run separately with --run-ignored"]
 async fn test_gradlew_sync_commands_interactive() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
+    skip_if_disabled_async_result!("gradlew");
     let client = new_client(Some(".ahma")).await?;
     let project_path = get_android_test_project_path();
 
@@ -45,10 +47,11 @@ async fn test_gradlew_sync_commands_interactive() -> Result<()> {
         println!("Testing sync command: {} - {}", command, description);
 
         let call_param = CallToolRequestParam {
-            name: Cow::Borrowed("gradlew"),
+            name: Cow::Borrowed("sandboxed_shell"),
             arguments: Some(
                 json!({
-                    "subcommand": command,
+                    "subcommand": "default",
+                    "command": format!("./gradlew {}", command),
                     "working_directory": project_path
                 })
                 .as_object()
@@ -99,16 +102,19 @@ async fn test_gradlew_sync_commands_interactive() -> Result<()> {
 #[cfg(feature = "android")]
 #[tokio::test]
 async fn test_gradlew_working_directory_handling() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
+    skip_if_disabled_async_result!("gradlew");
     let client = new_client(Some(".ahma")).await?;
     let project_path = get_android_test_project_path();
 
     // Test: Valid project directory with a quick command
     // Using "help" instead of "tasks" as it's slightly faster
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("gradlew"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
-                "subcommand": "help",
+                "subcommand": "default",
+                "command": "./gradlew help",
                 "working_directory": project_path
             })
             .as_object()
@@ -122,10 +128,13 @@ async fn test_gradlew_working_directory_handling() -> Result<()> {
     match result {
         Ok(tool_result) => {
             assert!(!tool_result.content.is_empty());
-            println!("✓ Valid project directory works");
+            println!("✓ Valid project directory works via sandboxed_shell");
         }
         Err(e) => {
-            println!("Note: gradlew help failed (possibly no Android SDK): {}", e);
+            println!(
+                "Note: gradlew help failed via sandboxed_shell (possibly no Android SDK): {}",
+                e
+            );
         }
     }
 
@@ -139,15 +148,18 @@ async fn test_gradlew_working_directory_handling() -> Result<()> {
 #[tokio::test]
 #[ignore = "Slow test: Gradle startup takes ~10s per command. Run separately with --run-ignored"]
 async fn test_gradlew_subcommand_validation() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
+    skip_if_disabled_async_result!("gradlew");
     let client = new_client(Some(".ahma")).await?;
     let project_path = get_android_test_project_path();
 
     // Test 1: Valid subcommand
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("gradlew"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
-                "subcommand": "help",
+                "subcommand": "default",
+                "command": "./gradlew help",
                 "working_directory": project_path
             })
             .as_object()
@@ -160,11 +172,11 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
     let result = client.call_tool(call_param).await;
     match result {
         Ok(_tool_result) => {
-            println!("✓ Valid subcommand accepted");
+            println!("✓ Valid subcommand accepted via sandboxed_shell");
         }
         Err(e) => {
             println!(
-                "Note: Valid subcommand failed (possibly no Android SDK): {}",
+                "Note: Valid subcommand failed via sandboxed_shell (possibly no Android SDK): {}",
                 e
             );
         }
@@ -172,10 +184,11 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
 
     // Test 2: Invalid subcommand
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("gradlew"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
-                "subcommand": "nonexistent_command_xyz",
+                "subcommand": "default",
+                "command": "./gradlew nonexistent_command_xyz",
                 "working_directory": project_path
             })
             .as_object()
@@ -193,23 +206,24 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
                 && let Some(text_content) = content.as_text()
             {
                 println!(
-                    "✓ Invalid subcommand handled: {}",
+                    "✓ Invalid subcommand handled via sandboxed_shell: {}",
                     text_content.text.chars().take(100).collect::<String>()
                 );
             }
         }
         Err(_) => {
-            println!("✓ Invalid subcommand properly rejected");
+            println!("✓ Invalid subcommand properly rejected via sandboxed_shell");
         }
     }
 
-    // Test 3: Missing subcommand
+    // Test 3: Missing command in sandboxed_shell
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("gradlew"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
+                "subcommand": "default",
                 "working_directory": project_path
-                // No subcommand
+                // No command
             })
             .as_object()
             .unwrap()
@@ -221,11 +235,13 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
     let result = client.call_tool(call_param).await;
     match result {
         Ok(_tool_result) => {
-            // Should provide help or error about missing subcommand
-            println!("✓ Missing subcommand handled gracefully");
+            println!("✓ Missing command handled gracefully via sandboxed_shell");
         }
         Err(e) => {
-            println!("✓ Missing subcommand properly rejected: {}", e);
+            println!(
+                "✓ Missing command properly rejected via sandboxed_shell: {}",
+                e
+            );
         }
     }
 
@@ -239,16 +255,18 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
 #[tokio::test]
 #[ignore = "Slow test: Gradle startup takes ~10s per command. Run separately with --run-ignored"]
 async fn test_gradlew_optional_parameters() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
+    skip_if_disabled_async_result!("gradlew");
     let client = new_client(Some(".ahma")).await?;
     let project_path = get_android_test_project_path();
 
     // Test 1: tasks command with --all option
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("gradlew"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
-                "subcommand": "tasks",
-                "all": true,
+                "subcommand": "default",
+                "command": "./gradlew tasks --all",
                 "working_directory": project_path
             })
             .as_object()
@@ -261,20 +279,23 @@ async fn test_gradlew_optional_parameters() -> Result<()> {
     let result = client.call_tool(call_param).await;
     match result {
         Ok(_tool_result) => {
-            println!("✓ tasks --all command accepted");
+            println!("✓ tasks --all command accepted via sandboxed_shell");
         }
         Err(e) => {
-            println!("Note: tasks --all failed (possibly no Android SDK): {}", e);
+            println!(
+                "Note: tasks --all failed via sandboxed_shell (possibly no Android SDK): {}",
+                e
+            );
         }
     }
 
     // Test 2: help command with task parameter
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("gradlew"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
-                "subcommand": "help",
-                "task": "build",
+                "subcommand": "default",
+                "command": "./gradlew help --task build",
                 "working_directory": project_path
             })
             .as_object()
@@ -287,7 +308,7 @@ async fn test_gradlew_optional_parameters() -> Result<()> {
     let result = client.call_tool(call_param).await;
     match result {
         Ok(tool_result) => {
-            println!("✓ help --task command accepted");
+            println!("✓ help --task command accepted via sandboxed_shell");
             if let Some(content) = tool_result.content.first()
                 && let Some(text_content) = content.as_text()
             {
@@ -295,17 +316,20 @@ async fn test_gradlew_optional_parameters() -> Result<()> {
             }
         }
         Err(e) => {
-            println!("Note: help --task failed (possibly no Android SDK): {}", e);
+            println!(
+                "Note: help --task failed via sandboxed_shell (possibly no Android SDK): {}",
+                e
+            );
         }
     }
 
     // Test 3: dependencies command with configuration parameter
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("gradlew"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
-                "subcommand": "dependencies",
-                "configuration": "debugCompileClasspath",
+                "subcommand": "default",
+                "command": "./gradlew dependencies --configuration debugCompileClasspath",
                 "working_directory": project_path
             })
             .as_object()
@@ -318,11 +342,11 @@ async fn test_gradlew_optional_parameters() -> Result<()> {
     let result = client.call_tool(call_param).await;
     match result {
         Ok(_tool_result) => {
-            println!("✓ dependencies --configuration command accepted");
+            println!("✓ dependencies --configuration command accepted via sandboxed_shell");
         }
         Err(e) => {
             println!(
-                "Note: dependencies --configuration failed (possibly no Android SDK): {}",
+                "Note: dependencies --configuration failed via sandboxed_shell (possibly no Android SDK): {}",
                 e
             );
         }
@@ -335,43 +359,47 @@ async fn test_gradlew_optional_parameters() -> Result<()> {
 /// Test gradlew tool loading and basic availability
 #[tokio::test]
 async fn test_gradlew_tool_availability() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
     skip_if_disabled_async_result!("gradlew");
     let client = new_client(Some(".ahma")).await?;
 
-    // Test that gradlew tool is available
+    // Test that sandboxed_shell tool is available
     let tools = client.list_tools(None).await?;
 
-    let gradlew_tool = tools.tools.iter().find(|t| t.name == "gradlew");
-    assert!(gradlew_tool.is_some(), "gradlew tool should be available");
+    let shell_tool = tools.tools.iter().find(|t| t.name == "sandboxed_shell");
+    assert!(
+        shell_tool.is_some(),
+        "sandboxed_shell tool should be available"
+    );
 
-    let gradlew_tool = gradlew_tool.unwrap();
-    assert_eq!(gradlew_tool.name, "gradlew");
+    let shell_tool = shell_tool.unwrap();
+    assert_eq!(shell_tool.name, "sandboxed_shell");
 
     // Handle optional description
-    if let Some(ref description) = gradlew_tool.description {
+    if let Some(ref description) = shell_tool.description {
         assert!(
-            description.contains("Android"),
-            "Description should mention Android"
+            description.contains("sandbox"),
+            "Description should mention sandbox"
         );
         println!("  Description: {}", description);
     } else {
         println!("  Description: None provided");
     }
 
-    println!("✓ gradlew tool loaded successfully");
+    println!("✓ sandboxed_shell tool loaded successfully");
 
     // Verify tool has input schema
-    let schema_properties = gradlew_tool.input_schema.get("properties");
+    let schema_properties = shell_tool.input_schema.get("properties");
     if let Some(properties) = schema_properties {
         if let Some(properties_obj) = properties.as_object() {
             assert!(
-                properties_obj.contains_key("subcommand"),
-                "Schema should have subcommand property"
+                properties_obj.contains_key("command"),
+                "Schema should have command property"
             );
-            println!("✓ gradlew schema has subcommand property");
+            println!("✓ sandboxed_shell schema has command property");
         }
     } else {
-        println!("Note: gradlew schema properties not found");
+        println!("Note: sandboxed_shell schema properties not found");
     }
 
     client.cancel().await?;
@@ -381,11 +409,13 @@ async fn test_gradlew_tool_availability() -> Result<()> {
 /// Test error handling for malformed parameters
 #[tokio::test]
 async fn test_gradlew_error_handling() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
+    skip_if_disabled_async_result!("gradlew");
     let client = new_client(Some(".ahma")).await?;
 
-    // Test 1: Completely invalid parameters
+    // Test 1: Completely invalid parameters for sandboxed_shell
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("gradlew"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
                 "invalid_field": "invalid_value",
@@ -416,10 +446,10 @@ async fn test_gradlew_error_handling() -> Result<()> {
 
     // Test 2: Wrong parameter types
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("gradlew"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
-                "subcommand": 12345, // Should be string
+                "command": 12345, // Should be string
                 "working_directory": true // Should be string
             })
             .as_object()
@@ -441,10 +471,9 @@ async fn test_gradlew_error_handling() -> Result<()> {
 
     // Test 3: Empty parameters
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("gradlew"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(Map::new()),
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await;

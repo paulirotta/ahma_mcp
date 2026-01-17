@@ -1161,7 +1161,7 @@ async fn test_symlink_escape_attempt_is_blocked() {
         .expect("Failed to get workspace dir")
         .to_path_buf();
     std::fs::copy(
-        workspace_dir.join(".ahma/file_tools.json"),
+        workspace_dir.join("ahma_core/examples/configs/file_tools.json"),
         tools_dir.join("file_tools.json"),
     )
     .expect("Failed to copy file_tools tool config");

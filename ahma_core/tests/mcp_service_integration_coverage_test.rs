@@ -620,8 +620,8 @@ async fn test_file_tools_in_temp_directory() -> Result<()> {
 
     if has_file_tools {
         let params = CallToolRequestParam {
-            name: Cow::Borrowed("file_tools_ls"),
-            arguments: Some(json!({}).as_object().unwrap().clone()),
+            name: Cow::Borrowed("file_tools"),
+            arguments: Some(json!({"subcommand": "ls"}).as_object().unwrap().clone()),
             task: None,
         };
 

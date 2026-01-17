@@ -60,7 +60,6 @@ async fn test_synchronous_flag_overrides_async_tools() -> Result<()> {
             name: Cow::Borrowed("test_sync"),
             arguments: Some(baseline_args),
             task: None,
-
         })
         .await?;
 
@@ -89,7 +88,6 @@ async fn test_synchronous_flag_overrides_async_tools() -> Result<()> {
             name: Cow::Borrowed("test_sync"),
             arguments: Some(override_args),
             task: None,
-
         })
         .await?;
 

@@ -26,7 +26,6 @@ async fn test_no_timeout_no_operations_uses_default() -> Result<()> {
         name: "await".into(),
         arguments: None, // No timeout, no tools filter
         task: None,
-
     };
 
     let start = Instant::now();
@@ -56,7 +55,6 @@ async fn test_intelligent_timeout_calculation_needed() -> Result<()> {
         name: "await".into(),
         arguments: None, // No explicit timeout - should use default/intelligent calculation
         task: None,
-
     };
 
     let start = Instant::now();
@@ -182,7 +180,6 @@ async fn test_intelligent_timeout_with_long_operations() -> Result<()> {
         name: "await".into(),
         arguments: None, // No parameters - uses intelligent timeout
         task: None,
-
     };
 
     // Test that the await tool calculates intelligent timeout correctly
@@ -210,7 +207,6 @@ async fn test_intelligent_timeout_no_pending_operations() -> Result<()> {
         name: "await".into(),
         arguments: None, // No parameters - uses intelligent timeout
         task: None,
-
     };
 
     let start = Instant::now();

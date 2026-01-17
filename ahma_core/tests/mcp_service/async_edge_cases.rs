@@ -189,7 +189,6 @@ async fn test_error_handling_unknown_tools() -> Result<()> {
         name: Cow::Borrowed("nonexistent_tool_xyz_123"),
         arguments: None,
         task: None,
-
     };
 
     let result = client.call_tool(unknown_tool_params).await;
@@ -336,7 +335,6 @@ async fn test_async_operation_with_real_execution() -> Result<()> {
         name: Cow::Borrowed("status"),
         arguments: None,
         task: None,
-
     };
 
     let status_result = client.call_tool(status_params).await?;
@@ -360,7 +358,6 @@ async fn test_error_recovery_and_resilience() -> Result<()> {
             name: Cow::Borrowed("unknown_tool"),
             arguments: None,
             task: None,
-
         })
         .await;
 
@@ -369,7 +366,6 @@ async fn test_error_recovery_and_resilience() -> Result<()> {
         name: Cow::Borrowed("status"),
         arguments: None,
         task: None,
-
     };
 
     let result = client.call_tool(working_params).await?;
@@ -384,7 +380,6 @@ async fn test_error_recovery_and_resilience() -> Result<()> {
                 name: Cow::Owned(invalid_tool_name),
                 arguments: None,
                 task: None,
-
             })
             .await;
 
@@ -394,7 +389,6 @@ async fn test_error_recovery_and_resilience() -> Result<()> {
                 name: Cow::Borrowed("status"),
                 arguments: None,
                 task: None,
-
             })
             .await?;
         assert!(!good_result.content.is_empty());

@@ -9,27 +9,48 @@ use tempfile::TempDir;
 // Skip-if-disabled macros for test utilities
 // =============================================================================
 
-/// Check if a tool is disabled in the config.
-/// Returns true if the tool JSON exists and has `"enabled": false`.
+/// Check if a tool is disabled in the config or environment.
+/// Returns true if:
+/// 1. Environment variable `AHMA_DISABLE_TOOL_{TOOL_NAME_UPPER}` is "true" or "1"
+/// 2. The tool JSON exists in `.ahma/` and has `"enabled": false`
+/// 3. The tool JSON exists in `ahma_core/examples/configs/` and has `"enabled": false`
 pub fn is_tool_disabled(tool_name: &str) -> bool {
+    // Check environment variable first (e.g., AHMA_DISABLE_TOOL_GH=true)
+    let env_var = format!("AHMA_DISABLE_TOOL_{}", tool_name.to_uppercase());
+    if std::env::var(&env_var)
+        .map(|v| v.to_lowercase() == "true" || v == "1")
+        .unwrap_or(false)
+    {
+        return true;
+    }
+
     let workspace_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("Failed to get workspace root")
         .to_path_buf();
-    let tools_dir = workspace_dir.join(".ahma");
-    let config_path = tools_dir.join(format!("{}.json", tool_name));
 
-    if !config_path.exists() {
-        return false; // Tool doesn't have a config file, assume enabled
-    }
+    // Paths to check for tool configuration
+    let config_paths = [
+        workspace_dir
+            .join(".ahma")
+            .join(format!("{}.json", tool_name)),
+        workspace_dir
+            .join("ahma_core/examples/configs")
+            .join(format!("{}.json", tool_name)),
+    ];
 
-    match std::fs::read_to_string(&config_path) {
-        Ok(content) => {
+    for config_path in config_paths {
+        if config_path.exists()
+            && let Ok(content) = std::fs::read_to_string(&config_path)
+        {
             // Simple check for "enabled": false
-            content.contains(r#""enabled": false"#) || content.contains(r#""enabled":false"#)
+            if content.contains(r#""enabled": false"#) || content.contains(r#""enabled":false"#) {
+                return true;
+            }
         }
-        Err(_) => false, // Can't read, assume enabled
     }
+
+    false
 }
 
 /// Macro to skip a synchronous test if a tool is disabled.

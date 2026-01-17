@@ -15,8 +15,10 @@ mod comprehensive_tool_fixes_tdd {
         // - Apply automatic fixes (--fix)
 
         // Let's verify what ahma_mcp clippy support looks like within cargo.json
-        let cargo_config = std::fs::read_to_string(get_workspace_path(".ahma/cargo.json"))
-            .expect("Failed to read merged cargo.json");
+        let workspace_root = get_workspace_path("");
+        let cargo_config_path = workspace_root.join("ahma_core/examples/configs/cargo.json");
+        let cargo_config = std::fs::read_to_string(&cargo_config_path)
+            .expect("Failed to read cargo.json from examples/configs");
 
         let cargo_json: serde_json::Value =
             serde_json::from_str(&cargo_config).expect("cargo.json should be valid JSON");
@@ -95,8 +97,10 @@ mod comprehensive_tool_fixes_tdd {
     fn test_nextest_should_support_run_subcommand() {
         // TDD: nextest needs "run" subcommand to work properly
 
-        let cargo_config = std::fs::read_to_string(get_workspace_path(".ahma/cargo.json"))
-            .expect("Failed to read merged cargo.json");
+        let workspace_root = get_workspace_path("");
+        let cargo_config_path = workspace_root.join("ahma_core/examples/configs/cargo.json");
+        let cargo_config = std::fs::read_to_string(&cargo_config_path)
+            .expect("Failed to read cargo.json from examples/configs");
 
         let cargo_json: serde_json::Value =
             serde_json::from_str(&cargo_config).expect("cargo.json should be valid JSON");
@@ -129,8 +133,10 @@ mod comprehensive_tool_fixes_tdd {
 
     #[test]
     fn test_nextest_run_has_availability_and_install_guidance() {
-        let cargo_config = std::fs::read_to_string(get_workspace_path(".ahma/cargo.json"))
-            .expect("Failed to read merged cargo.json");
+        let workspace_root = get_workspace_path("");
+        let cargo_config_path = workspace_root.join("ahma_core/examples/configs/cargo.json");
+        let cargo_config = std::fs::read_to_string(&cargo_config_path)
+            .expect("Failed to read cargo.json from examples/configs");
 
         let cargo_json: serde_json::Value =
             serde_json::from_str(&cargo_config).expect("cargo.json should be valid JSON");

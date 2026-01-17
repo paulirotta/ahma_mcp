@@ -58,7 +58,7 @@ mod file_tools_tests {
 
     #[test]
     fn test_file_tools_pwd() {
-        skip_if_disabled!("file_tools");
+        skip_if_disabled!("sandboxed_shell");
 
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
@@ -67,16 +67,21 @@ mod file_tools_tests {
 
         let output = test_command(&binary)
             .current_dir(temp_dir.path())
-            .args(["--tools-dir", tools_dir.to_str().unwrap(), "file_tools_pwd"])
+            .args([
+                "--tools-dir",
+                tools_dir.to_str().unwrap(),
+                "sandboxed_shell",
+                "pwd",
+            ])
             .output()
-            .expect("Failed to execute file_tools_pwd");
+            .expect("Failed to execute pwd via sandboxed_shell");
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
 
         assert!(
             output.status.success(),
-            "file_tools_pwd should succeed. stdout: {}, stderr: {}",
+            "pwd via sandboxed_shell should succeed. stdout: {}, stderr: {}",
             stdout,
             stderr
         );
@@ -93,7 +98,7 @@ mod file_tools_tests {
 
     #[test]
     fn test_file_tools_touch_and_ls() {
-        skip_if_disabled!("file_tools");
+        skip_if_disabled!("sandboxed_shell");
 
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
@@ -107,15 +112,15 @@ mod file_tools_tests {
             .args([
                 "--tools-dir",
                 tools_dir.to_str().unwrap(),
-                "file_tools_touch",
-                test_file,
+                "sandboxed_shell",
+                &format!("touch {}", test_file),
             ])
             .output()
-            .expect("Failed to execute file_tools_touch");
+            .expect("Failed to execute touch via sandboxed_shell");
 
         assert!(
             output_touch.status.success(),
-            "file_tools_touch should succeed. stderr: {}",
+            "touch via sandboxed_shell should succeed. stderr: {}",
             String::from_utf8_lossy(&output_touch.stderr)
         );
 
@@ -131,16 +136,16 @@ mod file_tools_tests {
             .args([
                 "--tools-dir",
                 tools_dir.to_str().unwrap(),
-                "file_tools_ls",
-                test_file,
+                "sandboxed_shell",
+                &format!("ls {}", test_file),
             ])
             .output()
-            .expect("Failed to execute file_tools_ls");
+            .expect("Failed to execute ls via sandboxed_shell");
 
         let stdout_ls = String::from_utf8_lossy(&output_ls.stdout);
         assert!(
             output_ls.status.success(),
-            "file_tools_ls should succeed. stderr: {}",
+            "ls via sandboxed_shell should succeed. stderr: {}",
             String::from_utf8_lossy(&output_ls.stderr)
         );
 
@@ -153,7 +158,7 @@ mod file_tools_tests {
 
     #[test]
     fn test_file_tools_cp_and_mv() {
-        skip_if_disabled!("file_tools");
+        skip_if_disabled!("sandboxed_shell");
 
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
@@ -174,16 +179,15 @@ mod file_tools_tests {
             .args([
                 "--tools-dir",
                 tools_dir.to_str().unwrap(),
-                "file_tools_cp",
-                source_file,
-                dest_file,
+                "sandboxed_shell",
+                &format!("cp {} {}", source_file, dest_file),
             ])
             .output()
-            .expect("Failed to execute file_tools_cp");
+            .expect("Failed to execute cp via sandboxed_shell");
 
         assert!(
             output_cp.status.success(),
-            "file_tools_cp should succeed. stderr: {}",
+            "cp via sandboxed_shell should succeed. stderr: {}",
             String::from_utf8_lossy(&output_cp.stderr)
         );
 
@@ -198,16 +202,15 @@ mod file_tools_tests {
             .args([
                 "--tools-dir",
                 tools_dir.to_str().unwrap(),
-                "file_tools_mv",
-                dest_file,
-                moved_file,
+                "sandboxed_shell",
+                &format!("mv {} {}", dest_file, moved_file),
             ])
             .output()
-            .expect("Failed to execute file_tools_mv");
+            .expect("Failed to execute mv via sandboxed_shell");
 
         assert!(
             output_mv.status.success(),
-            "file_tools_mv should succeed. stderr: {}",
+            "mv via sandboxed_shell should succeed. stderr: {}",
             String::from_utf8_lossy(&output_mv.stderr)
         );
 
@@ -223,7 +226,7 @@ mod file_tools_tests {
 
     #[test]
     fn test_file_tools_rm() {
-        skip_if_disabled!("file_tools");
+        skip_if_disabled!("sandboxed_shell");
 
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
@@ -240,15 +243,15 @@ mod file_tools_tests {
             .args([
                 "--tools-dir",
                 tools_dir.to_str().unwrap(),
-                "file_tools_rm",
-                test_file,
+                "sandboxed_shell",
+                &format!("rm {}", test_file),
             ])
             .output()
-            .expect("Failed to execute file_tools_rm");
+            .expect("Failed to execute rm via sandboxed_shell");
 
         assert!(
             output_rm.status.success(),
-            "file_tools_rm should succeed. stderr: {}",
+            "rm via sandboxed_shell should succeed. stderr: {}",
             String::from_utf8_lossy(&output_rm.stderr)
         );
 
@@ -260,7 +263,7 @@ mod file_tools_tests {
 
     #[test]
     fn test_file_tools_cat_and_grep() {
-        skip_if_disabled!("file_tools");
+        skip_if_disabled!("sandboxed_shell");
 
         let binary = build_binary("ahma_core", "ahma_mcp");
         let workspace = workspace_dir();
@@ -278,16 +281,16 @@ mod file_tools_tests {
             .args([
                 "--tools-dir",
                 tools_dir.to_str().unwrap(),
-                "file_tools_cat",
-                test_file,
+                "sandboxed_shell",
+                &format!("cat {}", test_file),
             ])
             .output()
-            .expect("Failed to execute file_tools_cat");
+            .expect("Failed to execute cat via sandboxed_shell");
 
         let stdout_cat = String::from_utf8_lossy(&output_cat.stdout);
         assert!(
             output_cat.status.success(),
-            "file_tools_cat should succeed. stderr: {}",
+            "cat via sandboxed_shell should succeed. stderr: {}",
             String::from_utf8_lossy(&output_cat.stderr)
         );
         assert!(
@@ -301,17 +304,16 @@ mod file_tools_tests {
             .args([
                 "--tools-dir",
                 tools_dir.to_str().unwrap(),
-                "file_tools_grep",
-                "Target",
-                test_file,
+                "sandboxed_shell",
+                &format!("grep Target {}", test_file),
             ])
             .output()
-            .expect("Failed to execute file_tools_grep");
+            .expect("Failed to execute grep via sandboxed_shell");
 
         let stdout_grep = String::from_utf8_lossy(&output_grep.stdout);
         assert!(
             output_grep.status.success(),
-            "file_tools_grep should succeed. stderr: {}",
+            "grep via sandboxed_shell should succeed. stderr: {}",
             String::from_utf8_lossy(&output_grep.stderr)
         );
         assert!(

@@ -211,10 +211,7 @@ async fn test_service_creation_and_basic_functionality() {
 
     // Test get_info
     let info = service.get_info();
-    assert_eq!(
-        info.protocol_version,
-        rmcp::model::ProtocolVersion::LATEST
-    );
+    assert_eq!(info.protocol_version, rmcp::model::ProtocolVersion::LATEST);
     assert!(info.capabilities.tools.is_some());
 }
 

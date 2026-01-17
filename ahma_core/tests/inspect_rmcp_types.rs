@@ -4,7 +4,7 @@ use serde_json::json;
 #[test]
 fn test_client_capabilities_deserialization() {
     // 1. Inspect what ClientCapabilities expects regarding "tasks"
-    
+
     // Case A: Missing "tasks" field
     let json_missing = json!({
         "roots": { "listChanged": true }

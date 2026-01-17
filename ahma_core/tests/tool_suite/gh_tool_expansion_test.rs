@@ -7,7 +7,8 @@ use common::get_tools_dir;
 #[tokio::test]
 async fn test_gh_tool_expansion_all_synchronous() {
     init_test_logging();
-    let tools_dir = get_tools_dir();
+    let workspace_dir = ahma_core::test_utils::get_workspace_dir();
+    let tools_dir = workspace_dir.join("ahma_core/examples/configs");
     let configs = load_tool_configs(&tools_dir)
         .await
         .expect("Should load tools config");
@@ -72,7 +73,8 @@ async fn test_gh_tool_expansion_all_synchronous() {
 #[tokio::test]
 async fn test_gh_cache_subcommands_schema() {
     init_test_logging();
-    let tools_dir = get_tools_dir();
+    let workspace_dir = ahma_core::test_utils::get_workspace_dir();
+    let tools_dir = workspace_dir.join("ahma_core/examples/configs");
     let configs = load_tool_configs(&tools_dir)
         .await
         .expect("Should load tools config");

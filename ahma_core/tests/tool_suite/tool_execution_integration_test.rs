@@ -33,7 +33,6 @@ async fn test_file_tools_pwd_execution() {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
-
         })
         .await;
 
@@ -73,7 +72,6 @@ async fn test_file_tools_cat_with_number_option() {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
-
         })
         .await;
 
@@ -113,7 +111,6 @@ async fn test_file_tools_head_with_lines_option() {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
-
         })
         .await;
 
@@ -160,7 +157,6 @@ async fn test_file_tools_find_with_name_option() {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
-
         })
         .await;
 
@@ -202,7 +198,6 @@ async fn test_file_tools_grep_with_options() {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
-
         })
         .await;
 
@@ -242,7 +237,6 @@ async fn test_sandboxed_shell_echo_execution() {
             name: Cow::Borrowed("sandboxed_shell"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
-
         })
         .await;
 
@@ -280,7 +274,6 @@ async fn test_sandboxed_shell_pipe_execution() {
             name: Cow::Borrowed("sandboxed_shell"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
-
         })
         .await;
 
@@ -311,7 +304,6 @@ async fn test_git_status_execution() {
             name: Cow::Borrowed("git"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
-
         })
         .await;
 
@@ -352,7 +344,6 @@ async fn test_git_log_oneline_execution() {
             name: Cow::Borrowed("git"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
-
         })
         .await;
 
@@ -380,7 +371,6 @@ async fn test_cargo_check_dry_run() {
             name: Cow::Borrowed("cargo"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
-
         })
         .await;
 
@@ -413,7 +403,6 @@ async fn test_file_tools_ls_long_alias() {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
-
         })
         .await;
 
@@ -457,7 +446,6 @@ async fn test_file_tools_grep_recursive_alias() {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
-
         })
         .await;
 
@@ -500,7 +488,6 @@ async fn test_file_tools_ls_path_validation() {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
-
         })
         .await;
 
@@ -529,7 +516,6 @@ async fn test_file_tools_cat_path_format() {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
-
         })
         .await;
 
