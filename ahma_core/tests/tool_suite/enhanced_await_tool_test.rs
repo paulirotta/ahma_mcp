@@ -26,7 +26,6 @@ async fn test_await_tool_timeout_functionality() -> Result<()> {
         name: "await".into(),
         arguments: Some(serde_json::Map::new()),
         task: None,
-
     };
 
     // Should return immediately since no operations are running
@@ -63,7 +62,6 @@ async fn test_await_tool_timeout_validation() -> Result<()> {
         name: "await".into(),
         arguments: Some(serde_json::Map::new()),
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await?;
@@ -74,7 +72,6 @@ async fn test_await_tool_timeout_validation() -> Result<()> {
         name: "await".into(),
         arguments: Some(serde_json::Map::new()),
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await?;
@@ -100,7 +97,6 @@ async fn test_status_tool_functionality() -> Result<()> {
         name: "status".into(),
         arguments: Some(serde_json::Map::new()),
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await?;

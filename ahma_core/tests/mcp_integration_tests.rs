@@ -41,7 +41,6 @@ async fn test_call_tool_basic() -> Result<()> {
         name: Cow::Borrowed("await"),
         arguments: Some(params),
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await?;
@@ -81,7 +80,6 @@ async fn test_async_notification_delivery() -> Result<()> {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: async_tool_params.as_object().cloned(),
         task: None,
-
     };
 
     let result = client.call_tool(call_params).await?;
@@ -103,7 +101,6 @@ async fn test_async_notification_delivery() -> Result<()> {
         name: Cow::Borrowed("await"),
         arguments: await_params.as_object().cloned(),
         task: None,
-
     };
 
     let await_result = client.call_tool(await_call_params).await?;

@@ -45,10 +45,7 @@ async fn test_get_info_returns_complete_server_info() {
 
     let info = service.get_info();
 
-    assert_eq!(
-        info.protocol_version,
-        rmcp::model::ProtocolVersion::LATEST
-    );
+    assert_eq!(info.protocol_version, rmcp::model::ProtocolVersion::LATEST);
     assert!(
         info.capabilities.tools.is_some(),
         "Server should advertise tool capabilities"
@@ -190,10 +187,7 @@ async fn test_service_protocol_version_consistency() {
     let info = service.get_info();
 
     // Verify the protocol version is the expected one
-    assert_eq!(
-        info.protocol_version,
-        rmcp::model::ProtocolVersion::LATEST
-    );
+    assert_eq!(info.protocol_version, rmcp::model::ProtocolVersion::LATEST);
 
     // The protocol version should be consistent across calls
     let info2 = service.get_info();

@@ -27,7 +27,6 @@ async fn test_ls_tool_should_not_add_undefined_path_parameter() -> Result<()> {
         name: Cow::Borrowed("ls_default"),
         arguments: Some(Map::new()), // Empty arguments - should not add --path=.
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await;
@@ -98,7 +97,6 @@ async fn test_ls_tool_executes_plain_ls_command() -> Result<()> {
         name: Cow::Borrowed("ls_default"),
         arguments: Some(Map::new()),
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await?;
@@ -150,7 +148,6 @@ async fn test_ls_tool_with_valid_options() -> Result<()> {
         name: Cow::Borrowed("ls_default"),
         arguments: Some(Map::new()),
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await?;

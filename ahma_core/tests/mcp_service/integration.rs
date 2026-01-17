@@ -45,10 +45,7 @@ async fn test_mcp_service_creation_and_info() {
 
     // Test basic service info
     let info = service.get_info();
-    assert_eq!(
-        info.protocol_version,
-        rmcp::model::ProtocolVersion::LATEST
-    );
+    assert_eq!(info.protocol_version, rmcp::model::ProtocolVersion::LATEST);
     assert!(
         info.capabilities.tools.is_some(),
         "Server should advertise tool capabilities"
@@ -128,10 +125,7 @@ async fn test_mcp_service_with_tool_configs() {
 
     // Should still work with empty configs
     let info = service.get_info();
-    assert_eq!(
-        info.protocol_version,
-        rmcp::model::ProtocolVersion::LATEST
-    );
+    assert_eq!(info.protocol_version, rmcp::model::ProtocolVersion::LATEST);
     assert!(
         info.capabilities.tools.is_some(),
         "Should still advertise tool capabilities"

@@ -95,40 +95,45 @@ fn test_graceful_shutdown_timing_invariant() {
 fn test_json_tool_configuration_count_invariant() {
     use std::fs;
 
-    // Count actual JSON files in tools directory
-    let tools_dir_buf = common::get_workspace_path(".ahma");
-    let tools_dir = tools_dir_buf.as_path();
-    if !tools_dir.exists() {
-        println!("⚠️  Tools directory not found - test skipped");
-        return;
-    }
+    // Count actual JSON files in tools directory and examples config directory
+    let ahma_dir = common::get_workspace_path(".ahma");
+    let examples_dir = common::get_workspace_path("ahma_core/examples/configs");
 
-    let json_files: Vec<_> = fs::read_dir(tools_dir)
-        .expect("Should read tools directory")
-        .filter_map(|entry| {
-            let entry = entry.ok()?;
-            let path = entry.path();
-            if path.extension()? == "json" {
-                Some(path.file_name()?.to_string_lossy().to_string())
-            } else {
-                None
-            }
-        })
-        .collect();
+    let mut json_files = Vec::new();
+
+    for dir in &[ahma_dir, examples_dir] {
+        if !dir.exists() {
+            println!("⚠️  Directory {:?} not found - skipping", dir);
+            continue;
+        }
+
+        let files: Vec<_> = fs::read_dir(dir)
+            .expect("Should read directory")
+            .filter_map(|entry| {
+                let entry = entry.ok()?;
+                let path = entry.path();
+                if path.extension()? == "json" {
+                    Some(path.file_name()?.to_string_lossy().to_string())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        json_files.extend(files);
+    }
 
     println!("📁 Found JSON tool configurations: {:?}", json_files);
 
     // CRITICAL: These are CLI tool adapters only. MCP tools (status, await) are hardwired.
-    // Expected core tools (minimal set): cargo*.json, python.json, git.json, gh.json
-    // NOTE: ls.json was formerly required but is now OPTIONAL. Tests must not assume its presence.
-    // Complete tool set now consolidates cargo tooling into cargo.json; legacy cargo_*.json files must be removed
+    // Expected core tools (minimal set): sandboxed_shell.json, cargo.json, python.json, git.json, gh.json, gradlew.json
+    // total should be at least 6.
     assert!(
-        json_files.len() >= 3,
+        json_files.len() >= 6,
         "Should have core CLI tool configurations (got {})",
         json_files.len()
     );
     assert!(
-        json_files.len() <= 25,
+        json_files.len() <= 30,
         "Should not have excessive tool configurations (got {})",
         json_files.len()
     );
@@ -149,11 +154,14 @@ fn test_json_tool_configuration_count_invariant() {
     let _has_ls = json_files.iter().any(|f| f.contains("ls"));
     let has_python = json_files.iter().any(|f| f.contains("python"));
 
-    assert!(has_cargo, "cargo.json must exist for Rust development");
+    assert!(
+        has_cargo,
+        "cargo.json must exist (either in .ahma or examples/configs)"
+    );
     // (Optional) assert for ls removed intentionally to allow repositories without ls.json
     assert!(
         has_python,
-        "python.json must exist for Python script support"
+        "python.json must exist (either in .ahma or examples/configs)"
     );
 
     println!(

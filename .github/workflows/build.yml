@@ -57,7 +57,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 2
 
@@ -77,7 +77,7 @@ jobs:
         run: echo "day=$(date +%j)" >> $GITHUB_OUTPUT
 
       - name: Cache Cargo build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -90,7 +90,7 @@ jobs:
             cargo-build-target-${{ runner.os }}-
 
       - name: Cache sccache artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cache/sccache
@@ -131,7 +131,7 @@ jobs:
           cargo doc --no-deps
 
       - name: Upload documentation
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: documentation-${{ matrix.os }}
           path: target/doc
@@ -153,7 +153,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 2
 
@@ -173,7 +173,7 @@ jobs:
         run: echo "day=$(date +%j)" >> $GITHUB_OUTPUT
 
       - name: Cache Cargo build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -186,7 +186,7 @@ jobs:
             cargo-nextest-target-${{ runner.os }}-
 
       - name: Cache sccache artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cache/sccache
@@ -212,7 +212,9 @@ jobs:
           echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
           sccache --show-stats
 
-      - uses: taiki-e/install-action@nextest
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: nextest
 
       - name: Ensure cargo-nextest is installed (fallback)
         run: |
@@ -241,12 +243,12 @@ jobs:
     env:
       TERM: xterm-256color
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 2
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: "21"
           distribution: "temurin"
@@ -259,7 +261,7 @@ jobs:
         run: echo "day=$(date +%j)" >> $GITHUB_OUTPUT
 
       - name: Cache AGP and more Gradle directories
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.gradle/caches/modules-2
@@ -284,7 +286,7 @@ jobs:
         run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Cache Android Cargo build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -299,7 +301,7 @@ jobs:
             cargo-build-target-${{ runner.os }}-
 
       - name: Cache sccache artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cache/sccache
@@ -334,7 +336,7 @@ jobs:
           cargo ndk --version
 
       - name: Cache Android build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ${{ github.workspace }}/.gradle
@@ -360,7 +362,9 @@ jobs:
         run: ./gradlew test --rerun-tasks --parallel --daemon --configure-on-demand --no-configuration-cache
         working-directory: ./test-data/AndoidTestBasicViews
 
-      - uses: taiki-e/install-action@nextest
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: nextest
 
       - name: Ensure cargo-nextest is installed (fallback)
         run: |
@@ -389,7 +393,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 2
 
@@ -409,7 +413,7 @@ jobs:
         run: echo "day=$(date +%j)" >> $GITHUB_OUTPUT
 
       - name: Cache Cargo build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -424,7 +428,7 @@ jobs:
             cargo-build-target-${{ runner.os }}-
 
       - name: Cache sccache artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/sccache
           key: sccache-coverage-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
@@ -459,7 +463,9 @@ jobs:
             echo "cargo-llvm-cov is already installed"
           fi
 
-      - uses: taiki-e/install-action@nextest
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: nextest
 
       - name: Ensure cargo-nextest is installed (fallback)
         run: |
@@ -478,7 +484,7 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Upload coverage artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: ./coverage
 

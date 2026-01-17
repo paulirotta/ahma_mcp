@@ -828,7 +828,9 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
 
     // Use PatchedStdioTransport to fix rmcp 0.13.0 deserialization issues with VS Code
     use crate::transport_patch::PatchedStdioTransport;
-    let service = service_handler.serve(PatchedStdioTransport::new_stdio()).await?;
+    let service = service_handler
+        .serve(PatchedStdioTransport::new_stdio())
+        .await?;
 
     // ============================================================================
     // CRITICAL: Graceful Shutdown Implementation for Development Workflow

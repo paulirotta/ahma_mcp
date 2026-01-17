@@ -239,19 +239,19 @@ impl OperationMonitor {
                 "reason": reason
             }));
 
-            // Notify waiters
-            op.completion_notifier.notify_waiters();
-
-            // Move to history
-            let timed_out_op = op.clone();
+            // Remove from active operations
+            let timed_out_op = ops.remove(operation_id);
             drop(ops); // Release lock
 
-            let mut history = self.completion_history.write().await;
-            history.insert(operation_id.to_string(), timed_out_op);
+            // Move to history BEFORE notifying to avoid race condition
+            if let Some(op) = timed_out_op {
+                let mut history = self.completion_history.write().await;
+                history.insert(operation_id.to_string(), op.clone());
+                drop(history);
 
-            // Remove from active
-            let mut ops = self.operations.write().await;
-            ops.remove(operation_id);
+                // NOW notify waiters
+                op.completion_notifier.notify_waiters();
+            }
         }
     }
 
@@ -288,10 +288,8 @@ impl OperationMonitor {
             // Set end time when operation reaches terminal state
             if status.is_terminal() {
                 op.end_time = Some(SystemTime::now());
-                // Notify anyone waiting on this operation
-                op.completion_notifier.notify_waiters();
 
-                // Remove from active operations now
+                // Remove from active operations now (before notifying)
                 operation_to_move = ops.remove(operation_id);
             }
         }
@@ -300,10 +298,16 @@ impl OperationMonitor {
         drop(ops);
 
         // If we removed a terminal operation, move it to completion history
+        // BEFORE notifying waiters to avoid race condition
         if let Some(op) = operation_to_move {
             let mut history = self.completion_history.write().await;
-            history.insert(operation_id.to_string(), op);
+            history.insert(operation_id.to_string(), op.clone());
             tracing::debug!("Moved operation {} to completion history.", operation_id);
+            drop(history);
+
+            // NOW notify anyone waiting on this operation
+            // The operation is guaranteed to be in completion_history at this point
+            op.completion_notifier.notify_waiters();
         }
     }
 
@@ -411,7 +415,9 @@ impl OperationMonitor {
     }
 
     pub async fn wait_for_operation(&self, operation_id: &str) -> Option<Operation> {
-        let timeout = Duration::from_secs(30); // Reduced from 300s to 30s
+        // Use a generous timeout (5 minutes) to handle long-running operations like cargo clippy
+        // The caller can apply their own timeout if they want stricter limits
+        let timeout = Duration::from_secs(300);
 
         // First, check if the operation has already completed.
         {
@@ -465,8 +471,30 @@ impl OperationMonitor {
             match tokio::time::timeout(timeout, notifier.notified()).await {
                 Ok(_) => {
                     // Notification received, the operation should be in the completion history now.
-                    let history = self.completion_history.read().await;
-                    history.get(operation_id).cloned()
+                    // There's a small race window where the notifier fires before the operation
+                    // is moved to completion_history. Retry a few times with a small delay.
+                    for attempt in 0..10 {
+                        let history = self.completion_history.read().await;
+                        if let Some(op) = history.get(operation_id) {
+                            return Some(op.clone());
+                        }
+                        drop(history);
+
+                        if attempt < 9 {
+                            tracing::debug!(
+                                "Operation {} not yet in completion history, retrying (attempt {}/10)",
+                                operation_id,
+                                attempt + 1
+                            );
+                            tokio::time::sleep(Duration::from_millis(10)).await;
+                        }
+                    }
+
+                    tracing::warn!(
+                        "Operation {} completed but not found in history after 10 retries",
+                        operation_id
+                    );
+                    None
                 }
                 Err(_) => {
                     // Timeout elapsed.

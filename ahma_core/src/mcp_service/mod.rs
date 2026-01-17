@@ -346,10 +346,7 @@ impl AhmaMcpService {
     }
 
     /// Handles the 'await' tool call.
-    async fn handle_await(
-        &self,
-        params: CallToolRequestParam,
-    ) -> Result<CallToolResult, McpError> {
+    async fn handle_await(&self, params: CallToolRequestParam) -> Result<CallToolResult, McpError> {
         let args = params.arguments.unwrap_or_default();
 
         // Check if a specific operation_id is provided

@@ -5,6 +5,7 @@
 
 #![cfg(feature = "android")]
 
+use ahma_core::skip_if_disabled_async_result;
 use ahma_core::test_utils::get_workspace_dir;
 use ahma_core::test_utils::test_client::new_client;
 use anyhow::Result;
@@ -22,6 +23,8 @@ fn get_android_test_project_path() -> String {
 /// Test gradlew async build commands (might fail without Android SDK but tests tool behavior)
 #[tokio::test]
 async fn test_gradlew_async_build_commands() -> Result<()> {
+    skip_if_disabled_async_result!("sandboxed_shell");
+    skip_if_disabled_async_result!("gradlew");
     let client = new_client(Some(".ahma")).await?;
     let project_path = get_android_test_project_path();
 
@@ -36,10 +39,10 @@ async fn test_gradlew_async_build_commands() -> Result<()> {
         println!("Testing async command: {} - {}", command, description);
 
         let call_param = CallToolRequestParam {
-            name: Cow::Borrowed("gradlew"),
+            name: Cow::Borrowed("sandboxed_shell"),
             arguments: Some(
                 json!({
-                    "subcommand": command,
+                    "command": format!("./gradlew {}", command),
                     "working_directory": project_path
                 })
                 .as_object()
@@ -104,10 +107,11 @@ async fn test_gradlew_lint_commands() -> Result<()> {
         println!("Testing lint command: {} - {}", command, description);
 
         let call_param = CallToolRequestParam {
-            name: Cow::Borrowed("gradlew"),
+            name: Cow::Borrowed("sandboxed_shell"),
             arguments: Some(
                 json!({
-                    "subcommand": command,
+                    "subcommand": "default",
+                    "command": format!("./gradlew {}", command),
                     "working_directory": project_path
                 })
                 .as_object()
@@ -150,10 +154,11 @@ async fn test_comprehensive_gradlew_validation() -> Result<()> {
 
     // 1. Help command
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("gradlew"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
-                "subcommand": "help",
+                "subcommand": "default",
+                "command": "./gradlew help",
                 "working_directory": project_path
             })
             .as_object()
@@ -172,10 +177,11 @@ async fn test_comprehensive_gradlew_validation() -> Result<()> {
 
     // 2. Tasks command
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("gradlew"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
-                "subcommand": "tasks",
+                "subcommand": "default",
+                "command": "./gradlew tasks",
                 "working_directory": project_path
             })
             .as_object()
@@ -198,10 +204,11 @@ async fn test_comprehensive_gradlew_validation() -> Result<()> {
 
     // 3. Properties command
     let call_param = CallToolRequestParam {
-        name: Cow::Borrowed("gradlew"),
+        name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
-                "subcommand": "properties",
+                "subcommand": "default",
+                "command": "./gradlew properties",
                 "working_directory": project_path
             })
             .as_object()

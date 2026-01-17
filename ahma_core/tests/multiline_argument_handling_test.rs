@@ -230,7 +230,7 @@ async fn test_multiline_git_commit_with_real_tool() {
         .with_root(temp_dir.path().to_path_buf());
 
     // Load the real git tool configuration
-    let git_tool_path = get_workspace_path(".ahma/git.json");
+    let git_tool_path = get_workspace_path("ahma_core/examples/configs/git.json");
     let git_config_str =
         std::fs::read_to_string(git_tool_path).expect("Failed to read git tool config");
     let git_tool: ahma_core::config::ToolConfig =

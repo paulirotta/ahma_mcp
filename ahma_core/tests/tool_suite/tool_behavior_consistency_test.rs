@@ -72,7 +72,6 @@ async fn test_ls_tool_command_structure() -> Result<()> {
         name: Cow::Borrowed("ls_default"),
         arguments: None, // ls without arguments should list current directory
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await?;
