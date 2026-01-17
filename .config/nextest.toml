@@ -38,3 +38,18 @@ success-output = "immediate"
 failure-output = "immediate"
 filter = "test(cli_extended_integration_test::) | test(cli_mode_coverage_test::)"
 success-output = "immediate"
+
+# Coverage profile for cargo llvm-cov (instrumentation makes tests much slower)
+[profile.coverage]
+retries = 0
+slow-timeout = {period = "1800s", terminate-after = 2}
+
+[[profile.coverage.overrides]]
+failure-output = "immediate"
+filter = "test(cli_binary_integration_test::)"
+success-output = "immediate"
+
+[[profile.coverage.overrides]]
+failure-output = "immediate"
+filter = "test(cli_extended_integration_test::) | test(cli_mode_coverage_test::)"
+success-output = "immediate"
