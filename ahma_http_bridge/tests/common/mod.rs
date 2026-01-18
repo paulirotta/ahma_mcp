@@ -314,7 +314,7 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
         .env_remove("NEXTEST_EXECUTION_MODE")
         .env_remove("CARGO_TARGET_DIR")
         .env_remove("RUST_TEST_THREADS")
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
     // Explicitly propagate handshake timeout so tests can shrink it reliably
@@ -326,58 +326,58 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
         .spawn()
         .map_err(|e| format!("Failed to spawn test server: {}", e))?;
 
-    // Read stderr to find the bound port (AHMA_BOUND_PORT=<port>)
+    // Read stdout/stderr to find the bound port (AHMA_BOUND_PORT=<port>)
+    let stdout = child.stdout.take().expect("Failed to capture stdout");
     let stderr = child.stderr.take().expect("Failed to capture stderr");
-    let mut reader = BufReader::new(stderr);
-    let mut port: Option<u16>;
+    let (line_tx, line_rx) = std::sync::mpsc::channel::<String>();
+
+    let tx_out = line_tx.clone();
+    std::thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines().map_while(Result::ok) {
+            let _ = tx_out.send(line);
+        }
+    });
+
+    let tx_err = line_tx.clone();
+    std::thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines().map_while(Result::ok) {
+            let _ = tx_err.send(line);
+        }
+    });
 
     let start = Instant::now();
     let timeout = Duration::from_secs(10);
+    let mut bound_port: Option<u16> = None;
 
-    loop {
-        if start.elapsed() > timeout {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err("Timeout waiting for server to start".to_string());
-        }
-
-        let mut line = String::new();
-        match reader.read_line(&mut line) {
-            Ok(0) => {
-                // EOF - process likely exited
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err("Server process exited before reporting port".to_string());
-            }
-            Ok(_) => {
-                // Print server output for debugging
-                eprint!("{}", line);
-
-                // Look for the bound port marker
-                if let Some(port_str) = line.strip_prefix("AHMA_BOUND_PORT=") {
-                    port = port_str.trim().parse().ok();
-                    if port.is_some() {
+    while start.elapsed() <= timeout {
+        match line_rx.recv_timeout(Duration::from_millis(200)) {
+            Ok(line) => {
+                eprintln!("{}", line);
+                if let Some(idx) = line.find("AHMA_BOUND_PORT=") {
+                    let port_str = &line[idx + "AHMA_BOUND_PORT=".len()..];
+                    bound_port = port_str.trim().parse().ok();
+                    if bound_port.is_some() {
                         break;
                     }
                 }
             }
-            Err(e) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(format!("Error reading server stderr: {}", e));
-            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
         }
     }
 
-    let bound_port = port.ok_or("Failed to parse bound port from server output")?;
-    eprintln!("[TestServer] Server bound to port {}", bound_port);
-
-    // Spawn a task to drain remaining stderr (prevent blocking)
-    std::thread::spawn(move || {
-        for line in reader.lines().map_while(Result::ok) {
-            eprintln!("{}", line);
+    let bound_port = match bound_port {
+        Some(port) => port,
+        None => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("Timeout waiting for server to start".to_string());
         }
-    });
+    };
+
+    eprintln!("[TestServer] Server bound to port {}", bound_port);
 
     // Wait for server to be ready (health check)
     let client = Client::new();
