@@ -119,8 +119,10 @@ struct Cli {
     http_host: String,
 
     /// Path to the directory containing tool JSON configuration files.
-    #[arg(long, global = true, default_value = ".ahma")]
-    tools_dir: PathBuf,
+    /// If not provided, auto-detects .ahma in the current working directory.
+    /// Falls back to built-in tools only if no .ahma directory exists.
+    #[arg(long, global = true)]
+    tools_dir: Option<PathBuf>,
 
     /// Default timeout for commands in seconds.
     #[arg(long, global = true, default_value = "1800")]
@@ -327,25 +329,57 @@ pub async fn run() -> Result<()> {
     }
 }
 
-fn normalize_tools_dir(tools_dir: PathBuf) -> PathBuf {
-    let is_legacy_tools_dir = tools_dir
-        .file_name()
-        .and_then(|s| s.to_str())
-        .is_some_and(|s| s == "tools")
-        && tools_dir
-            .parent()
-            .and_then(|p| p.file_name())
+/// Auto-detect .ahma directory or use explicitly provided tools_dir.
+///
+/// # Arguments
+/// * `tools_dir` - Optional explicit tools directory from CLI.
+///
+/// # Returns
+/// * `Some(PathBuf)` - Path to tools directory (explicit or auto-detected .ahma).
+/// * `None` - No tools directory found (will use only built-in internal tools).
+fn normalize_tools_dir(tools_dir: Option<PathBuf>) -> Option<PathBuf> {
+    // If explicitly provided via CLI, use it (takes precedence)
+    if let Some(explicit_dir) = tools_dir {
+        // Handle legacy .ahma/tools format
+        let is_legacy_tools_dir = explicit_dir
+            .file_name()
             .and_then(|s| s.to_str())
-            .is_some_and(|s| s == ".ahma");
+            .is_some_and(|s| s == "tools")
+            && explicit_dir
+                .parent()
+                .and_then(|p| p.file_name())
+                .and_then(|s| s.to_str())
+                .is_some_and(|s| s == ".ahma");
 
-    if is_legacy_tools_dir {
-        tools_dir
-            .parent()
-            .map(|p| p.to_path_buf())
-            .unwrap_or(tools_dir)
-    } else {
-        tools_dir
+        if is_legacy_tools_dir {
+            return explicit_dir.parent().map(|p| p.to_path_buf());
+        } else {
+            return Some(explicit_dir);
+        }
     }
+
+    // No explicit --tools-dir, try auto-detection
+    if let Ok(cwd) = std::env::current_dir() {
+        let ahma_dir = cwd.join(".ahma");
+        if ahma_dir.exists() && ahma_dir.is_dir() {
+            tracing::info!("Auto-detected .ahma directory at: {}", ahma_dir.display());
+            return Some(ahma_dir);
+        } else {
+            tracing::warn!(
+                "No .ahma directory found in current working directory ({}). \
+                 Falling back to built-in internal tools only (await, status, sandboxed_shell).",
+                cwd.display()
+            );
+        }
+    } else {
+        tracing::warn!(
+            "Could not determine current working directory. \
+             Falling back to built-in internal tools only (await, status, sandboxed_shell)."
+        );
+    }
+
+    // No tools directory found
+    None
 }
 
 /// Find the best matching tool configuration by name prefix.
@@ -659,14 +693,16 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
     // Session isolation is always enabled in HTTP mode.
     // We do NOT pass --sandbox-scope to subprocess args because each session
     // derives its sandbox scope from roots/list.
-    let mut server_args = vec![
-        "--mode".to_string(),
-        "stdio".to_string(),
-        "--tools-dir".to_string(),
-        cli.tools_dir.to_string_lossy().to_string(),
-        "--timeout".to_string(),
-        cli.timeout.to_string(),
-    ];
+    let mut server_args = vec!["--mode".to_string(), "stdio".to_string()];
+
+    // Only pass --tools-dir if explicitly provided
+    if let Some(ref tools_dir) = cli.tools_dir {
+        server_args.push("--tools-dir".to_string());
+        server_args.push(tools_dir.to_string_lossy().to_string());
+    }
+
+    server_args.push("--timeout".to_string());
+    server_args.push(cli.timeout.to_string());
 
     if cli.debug {
         server_args.push("--debug".to_string());
@@ -703,7 +739,11 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
 
 async fn run_server_mode(cli: Cli) -> Result<()> {
     tracing::info!("Starting ahma_mcp v1.0.0");
-    tracing::info!("Tools directory: {:?}", cli.tools_dir);
+    if let Some(ref tools_dir) = cli.tools_dir {
+        tracing::info!("Tools directory: {:?}", tools_dir);
+    } else {
+        tracing::info!("No tools directory (using built-in internal tools only)");
+    }
     tracing::info!("Command timeout: {}s", cli.timeout);
 
     // --- MCP Client Mode ---
@@ -775,10 +815,16 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     )?);
 
     // Load tool configurations (now async, no spawn_blocking needed)
-    let tools_dir = cli.tools_dir.clone();
-    let raw_configs = load_tool_configs(&tools_dir)
-        .await
-        .context("Failed to load tool configurations")?;
+    // If tools_dir is None, we'll only have built-in internal tools
+    let raw_configs = if let Some(ref tools_dir) = cli.tools_dir {
+        load_tool_configs(tools_dir)
+            .await
+            .context("Failed to load tool configurations")?
+    } else {
+        // No tools directory - empty configs (only internal tools)
+        HashMap::new()
+    };
+
     let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let availability_summary = evaluate_tool_availability(
         shell_pool_manager.clone(),
@@ -836,7 +882,11 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     let configs = Arc::new(availability_summary.filtered_configs);
     if configs.is_empty() {
         tracing::error!("No valid tool configurations available after availability checks");
-        tracing::error!("Tools directory: {:?}", cli.tools_dir);
+        if let Some(ref tools_dir) = cli.tools_dir {
+            tracing::error!("Tools directory: {:?}", tools_dir);
+        } else {
+            tracing::error!("No tools directory specified (using built-in internal tools only)");
+        }
         // It's not a fatal error to have no tools, just log it.
     } else {
         let tool_names: Vec<String> = configs.keys().cloned().collect();
@@ -861,8 +911,10 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     )
     .await?;
 
-    // Start the config watcher to support hot-reloading of tools
-    service_handler.start_config_watcher(cli.tools_dir.clone());
+    // Start the config watcher to support hot-reloading of tools (if tools_dir exists)
+    if let Some(tools_dir) = cli.tools_dir.clone() {
+        service_handler.start_config_watcher(tools_dir);
+    }
 
     // Use PatchedStdioTransport to fix rmcp 0.13.0 deserialization issues with VS Code
     use crate::transport_patch::PatchedStdioTransport;
@@ -1018,9 +1070,16 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
     let adapter = Adapter::new(operation_monitor, shell_pool_manager.clone())?;
 
     // Load tool configurations (now async, no spawn_blocking needed)
-    let raw_configs = load_tool_configs(&cli.tools_dir)
-        .await
-        .context("Failed to load tool configurations")?;
+    // If tools_dir is None, we'll only have built-in internal tools
+    let raw_configs = if let Some(ref tools_dir) = cli.tools_dir {
+        load_tool_configs(tools_dir)
+            .await
+            .context("Failed to load tool configurations")?
+    } else {
+        // No tools directory - empty configs (only internal tools)
+        HashMap::new()
+    };
+
     let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let availability_summary = evaluate_tool_availability(
         shell_pool_manager.clone(),
@@ -1041,8 +1100,8 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
 
     let configs = Arc::new(availability_summary.filtered_configs);
     if configs.is_empty() {
-        tracing::error!("No valid tool configurations available after availability checks");
-        anyhow::bail!("No tool configurations found");
+        tracing::error!("No external tool configurations found");
+        anyhow::bail!("No tool '{}' found", tool_name);
     }
 
     let configs_ref = configs.as_ref();

@@ -254,36 +254,36 @@ impl StressClient {
 
                     if let Ok(msg) = serde_json::from_str::<Value>(&data) {
                         // Check if this is a roots/list request
-                        if msg.get("method").and_then(|m| m.as_str()) == Some("roots/list") {
-                            if let Some(req_id) = msg.get("id") {
-                                // Respond with roots using proper file:// URI
-                                let response = post_client
-                                    .post(&post_url)
-                                    .header("mcp-session-id", &post_session_id)
-                                    .json(&json!({
-                                        "jsonrpc": "2.0",
-                                        "id": req_id,
-                                        "result": {
-                                            "roots": [{
-                                                "uri": format!("file://{}", cwd),
-                                                "name": "workspace"
-                                            }]
-                                        }
-                                    }))
-                                    .send()
-                                    .await
-                                    .context("Failed to respond to roots/list")?;
+                        if msg.get("method").and_then(|m| m.as_str()) == Some("roots/list")
+                            && let Some(req_id) = msg.get("id")
+                        {
+                            // Respond with roots using proper file:// URI
+                            let response = post_client
+                                .post(&post_url)
+                                .header("mcp-session-id", &post_session_id)
+                                .json(&json!({
+                                    "jsonrpc": "2.0",
+                                    "id": req_id,
+                                    "result": {
+                                        "roots": [{
+                                            "uri": format!("file://{}", cwd),
+                                            "name": "workspace"
+                                        }]
+                                    }
+                                }))
+                                .send()
+                                .await
+                                .context("Failed to respond to roots/list")?;
 
-                                if !response.status().is_success() {
-                                    return Err(anyhow!(
-                                        "roots/list response failed: {}",
-                                        response.status()
-                                    ));
-                                }
-
-                                // Handshake complete!
-                                return Ok(());
+                            if !response.status().is_success() {
+                                return Err(anyhow!(
+                                    "roots/list response failed: {}",
+                                    response.status()
+                                ));
                             }
+
+                            // Handshake complete!
+                            return Ok(());
                         }
                     }
                 }
@@ -722,7 +722,7 @@ async fn main() -> Result<()> {
         }
 
         // Print progress every 5 seconds
-        if start.elapsed().as_secs() % 5 == 0 {
+        if start.elapsed().as_secs().is_multiple_of(5) {
             let elapsed = start.elapsed().as_secs();
             let rate = if elapsed > 0 { success / elapsed } else { 0 };
             println!(

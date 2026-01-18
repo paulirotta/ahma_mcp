@@ -345,6 +345,35 @@ impl AhmaMcpService {
         Arc::new(schema)
     }
 
+    /// Generates the specific input schema for the `sandboxed_shell` tool.
+    fn generate_input_schema_for_sandboxed_shell(&self) -> Arc<Map<String, Value>> {
+        let mut properties = Map::new();
+        properties.insert(
+            "command".to_string(),
+            serde_json::json!({
+                "type": "string",
+                "description": "The shell command to execute (supports pipes, redirects, variables, etc.)"
+            }),
+        );
+        properties.insert(
+            "working_directory".to_string(),
+            serde_json::json!({
+                "type": "string",
+                "description": "Working directory for command execution",
+                "format": "path"
+            }),
+        );
+
+        let mut schema = Map::new();
+        schema.insert("type".to_string(), Value::String("object".to_string()));
+        schema.insert("properties".to_string(), Value::Object(properties));
+        schema.insert(
+            "required".to_string(),
+            Value::Array(vec![Value::String("command".to_string())]),
+        );
+        Arc::new(schema)
+    }
+
     /// Handles the 'await' tool call.
     async fn handle_await(&self, params: CallToolRequestParam) -> Result<CallToolResult, McpError> {
         let args = params.arguments.unwrap_or_default();
@@ -960,6 +989,201 @@ impl AhmaMcpService {
         ]))
     }
 
+    /// Handles the 'sandboxed_shell' built-in tool call.
+    /// Executes shell commands using bash within the sandbox.
+    /// Supports both synchronous and asynchronous execution modes.
+    async fn handle_sandboxed_shell(
+        &self,
+        params: CallToolRequestParam,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, McpError> {
+        let args = params.arguments.unwrap_or_default();
+
+        // Extract command (required)
+        let command = args
+            .get("command")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                McpError::invalid_params("command parameter is required".to_string(), None)
+            })?
+            .to_string();
+
+        // Extract working_directory (optional)
+        let working_directory = args
+            .get("working_directory")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .or_else(|| {
+                if crate::sandbox::is_test_mode() {
+                    None
+                } else {
+                    crate::sandbox::get_sandbox_scope().map(|p| p.to_string_lossy().to_string())
+                }
+            })
+            .unwrap_or_else(|| ".".to_string());
+
+        let timeout = args.get("timeout_seconds").and_then(|v| v.as_u64());
+
+        // Determine execution mode
+        // 1. If --sync CLI flag was used (force_synchronous=true), use sync mode
+        // 2. Check explicit execution_mode argument
+        // 3. Default to ASYNCHRONOUS (like other tools)
+        let execution_mode = if self.force_synchronous {
+            crate::adapter::ExecutionMode::Synchronous
+        } else if let Some(mode_str) = args.get("execution_mode").and_then(|v| v.as_str()) {
+            match mode_str {
+                "Synchronous" => crate::adapter::ExecutionMode::Synchronous,
+                "AsyncResultPush" => crate::adapter::ExecutionMode::AsyncResultPush,
+                _ => crate::adapter::ExecutionMode::AsyncResultPush,
+            }
+        } else {
+            crate::adapter::ExecutionMode::AsyncResultPush
+        };
+
+        // Build arguments map for adapter
+        let mut adapter_args = Map::new();
+        adapter_args.insert("command".to_string(), serde_json::Value::String(command));
+        if let Some(wd) = args.get("working_directory") {
+            adapter_args.insert("working_directory".to_string(), wd.clone());
+        }
+
+        match execution_mode {
+            crate::adapter::ExecutionMode::Synchronous => {
+                // Create a minimal SubcommandConfig for bash -c
+                let subcommand_config = crate::config::SubcommandConfig {
+                    name: "sandboxed_shell".to_string(),
+                    description: "Execute shell commands".to_string(),
+                    subcommand: None,
+                    options: Some(vec![crate::config::CommandOption {
+                        name: "c_flag".to_string(), // Internal name
+                        option_type: "boolean".to_string(),
+                        description: Some("Execute command string".to_string()),
+                        required: Some(false),
+                        format: None,
+                        items: None,
+                        file_arg: None,
+                        file_flag: None,
+                        alias: Some("c".to_string()), // Single-char alias will create -c
+                    }]),
+                    positional_args: Some(vec![crate::config::CommandOption {
+                        name: "command".to_string(),
+                        option_type: "string".to_string(),
+                        description: Some("Shell command to execute".to_string()),
+                        required: Some(true),
+                        format: None,
+                        items: None,
+                        file_arg: None,
+                        file_flag: None,
+                        alias: None,
+                    }]),
+                    positional_args_first: Some(false),
+                    timeout_seconds: timeout,
+                    synchronous: Some(true),
+                    enabled: true,
+                    guidance_key: None,
+                    sequence: None,
+                    step_delay_ms: None,
+                    availability_check: None,
+                    install_instructions: None,
+                };
+
+                // Add the -c flag to adapter_args using the internal name
+                adapter_args.insert("c_flag".to_string(), serde_json::Value::Bool(true));
+
+                let result = self
+                    .adapter
+                    .execute_sync_in_dir(
+                        "/bin/bash",
+                        Some(adapter_args),
+                        &working_directory,
+                        timeout,
+                        Some(&subcommand_config),
+                    )
+                    .await;
+
+                match result {
+                    Ok(output) => Ok(CallToolResult::success(vec![Content::text(output)])),
+                    Err(e) => {
+                        let error_message = format!("Synchronous execution failed: {}", e);
+                        tracing::error!("{}", error_message);
+                        Err(McpError::internal_error(error_message, None))
+                    }
+                }
+            }
+            crate::adapter::ExecutionMode::AsyncResultPush => {
+                let operation_id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
+                let progress_token = context.meta.get_progress_token();
+                let client_type = McpClientType::from_peer(&context.peer);
+                let callback: Option<Box<dyn CallbackSender>> = progress_token.map(|token| {
+                    Box::new(McpCallbackSender::new(
+                        context.peer.clone(),
+                        operation_id.clone(),
+                        Some(token),
+                        client_type,
+                    )) as Box<dyn CallbackSender>
+                });
+
+                // Create a minimal SubcommandConfig for bash -c
+                let subcommand_config = crate::config::SubcommandConfig {
+                    name: "sandboxed_shell".to_string(),
+                    description: "Execute shell commands".to_string(),
+                    subcommand: None,
+                    options: None,
+                    positional_args: Some(vec![crate::config::CommandOption {
+                        name: "command".to_string(),
+                        option_type: "string".to_string(),
+                        description: Some("Shell command to execute".to_string()),
+                        required: Some(true),
+                        format: None,
+                        items: None,
+                        file_arg: None,
+                        file_flag: None,
+                        alias: None,
+                    }]),
+                    positional_args_first: Some(false),
+                    timeout_seconds: timeout,
+                    synchronous: Some(false),
+                    enabled: true,
+                    guidance_key: None,
+                    sequence: None,
+                    step_delay_ms: None,
+                    availability_check: None,
+                    install_instructions: None,
+                };
+
+                let job_id = self
+                    .adapter
+                    .execute_async_in_dir_with_options(
+                        "sandboxed_shell",
+                        "/bin/bash",
+                        &working_directory,
+                        crate::adapter::AsyncExecOptions {
+                            operation_id: Some(operation_id),
+                            args: Some(adapter_args),
+                            timeout,
+                            callback,
+                            subcommand_config: Some(&subcommand_config),
+                        },
+                    )
+                    .await;
+
+                match job_id {
+                    Ok(id) => {
+                        let hint = crate::tool_hints::preview(&id, "sandboxed_shell");
+                        let message =
+                            format!("Asynchronous operation started with ID: {}{}", id, hint);
+                        Ok(CallToolResult::success(vec![Content::text(message)]))
+                    }
+                    Err(e) => {
+                        let error_message = format!("Async execution failed: {}", e);
+                        tracing::error!("{}", error_message);
+                        Err(McpError::internal_error(error_message, None))
+                    }
+                }
+            }
+        }
+    }
+
     /// Calculate intelligent timeout based on operation timeouts and default await timeout
     ///
     /// Returns the maximum of:
@@ -1262,6 +1486,18 @@ impl ServerHandler for AhmaMcpService {
                 meta: None,
             });
 
+            // Hard-wired sandboxed_shell command - always available
+            tools.push(Tool {
+                name: "sandboxed_shell".into(),
+                title: Some("sandboxed_shell".to_string()),
+                icons: None,
+                description: Some("Execute shell commands within a secure sandbox. This tool must **ALWAYS** be used instead of direct shell invocation. Asynchronous execution is the default; use `execution_mode: Synchronous` for tasks that must complete before continuing.".into()),
+                input_schema: self.generate_input_schema_for_sandboxed_shell(),
+                output_schema: None,
+                annotations: None,
+                meta: None,
+            });
+
             {
                 let configs_lock = self.configs.read().unwrap();
                 for config in configs_lock.values() {
@@ -1302,6 +1538,10 @@ impl ServerHandler for AhmaMcpService {
 
             if tool_name == "await" {
                 return self.handle_await(params).await;
+            }
+
+            if tool_name == "sandboxed_shell" {
+                return self.handle_sandboxed_shell(params, context).await;
             }
 
             if tool_name == "cancel" {

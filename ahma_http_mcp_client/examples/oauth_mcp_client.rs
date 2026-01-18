@@ -67,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Searching for '{}'...", args.query);
 
         let params = CallToolRequestParam {
-            name: tool.name.clone().into(),
+            name: tool.name.clone(),
             arguments: Some(
                 serde_json::json!({ "query": args.query })
                     .as_object()

@@ -104,7 +104,7 @@ ahma_mcp/
 | `callback_system` | Event notification system for async operations |
 | `path_security` | Path validation for sandbox enforcement |
 
-### 2.3 Built-in Tools
+### 2.3 Built-in Internal Tools
 
 These tools are always available regardless of JSON configuration:
 
@@ -113,7 +113,9 @@ These tools are always available regardless of JSON configuration:
 | `status` | Non-blocking progress check for async operations |
 | `await` | Blocking wait for operation completion (use sparingly) |
 | `cancel` | Cancel running operations |
-| `sandboxed_shell` | Execute arbitrary shell commands within sandbox scope |
+| `sandboxed_shell` | Execute arbitrary shell commands within sandbox scope (promoted from file-based to internal) |
+
+**Note**: These internal tools are hardcoded into the `AhmaMcpService` and are guaranteed to be available even when no `.ahma` directory exists or when all external tool configurations fail to load.
 
 ### 2.4 Async-First Architecture
 
@@ -170,7 +172,9 @@ These tools are always available regardless of JSON configuration:
 ### R1: Configuration-Driven Tools
 
 - **R1.1**: The system **must** adapt any CLI tool for use as MCP tools based on declarative JSON configuration files.
-- **R1.2**: All tool definitions **must** be stored in `.json` files within a `tools/` directory (default: `.ahma/tools/`).
+- **R1.2**: All tool definitions **must** be stored in `.json` files within a `tools/` directory (default: `.ahma/`).
+- **R1.2.1**: **Auto-Detection**: When `--tools-dir` is not explicitly provided, the system **must** check for a `.ahma` directory in the current working directory. If found, it **must** be used as the tools directory. If not found, the system **must** log a warning and operate with only the built-in internal tools (`await`, `status`, `sandboxed_shell`).
+- **R1.2.2**: When `--tools-dir` is explicitly provided via CLI argument, that path **must** take precedence over auto-detection.
 - **R1.3**: The system **must not** be recompiled to add, remove, or modify a tool.
 - **R1.4**: **Hot-Reloading**: The system **must** watch the `tools/` directory and send `notifications/tools/list_changed` when files change.
 
@@ -575,6 +579,43 @@ cargo build --release               # Verify build succeeds
 cargo nextest run                   # Run all tests (must pass)
 ```
 
+### 13.4 Test-First Development (TDD)
+
+> **MANDATORY for all new features and bug fixes:**
+
+**R13.4.1**: **ALL** functional requirements and bug fixes **MUST** follow test-first development:
+
+1. **Write the test first** - Write a test that expresses the desired behavior or exposes the bug
+2. **See it fail** - Run the test and verify it fails for the expected reason
+3. **Implement the fix** - Write the minimal code to make the test pass
+4. **See it pass** - Run the test and verify it passes
+5. **Refactor** - Clean up the code while keeping tests green
+
+**R13.4.2**: This workflow is **non-negotiable** and applies to:
+- New features (e.g., auto-detection of `.ahma` directory)
+- Bug fixes (any deviation from expected behavior)
+- Performance improvements (when testable)
+- Security enhancements (when testable)
+
+**R13.4.3**: Tests are **part of the functional requirements**, not an afterthought.
+
+**R13.4.4**: Code changes without corresponding tests **MUST NOT** be merged unless:
+- The change is purely documentation
+- The change is a trivial typo fix in comments
+- Tests are genuinely impossible (must be justified in code review)
+
+**R13.4.5**: Before considering any work complete, you **MUST** run these quality checks in order:
+1. `cargo clippy` - Verify no warnings or errors
+2. `cargo nextest run` (or `cargo test` if nextest not available) - Verify all tests pass
+3. Only after both pass can work be considered complete
+
+This ensures:
+- Code quality and idiomatic Rust patterns (clippy)
+- No regressions in functionality (nextest)
+- Early detection of issues before they are merged
+
+**Failing to run these checks results in broken builds and wasted time.**
+
 ---
 
 ## 14. Maintenance Notes
@@ -584,7 +625,7 @@ cargo nextest run                   # Run all tests (must pass)
 > 1. Update the "Quick Status" table
 > 2. Add to "Known Issues" if new bugs found
 > 3. Update feature tables with status changes
-> 4. **ALWAYS run quality checks before stopping work**
+> 4. **BEFORE stopping work: Run `cargo clippy` then `cargo nextest run` to verify quality**
 
 **Last Updated**: 2026-01-18
 

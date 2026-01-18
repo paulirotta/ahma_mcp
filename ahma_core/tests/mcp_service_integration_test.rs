@@ -508,10 +508,13 @@ async fn test_mcp_shell_command_execution() -> Result<()> {
     let params = CallToolRequestParam {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
-            json!({"command": "echo 'MCP test output'"})
-                .as_object()
-                .unwrap()
-                .clone(),
+            json!({
+                "command": "echo 'MCP test output'",
+                "execution_mode": "Synchronous"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
         ),
         task: None,
     };
@@ -619,7 +622,8 @@ async fn test_mcp_working_directory_parameter() -> Result<()> {
         arguments: Some(
             json!({
                 "command": "ls",
-                "working_directory": sub_dir.to_str().unwrap()
+                "working_directory": sub_dir.to_str().unwrap(),
+                "execution_mode": "Synchronous"
             })
             .as_object()
             .unwrap()
