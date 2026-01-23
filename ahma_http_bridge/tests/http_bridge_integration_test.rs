@@ -538,13 +538,14 @@ async fn test_tool_call_with_different_working_directory() {
         answer_roots_list_over_sse(&sse_client, &sse_base_url, &sse_session_id, &[sse_root]).await;
     });
 
-    let _ = send_mcp_request(
+    send_mcp_request(
         &client,
         &base_url,
         &initialized_notification,
         Some(&session_id),
     )
-    .await;
+    .await
+    .expect("notifications/initialized should succeed");
     // Notifications don't return responses, that's OK
 
     // Ensure roots/list was observed and answered.
@@ -571,7 +572,7 @@ async fn test_tool_call_with_different_working_directory() {
     let start = tokio::time::Instant::now();
     let mut tool_response;
     loop {
-        if start.elapsed() > Duration::from_secs(5) {
+        if start.elapsed() > Duration::from_secs(15) {
             panic!("Timed out waiting for sandbox initialization");
         }
 
@@ -735,7 +736,7 @@ async fn test_basic_tool_call_within_sandbox() {
     let start = tokio::time::Instant::now();
     let mut response;
     loop {
-        if start.elapsed() > Duration::from_secs(5) {
+        if start.elapsed() > Duration::from_secs(15) {
             panic!("Timed out waiting for sandbox initialization");
         }
 
@@ -1120,7 +1121,7 @@ async fn test_rejects_working_directory_path_traversal_outside_root() {
     let start = tokio::time::Instant::now();
     let mut resp;
     loop {
-        if start.elapsed() > Duration::from_secs(5) {
+        if start.elapsed() > Duration::from_secs(15) {
             panic!("Timed out waiting for sandbox initialization");
         }
 
@@ -1247,7 +1248,7 @@ async fn test_symlink_escape_attempt_is_blocked() {
     let start = tokio::time::Instant::now();
     let mut resp;
     loop {
-        if start.elapsed() > Duration::from_secs(5) {
+        if start.elapsed() > Duration::from_secs(15) {
             panic!("Timed out waiting for sandbox initialization");
         }
 

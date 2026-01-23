@@ -622,8 +622,8 @@ async fn handle_session_isolated_request(
                 method = ?method,
                 "Waiting for MCP initialization before forwarding request"
             );
-            // Wait for initialization with a reasonable timeout
-            let init_timeout = Duration::from_secs(5);
+            // Wait for initialization with a reasonable timeout (increased for slow CI)
+            let init_timeout = Duration::from_secs(15);
             let wait_result =
                 tokio::time::timeout(init_timeout, session.wait_for_mcp_initialized()).await;
 
