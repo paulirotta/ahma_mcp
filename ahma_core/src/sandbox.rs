@@ -130,16 +130,17 @@ impl Sandbox {
 
     /// Check if a path is within any of the sandbox scopes.
     pub fn validate_path(&self, path: &Path) -> Result<PathBuf> {
-        if self.scopes.is_empty() && self.mode != SandboxMode::Test {
-            return Err(anyhow!("No sandbox scopes configured"));
+        // In Test mode, we only bypass validation if the sandbox is explicitly unrestricted (root scope or no scopes).
+        // If specific scopes are provided, we enforce them logically even in Test mode, while still bypassing
+        // the kernel-level sandboxing in create_command.
+        if self.mode == SandboxMode::Test
+            && (self.scopes.is_empty() || self.scopes.iter().any(|s| s == Path::new("/")))
+        {
+            return std::fs::canonicalize(path).or_else(|_| Ok(path.to_path_buf()));
         }
 
-        // In test mode, we might want to skip validation, but let's see.
-        // References logic said "Test mode flag - when true, sandbox is bypassed".
-        // However, we still probably want to resolve paths.
-        if self.mode == SandboxMode::Test {
-            // Minimal validation/resolution logic for tests without strict bounds
-            return std::fs::canonicalize(path).or_else(|_| Ok(path.to_path_buf()));
+        if self.scopes.is_empty() {
+            return Err(anyhow!("No sandbox scopes configured"));
         }
 
         // We assume the first scope is the "primary" one for relative path resolution
@@ -152,25 +153,25 @@ impl Sandbox {
             first_scope.join(path)
         };
 
-        // Try to canonicalize the path
+        // Try to canonicalize the path.
+        // If the path doesn't exist, try canonicalizing its parent directory
+        // to handle symlinks correctly (especially important on macOS where /var is a symlink).
         let canonical = match std::fs::canonicalize(&full_path) {
             Ok(p) => p,
             Err(_) => {
-                // For non-existent paths (e.g., files to be created), normalize lexically
-                // and check against all scopes
-                let normalized = normalize_path_lexically(&full_path);
-                if !self
-                    .scopes
-                    .iter()
-                    .any(|scope| normalized.starts_with(scope))
-                {
-                    return Err(SandboxError::PathOutsideSandbox {
-                        path: path.to_path_buf(),
-                        scopes: self.scopes.clone(),
+                if let Some(parent) = full_path.parent() {
+                    if let Ok(parent_canonical) = std::fs::canonicalize(parent) {
+                        if let Some(name) = full_path.file_name() {
+                            parent_canonical.join(name)
+                        } else {
+                            parent_canonical
+                        }
+                    } else {
+                        normalize_path_lexically(&full_path)
                     }
-                    .into());
+                } else {
+                    normalize_path_lexically(&full_path)
                 }
-                normalized
             }
         };
 
