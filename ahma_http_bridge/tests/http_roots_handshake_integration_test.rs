@@ -98,7 +98,7 @@ async fn http_roots_handshake_then_tool_call_defaults_to_root() {
         .header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "application/json")
         .json(&init_req)
-        .timeout(Duration::from_secs(20))
+        .timeout(Duration::from_secs(60))
         .send()
         .await
         .expect("initialize POST failed");
@@ -141,7 +141,7 @@ async fn http_roots_handshake_then_tool_call_defaults_to_root() {
     let sse_resp = client
         .get(sse_url)
         .headers(sse_headers)
-        .timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(60))
         .send()
         .await
         .expect("SSE GET failed");

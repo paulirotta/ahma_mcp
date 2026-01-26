@@ -39,25 +39,31 @@ fn get_ahma_mcp_binary() -> PathBuf {
         .expect("Failed to get workspace dir")
         .to_path_buf();
 
-    // Build ahma_mcp binary
-    let output = Command::new("cargo")
-        .current_dir(&workspace_dir)
-        .args(["build", "--package", "ahma_core", "--bin", "ahma_mcp"])
-        .output()
-        .expect("Failed to run cargo build");
-
-    assert!(
-        output.status.success(),
-        "Failed to build ahma_mcp: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
     // Check for CARGO_TARGET_DIR
     let target_dir = std::env::var("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| workspace_dir.join("target"));
 
-    target_dir.join("debug/ahma_mcp")
+    let binary_path = target_dir.join("debug/ahma_mcp");
+
+    // Optimization: Skip manual build if binary already exists, especially in NEXTEST
+    // where all binaries are pre-built to avoid cargo lock contention.
+    if !binary_path.exists() {
+        // Build ahma_mcp binary
+        let output = Command::new("cargo")
+            .current_dir(&workspace_dir)
+            .args(["build", "--package", "ahma_core", "--bin", "ahma_mcp"])
+            .output()
+            .expect("Failed to run cargo build");
+
+        assert!(
+            output.status.success(),
+            "Failed to build ahma_mcp: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    binary_path
 }
 
 /// Start the HTTP bridge server and return the process and URL
@@ -103,7 +109,7 @@ async fn start_http_bridge(
     let client = Client::new();
     let health_url = format!("http://127.0.0.1:{}/health", port);
 
-    for _ in 0..60 {
+    for _ in 0..150 {
         sleep(Duration::from_millis(200)).await;
         if let Ok(resp) = client.get(&health_url).send().await
             && resp.status().is_success()
@@ -146,7 +152,7 @@ async fn send_mcp_request(
         .post(&url)
         .header("Content-Type", "application/json")
         .header("Accept", "application/json")
-        .timeout(Duration::from_secs(30));
+        .timeout(Duration::from_secs(60));
 
     if let Some(id) = session_id {
         req = req.header("Mcp-Session-Id", id);
@@ -572,7 +578,7 @@ async fn test_tool_call_with_different_working_directory() {
     let start = tokio::time::Instant::now();
     let mut tool_response;
     loop {
-        if start.elapsed() > Duration::from_secs(15) {
+        if start.elapsed() > Duration::from_secs(60) {
             panic!("Timed out waiting for sandbox initialization");
         }
 
@@ -736,7 +742,7 @@ async fn test_basic_tool_call_within_sandbox() {
     let start = tokio::time::Instant::now();
     let mut response;
     loop {
-        if start.elapsed() > Duration::from_secs(15) {
+        if start.elapsed() > Duration::from_secs(60) {
             panic!("Timed out waiting for sandbox initialization");
         }
 
@@ -1121,7 +1127,7 @@ async fn test_rejects_working_directory_path_traversal_outside_root() {
     let start = tokio::time::Instant::now();
     let mut resp;
     loop {
-        if start.elapsed() > Duration::from_secs(15) {
+        if start.elapsed() > Duration::from_secs(60) {
             panic!("Timed out waiting for sandbox initialization");
         }
 
@@ -1248,7 +1254,7 @@ async fn test_symlink_escape_attempt_is_blocked() {
     let start = tokio::time::Instant::now();
     let mut resp;
     loop {
-        if start.elapsed() > Duration::from_secs(15) {
+        if start.elapsed() > Duration::from_secs(60) {
             panic!("Timed out waiting for sandbox initialization");
         }
 

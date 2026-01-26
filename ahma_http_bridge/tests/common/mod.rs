@@ -229,31 +229,37 @@ impl Drop for TestServerInstance {
 }
 
 /// Build the ahma_mcp binary if needed and return the path
-fn get_ahma_mcp_binary() -> PathBuf {
+pub fn get_ahma_mcp_binary() -> PathBuf {
     let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("Failed to get workspace dir")
         .to_path_buf();
-
-    // Build ahma_mcp binary
-    let output = Command::new("cargo")
-        .current_dir(&workspace_dir)
-        .args(["build", "--package", "ahma_core", "--bin", "ahma_mcp"])
-        .output()
-        .expect("Failed to run cargo build");
-
-    assert!(
-        output.status.success(),
-        "Failed to build ahma_mcp: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
 
     // Check for CARGO_TARGET_DIR to support tools like llvm-cov
     let target_dir = std::env::var("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| workspace_dir.join("target"));
 
-    target_dir.join("debug/ahma_mcp")
+    let binary_path = target_dir.join("debug/ahma_mcp");
+
+    // Optimization: Skip manual build if binary already exists to avoid 
+    // cargo lock contention during parallel testing (especially in CI).
+    if !binary_path.exists() {
+        // Build ahma_mcp binary
+        let output = Command::new("cargo")
+            .current_dir(&workspace_dir)
+            .args(["build", "--package", "ahma_core", "--bin", "ahma_mcp"])
+            .output()
+            .expect("Failed to run cargo build");
+
+        assert!(
+            output.status.success(),
+            "Failed to build ahma_mcp: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    binary_path
 }
 
 /// Spawn a new test server with dynamic port allocation.
