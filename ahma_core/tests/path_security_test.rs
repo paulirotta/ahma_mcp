@@ -65,11 +65,7 @@ async fn test_path_validation_failure_absolute() {
             // So we should expect INTERNAL_ERROR.
             // assert_eq!(mcp_error.code, ErrorCode::INVALID_PARAMS);
             // Default mode is now async, so error says "Async execution failed"
-            assert!(
-                mcp_error
-                    .message
-                    .contains("Async execution failed")
-            );
+            assert!(mcp_error.message.contains("Async execution failed"));
             assert!(mcp_error.message.contains("outside the sandbox root"));
         }
         _ => panic!("Expected McpError, got {:?}", error),
@@ -104,11 +100,7 @@ async fn test_path_validation_failure_relative() {
     match error {
         ServiceError::McpError(mcp_error) => {
             // Default mode is now async, so error says "Async execution failed"
-            assert!(
-                mcp_error
-                    .message
-                    .contains("Async execution failed")
-            );
+            assert!(mcp_error.message.contains("Async execution failed"));
             assert!(mcp_error.message.contains("outside the sandbox root"));
         }
         _ => panic!("Expected McpError, got {:?}", error),

@@ -36,7 +36,6 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
-use tempfile::TempDir;
 use tokio::time::sleep;
 
 // =============================================================================
@@ -204,7 +203,6 @@ pub const AHMA_INTEGRATION_TEST_SERVER_PORT: u16 = 5721;
 pub struct TestServerInstance {
     child: Child,
     port: u16,
-    _temp_dir: TempDir, // Keep alive for the duration of the server
 }
 
 impl TestServerInstance {
@@ -282,11 +280,8 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
     // Use the workspace .ahma directory
     let tools_dir = workspace_dir.join(".ahma");
 
-    // Create temp directory for sandbox scope
-    let temp_dir = TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
-    let sandbox_scope = temp_dir.path().to_path_buf();
-
     // Build command args - use port 0 for dynamic allocation
+    // Use --defer-sandbox so each HTTP session can bind its sandbox to the client's roots
     let args = vec![
         "--mode".to_string(),
         "http".to_string(),
@@ -295,8 +290,7 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
         "--sync".to_string(),
         "--tools-dir".to_string(),
         tools_dir.to_string_lossy().to_string(),
-        "--sandbox-scope".to_string(),
-        sandbox_scope.to_string_lossy().to_string(),
+        "--defer-sandbox".to_string(),
         "--log-to-stderr".to_string(),
     ];
 
@@ -398,7 +392,6 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
             return Ok(TestServerInstance {
                 child,
                 port: bound_port,
-                _temp_dir: temp_dir,
             });
         }
     }
