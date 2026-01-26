@@ -721,7 +721,8 @@ impl SessionManager {
 
         // Wait for response if this is a request (has ID)
         if let Some(rx) = response_rx {
-            let wait_timeout = timeout.unwrap_or_else(|| Duration::from_secs(request_timeout_secs()));
+            let wait_timeout =
+                timeout.unwrap_or_else(|| Duration::from_secs(request_timeout_secs()));
             match tokio::time::timeout(wait_timeout, rx).await {
                 Ok(Ok(response)) => Ok(response),
                 Ok(Err(_)) => Err(BridgeError::Communication(
