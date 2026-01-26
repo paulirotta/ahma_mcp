@@ -38,7 +38,7 @@ fn get_ahma_mcp_binary() -> PathBuf {
 
     let binary_path = target_dir.join("debug/ahma_mcp");
 
-    // Optimization: Skip manual build if binary already exists to avoid 
+    // Optimization: Skip manual build if binary already exists to avoid
     // cargo lock contention during parallel testing (especially in CI).
     if !binary_path.exists() {
         let output = Command::new("cargo")
