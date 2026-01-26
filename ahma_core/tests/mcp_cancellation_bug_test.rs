@@ -12,6 +12,7 @@ use ahma_core::{
     adapter::Adapter,
     mcp_service::AhmaMcpService,
     operation_monitor::{MonitorConfig, OperationMonitor},
+    sandbox::Sandbox,
     shell_pool::{ShellPoolConfig, ShellPoolManager},
 };
 use rmcp::model::{CancelledNotificationParam, RequestId};
@@ -44,11 +45,15 @@ async fn test_mcp_cancellation_does_not_trigger_canceled_canceled_message() {
     };
     let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
 
+    // Create sandbox with temp_dir as root + /tmp
+    let scopes = vec![temp_dir.path().to_path_buf(), std::env::temp_dir()];
+    let sandbox =
+        Arc::new(Sandbox::new(scopes, ahma_core::sandbox::SandboxMode::Test, false).unwrap());
+
     // Create adapter
     let adapter = Arc::new(
-        Adapter::new(operation_monitor.clone(), shell_pool)
-            .expect("Failed to create adapter")
-            .with_root(temp_dir.path().to_path_buf()),
+        Adapter::new(operation_monitor.clone(), shell_pool, sandbox)
+            .expect("Failed to create adapter"),
     );
 
     // Create empty tool configs (we don't need real tools for this test)

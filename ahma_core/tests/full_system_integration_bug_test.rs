@@ -5,6 +5,7 @@ mod tests {
     use ahma_core::config::load_tool_configs;
     use ahma_core::mcp_service::AhmaMcpService;
     use ahma_core::operation_monitor::{MonitorConfig, OperationMonitor};
+    use ahma_core::sandbox::Sandbox;
     use ahma_core::shell_pool::{ShellPoolConfig, ShellPoolManager};
 
     use std::sync::{Arc, Mutex};
@@ -69,8 +70,9 @@ mod tests {
         let shell_pool_config = ShellPoolConfig::default();
         let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
         shell_pool_manager.clone().start_background_tasks();
+        let sandbox = Arc::new(Sandbox::new_test());
         let adapter =
-            Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager).unwrap());
+            Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager, sandbox).unwrap());
         let configs = Arc::new(
             load_tool_configs(&std::path::PathBuf::from(".ahma"))
                 .await
@@ -164,8 +166,9 @@ mod tests {
         let shell_pool_config = ShellPoolConfig::default();
         let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
         shell_pool_manager.clone().start_background_tasks();
+        let sandbox = Arc::new(Sandbox::new_test());
         let adapter =
-            Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager).unwrap());
+            Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager, sandbox).unwrap());
 
         let current_dir = std::env::current_dir().unwrap();
         let current_dir_str = current_dir.to_str().unwrap();

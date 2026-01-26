@@ -17,7 +17,9 @@ async fn test_intelligent_timeout_calculation_direct() {
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_config = ShellPoolConfig::default();
     let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
-    let adapter = Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool).unwrap());
+    let sandbox = Arc::new(ahma_core::sandbox::Sandbox::new_test());
+    let adapter =
+        Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool, sandbox).unwrap());
 
     // Create empty configs and guidance
     let configs = Arc::new(HashMap::new());
@@ -82,7 +84,9 @@ async fn test_timeout_warning_logic() {
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_config = ShellPoolConfig::default();
     let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
-    let adapter = Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool).unwrap());
+    let sandbox = Arc::new(ahma_core::sandbox::Sandbox::new_test());
+    let adapter =
+        Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool, sandbox).unwrap());
 
     // Create empty configs and guidance
     let configs = Arc::new(HashMap::new());

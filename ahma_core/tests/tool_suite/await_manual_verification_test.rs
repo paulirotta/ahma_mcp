@@ -14,7 +14,8 @@ async fn await_manual_verification() {
     let monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_pool_config = ShellPoolConfig::default();
     let shell_pool = Arc::new(ShellPoolManager::new(shell_pool_config));
-    let _adapter = Arc::new(Adapter::new(monitor.clone(), shell_pool).unwrap());
+    let sandbox = Arc::new(ahma_core::sandbox::Sandbox::new_test());
+    let _adapter = Arc::new(Adapter::new(monitor.clone(), shell_pool, sandbox).unwrap());
 
     println!("Testing await fix directly using the operation monitor...");
 

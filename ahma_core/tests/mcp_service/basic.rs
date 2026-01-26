@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod mcp_service_tests {
+    use ahma_core::sandbox::Sandbox;
     use ahma_core::utils::logging::init_test_logging;
     use ahma_core::{
         adapter::Adapter,
@@ -224,8 +225,14 @@ mod mcp_service_tests {
         let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(300));
         let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
         let shell_pool = Arc::new(ShellPoolManager::new(Default::default()));
+        let sandbox = Arc::new(Sandbox::new_test());
         let adapter = Arc::new(
-            Adapter::new(Arc::clone(&operation_monitor), Arc::clone(&shell_pool)).unwrap(),
+            Adapter::new(
+                Arc::clone(&operation_monitor),
+                Arc::clone(&shell_pool),
+                sandbox,
+            )
+            .unwrap(),
         );
         let configs = Arc::new(HashMap::new());
         let guidance = Arc::new(None);
@@ -252,8 +259,14 @@ mod mcp_service_tests {
         let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(300));
         let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
         let shell_pool = Arc::new(ShellPoolManager::new(Default::default()));
+        let sandbox = Arc::new(Sandbox::new_test());
         let adapter = Arc::new(
-            Adapter::new(Arc::clone(&operation_monitor), Arc::clone(&shell_pool)).unwrap(),
+            Adapter::new(
+                Arc::clone(&operation_monitor),
+                Arc::clone(&shell_pool),
+                sandbox,
+            )
+            .unwrap(),
         );
         let configs = Arc::new(HashMap::new());
         let guidance = Arc::new(None);
@@ -285,8 +298,14 @@ mod mcp_service_tests {
         let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(300));
         let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
         let shell_pool = Arc::new(ShellPoolManager::new(Default::default()));
+        let sandbox = Arc::new(Sandbox::new_test());
         let adapter = Arc::new(
-            Adapter::new(Arc::clone(&operation_monitor), Arc::clone(&shell_pool)).unwrap(),
+            Adapter::new(
+                Arc::clone(&operation_monitor),
+                Arc::clone(&shell_pool),
+                sandbox,
+            )
+            .unwrap(),
         );
         let configs = Arc::new(HashMap::new());
         let guidance = Arc::new(None);

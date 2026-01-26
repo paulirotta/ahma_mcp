@@ -30,9 +30,8 @@ async fn test_git_operations_timeout_parameter() {
         ..Default::default()
     };
     let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
-
-    // Create adapter
-    let adapter = Adapter::new(operation_monitor, shell_pool).unwrap();
+    let sandbox = Arc::new(ahma_core::sandbox::Sandbox::new_test());
+    let adapter = Adapter::new(operation_monitor, shell_pool, sandbox).unwrap();
 
     // Test that git push with timeout_seconds parameter is accepted
     let result = timeout(Duration::from_secs(5), async {
@@ -76,7 +75,8 @@ async fn test_timeout_seconds_parameter_validation() {
         ..Default::default()
     };
     let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
-    let adapter = Adapter::new(operation_monitor, shell_pool).unwrap();
+    let sandbox = Arc::new(ahma_core::sandbox::Sandbox::new_test());
+    let adapter = Adapter::new(operation_monitor, shell_pool, sandbox).unwrap();
 
     // Test minimum timeout value (10 seconds)
     let result = timeout(Duration::from_secs(5), async {
@@ -141,7 +141,8 @@ async fn test_default_timeout_behavior() {
         ..Default::default()
     };
     let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
-    let adapter = Adapter::new(operation_monitor, shell_pool).unwrap();
+    let sandbox = Arc::new(ahma_core::sandbox::Sandbox::new_test());
+    let adapter = Adapter::new(operation_monitor, shell_pool, sandbox).unwrap();
 
     // Test that git operations work without explicit timeout_seconds (should use default)
     let result = timeout(Duration::from_secs(5), async {

@@ -212,7 +212,8 @@ async fn test_evaluate_empty_configs() -> Result<()> {
     let shell_pool = Arc::new(ShellPoolManager::new(ShellPoolConfig::default()));
     let configs: HashMap<String, ToolConfig> = HashMap::new();
 
-    let summary = evaluate_tool_availability(shell_pool, configs, Path::new(".")).await?;
+    let sandbox = ahma_core::sandbox::Sandbox::new_test();
+    let summary = evaluate_tool_availability(shell_pool, configs, Path::new("."), &sandbox).await?;
 
     assert!(summary.filtered_configs.is_empty());
     assert!(summary.disabled_tools.is_empty());
@@ -231,7 +232,8 @@ async fn test_evaluate_tool_already_disabled() -> Result<()> {
     let mut configs = HashMap::new();
     configs.insert(disabled_tool.name.clone(), disabled_tool);
 
-    let summary = evaluate_tool_availability(shell_pool, configs, Path::new(".")).await?;
+    let sandbox = ahma_core::sandbox::Sandbox::new_test();
+    let summary = evaluate_tool_availability(shell_pool, configs, Path::new("."), &sandbox).await?;
 
     // Tool was already disabled, so it shouldn't be probed or appear in disabled_tools
     let config = summary.filtered_configs.get("disabled_tool").unwrap();
@@ -258,7 +260,8 @@ async fn test_evaluate_sequence_tool_skipped() -> Result<()> {
     let mut configs = HashMap::new();
     configs.insert(sequence_tool.name.clone(), sequence_tool);
 
-    let summary = evaluate_tool_availability(shell_pool, configs, Path::new(".")).await?;
+    let sandbox = ahma_core::sandbox::Sandbox::new_test();
+    let summary = evaluate_tool_availability(shell_pool, configs, Path::new("."), &sandbox).await?;
 
     // Sequence tools should be skipped (not probed)
     let config = summary.filtered_configs.get("sequence_tool").unwrap();
@@ -281,7 +284,8 @@ async fn test_evaluate_project_relative_command_skipped() -> Result<()> {
     let mut configs = HashMap::new();
     configs.insert(relative_tool.name.clone(), relative_tool);
 
-    let summary = evaluate_tool_availability(shell_pool, configs, Path::new(".")).await?;
+    let sandbox = ahma_core::sandbox::Sandbox::new_test();
+    let summary = evaluate_tool_availability(shell_pool, configs, Path::new("."), &sandbox).await?;
 
     // Project-relative commands without availability_check should be skipped
     let config = summary.filtered_configs.get("gradlew_tool").unwrap();
@@ -312,7 +316,8 @@ async fn test_evaluate_tool_with_available_command() -> Result<()> {
     let mut configs = HashMap::new();
     configs.insert(echo_tool.name.clone(), echo_tool);
 
-    let summary = evaluate_tool_availability(shell_pool, configs, Path::new(".")).await?;
+    let sandbox = ahma_core::sandbox::Sandbox::new_test();
+    let summary = evaluate_tool_availability(shell_pool, configs, Path::new("."), &sandbox).await?;
 
     // echo should be available on all systems
     let config = summary.filtered_configs.get("echo_tool").unwrap();
@@ -335,7 +340,8 @@ async fn test_evaluate_tool_with_unavailable_command() -> Result<()> {
     let mut configs = HashMap::new();
     configs.insert(unavailable_tool.name.clone(), unavailable_tool);
 
-    let summary = evaluate_tool_availability(shell_pool, configs, Path::new(".")).await?;
+    let sandbox = ahma_core::sandbox::Sandbox::new_test();
+    let summary = evaluate_tool_availability(shell_pool, configs, Path::new("."), &sandbox).await?;
 
     // Tool should be disabled
     let config = summary.filtered_configs.get("unavailable_tool").unwrap();
@@ -387,7 +393,8 @@ async fn test_evaluate_subcommand_disabled_when_probe_fails() -> Result<()> {
     let mut configs = HashMap::new();
     configs.insert(tool.name.clone(), tool);
 
-    let summary = evaluate_tool_availability(shell_pool, configs, Path::new(".")).await?;
+    let sandbox = ahma_core::sandbox::Sandbox::new_test();
+    let summary = evaluate_tool_availability(shell_pool, configs, Path::new("."), &sandbox).await?;
 
     let config = summary.filtered_configs.get("bash_tool").unwrap();
     assert!(config.enabled, "Parent tool should remain enabled");
@@ -426,7 +433,8 @@ async fn test_evaluate_already_disabled_subcommand_not_probed() -> Result<()> {
     let mut configs = HashMap::new();
     configs.insert(tool.name.clone(), tool);
 
-    let summary = evaluate_tool_availability(shell_pool, configs, Path::new(".")).await?;
+    let sandbox = ahma_core::sandbox::Sandbox::new_test();
+    let summary = evaluate_tool_availability(shell_pool, configs, Path::new("."), &sandbox).await?;
 
     // Subcommand was already disabled, so it shouldn't appear in disabled_subcommands
     assert!(
@@ -469,7 +477,8 @@ async fn test_evaluate_nested_subcommands() -> Result<()> {
     let mut configs = HashMap::new();
     configs.insert(tool.name.clone(), tool);
 
-    let summary = evaluate_tool_availability(shell_pool, configs, Path::new(".")).await?;
+    let sandbox = ahma_core::sandbox::Sandbox::new_test();
+    let summary = evaluate_tool_availability(shell_pool, configs, Path::new("."), &sandbox).await?;
 
     // The nested child should be disabled
     let config = summary.filtered_configs.get("nested_tool").unwrap();
@@ -508,7 +517,8 @@ async fn test_evaluate_custom_success_exit_codes() -> Result<()> {
     let mut configs = HashMap::new();
     configs.insert(tool.name.clone(), tool);
 
-    let summary = evaluate_tool_availability(shell_pool, configs, Path::new(".")).await?;
+    let sandbox = ahma_core::sandbox::Sandbox::new_test();
+    let summary = evaluate_tool_availability(shell_pool, configs, Path::new("."), &sandbox).await?;
 
     let config = summary.filtered_configs.get("exit_code_tool").unwrap();
     assert!(

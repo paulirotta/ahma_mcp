@@ -140,8 +140,9 @@ struct Cli {
 
     /// Override the sandbox scope (root directory for file system operations).
     /// By default, uses the current working directory for stdio mode.
+    /// Can be specified multiple times to allow access to multiple roots.
     #[arg(long, global = true)]
-    sandbox_scope: Option<PathBuf>,
+    sandbox_scope: Vec<PathBuf>,
 
     /// Defer sandbox initialization until the client provides workspace roots via roots/list.
     /// Used by HTTP session isolation so each subprocess can bind its sandbox scope to the
@@ -198,10 +199,15 @@ pub async fn run() -> Result<()> {
         || std::env::var("AHMA_NO_SANDBOX").is_ok()
         || std::env::var("AHMA_TEST_MODE").is_ok();
 
-    if no_sandbox {
+    // Determine Sandbox Mode
+    let sandbox_mode = if no_sandbox {
         tracing::warn!("Ahma sandbox disabled via --no-sandbox flag or environment variable");
-        sandbox::enable_test_mode();
+        sandbox::SandboxMode::Test
     } else {
+        sandbox::SandboxMode::Strict
+    };
+
+    if !no_sandbox {
         // Check sandbox prerequisites before anything else
         if let Err(e) = sandbox::check_sandbox_prerequisites() {
             sandbox::exit_with_sandbox_error(&e);
@@ -226,55 +232,72 @@ pub async fn run() -> Result<()> {
         }
     }
 
-    // Initialize sandbox scope unless deferred.
-    // Priority: 1. CLI --sandbox-scope, 2. AHMA_SANDBOX_SCOPE env var, 3. current working directory
-    let sandbox_scope = if cli.defer_sandbox {
+    // Initialize sandbox scopes unless deferred.
+    // Priority:
+    // 1. CLI --sandbox-scope (multiple supported)
+    // 2. AHMA_SANDBOX_SCOPE env var (legacy single path)
+    // 3. Current working directory
+    let sandbox_scopes = if cli.defer_sandbox {
         tracing::info!("Sandbox initialization deferred - will be set from client roots/list");
         None
+    } else if !cli.sandbox_scope.is_empty() {
+        // CLI override takes precedence
+        let mut canonical_scopes = Vec::new();
+        for scope in &cli.sandbox_scope {
+            let canonical = std::fs::canonicalize(scope)
+                .with_context(|| format!("Failed to canonicalize sandbox scope: {:?}", scope))?;
+            canonical_scopes.push(canonical);
+        }
+        Some(canonical_scopes)
+    } else if let Ok(env_scope) = std::env::var("AHMA_SANDBOX_SCOPE") {
+        // Environment variable is second priority
+        let env_path = PathBuf::from(&env_scope);
+        let canonical = std::fs::canonicalize(&env_path).with_context(|| {
+            format!(
+                "Failed to canonicalize AHMA_SANDBOX_SCOPE environment variable: {:?}",
+                env_scope
+            )
+        })?;
+        Some(vec![canonical])
     } else {
-        Some(if let Some(ref scope) = cli.sandbox_scope {
-            // CLI override takes precedence
-            std::fs::canonicalize(scope)
-                .with_context(|| format!("Failed to canonicalize sandbox scope: {:?}", scope))?
-        } else if let Ok(env_scope) = std::env::var("AHMA_SANDBOX_SCOPE") {
-            // Environment variable is second priority
-            let env_path = PathBuf::from(&env_scope);
-            std::fs::canonicalize(&env_path).with_context(|| {
-                format!(
-                    "Failed to canonicalize AHMA_SANDBOX_SCOPE environment variable: {:?}",
-                    env_scope
-                )
-            })?
-        } else {
-            // Default to current working directory
-            std::env::current_dir()
-                .context("Failed to get current working directory for sandbox scope")?
-        })
+        // Default to current working directory
+        let cwd = std::env::current_dir()
+            .context("Failed to get current working directory for sandbox scope")?;
+        Some(vec![cwd])
     };
 
-    if let Some(ref sandbox_scope) = sandbox_scope {
-        // Initialize the global sandbox scope (can only be done once)
-        if let Err(e) = sandbox::initialize_sandbox_scope(sandbox_scope) {
-            match e {
-                SandboxError::AlreadyInitialized => {
-                    // This shouldn't happen in normal operation, but handle gracefully
-                    tracing::warn!("Sandbox scope was already initialized");
-                }
-                _ => {
-                    return Err(anyhow!("Failed to initialize sandbox scope: {}", e));
+    // Create the Sandbox instance
+    // Note: If deferred, we create a placeholder sandbox or delay creation.
+    // Actually, Adapter needs a sandbox. For HTTP/deferred mode, the architecture suggests session isolation
+    // where each session has its own adapter/sandbox.
+    // But here we are in the main process entry.
+    // If deferred, we assume we are in HTTP mode or similar where we might not need a sandbox immediately?
+    // Wait, run_http_bridge_mode uses its own session mechanism.
+
+    // For STDIO/CLI mode, we MUST have a sandbox.
+    let sandbox = if let Some(scopes) = sandbox_scopes {
+        // Check for no_temp_files env var (legacy support)
+        let no_temp_files = std::env::var("AHMA_NO_TEMP_FILES").is_ok();
+
+        let s = sandbox::Sandbox::new(scopes.clone(), sandbox_mode, no_temp_files)
+            .context("Failed to initialize sandbox")?;
+
+        tracing::info!("Sandbox scopes initialized: {:?}", scopes);
+
+        // Apply kernel-level restrictions on Linux
+        #[cfg(target_os = "linux")]
+        {
+            if sandbox_mode == sandbox::SandboxMode::Strict {
+                if let Err(e) = sandbox::enforce_landlock_sandbox(s.scopes()) {
+                    tracing::error!("Failed to enforce Landlock sandbox: {}", e);
+                    return Err(e.into());
                 }
             }
         }
-
-        tracing::info!("Sandbox scope initialized: {:?}", sandbox_scope);
-
-        // Apply kernel-level sandbox restrictions on Linux (skip if disabled)
-        #[cfg(target_os = "linux")]
-        if !no_sandbox && let Err(e) = sandbox::enforce_landlock_sandbox(sandbox_scope) {
-            tracing::error!("Failed to enforce Landlock sandbox: {}", e);
-            return Err(e);
-        }
-    }
+        Some(Arc::new(s))
+    } else {
+        None
+    };
 
     // Log the active sandbox mode for clarity
     if no_sandbox {
@@ -298,6 +321,8 @@ pub async fn run() -> Result<()> {
                 run_http_bridge_mode(cli).await
             }
             "stdio" => {
+                let sandbox = sandbox
+                    .ok_or_else(|| anyhow!("Sandbox scopes must be initialized for stdio mode"))?;
                 // Check if stdin is a terminal (interactive mode)
                 if std::io::stdin().is_terminal() {
                     eprintln!(
@@ -316,7 +341,7 @@ pub async fn run() -> Result<()> {
                 }
 
                 tracing::info!("Running in STDIO server mode");
-                run_server_mode(cli).await
+                run_server_mode(cli, sandbox).await
             }
             _ => {
                 eprintln!("Invalid mode: {}. Use 'stdio' or 'http'", cli.mode);
@@ -324,9 +349,115 @@ pub async fn run() -> Result<()> {
             }
         }
     } else {
+        let sandbox =
+            sandbox.ok_or_else(|| anyhow!("Sandbox scopes must be initialized for CLI mode"))?;
         tracing::info!("Running in CLI mode");
-        run_cli_mode(cli).await
+        run_cli_mode(cli, sandbox).await
     }
+}
+
+// ... normalize_tools_dir ... (unchanged)
+
+// ... find_matching_tool ... (unchanged)
+
+// ... find_tool_config ... (unchanged)
+
+// ... resolve_cli_subcommand ... (unchanged)
+
+// ... run_cli_sequence ... (unchanged)
+
+// ... parse_env_list ... (unchanged)
+
+// ... should_skip ... (unchanged)
+
+// ... run_list_tools_mode ... (unchanged)
+
+// ... run_http_bridge_mode ... (unchanged but needs to use get_sandbox_scopes logic potentially? No, logic above didn't change its usage, I need to check run_http_bridge_mode implementation below since it uses globals in previous version)
+// Actually in the previous `run()` implementation I touched `run_http_bridge_mode` to use `sandbox::get_sandbox_scopes()`.
+// I should update it to NOT use globals, effectively maybe passing scopes?
+// But `run_http_bridge_mode` signature in my replacement above is `run_http_bridge_mode(cli)`.
+// I probably should update it to look at what I did in step 2.
+// Ah, `run_http_bridge_mode` is called with `cli` only.
+// I should update `run_http_bridge_mode` to read the sandbox config or pass it.
+// But `run` creates `sandbox` (Option).
+// Let's defer that for a moment and focus on `run_server_mode` and `run_cli_mode`.
+
+async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
+    use ahma_http_bridge::{BridgeConfig, start_bridge};
+
+    // We need to re-derive fallback scope because we don't have global state anymore.
+    // Ideally we pass `sandbox` to this function, but `sandbox` might be None if deferred.
+    // So logic inside `run_http_bridge_mode` should just default to CWD if not provided,
+    // OR we pass the calculated `sandbox_scopes` (if any) to it.
+
+    let bind_addr = format!("{}:{}", cli.http_host, cli.http_port)
+        .parse()
+        .context("Invalid HTTP host/port")?;
+
+    tracing::info!("Starting HTTP bridge on {}", bind_addr);
+    tracing::info!("Session isolation: ENABLED (always-on)");
+
+    // Build the command to run the stdio MCP server
+    let server_command = env::current_exe()
+        .context("Failed to get current executable path")?
+        .to_string_lossy()
+        .to_string();
+
+    // Determine default scope
+    // We can re-use the logic or just use CWD as fallback if not provided.
+    // Since we don't have globals, we can't call get_sandbox_scopes.
+    // Let's implement local logic:
+    let default_scope = if !cli.sandbox_scope.is_empty() {
+        // Use first CLI scope
+        std::fs::canonicalize(&cli.sandbox_scope[0])
+            .unwrap_or_else(|_| cli.sandbox_scope[0].clone())
+    } else if let Ok(env_scope) = std::env::var("AHMA_SANDBOX_SCOPE") {
+        PathBuf::from(env_scope)
+    } else {
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    };
+
+    // Session isolation is always enabled in HTTP mode.
+    let mut server_args = vec!["--mode".to_string(), "stdio".to_string()];
+
+    // Only pass --tools-dir if explicitly provided
+    if let Some(ref tools_dir) = cli.tools_dir {
+        server_args.push("--tools-dir".to_string());
+        server_args.push(tools_dir.to_string_lossy().to_string());
+    }
+
+    server_args.push("--timeout".to_string());
+    server_args.push(cli.timeout.to_string());
+
+    if cli.debug {
+        server_args.push("--debug".to_string());
+    }
+
+    if cli.sync {
+        server_args.push("--sync".to_string());
+    }
+
+    let enable_colored_output = true;
+    tracing::info!(
+        "HTTP bridge mode - colored terminal output enabled (v{})",
+        env!("CARGO_PKG_VERSION")
+    );
+    tracing::info!(
+        "HTTP default sandbox scope (used only if client provides no roots): {}",
+        default_scope.display()
+    );
+
+    let config = BridgeConfig {
+        bind_addr,
+        server_command,
+        server_args,
+        enable_colored_output,
+        default_sandbox_scope: default_scope,
+    };
+
+    start_bridge(config).await?;
+
+    Ok(())
 }
 
 /// Auto-detect .ahma directory or use explicitly provided tools_dir.
@@ -664,80 +795,7 @@ async fn run_list_tools_mode(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
-async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
-    use ahma_http_bridge::{BridgeConfig, start_bridge};
-
-    let bind_addr = format!("{}:{}", cli.http_host, cli.http_port)
-        .parse()
-        .context("Invalid HTTP host/port")?;
-
-    tracing::info!("Starting HTTP bridge on {}", bind_addr);
-    tracing::info!("Session isolation: ENABLED (always-on)");
-
-    // Build the command to run the stdio MCP server
-    let server_command = env::current_exe()
-        .context("Failed to get current executable path")?
-        .to_string_lossy()
-        .to_string();
-
-    // Get the sandbox scope that was initialized in main()
-    // This ensures the subprocess uses the same sandbox as the parent
-    let sandbox_scope = sandbox::get_sandbox_scope()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| {
-            std::env::current_dir()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|_| ".".to_string())
-        });
-
-    // Session isolation is always enabled in HTTP mode.
-    // We do NOT pass --sandbox-scope to subprocess args because each session
-    // derives its sandbox scope from roots/list.
-    let mut server_args = vec!["--mode".to_string(), "stdio".to_string()];
-
-    // Only pass --tools-dir if explicitly provided
-    if let Some(ref tools_dir) = cli.tools_dir {
-        server_args.push("--tools-dir".to_string());
-        server_args.push(tools_dir.to_string_lossy().to_string());
-    }
-
-    server_args.push("--timeout".to_string());
-    server_args.push(cli.timeout.to_string());
-
-    if cli.debug {
-        server_args.push("--debug".to_string());
-    }
-
-    if cli.sync {
-        server_args.push("--sync".to_string());
-    }
-
-    // Enable colored output for HTTP mode (shows STDIN/STDOUT/STDERR debug info)
-    // Per R8B, this is always enabled for HTTP mode to aid debugging
-    let enable_colored_output = true;
-    tracing::info!(
-        "HTTP bridge mode - colored terminal output enabled (v{})",
-        env!("CARGO_PKG_VERSION")
-    );
-    tracing::info!(
-        "HTTP default sandbox scope (used only if client provides no roots): {}",
-        sandbox_scope
-    );
-
-    let config = BridgeConfig {
-        bind_addr,
-        server_command,
-        server_args,
-        enable_colored_output,
-        default_sandbox_scope: PathBuf::from(&sandbox_scope),
-    };
-
-    start_bridge(config).await?;
-
-    Ok(())
-}
-
-async fn run_server_mode(cli: Cli) -> Result<()> {
+async fn run_server_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result<()> {
     tracing::info!("Starting ahma_mcp v1.0.0");
     if let Some(ref tools_dir) = cli.tools_dir {
         tracing::info!("Tools directory: {:?}", tools_dir);
@@ -789,15 +847,12 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
         }
     }
 
-    // --- Standard Server Mode ---
-    tracing::info!("Running in standard child-process server mode.");
-
     // Use default guidance configuration
     let guidance_config = Some(GuidanceConfig::default());
 
     // Initialize the operation monitor
     let monitor_config = MonitorConfig::with_timeout(std::time::Duration::from_secs(cli.timeout));
-    let shutdown_timeout = monitor_config.shutdown_timeout; // Clone before moving
+    let shutdown_timeout = monitor_config.shutdown_timeout;
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
 
     // Initialize the shell pool manager
@@ -812,6 +867,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     let adapter = Arc::new(Adapter::new(
         operation_monitor.clone(),
         shell_pool_manager.clone(),
+        sandbox.clone(),
     )?);
 
     // Load tool configurations (now async, no spawn_blocking needed)
@@ -830,6 +886,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
         shell_pool_manager.clone(),
         raw_configs,
         working_dir.as_path(),
+        sandbox.as_ref(),
     )
     .await?;
 
@@ -1056,7 +1113,7 @@ async fn run_server_mode(cli: Cli) -> Result<()> {
     Ok(())
 }
 
-async fn run_cli_mode(cli: Cli) -> Result<()> {
+async fn run_cli_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result<()> {
     let tool_name = cli.tool_name.unwrap();
 
     // Initialize adapter and monitor for CLI mode
@@ -1067,7 +1124,13 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         ..Default::default()
     };
     let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
-    let adapter = Adapter::new(operation_monitor, shell_pool_manager.clone())?;
+
+    // Initialize adapter with sandbox
+    let adapter = Adapter::new(
+        operation_monitor,
+        shell_pool_manager.clone(),
+        sandbox.clone(),
+    )?;
 
     // Load tool configurations (now async, no spawn_blocking needed)
     // If tools_dir is None, we'll only have built-in internal tools
@@ -1085,6 +1148,7 @@ async fn run_cli_mode(cli: Cli) -> Result<()> {
         shell_pool_manager.clone(),
         raw_configs,
         working_dir.as_path(),
+        sandbox.as_ref(), // passed as Arc<Sandbox>
     )
     .await?;
 

@@ -8,7 +8,7 @@
 //!
 //! The goal is to document both working protections and known limitations.
 
-use ahma_core::sandbox;
+use ahma_core::sandbox::{Sandbox, SandboxMode};
 use ahma_core::test_utils as common;
 use ahma_core::utils::logging::init_test_logging;
 use common::test_client::{get_workspace_tools_dir, new_client_in_dir};
@@ -200,16 +200,6 @@ async fn red_team_symlink_to_home_blocked() {
 // =============================================================================
 
 /// Test that shell metacharacters in paths are rejected
-///
-/// Note: The sandboxed_shell returns an async result, so invalid paths
-/// that don't exist will fail during path validation/canonicalization.
-/// Shell metacharacters in paths typically result in "no such file or directory"
-/// errors because the path literally contains those characters.
-///
-/// This is a DOCUMENTED BEHAVIOR: The path is validated as a filesystem path,
-/// not parsed for shell metacharacters. The security comes from:
-/// 1. The path not existing (it's a string with semicolons, not a real path)
-/// 2. The sandbox-exec restricting where the command can write
 #[tokio::test]
 async fn red_team_shell_metacharacters_in_path() {
     init_test_logging();
@@ -245,25 +235,19 @@ async fn red_team_shell_metacharacters_in_path() {
 // RED TEAM TEST 4: No-Temp-Files Mode Tests
 // =============================================================================
 
-/// Test that no_temp_files mode is properly detected
+/// Test that no_temp_files mode is properly set on Sandbox
 #[test]
-fn red_team_no_temp_files_flag_detection() {
-    // Test that the flag is initially off
-    // Note: This may already be enabled from previous test runs since it's a global static
-    // We just verify the API works without asserting initial state
-    let _ = sandbox::is_no_temp_files();
-}
-
-/// Test that enable_no_temp_files properly sets the flag
-#[test]
-fn red_team_no_temp_files_enable() {
-    // Note: This test modifies global state. Due to static globals,
-    // once enabled, it stays enabled for the process lifetime.
-    // We check if it can be enabled (idempotent).
-    sandbox::enable_no_temp_files();
+fn red_team_no_temp_files_flag_setting() {
+    let sandbox = Sandbox::new(vec![], SandboxMode::Strict, true).unwrap();
     assert!(
-        sandbox::is_no_temp_files(),
-        "no_temp_files should be enabled after calling enable_no_temp_files"
+        sandbox.is_no_temp_files(),
+        "no_temp_files should be enabled"
+    );
+
+    let sandbox_default = Sandbox::new(vec![], SandboxMode::Strict, false).unwrap();
+    assert!(
+        !sandbox_default.is_no_temp_files(),
+        "no_temp_files should be disabled by default"
     );
 }
 
@@ -272,12 +256,6 @@ fn red_team_no_temp_files_enable() {
 // =============================================================================
 
 /// Document: Read access is allowed everywhere (KNOWN LIMITATION)
-///
-/// The Seatbelt profile allows `file-read*` everywhere because shells and tools
-/// need to read from many system locations. This means AI can read sensitive
-/// files like ~/.ssh/id_rsa.
-///
-/// This test PASSES to document that this is a known and accepted limitation.
 #[tokio::test]
 async fn documented_limitation_read_access_unrestricted() {
     init_test_logging();
@@ -309,20 +287,12 @@ async fn documented_limitation_read_access_unrestricted() {
     // The output will show if /etc/passwd is readable
     // On macOS, it WILL be readable (known limitation)
     if let Ok(response) = result {
-        // We don't assert on the output because this documents a limitation
-        // The test passing means the command runs; what matters is we document
-        // that read access is unrestricted.
         let _ = response;
     }
     client.cancel().await.unwrap();
 }
 
 /// Document: Network access is unrestricted (KNOWN LIMITATION)
-///
-/// The Seatbelt profile allows `(allow network*)` for all network operations.
-/// This means AI could potentially exfiltrate data via network.
-///
-/// This is documented in REQUIREMENTS.md as a future TODO.
 #[tokio::test]
 async fn documented_limitation_network_unrestricted() {
     init_test_logging();

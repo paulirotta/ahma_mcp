@@ -123,12 +123,12 @@ pub struct Adapter {
     monitor: Arc<OperationMonitor>,
     /// Pre-warmed shell pool manager for async execution.
     shell_pool: Arc<ShellPoolManager>,
+    /// Security sandbox context.
+    sandbox: Arc<sandbox::Sandbox>,
     /// Handles to spawned tasks for graceful shutdown.
     task_handles: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
     /// Temporary files created for multi-line arguments - cleaned up automatically when dropped
     temp_files: Arc<Mutex<Vec<NamedTempFile>>>,
-    /// The root directory for path validation (sandbox root).
-    root_path: std::path::PathBuf,
     /// Optional retry configuration for transient error handling.
     retry_config: Option<RetryConfig>,
 }
@@ -136,36 +136,27 @@ pub struct Adapter {
 impl Adapter {
     /// Creates a new `Adapter` instance.
     ///
-    /// The adapter requires an `OperationMonitor` for tracking async tasks and a `ShellPoolManager`
-    /// for efficient shell execution.
+    /// The adapter requires an `OperationMonitor` for tracking async tasks, a `ShellPoolManager`
+    /// for efficient shell execution, and a `Sandbox` for security context.
     ///
     /// # Arguments
     ///
     /// * `monitor` - Shared reference to the operation monitor
     /// * `shell_pool` - Shared reference to the shell pool manager
-    pub fn new(monitor: Arc<OperationMonitor>, shell_pool: Arc<ShellPoolManager>) -> Result<Self> {
+    /// * `sandbox` - Shared reference to the security sandbox
+    pub fn new(
+        monitor: Arc<OperationMonitor>,
+        shell_pool: Arc<ShellPoolManager>,
+        sandbox: Arc<sandbox::Sandbox>,
+    ) -> Result<Self> {
         Ok(Self {
             monitor,
             shell_pool,
+            sandbox,
             task_handles: Arc::new(Mutex::new(HashMap::new())),
             temp_files: Arc::new(Mutex::new(Vec::new())),
-            root_path: std::env::current_dir()?,
             retry_config: None,
         })
-    }
-
-    /// Sets a custom root path for the adapter.
-    ///
-    /// The root path acts as the base directory for the adapter's operations.
-    /// It is used as the security context for validating file access and
-    /// resolving relative paths. By default, this is the current working directory
-    /// of the process.
-    ///
-    /// This is particularly useful for testing to isolate operations to a temporary
-    /// directory, or when the adapter should be restricted to a specific workspace folder.
-    pub fn with_root(mut self, root: std::path::PathBuf) -> Self {
-        self.root_path = root;
-        self
     }
 
     /// Sets retry configuration for transient error handling.
@@ -253,6 +244,11 @@ impl Adapter {
         tracing::info!("Adapter shutdown complete");
     }
 
+    /// Get a reference to the sandbox.
+    pub fn sandbox(&self) -> &crate::sandbox::Sandbox {
+        &self.sandbox
+    }
+
     /// Synchronously executes a command and returns the result directly.
     ///
     /// This method bypasses the async operation queue and runs the command directly, waiting for it to complete.
@@ -286,14 +282,10 @@ impl Adapter {
         );
 
         // Validate working directory against sandbox scope.
-        // - In normal operation, sandbox scopes MUST be initialized.
-        // - In some unit tests, sandbox may be uninitialized; fall back to legacy root_path.
-        let safe_wd = if sandbox::get_sandbox_scopes().is_some() {
-            sandbox::validate_path_in_sandbox(std::path::Path::new(working_dir))
-                .map_err(|e| anyhow::anyhow!(e.to_string()))?
-        } else {
-            path_security::validate_path(std::path::Path::new(working_dir), &self.root_path).await?
-        };
+        let safe_wd = self
+            .sandbox
+            .validate_path(std::path::Path::new(working_dir))
+            .context("Sandbox validation failed for working directory")?;
 
         let (program, args_vec) = self
             .prepare_command_and_args(command, args.as_ref(), subcommand_config, &safe_wd)
@@ -309,12 +301,13 @@ impl Adapter {
             .map(Duration::from_secs)
             .unwrap_or_else(|| self.shell_pool.config().command_timeout);
 
-        // Create sandboxed command (uses sandbox-exec on macOS, direct on Linux with Landlock)
+        // Create sandboxed command
         let mut cmd = if program == "/bin/sh" {
             let full_command = args_vec.join(" ");
-            sandbox::create_sandboxed_shell_command(&program, &full_command, &safe_wd)?
+            self.sandbox
+                .create_shell_command(&program, &full_command, &safe_wd)?
         } else {
-            sandbox::create_sandboxed_command(&program, &args_vec, &safe_wd)?
+            self.sandbox.create_command(&program, &args_vec, &safe_wd)?
         };
 
         let output_res = tokio::time::timeout(timeout, cmd.output()).await;
@@ -456,14 +449,10 @@ impl Adapter {
         } = options;
 
         // Validate working directory against sandbox scope.
-        // - In normal operation, sandbox scopes MUST be initialized.
-        // - In some unit tests, sandbox may be uninitialized; fall back to legacy root_path.
-        let safe_wd = if sandbox::get_sandbox_scopes().is_some() {
-            sandbox::validate_path_in_sandbox(std::path::Path::new(working_dir))
-                .map_err(|e| anyhow::anyhow!(e.to_string()))?
-        } else {
-            path_security::validate_path(std::path::Path::new(working_dir), &self.root_path).await?
-        };
+        let safe_wd = self
+            .sandbox
+            .validate_path(std::path::Path::new(working_dir))
+            .context("Sandbox validation failed for working directory")?;
         let safe_wd_str = safe_wd.to_string_lossy().to_string();
 
         // Validate command arguments
@@ -488,6 +477,7 @@ impl Adapter {
 
         let monitor = self.monitor.clone();
         let shell_pool = self.shell_pool.clone();
+        let sandbox = self.sandbox.clone(); // Clone ARC to pass to task
         let command = command.to_string();
         let wd_clone = wd.clone();
 
@@ -555,13 +545,11 @@ impl Adapter {
             let start_time = Instant::now();
 
             // Build sandboxed process command
-            // On Linux, Landlock is already applied at process level
-            // On macOS, this wraps with sandbox-exec
             let wd_path = std::path::PathBuf::from(&wd_clone);
             let proc_cmd_result =
-                sandbox::create_sandboxed_command(&program_with_subcommand, &args_vec, &wd_path);
+                sandbox.create_command(&program_with_subcommand, &args_vec, &wd_path);
 
-            let mut proc_cmd = match proc_cmd_result {
+            let mut proc_cmd: tokio::process::Command = match proc_cmd_result {
                 Ok(cmd) => cmd,
                 Err(e) => {
                     let error_message = format!("Failed to create sandboxed command: {}", e);

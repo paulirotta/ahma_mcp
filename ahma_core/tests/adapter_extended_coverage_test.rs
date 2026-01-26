@@ -6,38 +6,32 @@
 use ahma_core::adapter::{Adapter, AsyncExecOptions, ExecutionMode};
 use ahma_core::config::{CommandOption, SubcommandConfig};
 use ahma_core::operation_monitor::{MonitorConfig, OperationMonitor};
+use ahma_core::sandbox::{Sandbox, SandboxMode};
 use ahma_core::shell_pool::{ShellPoolConfig, ShellPoolManager};
-use ahma_core::test_utils::{init_test_sandbox, wait_for_condition};
+use ahma_core::test_utils::wait_for_condition;
 use serde_json::{Map, Value, json};
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::tempdir;
 
 async fn create_test_adapter() -> Arc<Adapter> {
-    // Initialize sandbox for tests (idempotent)
-    init_test_sandbox();
-
     let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
     let monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_pool_config = ShellPoolConfig::default();
     let shell_pool = Arc::new(ShellPoolManager::new(shell_pool_config));
-    // Use a permissive root for testing
-    Arc::new(
-        Adapter::new(monitor, shell_pool)
-            .unwrap()
-            .with_root(std::path::PathBuf::from("/")),
-    )
+    let sandbox = Arc::new(Sandbox::new_test());
+
+    Arc::new(Adapter::new(monitor, shell_pool, sandbox).unwrap())
 }
 
 async fn create_adapter_with_root(root: std::path::PathBuf) -> Arc<Adapter> {
-    // Initialize sandbox for tests (idempotent)
-    init_test_sandbox();
-
     let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
     let monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_pool_config = ShellPoolConfig::default();
     let shell_pool = Arc::new(ShellPoolManager::new(shell_pool_config));
-    Arc::new(Adapter::new(monitor, shell_pool).unwrap().with_root(root))
+    let sandbox = Arc::new(Sandbox::new(vec![root], SandboxMode::Test, false).unwrap());
+
+    Arc::new(Adapter::new(monitor, shell_pool, sandbox).unwrap())
 }
 
 // === ExecutionMode Tests ===
@@ -704,11 +698,9 @@ async fn test_async_cancellation_before_execution() {
     let monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_pool_config = ShellPoolConfig::default();
     let shell_pool = Arc::new(ShellPoolManager::new(shell_pool_config));
-    let adapter = Arc::new(
-        Adapter::new(monitor.clone(), shell_pool)
-            .unwrap()
-            .with_root(temp.path().to_path_buf()),
-    );
+    let sandbox =
+        Arc::new(Sandbox::new(vec![temp.path().to_path_buf()], SandboxMode::Test, false).unwrap());
+    let adapter = Arc::new(Adapter::new(monitor.clone(), shell_pool, sandbox).unwrap());
 
     // Start a slow operation
     let op_id = adapter
@@ -718,7 +710,7 @@ async fn test_async_cancellation_before_execution() {
             None,
             temp.path().to_str().unwrap(),
             Some(60),
-            None,
+            None::<Box<dyn ahma_core::callback_system::CallbackSender>>,
         )
         .await
         .unwrap();
@@ -729,21 +721,17 @@ async fn test_async_cancellation_before_execution() {
         .await;
 
     // Give the task time to see the cancellation
-    let _ = wait_for_condition(
-        Duration::from_secs(5),
-        Duration::from_millis(50),
-        || {
-            let monitor = monitor.clone();
-            let op_id = op_id.clone();
-            async move {
-                monitor
-                    .get_operation(&op_id)
-                    .await
-                    .map(|op| op.state != OperationStatus::Pending)
-                    .unwrap_or(false)
-            }
-        },
-    )
+    let _ = wait_for_condition(Duration::from_secs(5), Duration::from_millis(50), || {
+        let monitor = monitor.clone();
+        let op_id = op_id.clone();
+        async move {
+            monitor
+                .get_operation(&op_id)
+                .await
+                .map(|op| op.state != OperationStatus::Pending)
+                .unwrap_or(false)
+        }
+    })
     .await;
 
     // The operation should be cancellable (even if it started executing)
@@ -774,11 +762,9 @@ async fn test_async_with_callback_none() {
     let monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_pool_config = ShellPoolConfig::default();
     let shell_pool = Arc::new(ShellPoolManager::new(shell_pool_config));
-    let adapter = Arc::new(
-        Adapter::new(monitor.clone(), shell_pool)
-            .unwrap()
-            .with_root(temp.path().to_path_buf()),
-    );
+    let sandbox =
+        Arc::new(Sandbox::new(vec![temp.path().to_path_buf()], SandboxMode::Test, false).unwrap());
+    let adapter = Arc::new(Adapter::new(monitor.clone(), shell_pool, sandbox).unwrap());
 
     let op_id = adapter
         .execute_async_in_dir(
@@ -787,27 +773,23 @@ async fn test_async_with_callback_none() {
             None,
             temp.path().to_str().unwrap(),
             Some(30),
-            None, // No callback - tests the None branch
+            None::<Box<dyn ahma_core::callback_system::CallbackSender>>, // No callback - tests the None branch
         )
         .await
         .unwrap();
 
     // Wait for completion
-    let _ = wait_for_condition(
-        Duration::from_secs(5),
-        Duration::from_millis(50),
-        || {
-            let monitor = monitor.clone();
-            let op_id = op_id.clone();
-            async move {
-                monitor
-                    .get_operation(&op_id)
-                    .await
-                    .map(|op| op.state.is_terminal())
-                    .unwrap_or(false)
-            }
-        },
-    )
+    let _ = wait_for_condition(Duration::from_secs(5), Duration::from_millis(50), || {
+        let monitor = monitor.clone();
+        let op_id = op_id.clone();
+        async move {
+            monitor
+                .get_operation(&op_id)
+                .await
+                .map(|op| op.state.is_terminal())
+                .unwrap_or(false)
+        }
+    })
     .await;
 
     // Check the operation completed
@@ -834,11 +816,9 @@ async fn test_async_timeout_path() {
     let monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_pool_config = ShellPoolConfig::default();
     let shell_pool = Arc::new(ShellPoolManager::new(shell_pool_config));
-    let adapter = Arc::new(
-        Adapter::new(monitor.clone(), shell_pool)
-            .unwrap()
-            .with_root(temp.path().to_path_buf()),
-    );
+    let sandbox =
+        Arc::new(Sandbox::new(vec![temp.path().to_path_buf()], SandboxMode::Test, false).unwrap());
+    let adapter = Arc::new(Adapter::new(monitor.clone(), shell_pool, sandbox).unwrap());
 
     let op_id = adapter
         .execute_async_in_dir(
@@ -847,27 +827,23 @@ async fn test_async_timeout_path() {
             None,
             temp.path().to_str().unwrap(),
             Some(1), // Very short timeout (1 second)
-            None,
+            None::<Box<dyn ahma_core::callback_system::CallbackSender>>,
         )
         .await
         .unwrap();
 
     // Wait for timeout (1 second + buffer)
-    let _ = wait_for_condition(
-        Duration::from_secs(5),
-        Duration::from_millis(50),
-        || {
-            let monitor = monitor.clone();
-            let op_id = op_id.clone();
-            async move {
-                monitor
-                    .get_operation(&op_id)
-                    .await
-                    .map(|op| op.state.is_terminal())
-                    .unwrap_or(false)
-            }
-        },
-    )
+    let _ = wait_for_condition(Duration::from_secs(5), Duration::from_millis(50), || {
+        let monitor = monitor.clone();
+        let op_id = op_id.clone();
+        async move {
+            monitor
+                .get_operation(&op_id)
+                .await
+                .map(|op| op.state.is_terminal())
+                .unwrap_or(false)
+        }
+    })
     .await;
 
     // Check the operation was cancelled due to timeout

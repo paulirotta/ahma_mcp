@@ -93,8 +93,9 @@ async fn test_availability_disables_missing_tools_and_subcommands() -> Result<()
     configs.insert(missing_tool.name.clone(), missing_tool);
     configs.insert(multi_tool.name.clone(), multi_tool);
 
+    let sandbox = ahma_core::sandbox::Sandbox::new_test();
     let summary: AvailabilitySummary =
-        evaluate_tool_availability(shell_pool, configs, Path::new(".")).await?;
+        evaluate_tool_availability(shell_pool, configs, Path::new("."), &sandbox).await?;
 
     // Missing tool must be disabled with install instructions
     let disabled_names: Vec<_> = summary

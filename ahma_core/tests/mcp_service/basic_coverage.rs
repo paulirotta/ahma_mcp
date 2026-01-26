@@ -7,6 +7,7 @@ use ahma_core::adapter::Adapter;
 use ahma_core::config::load_tool_configs;
 use ahma_core::mcp_service::{AhmaMcpService, GuidanceConfig};
 use ahma_core::operation_monitor::{MonitorConfig, OperationMonitor};
+use ahma_core::sandbox::Sandbox;
 use ahma_core::shell_pool::{ShellPoolConfig, ShellPoolManager};
 use rmcp::handler::server::ServerHandler;
 use tempfile::TempDir;
@@ -19,7 +20,9 @@ async fn create_test_service() -> (AhmaMcpService, TempDir) {
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_config = ShellPoolConfig::default();
     let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
-    let adapter = Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool).unwrap());
+    let sandbox = Arc::new(Sandbox::new_test());
+    let adapter =
+        Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool, sandbox).unwrap());
 
     // Load tool configs from .ahma directory or use empty map
     let tool_configs = if Path::new(".ahma").exists() {
@@ -60,7 +63,9 @@ async fn test_service_creation_with_guidance_config() {
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_config = ShellPoolConfig::default();
     let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
-    let adapter = Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool).unwrap());
+    let sandbox = Arc::new(Sandbox::new_test());
+    let adapter =
+        Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool, sandbox).unwrap());
 
     let tool_configs = HashMap::new();
     let configs = Arc::new(tool_configs);
@@ -90,7 +95,9 @@ async fn test_service_creation_with_existing_tool_configs() {
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_config = ShellPoolConfig::default();
     let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
-    let adapter = Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool).unwrap());
+    let sandbox = Arc::new(Sandbox::new_test());
+    let adapter =
+        Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool, sandbox).unwrap());
 
     // Load actual tool configs if they exist
     let tool_configs = if Path::new(".ahma").exists() {
@@ -131,7 +138,9 @@ async fn test_service_creation_with_custom_shell_config() {
         health_check_interval: Duration::from_secs(30),
     };
     let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
-    let adapter = Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool).unwrap());
+    let sandbox = Arc::new(Sandbox::new_test());
+    let adapter =
+        Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool, sandbox).unwrap());
 
     let tool_configs = HashMap::new();
     let configs = Arc::new(tool_configs);
@@ -239,7 +248,9 @@ async fn test_service_with_guidance_blocks() {
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_config = ShellPoolConfig::default();
     let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
-    let adapter = Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool).unwrap());
+    let sandbox = Arc::new(Sandbox::new_test());
+    let adapter =
+        Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool, sandbox).unwrap());
 
     let tool_configs = HashMap::new();
     let configs = Arc::new(tool_configs);
@@ -287,8 +298,10 @@ async fn test_service_disabled_shell_pool() {
         health_check_interval: Duration::from_secs(30),
     };
     let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
+    let sandbox = Arc::new(Sandbox::new_test());
 
-    let adapter = Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool).unwrap());
+    let adapter =
+        Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool, sandbox).unwrap());
 
     let tool_configs = HashMap::new();
     let configs = Arc::new(tool_configs);

@@ -69,10 +69,14 @@ async fn handle_sequence_tool_sync(
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .or_else(|| {
-                if crate::sandbox::is_test_mode() {
+                if adapter.sandbox().is_test_mode() {
                     None
                 } else {
-                    crate::sandbox::get_sandbox_scope().map(|p| p.to_string_lossy().to_string())
+                    adapter
+                        .sandbox()
+                        .scopes()
+                        .first()
+                        .map(|p: &std::path::PathBuf| p.to_string_lossy().to_string())
                 }
             })
             .unwrap_or_else(|| ".".to_string());
@@ -216,10 +220,14 @@ async fn handle_sequence_tool_async(
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .or_else(|| {
-                if crate::sandbox::is_test_mode() {
+                if adapter.sandbox().is_test_mode() {
                     None
                 } else {
-                    crate::sandbox::get_sandbox_scope().map(|p| p.to_string_lossy().to_string())
+                    adapter
+                        .sandbox()
+                        .scopes()
+                        .first()
+                        .map(|p: &std::path::PathBuf| p.to_string_lossy().to_string())
                 }
             })
             .unwrap_or_else(|| ".".to_string());

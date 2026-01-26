@@ -1,4 +1,4 @@
-use ahma_core::test_utils::{get_workspace_path, init_test_sandbox, wait_for_operation_terminal};
+use ahma_core::test_utils::{get_workspace_path, wait_for_operation_terminal};
 use ahma_core::utils::logging::init_test_logging;
 /// Test multi-line argument handling functionality
 ///
@@ -8,6 +8,7 @@ use ahma_core::{
     adapter::{Adapter, AsyncExecOptions},
     config::{CommandOption, SubcommandConfig},
     operation_monitor::{MonitorConfig, OperationMonitor},
+    sandbox::Sandbox,
     shell_pool::{ShellPoolConfig, ShellPoolManager},
 };
 use serde_json::json;
@@ -102,14 +103,18 @@ async fn test_simple_git_commit_without_multiline() {
 #[tokio::test]
 async fn test_multiline_argument_with_echo() {
     init_test_logging();
-    init_test_sandbox();
     let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
         Duration::from_secs(30),
     )));
     let shell_pool = Arc::new(ShellPoolManager::new(ShellPoolConfig::default()));
-    let adapter = Adapter::new(monitor.clone(), shell_pool)
-        .expect("Failed to create adapter")
-        .with_root(std::path::PathBuf::from("/"));
+
+    // Create a sandbox with root scope
+    let scopes = vec![std::path::PathBuf::from("/")];
+    let sandbox =
+        Arc::new(Sandbox::new(scopes, ahma_core::sandbox::SandboxMode::Test, false).unwrap());
+
+    let adapter =
+        Adapter::new(monitor.clone(), shell_pool, sandbox).expect("Failed to create adapter");
 
     // Create a config for echo that supports file arguments
     let echo_config = SubcommandConfig {
@@ -193,7 +198,8 @@ async fn test_multiline_argument_with_echo() {
 async fn test_multiline_git_commit_with_real_tool() {
     skip_if_nested_sandbox!();
     init_test_logging();
-    init_test_sandbox();
+    skip_if_nested_sandbox!();
+    init_test_logging();
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let repo_path = temp_dir.path();
 
@@ -236,9 +242,14 @@ async fn test_multiline_git_commit_with_real_tool() {
         Duration::from_secs(30),
     )));
     let shell_pool = Arc::new(ShellPoolManager::new(ShellPoolConfig::default()));
-    let adapter = Adapter::new(monitor.clone(), shell_pool)
-        .expect("Failed to create adapter")
-        .with_root(temp_dir.path().to_path_buf());
+
+    // Create sandbox with temp_dir as a scope
+    let scopes = vec![temp_dir.path().to_path_buf(), std::env::temp_dir()];
+    let sandbox =
+        Arc::new(Sandbox::new(scopes, ahma_core::sandbox::SandboxMode::Test, false).unwrap());
+
+    let adapter =
+        Adapter::new(monitor.clone(), shell_pool, sandbox).expect("Failed to create adapter");
 
     // Load the real git tool configuration
     let git_tool_path = get_workspace_path("ahma_core/examples/configs/git.json");
@@ -351,7 +362,8 @@ async fn test_multiline_git_commit_with_real_tool() {
 async fn test_multiline_git_commit_message() {
     skip_if_nested_sandbox!();
     init_test_logging();
-    init_test_sandbox();
+    skip_if_nested_sandbox!();
+    init_test_logging();
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let repo_path = temp_dir.path();
 
@@ -394,9 +406,14 @@ async fn test_multiline_git_commit_message() {
         Duration::from_secs(30),
     )));
     let shell_pool = Arc::new(ShellPoolManager::new(ShellPoolConfig::default()));
-    let adapter = Adapter::new(monitor.clone(), shell_pool)
-        .expect("Failed to create adapter")
-        .with_root(temp_dir.path().to_path_buf());
+
+    // Create sandbox with temp_dir as a scope
+    let scopes = vec![temp_dir.path().to_path_buf(), std::env::temp_dir()];
+    let sandbox =
+        Arc::new(Sandbox::new(scopes, ahma_core::sandbox::SandboxMode::Test, false).unwrap());
+
+    let adapter =
+        Adapter::new(monitor.clone(), shell_pool, sandbox).expect("Failed to create adapter");
 
     // Create a config for git commit with file_arg support
     let commit_config = SubcommandConfig {
@@ -531,14 +548,13 @@ async fn test_multiline_git_commit_message() {
 #[tokio::test]
 async fn test_special_characters_in_arguments() {
     init_test_logging();
-    init_test_sandbox();
     let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
         Duration::from_secs(30),
     )));
     let shell_pool = Arc::new(ShellPoolManager::new(ShellPoolConfig::default()));
-    let adapter = Adapter::new(monitor, shell_pool)
-        .expect("Failed to create adapter")
-        .with_root(std::path::PathBuf::from("/"));
+    let sandbox = Arc::new(Sandbox::new_test());
+
+    let adapter = Adapter::new(monitor, shell_pool, sandbox).expect("Failed to create adapter");
 
     // Test with a simple echo command that handles special characters
     let echo_config = SubcommandConfig {

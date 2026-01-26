@@ -18,7 +18,9 @@ async fn create_test_service() -> AhmaMcpService {
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_config = ShellPoolConfig::default();
     let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
-    let adapter = Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool).unwrap());
+    let sandbox = Arc::new(ahma_core::sandbox::Sandbox::new_test());
+    let adapter =
+        Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool, sandbox).unwrap());
 
     // Load tool configs from .ahma directory
     let tool_configs = if Path::new(".ahma").exists() {
@@ -115,7 +117,9 @@ async fn test_mcp_service_with_tool_configs() {
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_config = ShellPoolConfig::default();
     let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
-    let adapter = Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool).unwrap());
+    let sandbox = Arc::new(ahma_core::sandbox::Sandbox::new_test());
+    let adapter =
+        Arc::new(Adapter::new(Arc::clone(&operation_monitor), shell_pool, sandbox).unwrap());
     let configs = Arc::new(HashMap::new());
     let guidance = Arc::new(None::<GuidanceConfig>);
 

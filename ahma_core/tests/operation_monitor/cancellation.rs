@@ -1,6 +1,7 @@
 use ahma_core::{
     adapter::Adapter,
     operation_monitor::{MonitorConfig, OperationMonitor, OperationStatus},
+    sandbox::Sandbox,
     shell_pool::{ShellPoolConfig, ShellPoolManager},
     test_utils::wait_for_condition,
 };
@@ -32,11 +33,15 @@ async fn test_operation_cancellation_functionality() {
     };
     let shell_pool = Arc::new(ShellPoolManager::new(shell_config));
 
+    // Create sandbox with temp_dir and /tmp
+    let scopes = vec![temp_dir.path().to_path_buf(), std::env::temp_dir()];
+    let sandbox =
+        Arc::new(Sandbox::new(scopes, ahma_core::sandbox::SandboxMode::Test, false).unwrap());
+
     // Create adapter
     let adapter = Arc::new(
-        Adapter::new(operation_monitor.clone(), shell_pool)
-            .expect("Failed to create adapter")
-            .with_root(temp_dir.path().to_path_buf()),
+        Adapter::new(operation_monitor.clone(), shell_pool, sandbox)
+            .expect("Failed to create adapter"),
     );
 
     println!("🧪 Starting operation cancellation test...");
@@ -67,21 +72,17 @@ async fn test_operation_cancellation_functionality() {
     println!("🚀 Started long-running operation: {}", operation_id);
 
     // Wait until the operation is at least InProgress
-    let _ = wait_for_condition(
-        Duration::from_secs(5),
-        Duration::from_millis(50),
-        || {
-            let operation_monitor = operation_monitor.clone();
-            let operation_id = operation_id.clone();
-            async move {
-                operation_monitor
-                    .get_operation(&operation_id)
-                    .await
-                    .map(|op| op.state != OperationStatus::Pending)
-                    .unwrap_or(false)
-            }
-        },
-    )
+    let _ = wait_for_condition(Duration::from_secs(5), Duration::from_millis(50), || {
+        let operation_monitor = operation_monitor.clone();
+        let operation_id = operation_id.clone();
+        async move {
+            operation_monitor
+                .get_operation(&operation_id)
+                .await
+                .map(|op| op.state != OperationStatus::Pending)
+                .unwrap_or(false)
+        }
+    })
     .await;
 
     // Check if the operation is still running, or if it completed/failed immediately
@@ -97,21 +98,17 @@ async fn test_operation_cancellation_functionality() {
             println!("✓ Operation cancellation succeeded");
 
             // Wait for cancellation to be processed
-            let _ = wait_for_condition(
-                Duration::from_secs(5),
-                Duration::from_millis(50),
-                || {
-                    let operation_monitor = operation_monitor.clone();
-                    let operation_id = operation_id.clone();
-                    async move {
-                        operation_monitor
-                            .get_operation(&operation_id)
-                            .await
-                            .map(|op| op.state == OperationStatus::Cancelled)
-                            .unwrap_or(true)
-                    }
-                },
-            )
+            let _ = wait_for_condition(Duration::from_secs(5), Duration::from_millis(50), || {
+                let operation_monitor = operation_monitor.clone();
+                let operation_id = operation_id.clone();
+                async move {
+                    operation_monitor
+                        .get_operation(&operation_id)
+                        .await
+                        .map(|op| op.state == OperationStatus::Cancelled)
+                        .unwrap_or(true)
+                }
+            })
             .await;
 
             // Verify the operation was cancelled

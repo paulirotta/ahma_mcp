@@ -5,10 +5,10 @@
 //! conveniences. These APIs are intended for test-only code paths.
 
 use crate::client::Client;
-use crate::sandbox;
+
 use anyhow::Result;
 use std::future::Future;
-use std::sync::Once;
+
 use std::time::Duration;
 use tempfile::TempDir;
 
@@ -154,36 +154,7 @@ macro_rules! skip_if_disabled_async {
     };
 }
 
-/// Initialize sandbox for tests. Uses "/" as the sandbox scope to allow all operations.
-/// This is safe because tests run in controlled environments.
-/// This function is idempotent - calling it multiple times is safe.
-static SANDBOX_INIT: Once = Once::new();
-
-/// Initialize the sandbox for tests (idempotent).
-///
-/// This sets the sandbox scope to `/` and enables test mode, allowing tests to
-/// access temporary directories without restriction.
-pub fn init_test_sandbox() {
-    SANDBOX_INIT.call_once(|| {
-        // Enable test mode to bypass sandbox requirement
-        sandbox::enable_test_mode();
-
-        // Initialize with root "/" to allow all paths in tests
-        // This is safe because:
-        // 1. Tests run in controlled environments
-        // 2. Tests don't execute untrusted AI commands
-        // 3. We need flexibility to test various path scenarios
-        if let Err(e) = sandbox::initialize_sandbox_scope(std::path::Path::new("/")) {
-            // If already initialized (from another test), that's fine
-            tracing::debug!("Sandbox initialization in test: {:?}", e);
-        }
-    });
-}
-
 pub async fn setup_mcp_service_with_client() -> Result<(TempDir, Client)> {
-    // Ensure sandbox is initialized for tests
-    init_test_sandbox();
-
     // Create a temporary directory for tool configs
     let temp_dir = tempfile::tempdir()?;
     let tools_dir = temp_dir.path();
@@ -380,9 +351,6 @@ pub mod cli {
 /// Create a test config for integration tests
 #[allow(dead_code)]
 pub fn create_test_config(_workspace_dir: &Path) -> Result<Arc<Adapter>> {
-    // Ensure sandbox is initialized for tests
-    init_test_sandbox();
-
     // Create test monitor and shell pool configurations
     let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
@@ -399,7 +367,10 @@ pub fn create_test_config(_workspace_dir: &Path) -> Result<Arc<Adapter>> {
     };
     let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
 
-    Adapter::new(operation_monitor, shell_pool_manager).map(Arc::new)
+    // Create a test sandbox
+    let sandbox = Arc::new(crate::sandbox::Sandbox::new_test());
+
+    Adapter::new(operation_monitor, shell_pool_manager, sandbox).map(Arc::new)
 }
 
 /// Strip ANSI escape sequences so tests are robust across local vs CI where
@@ -970,7 +941,8 @@ pub mod test_utils {
         let monitor = Arc::new(OperationMonitor::new(monitor_config));
         let shell_pool_config = ShellPoolConfig::default();
         let shell_pool = Arc::new(ShellPoolManager::new(shell_pool_config));
-        let adapter = Arc::new(Adapter::new(monitor.clone(), shell_pool).unwrap());
+        let sandbox = Arc::new(crate::sandbox::Sandbox::new_test());
+        let adapter = Arc::new(Adapter::new(monitor.clone(), shell_pool, sandbox).unwrap());
 
         // Create empty configs and guidance for the new API
         let configs = Arc::new(HashMap::new());
@@ -995,7 +967,8 @@ pub mod test_utils {
         let monitor = Arc::new(OperationMonitor::new(monitor_config));
         let shell_pool_config = ShellPoolConfig::default();
         let shell_pool = Arc::new(ShellPoolManager::new(shell_pool_config));
-        let adapter = Arc::new(Adapter::new(monitor.clone(), shell_pool).unwrap());
+        let sandbox = Arc::new(crate::sandbox::Sandbox::new_test());
+        let adapter = Arc::new(Adapter::new(monitor.clone(), shell_pool, sandbox).unwrap());
 
         // Create empty configs and guidance for the new API
         let configs = Arc::new(HashMap::new());

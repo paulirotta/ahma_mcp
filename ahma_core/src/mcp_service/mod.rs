@@ -120,6 +120,7 @@ impl AhmaMcpService {
         })
     }
 
+    #[allow(dead_code)]
     fn parse_file_uri_to_path(uri: &str) -> Option<PathBuf> {
         const PREFIX: &str = "file://";
         if !uri.starts_with(PREFIX) {
@@ -147,6 +148,7 @@ impl AhmaMcpService {
         Some(PathBuf::from(decoded))
     }
 
+    #[allow(dead_code)]
     fn percent_decode_utf8(input: &str) -> Option<String> {
         let bytes = input.as_bytes();
         let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
@@ -1014,10 +1016,14 @@ impl AhmaMcpService {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .or_else(|| {
-                if crate::sandbox::is_test_mode() {
+                if self.adapter.sandbox().is_test_mode() {
                     None
                 } else {
-                    crate::sandbox::get_sandbox_scope().map(|p| p.to_string_lossy().to_string())
+                    self.adapter
+                        .sandbox()
+                        .scopes()
+                        .first()
+                        .map(|p: &std::path::PathBuf| p.to_string_lossy().to_string())
                 }
             })
             .unwrap_or_else(|| ".".to_string());
@@ -1210,67 +1216,10 @@ impl AhmaMcpService {
     ///
     /// This implements the MCP roots protocol where the server requests the
     /// client's workspace roots to establish sandbox boundaries.
-    async fn configure_sandbox_from_roots(&self, peer: &Peer<RoleServer>) {
-        use crate::sandbox::{get_sandbox_scopes, initialize_sandbox_scopes};
-
-        // Check if sandbox is already configured (e.g., via --sandbox-scope CLI arg)
-        if get_sandbox_scopes().is_some() {
-            tracing::debug!("Sandbox already configured via CLI, skipping roots/list");
-            return;
-        }
-
-        tracing::info!("Requesting workspace roots from client via roots/list");
-
-        match peer.list_roots().await {
-            Ok(roots_result) => {
-                let roots = &roots_result.roots;
-                if roots.is_empty() {
-                    tracing::warn!(
-                        "Client returned empty roots list, sandbox will use fallback behavior"
-                    );
-                    return;
-                }
-
-                // Extract file:// URIs and convert to paths
-                let paths: Vec<PathBuf> = roots
-                    .iter()
-                    .filter_map(|root| Self::parse_file_uri_to_path(&root.uri))
-                    .collect();
-
-                if paths.is_empty() {
-                    tracing::warn!("No file:// roots found in client response, sandbox unchanged");
-                    return;
-                }
-
-                tracing::info!(
-                    "Received {} workspace root(s) from client: {:?}",
-                    paths.len(),
-                    paths
-                );
-
-                // Initialize sandbox with client's workspace roots
-                match initialize_sandbox_scopes(&paths) {
-                    Ok(()) => {
-                        tracing::info!("Sandbox scope initialized from client roots: {:?}", paths);
-                    }
-                    Err(e) => {
-                        // AlreadyInitialized is expected if CLI arg was used
-                        tracing::debug!(
-                            "Could not set sandbox from roots (may already be set): {}",
-                            e
-                        );
-                    }
-                }
-            }
-            Err(e) => {
-                // Client may not support roots capability - this is not an error
-                tracing::info!(
-                    "Client does not support roots/list or request failed: {}. \
-                     Sandbox will use fallback behavior.",
-                    e
-                );
-            }
-        }
+    async fn configure_sandbox_from_roots(&self, _peer: &Peer<RoleServer>) {
+        tracing::warn!(
+            "Dynamic sandbox configuration from roots/list is temporarily disabled due to architecture refactor."
+        );
     }
 }
 
@@ -1635,7 +1584,8 @@ impl ServerHandler for AhmaMcpService {
 
             // Delay tool execution until sandbox is initialized from roots/list.
             // This is critical in HTTP bridge mode with deferred sandbox initialization.
-            if crate::sandbox::get_sandbox_scopes().is_none() && !crate::sandbox::is_test_mode() {
+            if self.adapter.sandbox().scopes().is_empty() && !self.adapter.sandbox().is_test_mode()
+            {
                 let error_message = "Sandbox initializing from client roots - retry tools/call after roots/list completes".to_string();
                 tracing::warn!("{}", error_message);
                 return Err(McpError::internal_error(error_message, None));
@@ -1660,10 +1610,14 @@ impl ServerHandler for AhmaMcpService {
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
                 .or_else(|| {
-                    if crate::sandbox::is_test_mode() {
+                    if self.adapter.sandbox().is_test_mode() {
                         None
                     } else {
-                        crate::sandbox::get_sandbox_scope().map(|p| p.to_string_lossy().to_string())
+                        self.adapter
+                            .sandbox()
+                            .scopes()
+                            .first()
+                            .map(|p| p.to_string_lossy().to_string())
                     }
                 })
                 .unwrap_or_else(|| ".".to_string());

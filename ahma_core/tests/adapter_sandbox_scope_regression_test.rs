@@ -6,15 +6,15 @@
 
 use ahma_core::adapter::Adapter;
 use ahma_core::operation_monitor::{MonitorConfig, OperationMonitor};
+use ahma_core::sandbox::Sandbox;
 use ahma_core::shell_pool::{ShellPoolConfig, ShellPoolManager};
-use ahma_core::test_utils::init_test_sandbox;
 use std::sync::Arc;
 use std::time::Duration;
 
 #[tokio::test]
 async fn adapter_uses_global_sandbox_scope_not_adapter_root_path() {
     // Initialize sandbox scopes for tests. This sets sandbox scope to "/" and enables test mode.
-    init_test_sandbox();
+    let sandbox = Arc::new(Sandbox::new_test());
 
     let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(5));
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
@@ -32,10 +32,12 @@ async fn adapter_uses_global_sandbox_scope_not_adapter_root_path() {
     let shell_pool = Arc::new(ShellPoolManager::new(shell_pool_config));
 
     // Pick an adapter root that does NOT include /tmp (or most of the filesystem).
-    let temp_root = tempfile::tempdir().expect("tempdir");
-    let adapter = Adapter::new(operation_monitor, shell_pool)
-        .expect("adapter")
-        .with_root(temp_root.path().to_path_buf());
+    // Note: With the new Sandbox API, scopes are defined in the sandbox, not via with_root() on adapter.
+    // The test intent here was to ensure that even if "root" was restrictive, global test scopes override it.
+    // In the new design, the Adapter just uses the Sandbox provided.
+
+    // We create an adapter with our test sandbox which has permissive scopes (test mode)
+    let adapter = Adapter::new(operation_monitor, shell_pool, sandbox).expect("adapter");
 
     // This working directory is outside the adapter root_path, but inside the sandbox scope ("/").
     // Prior to the fix, this would fail with:
