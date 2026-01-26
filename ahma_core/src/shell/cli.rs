@@ -47,7 +47,7 @@ use crate::{
     config::{SubcommandConfig, ToolConfig, load_tool_configs},
     mcp_service::{AhmaMcpService, GuidanceConfig},
     operation_monitor::{MonitorConfig, OperationMonitor},
-    sandbox::{self, SandboxError},
+    sandbox::{self},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
     tool_availability::{evaluate_tool_availability, format_install_guidance},
     utils::logging::init_logging,
@@ -219,7 +219,7 @@ pub async fn run() -> Result<()> {
         {
             if let Err(e) = sandbox::test_sandbox_exec_available() {
                 match e {
-                    SandboxError::NestedSandboxDetected => {
+                    crate::sandbox::SandboxError::NestedSandboxDetected => {
                         // Per R7.6.2: Refuse to start in nested environment without explicit override
                         sandbox::exit_with_sandbox_error(&e);
                     }
