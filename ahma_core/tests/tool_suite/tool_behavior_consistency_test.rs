@@ -4,7 +4,7 @@ use ahma_core::{
 };
 use anyhow::Result;
 use common::test_client::new_client;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::borrow::Cow;
 
@@ -16,10 +16,11 @@ async fn test_synchronous_cargo_check_returns_actual_results() -> Result<()> {
 
     let client = new_client(Some(".ahma")).await?;
 
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("cargo"),
         arguments: Some(serde_json::from_value(json!({ "subcommand": "check" })).unwrap()),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await?;
@@ -68,10 +69,11 @@ async fn test_ls_tool_command_structure() -> Result<()> {
         return Ok(());
     }
 
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("ls_default"),
         arguments: None, // ls without arguments should list current directory
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await?;
@@ -152,7 +154,7 @@ async fn test_sandboxed_shell_returns_actual_results() -> Result<()> {
 
     let client = new_client(Some(".ahma")).await?;
 
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             serde_json::from_value(json!({
@@ -162,6 +164,7 @@ async fn test_sandboxed_shell_returns_actual_results() -> Result<()> {
             .unwrap(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await?;

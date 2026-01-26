@@ -2,7 +2,7 @@ use ahma_core::test_utils as common;
 
 use anyhow::Result;
 use common::test_client;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::{Map, json};
 use std::borrow::Cow;
 use tokio::fs;
@@ -56,10 +56,11 @@ async fn test_synchronous_flag_overrides_async_tools() -> Result<()> {
         test_client::new_client_in_dir(Some(&tools_dir_str), &[], temp_dir.path()).await?;
     let baseline_args = build_args("echo WITHOUT_OVERRIDE", &working_dir);
     let baseline_response = baseline_client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("test_sync"),
             arguments: Some(baseline_args),
             task: None,
+            meta: None,
         })
         .await?;
 
@@ -84,10 +85,11 @@ async fn test_synchronous_flag_overrides_async_tools() -> Result<()> {
         test_client::new_client_in_dir(Some(&tools_dir_str), &["--sync"], temp_dir.path()).await?;
     let override_args = build_args("echo WITH_SYNC_FLAG", &working_dir);
     let override_response = override_client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("test_sync"),
             arguments: Some(override_args),
             task: None,
+            meta: None,
         })
         .await?;
 

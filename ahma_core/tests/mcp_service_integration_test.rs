@@ -12,7 +12,7 @@
 use ahma_core::test_utils::test_client::new_client_in_dir;
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::borrow::Cow;
 use tempfile::TempDir;
@@ -256,7 +256,7 @@ async fn test_mcp_call_sync_tool_with_positional_args() -> Result<()> {
 
     let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("test_echo"),
         arguments: Some(
             json!({"message": "hello world"})
@@ -265,6 +265,7 @@ async fn test_mcp_call_sync_tool_with_positional_args() -> Result<()> {
                 .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -300,10 +301,11 @@ async fn test_mcp_call_tool_with_no_args() -> Result<()> {
 
     let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("test_echo"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -330,7 +332,7 @@ async fn test_mcp_call_async_tool_returns_operation_id() -> Result<()> {
 
     let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("async_echo"),
         arguments: Some(
             json!({"message": "async test"})
@@ -339,6 +341,7 @@ async fn test_mcp_call_async_tool_returns_operation_id() -> Result<()> {
                 .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -379,7 +382,7 @@ async fn test_mcp_subcommand_routing() -> Result<()> {
     let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     // Call with explicit subcommand
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("test_echo"),
         arguments: Some(
             json!({"subcommand": "uppercase", "message": "test"})
@@ -388,6 +391,7 @@ async fn test_mcp_subcommand_routing() -> Result<()> {
                 .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -414,10 +418,11 @@ async fn test_mcp_call_nonexistent_tool_error() -> Result<()> {
 
     let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("nonexistent_tool_xyz"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await;
@@ -455,7 +460,7 @@ async fn test_mcp_call_invalid_subcommand_error() -> Result<()> {
 
     let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("test_echo"),
         arguments: Some(
             json!({"subcommand": "nonexistent_subcommand"})
@@ -464,6 +469,7 @@ async fn test_mcp_call_invalid_subcommand_error() -> Result<()> {
                 .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await;
@@ -505,7 +511,7 @@ async fn test_mcp_shell_command_execution() -> Result<()> {
 
     let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
@@ -517,6 +523,7 @@ async fn test_mcp_shell_command_execution() -> Result<()> {
             .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -550,10 +557,11 @@ async fn test_mcp_shell_command_failure() -> Result<()> {
 
     let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(json!({"command": "exit 1"}).as_object().unwrap().clone()),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await;
@@ -617,7 +625,7 @@ async fn test_mcp_working_directory_parameter() -> Result<()> {
 
     let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
@@ -630,6 +638,7 @@ async fn test_mcp_working_directory_parameter() -> Result<()> {
             .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await?;

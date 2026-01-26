@@ -5,7 +5,7 @@ use ahma_core::test_utils::get_workspace_path;
 use ahma_core::test_utils::test_client::{new_client, new_client_in_dir};
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::borrow::Cow;
 
@@ -82,7 +82,7 @@ async fn test_simple_sequence_execution() -> Result<()> {
 
     let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path()).await?;
 
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("test_sequence"),
         arguments: Some(
             json!({
@@ -93,6 +93,7 @@ async fn test_simple_sequence_execution() -> Result<()> {
             .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await?;
@@ -172,7 +173,7 @@ async fn test_sequence_with_invalid_tool() -> Result<()> {
 
     let client = new_client(Some(tools_dir.to_str().unwrap())).await?;
 
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("invalid_sequence"),
         arguments: Some(
             json!({
@@ -183,6 +184,7 @@ async fn test_sequence_with_invalid_tool() -> Result<()> {
             .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let error = client
@@ -268,7 +270,7 @@ async fn test_sequence_delay_is_applied() -> Result<()> {
 
     let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path()).await?;
 
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("timed_sequence"),
         arguments: Some(
             json!({
@@ -279,6 +281,7 @@ async fn test_sequence_delay_is_applied() -> Result<()> {
             .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let start = Instant::now();

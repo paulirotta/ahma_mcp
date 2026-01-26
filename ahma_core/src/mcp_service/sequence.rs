@@ -3,7 +3,7 @@
 //! Contains handlers for executing sequence tools that invoke multiple
 //! other tools in order, both synchronously and asynchronously.
 
-use rmcp::model::{CallToolRequestParam, CallToolResult, Content, ErrorData as McpError};
+use rmcp::model::{CallToolRequestParams, CallToolResult, Content, ErrorData as McpError};
 use rmcp::service::{RequestContext, RoleServer};
 use serde_json::{Map, Value};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -30,7 +30,7 @@ pub async fn handle_sequence_tool(
     _operation_monitor: &OperationMonitor,
     configs: &Arc<RwLock<std::collections::HashMap<String, ToolConfig>>>,
     config: &ToolConfig,
-    params: CallToolRequestParam,
+    params: CallToolRequestParams,
     context: RequestContext<RoleServer>,
 ) -> Result<CallToolResult, McpError> {
     let sequence = config.sequence.as_ref().unwrap(); // Safe due to prior check
@@ -53,7 +53,7 @@ async fn handle_sequence_tool_sync(
     adapter: &Adapter,
     configs: &Arc<RwLock<std::collections::HashMap<String, ToolConfig>>>,
     config: &ToolConfig,
-    params: CallToolRequestParam,
+    params: CallToolRequestParams,
     sequence: &[SequenceStep],
     step_delay_ms: u64,
 ) -> Result<CallToolResult, McpError> {
@@ -200,7 +200,7 @@ async fn handle_sequence_tool_sync(
 async fn handle_sequence_tool_async(
     adapter: &Adapter,
     configs: &Arc<RwLock<std::collections::HashMap<String, ToolConfig>>>,
-    params: CallToolRequestParam,
+    params: CallToolRequestParams,
     context: RequestContext<RoleServer>,
     sequence: &[SequenceStep],
     step_delay_ms: u64,
@@ -335,7 +335,7 @@ pub async fn handle_subcommand_sequence(
     adapter: &Adapter,
     config: &ToolConfig,
     subcommand_config: &SubcommandConfig,
-    params: CallToolRequestParam,
+    params: CallToolRequestParams,
     context: RequestContext<RoleServer>,
 ) -> Result<CallToolResult, McpError> {
     let sequence: &Vec<SequenceStep> = subcommand_config.sequence.as_ref().unwrap(); // Safe due to prior check

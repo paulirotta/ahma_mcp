@@ -10,7 +10,7 @@
 use anyhow::Result;
 use rmcp::{
     ServiceExt,
-    model::{CallToolRequestParam, Content},
+    model::{CallToolRequestParams, Content},
     service::{RoleClient, RunningService},
     transport::{ConfigureCommandExt, TokioChildProcess},
 };
@@ -96,7 +96,7 @@ impl Client {
     pub async fn shell_async_sleep(&mut self, duration: &str) -> Result<ToolCallResult> {
         let service = self.get_service()?;
 
-        let params = CallToolRequestParam {
+        let params = CallToolRequestParams {
             name: Cow::Borrowed("sandboxed_shell"),
             arguments: Some(
                 json!({
@@ -108,6 +108,7 @@ impl Client {
                 .clone(),
             ),
             task: None,
+            meta: None,
         };
 
         let result = service.call_tool(params).await?;
@@ -131,7 +132,7 @@ impl Client {
     pub async fn await_op(&mut self, op_id: &str) -> Result<String> {
         let service = self.get_service()?;
 
-        let params = CallToolRequestParam {
+        let params = CallToolRequestParams {
             name: Cow::Borrowed("await"),
             arguments: Some(
                 json!({
@@ -142,6 +143,7 @@ impl Client {
                 .clone(),
             ),
             task: None,
+            meta: None,
         };
 
         let result = service.call_tool(params).await?;
@@ -152,7 +154,7 @@ impl Client {
     pub async fn status(&mut self, op_id: &str) -> Result<String> {
         let service = self.get_service()?;
 
-        let params = CallToolRequestParam {
+        let params = CallToolRequestParams {
             name: Cow::Borrowed("status"),
             arguments: Some(
                 json!({
@@ -163,6 +165,7 @@ impl Client {
                 .clone(),
             ),
             task: None,
+            meta: None,
         };
 
         let result = service.call_tool(params).await?;

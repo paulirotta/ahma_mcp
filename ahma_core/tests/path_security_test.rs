@@ -4,7 +4,7 @@ use ahma_core::test_utils as common;
 
 use ahma_core::utils::logging::init_test_logging;
 use common::test_client::new_client;
-use rmcp::{ServiceError, model::CallToolRequestParam};
+use rmcp::{ServiceError, model::CallToolRequestParams};
 use serde_json::json;
 
 /// Path validation - validates that working_directory is within allowed workspace
@@ -15,7 +15,7 @@ async fn test_path_validation_success() {
     // Use existing sandboxed_shell tool for path validation test
     let client = new_client(Some(".ahma")).await.unwrap();
 
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: "sandboxed_shell".into(),
         arguments: Some(
             serde_json::from_value(json!({
@@ -25,6 +25,7 @@ async fn test_path_validation_success() {
             .unwrap(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await;
@@ -40,7 +41,7 @@ async fn test_path_validation_failure_absolute() {
     // Use existing sandboxed_shell tool for path validation test
     let client = new_client(Some(".ahma")).await.unwrap();
 
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: "sandboxed_shell".into(),
         arguments: Some(
             serde_json::from_value(json!({
@@ -50,6 +51,7 @@ async fn test_path_validation_failure_absolute() {
             .unwrap(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await;
@@ -83,7 +85,7 @@ async fn test_path_validation_failure_relative() {
     // Use existing sandboxed_shell tool for path validation test
     let client = new_client(Some(".ahma")).await.unwrap();
 
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: "sandboxed_shell".into(),
         arguments: Some(
             serde_json::from_value(json!({
@@ -93,6 +95,7 @@ async fn test_path_validation_failure_relative() {
             .unwrap(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await;

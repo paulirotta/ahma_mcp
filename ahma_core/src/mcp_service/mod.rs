@@ -36,8 +36,8 @@ use notify::{Event, RecursiveMode, Watcher};
 use rmcp::{
     handler::server::ServerHandler,
     model::{
-        CallToolRequestParam, CallToolResult, CancelledNotificationParam, Content,
-        ErrorData as McpError, Implementation, ListToolsResult, PaginatedRequestParam,
+        CallToolRequestParams, CallToolResult, CancelledNotificationParam, Content,
+        ErrorData as McpError, Implementation, ListToolsResult, PaginatedRequestParams,
         ProtocolVersion, ServerCapabilities, ServerInfo, Tool, ToolsCapability,
     },
     service::{NotificationContext, Peer, RequestContext, RoleServer},
@@ -375,7 +375,7 @@ impl AhmaMcpService {
     }
 
     /// Handles the 'await' tool call.
-    async fn handle_await(&self, params: CallToolRequestParam) -> Result<CallToolResult, McpError> {
+    async fn handle_await(&self, params: CallToolRequestParams) -> Result<CallToolResult, McpError> {
         let args = params.arguments.unwrap_or_default();
 
         // Check if a specific operation_id is provided
@@ -994,7 +994,7 @@ impl AhmaMcpService {
     /// Supports both synchronous and asynchronous execution modes.
     async fn handle_sandboxed_shell(
         &self,
-        params: CallToolRequestParam,
+        params: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
         let args = params.arguments.unwrap_or_default();
@@ -1456,7 +1456,7 @@ impl ServerHandler for AhmaMcpService {
 
     fn list_tools(
         &self,
-        _request: Option<PaginatedRequestParam>,
+        _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
         async move {
@@ -1524,7 +1524,7 @@ impl ServerHandler for AhmaMcpService {
 
     fn call_tool(
         &self,
-        params: CallToolRequestParam,
+        params: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
         async move {
@@ -1809,11 +1809,12 @@ mod tests {
         make_service_with_monitor(monitor, Arc::new(None)).await
     }
 
-    fn call_tool_params(name: &str, args: serde_json::Value) -> CallToolRequestParam {
-        CallToolRequestParam {
+    fn call_tool_params(name: &str, args: serde_json::Value) -> CallToolRequestParams {
+        CallToolRequestParams {
             name: std::borrow::Cow::Owned(name.to_string()),
             arguments: args.as_object().cloned(),
             task: None,
+            meta: None,
         }
     }
 

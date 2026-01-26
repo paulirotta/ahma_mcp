@@ -3,7 +3,7 @@ use ahma_core::skip_if_disabled_async;
 use ahma_core::test_utils as common;
 use ahma_core::utils::logging::init_test_logging;
 use common::test_client::{get_workspace_tools_dir, new_client_in_dir};
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::{fs, path::Path};
 
@@ -17,7 +17,7 @@ async fn test_path_validation_nested_parent_segments() {
         .await
         .unwrap();
     // Deep relative escape attempt
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: "sandboxed_shell".into(),
         arguments: Some(
             serde_json::from_value(json!({
@@ -27,6 +27,7 @@ async fn test_path_validation_nested_parent_segments() {
             .unwrap(),
         ),
         task: None,
+        meta: None,
     };
     let result = client.call_tool(params).await;
     assert!(
@@ -52,7 +53,7 @@ async fn test_path_validation_unicode_directory() {
         .strip_prefix(temp_dir.path())
         .unwrap_or(&unicode_dir);
     let rel_str = rel.to_string_lossy();
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: "sandboxed_shell".into(),
         arguments: Some(
             serde_json::from_value(json!({
@@ -62,6 +63,7 @@ async fn test_path_validation_unicode_directory() {
             .unwrap(),
         ),
         task: None,
+        meta: None,
     };
     let result = client.call_tool(params).await;
     assert!(
@@ -91,7 +93,7 @@ async fn test_path_validation_symlink_escape() {
         let rel = link_path
             .strip_prefix(temp_dir.path())
             .unwrap_or(&link_path);
-        let params = CallToolRequestParam {
+        let params = CallToolRequestParams {
             name: "sandboxed_shell".into(),
             arguments: Some(
                 serde_json::from_value(json!({
@@ -101,6 +103,7 @@ async fn test_path_validation_symlink_escape() {
                 .unwrap(),
             ),
             task: None,
+            meta: None,
         };
         let result = client.call_tool(params).await;
         assert!(result.is_err(), "Symlink escaping root should be rejected");
@@ -129,7 +132,7 @@ async fn test_path_validation_symlink_internal() {
         let rel = link_path
             .strip_prefix(temp_dir.path())
             .unwrap_or(&link_path);
-        let params = CallToolRequestParam {
+        let params = CallToolRequestParams {
             name: "sandboxed_shell".into(),
             arguments: Some(
                 serde_json::from_value(json!({
@@ -139,6 +142,7 @@ async fn test_path_validation_symlink_internal() {
                 .unwrap(),
             ),
             task: None,
+            meta: None,
         };
         let result = client.call_tool(params).await;
         assert!(result.is_ok(), "Internal symlink should be accepted");
@@ -156,7 +160,7 @@ async fn test_path_validation_reserved_names() {
         .await
         .unwrap();
     for wd in [".", "./", "././."] {
-        let params = CallToolRequestParam {
+        let params = CallToolRequestParams {
             name: "sandboxed_shell".into(),
             arguments: Some(
                 serde_json::from_value(json!({
@@ -166,6 +170,7 @@ async fn test_path_validation_reserved_names() {
                 .unwrap(),
             ),
             task: None,
+            meta: None,
         };
         let result = client.call_tool(params).await;
         assert!(

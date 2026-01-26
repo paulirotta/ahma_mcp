@@ -6,7 +6,7 @@
 use ahma_core::skip_if_disabled_async_result;
 use ahma_core::test_utils::test_client::new_client_with_args;
 use anyhow::Result;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::borrow::Cow;
 
@@ -18,10 +18,11 @@ async fn test_await_blocks_correctly() -> Result<()> {
 
     // Start a long-running asynchronous task (sleep for 2 seconds)
 
-    let call_params = CallToolRequestParam {
+    let call_params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: json!({"command": "sleep 2"}).as_object().cloned(),
         task: None,
+        meta: None,
     };
     let result = client.call_tool(call_params).await?;
 
@@ -49,10 +50,11 @@ async fn test_await_blocks_correctly() -> Result<()> {
     println!("Started operation: {}", job_id);
 
     // A single call to await should block until the operation is complete.
-    let await_params = CallToolRequestParam {
+    let await_params = CallToolRequestParams {
         name: Cow::Borrowed("await"),
         arguments: json!({"operation_id": job_id}).as_object().cloned(),
         task: None,
+        meta: None,
     };
     let await_result = client.call_tool(await_params).await?;
 
@@ -95,10 +97,11 @@ async fn test_await_detects_pending_operation_without_delay() -> Result<()> {
     let client = new_client_with_args(Some(".ahma"), &[]).await?;
 
     // Launch an async operation and immediately await it.
-    let call_params = CallToolRequestParam {
+    let call_params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: json!({"command": "sleep 1"}).as_object().cloned(),
         task: None,
+        meta: None,
     };
     let result = client.call_tool(call_params).await?;
 
@@ -115,10 +118,11 @@ async fn test_await_detects_pending_operation_without_delay() -> Result<()> {
         .and_then(|s| s.split_whitespace().next())
         .ok_or_else(|| anyhow::anyhow!("Could not extract operation ID"))?;
 
-    let await_params = CallToolRequestParam {
+    let await_params = CallToolRequestParams {
         name: Cow::Borrowed("await"),
         arguments: json!({"operation_id": job_id}).as_object().cloned(),
         task: None,
+        meta: None,
     };
     let await_result = client.call_tool(await_params).await?;
 

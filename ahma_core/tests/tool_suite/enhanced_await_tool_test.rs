@@ -22,10 +22,11 @@ async fn test_await_tool_timeout_functionality() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Test that await tool uses intelligent timeout calculation only
-    let call_param = rmcp::model::CallToolRequestParam {
+    let call_param = rmcp::model::CallToolRequestParams {
         name: "await".into(),
         arguments: Some(serde_json::Map::new()),
         task: None,
+        meta: None,
     };
 
     // Should return immediately since no operations are running
@@ -58,20 +59,22 @@ async fn test_await_tool_timeout_validation() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Test that timeout parameter is no longer accepted
-    let call_param = rmcp::model::CallToolRequestParam {
+    let call_param = rmcp::model::CallToolRequestParams {
         name: "await".into(),
         arguments: Some(serde_json::Map::new()),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await?;
     assert!(result.is_error != Some(true));
 
     // Test another call without any timeout parameter
-    let call_param = rmcp::model::CallToolRequestParam {
+    let call_param = rmcp::model::CallToolRequestParams {
         name: "await".into(),
         arguments: Some(serde_json::Map::new()),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await?;
@@ -93,10 +96,11 @@ async fn test_status_tool_functionality() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Test status tool - should return current operation status
-    let call_param = rmcp::model::CallToolRequestParam {
+    let call_param = rmcp::model::CallToolRequestParams {
         name: "status".into(),
         arguments: Some(serde_json::Map::new()),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await?;
@@ -129,7 +133,7 @@ async fn test_await_tool_with_tool_filter() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Test await tool with tool filter only (no timeout parameter)
-    let call_param = rmcp::model::CallToolRequestParam {
+    let call_param = rmcp::model::CallToolRequestParams {
         name: "await".into(),
         arguments: Some({
             let mut args = serde_json::Map::new();
@@ -137,6 +141,7 @@ async fn test_await_tool_with_tool_filter() -> Result<()> {
             args
         }),
         task: None,
+        meta: None,
     };
 
     let result = timeout(Duration::from_secs(5), client.call_tool(call_param)).await??;

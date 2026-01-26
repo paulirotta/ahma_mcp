@@ -7,7 +7,7 @@ use ahma_core::test_utils as common;
 /// Uses the integration test pattern from existing working tests
 use anyhow::Result;
 use common::test_client::new_client;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::{Map, json};
 use std::borrow::Cow;
 
@@ -48,10 +48,11 @@ async fn test_await_tool_comprehensive() -> Result<()> {
     // Test valid await call with no timeout parameter (uses intelligent timeout)
     let params = Map::new();
 
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("await"),
         arguments: Some(params),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await?;
@@ -72,10 +73,11 @@ async fn test_await_tool_comprehensive() -> Result<()> {
     let mut valid_params = Map::new();
     valid_params.insert("tools".to_string(), json!("cargo"));
 
-    let valid_call_param = CallToolRequestParam {
+    let valid_call_param = CallToolRequestParams {
         name: Cow::Borrowed("await"),
         arguments: Some(valid_params),
         task: None,
+        meta: None,
     };
 
     let valid_result = client.call_tool(valid_call_param).await?;
@@ -93,10 +95,11 @@ async fn test_status_tool_comprehensive() -> Result<()> {
     // Test basic status call
     let params = Map::new();
 
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("status"),
         arguments: Some(params),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await?;
@@ -117,10 +120,11 @@ async fn test_status_tool_comprehensive() -> Result<()> {
     let mut specific_params = Map::new();
     specific_params.insert("operation_id".to_string(), json!("test_operation_123"));
 
-    let specific_call_param = CallToolRequestParam {
+    let specific_call_param = CallToolRequestParams {
         name: Cow::Borrowed("status"),
         arguments: Some(specific_params),
         task: None,
+        meta: None,
     };
 
     let specific_result = client.call_tool(specific_call_param).await?;
@@ -137,10 +141,11 @@ async fn test_unknown_tool_error_handling() -> Result<()> {
 
     let params = Map::new();
 
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("nonexistent_tool_xyz"),
         arguments: Some(params),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -187,10 +192,11 @@ async fn test_concurrent_tool_execution() -> Result<()> {
                 json!(format!("concurrent_test_{}", i)),
             );
 
-            let call_param = CallToolRequestParam {
+            let call_param = CallToolRequestParams {
                 name: Cow::Borrowed("status"),
                 arguments: Some(params),
                 task: None,
+                meta: None,
             };
 
             let result = client_clone.call_tool(call_param).await;
@@ -226,10 +232,11 @@ async fn test_path_validation_security() -> Result<()> {
         json!("/../../../../etc/passwd"),
     );
 
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("await"),
         arguments: Some(params),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -298,10 +305,11 @@ async fn test_service_resilience_stress() -> Result<()> {
     ];
 
     for (tool_name, args) in operations {
-        let call_param = CallToolRequestParam {
+        let call_param = CallToolRequestParams {
             name: Cow::Borrowed(tool_name),
             arguments: args.as_object().cloned(),
             task: None,
+            meta: None,
         };
 
         let result = client.call_tool(call_param).await;
@@ -319,10 +327,11 @@ async fn test_service_resilience_stress() -> Result<()> {
 
     // Service should still be functional after error conditions
     let final_params = Map::new();
-    let final_call_param = CallToolRequestParam {
+    let final_call_param = CallToolRequestParams {
         name: Cow::Borrowed("status"),
         arguments: Some(final_params),
         task: None,
+        meta: None,
     };
 
     let final_result = client.call_tool(final_call_param).await?;
@@ -338,10 +347,11 @@ async fn test_argument_parsing_edge_cases() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Test with empty arguments
-    let empty_call_param = CallToolRequestParam {
+    let empty_call_param = CallToolRequestParams {
         name: Cow::Borrowed("status"),
         arguments: None,
         task: None,
+        meta: None,
     };
 
     let empty_result = client.call_tool(empty_call_param).await?;
@@ -358,10 +368,11 @@ async fn test_argument_parsing_edge_cases() -> Result<()> {
         "tools": "cargo"
     });
 
-    let complex_call_param = CallToolRequestParam {
+    let complex_call_param = CallToolRequestParams {
         name: Cow::Borrowed("await"),
         arguments: complex_args.as_object().cloned(),
         task: None,
+        meta: None,
     };
 
     let complex_result = client.call_tool(complex_call_param).await;

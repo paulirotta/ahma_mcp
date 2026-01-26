@@ -11,7 +11,7 @@ use ahma_core::skip_if_disabled_async_result;
 use ahma_core::test_utils::get_workspace_dir;
 use ahma_core::test_utils::test_client::new_client;
 use anyhow::Result;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::{Map, json};
 use std::borrow::Cow;
 
@@ -46,7 +46,7 @@ async fn test_gradlew_sync_commands_interactive() -> Result<()> {
     for (command, description) in sync_commands {
         println!("Testing sync command: {} - {}", command, description);
 
-        let call_param = CallToolRequestParam {
+        let call_param = CallToolRequestParams {
             name: Cow::Borrowed("sandboxed_shell"),
             arguments: Some(
                 json!({
@@ -59,6 +59,7 @@ async fn test_gradlew_sync_commands_interactive() -> Result<()> {
                 .clone(),
             ),
             task: None,
+            meta: None,
         };
 
         let result = client.call_tool(call_param).await;
@@ -109,7 +110,7 @@ async fn test_gradlew_working_directory_handling() -> Result<()> {
 
     // Test: Valid project directory with a quick command
     // Using "help" instead of "tasks" as it's slightly faster
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
@@ -122,6 +123,7 @@ async fn test_gradlew_working_directory_handling() -> Result<()> {
             .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -154,7 +156,7 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
     let project_path = get_android_test_project_path();
 
     // Test 1: Valid subcommand
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
@@ -167,6 +169,7 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
             .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -183,7 +186,7 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
     }
 
     // Test 2: Invalid subcommand
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
@@ -196,6 +199,7 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
             .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -217,7 +221,7 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
     }
 
     // Test 3: Missing command in sandboxed_shell
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
@@ -230,6 +234,7 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
             .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -261,7 +266,7 @@ async fn test_gradlew_optional_parameters() -> Result<()> {
     let project_path = get_android_test_project_path();
 
     // Test 1: tasks command with --all option
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
@@ -274,6 +279,7 @@ async fn test_gradlew_optional_parameters() -> Result<()> {
             .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -290,7 +296,7 @@ async fn test_gradlew_optional_parameters() -> Result<()> {
     }
 
     // Test 2: help command with task parameter
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
@@ -303,6 +309,7 @@ async fn test_gradlew_optional_parameters() -> Result<()> {
             .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -324,7 +331,7 @@ async fn test_gradlew_optional_parameters() -> Result<()> {
     }
 
     // Test 3: dependencies command with configuration parameter
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
@@ -337,6 +344,7 @@ async fn test_gradlew_optional_parameters() -> Result<()> {
             .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -414,7 +422,7 @@ async fn test_gradlew_error_handling() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Test 1: Completely invalid parameters for sandboxed_shell
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
@@ -426,6 +434,7 @@ async fn test_gradlew_error_handling() -> Result<()> {
             .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -445,7 +454,7 @@ async fn test_gradlew_error_handling() -> Result<()> {
     }
 
     // Test 2: Wrong parameter types
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
@@ -457,6 +466,7 @@ async fn test_gradlew_error_handling() -> Result<()> {
             .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -470,10 +480,11 @@ async fn test_gradlew_error_handling() -> Result<()> {
     }
 
     // Test 3: Empty parameters
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(Map::new()),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await;

@@ -11,7 +11,7 @@ use ahma_core::skip_if_disabled_async;
 use ahma_core::test_utils as common;
 
 use common::test_client::new_client;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::borrow::Cow;
 
@@ -31,10 +31,11 @@ async fn test_ls_command_with_long_flag() {
     });
 
     let result = client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
+            meta: None,
         })
         .await;
 
@@ -87,10 +88,11 @@ async fn test_ls_command_without_flags() {
     });
 
     let result = client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
+            meta: None,
         })
         .await;
 
@@ -129,10 +131,11 @@ async fn test_ls_command_with_all_flag() {
     });
 
     let result = client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
+            meta: None,
         })
         .await;
 
@@ -173,10 +176,11 @@ async fn test_ls_command_with_multiple_flags() {
     });
 
     let result = client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
+            meta: None,
         })
         .await;
 

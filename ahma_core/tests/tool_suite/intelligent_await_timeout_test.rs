@@ -10,7 +10,7 @@ use ahma_core::test_utils as common;
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;
 use common::test_client::new_client;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::time::Duration;
 use tokio::time::{Instant, timeout};
@@ -22,10 +22,11 @@ async fn test_no_timeout_no_operations_uses_default() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma")).await?;
 
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: "await".into(),
         arguments: None, // No timeout, no tools filter
         task: None,
+        meta: None,
     };
 
     let start = Instant::now();
@@ -51,10 +52,11 @@ async fn test_intelligent_timeout_calculation_needed() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Test basic await functionality without explicit timeout
-    let await_param = CallToolRequestParam {
+    let await_param = CallToolRequestParams {
         name: "await".into(),
         arguments: None, // No explicit timeout - should use default/intelligent calculation
         task: None,
+        meta: None,
     };
 
     let start = Instant::now();
@@ -85,7 +87,7 @@ async fn test_no_timeout_parameter_accepted() -> Result<()> {
 
     // Test that await tool no longer accepts timeout_seconds parameter
     // It should use intelligent timeout calculation only
-    let await_param = CallToolRequestParam {
+    let await_param = CallToolRequestParams {
         name: "await".into(),
         arguments: Some({
             let mut args = serde_json::Map::new();
@@ -93,6 +95,7 @@ async fn test_no_timeout_parameter_accepted() -> Result<()> {
             args
         }),
         task: None,
+        meta: None,
     };
 
     let start = Instant::now();
@@ -124,7 +127,7 @@ async fn test_tool_filtered_intelligent_timeout() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Test await with tool filtering (should complete immediately when no matching operations)
-    let await_param = CallToolRequestParam {
+    let await_param = CallToolRequestParams {
         name: "await".into(),
         arguments: Some({
             let mut args = serde_json::Map::new();
@@ -132,6 +135,7 @@ async fn test_tool_filtered_intelligent_timeout() -> Result<()> {
             args
         }),
         task: None,
+        meta: None,
     };
 
     let start = Instant::now();
@@ -162,7 +166,7 @@ async fn test_intelligent_timeout_with_long_operations() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Start operation with long timeout
-    let long_op_param = CallToolRequestParam {
+    let long_op_param = CallToolRequestParams {
         name: "bash".into(),
         arguments: Some({
             let mut args = serde_json::Map::new();
@@ -170,16 +174,18 @@ async fn test_intelligent_timeout_with_long_operations() -> Result<()> {
             args
         }),
         task: None,
+        meta: None,
     };
 
     let _long_op_result = client.call_tool(long_op_param);
     tokio::task::yield_now().await;
 
     // Use await tool with intelligent timeout (no timeout parameter)
-    let await_param = CallToolRequestParam {
+    let await_param = CallToolRequestParams {
         name: "await".into(),
         arguments: None, // No parameters - uses intelligent timeout
         task: None,
+        meta: None,
     };
 
     // Test that the await tool calculates intelligent timeout correctly
@@ -203,10 +209,11 @@ async fn test_intelligent_timeout_no_pending_operations() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Test intelligent timeout behavior - should complete immediately when no operations pending
-    let await_param = CallToolRequestParam {
+    let await_param = CallToolRequestParams {
         name: "await".into(),
         arguments: None, // No parameters - uses intelligent timeout
         task: None,
+        meta: None,
     };
 
     let start = Instant::now();

@@ -2,8 +2,8 @@ use anyhow::Context;
 use rmcp::{
     ServiceExt,
     model::{
-        CallToolRequest, CallToolRequestParam, ClientCapabilities, ClientRequest, ClientResult,
-        Implementation, InitializeRequestParam, ListRootsResult, Meta, NumberOrString,
+        CallToolRequest, CallToolRequestParams, ClientCapabilities, ClientRequest, ClientResult,
+        Implementation, InitializeRequestParams, ListRootsResult, Meta, NumberOrString,
         ProgressNotificationParam, ProgressToken, ProtocolVersion, Root, ServerNotification,
         ServerRequest,
     },
@@ -63,8 +63,8 @@ struct RecordingClient {
 
 #[allow(clippy::manual_async_fn)]
 impl rmcp::service::Service<RoleClient> for RecordingClient {
-    fn get_info(&self) -> InitializeRequestParam {
-        InitializeRequestParam {
+    fn get_info(&self) -> InitializeRequestParams {
+        InitializeRequestParams {
             protocol_version: ProtocolVersion::V_2024_11_05,
             capabilities: ClientCapabilities::default(),
             client_info: Implementation {
@@ -74,6 +74,7 @@ impl rmcp::service::Service<RoleClient> for RecordingClient {
                 icons: None,
                 website_url: None,
             },
+            meta: None,
         }
     }
 
@@ -176,7 +177,7 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
     let mut meta = Meta::new();
     meta.set_progress_token(token.clone());
 
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
@@ -188,6 +189,7 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
             .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let req = ClientRequest::CallToolRequest(CallToolRequest::new(params));

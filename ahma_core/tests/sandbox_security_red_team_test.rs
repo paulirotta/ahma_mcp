@@ -12,7 +12,7 @@ use ahma_core::sandbox;
 use ahma_core::test_utils as common;
 use ahma_core::utils::logging::init_test_logging;
 use common::test_client::{get_workspace_tools_dir, new_client_in_dir};
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::fs;
 use tempfile::TempDir;
@@ -32,7 +32,7 @@ async fn red_team_basic_path_traversal_blocked() {
         .unwrap();
 
     // Attempt to escape via simple ../
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: "sandboxed_shell".into(),
         arguments: Some(
             serde_json::from_value(json!({
@@ -42,6 +42,7 @@ async fn red_team_basic_path_traversal_blocked() {
             .unwrap(),
         ),
         task: None,
+        meta: None,
     };
     let result = client.call_tool(params).await;
     assert!(
@@ -62,7 +63,7 @@ async fn red_team_deep_path_traversal_blocked() {
         .unwrap();
 
     // Attempt to escape via deeply nested traversal
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: "sandboxed_shell".into(),
         arguments: Some(
             serde_json::from_value(json!({
@@ -72,6 +73,7 @@ async fn red_team_deep_path_traversal_blocked() {
             .unwrap(),
         ),
         task: None,
+        meta: None,
     };
     let result = client.call_tool(params).await;
     assert!(
@@ -92,7 +94,7 @@ async fn red_team_absolute_path_escape_blocked() {
         .unwrap();
 
     // Attempt to use absolute path outside sandbox
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: "sandboxed_shell".into(),
         arguments: Some(
             serde_json::from_value(json!({
@@ -102,6 +104,7 @@ async fn red_team_absolute_path_escape_blocked() {
             .unwrap(),
         ),
         task: None,
+        meta: None,
     };
     let result = client.call_tool(params).await;
     assert!(
@@ -133,7 +136,7 @@ async fn red_team_symlink_escape_blocked() {
     let _ = fs::remove_file(&malicious_link);
     symlink("/etc", &malicious_link).expect("Failed to create symlink");
 
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: "sandboxed_shell".into(),
         arguments: Some(
             serde_json::from_value(json!({
@@ -143,6 +146,7 @@ async fn red_team_symlink_escape_blocked() {
             .unwrap(),
         ),
         task: None,
+        meta: None,
     };
     let result = client.call_tool(params).await;
     assert!(
@@ -171,7 +175,7 @@ async fn red_team_symlink_to_home_blocked() {
     let _ = fs::remove_file(&malicious_link);
     symlink(&home, &malicious_link).expect("Failed to create symlink");
 
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: "sandboxed_shell".into(),
         arguments: Some(
             serde_json::from_value(json!({
@@ -181,6 +185,7 @@ async fn red_team_symlink_to_home_blocked() {
             .unwrap(),
         ),
         task: None,
+        meta: None,
     };
     let result = client.call_tool(params).await;
     assert!(
@@ -216,7 +221,7 @@ async fn red_team_shell_metacharacters_in_path() {
 
     // Attempt to inject shell commands via path
     // The path "; cat /etc/passwd #" doesn't exist as a directory
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: "sandboxed_shell".into(),
         arguments: Some(
             serde_json::from_value(json!({
@@ -226,6 +231,7 @@ async fn red_team_shell_metacharacters_in_path() {
             .unwrap(),
         ),
         task: None,
+        meta: None,
     };
     let result = client.call_tool(params).await;
     // The command may start async but should fail during execution
@@ -286,7 +292,7 @@ async fn documented_limitation_read_access_unrestricted() {
     // because file-read* is allowed everywhere.
     //
     // This is a KNOWN LIMITATION, not a bug.
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: "sandboxed_shell".into(),
         arguments: Some(
             serde_json::from_value(json!({
@@ -295,6 +301,7 @@ async fn documented_limitation_read_access_unrestricted() {
             .unwrap(),
         ),
         task: None,
+        meta: None,
     };
     let result = client.call_tool(params).await;
 
@@ -327,7 +334,7 @@ async fn documented_limitation_network_unrestricted() {
 
     // Test that network access works (e.g., DNS lookup)
     // This documents that network is unrestricted
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: "sandboxed_shell".into(),
         arguments: Some(
             serde_json::from_value(json!({
@@ -337,6 +344,7 @@ async fn documented_limitation_network_unrestricted() {
             .unwrap(),
         ),
         task: None,
+        meta: None,
     };
     let result = client.call_tool(params).await;
     // Just document that network commands can run - this is a known limitation

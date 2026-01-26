@@ -20,7 +20,7 @@ use ahma_core::skip_if_disabled_async_result;
 use ahma_core::test_utils::test_client::new_client;
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::borrow::Cow;
 
@@ -37,7 +37,7 @@ async fn test_async_operation_triggers_callbacks() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Start an async operation that produces output
-    let shell_params = CallToolRequestParam {
+    let shell_params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({ "command": "echo 'callback test output'" })
@@ -46,6 +46,7 @@ async fn test_async_operation_triggers_callbacks() -> Result<()> {
                 .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(shell_params).await?;
@@ -60,7 +61,7 @@ async fn test_async_operation_triggers_callbacks() -> Result<()> {
         let op_id = extract_op_id(&text_content.text);
 
         // Await completion - this triggers FinalResult callback
-        let await_params = CallToolRequestParam {
+        let await_params = CallToolRequestParams {
             name: Cow::Borrowed("await"),
             arguments: Some(
                 json!({ "operation_id": op_id })
@@ -69,6 +70,7 @@ async fn test_async_operation_triggers_callbacks() -> Result<()> {
                     .clone(),
             ),
             task: None,
+            meta: None,
         };
 
         let await_result = client.call_tool(await_params).await?;
@@ -86,10 +88,11 @@ async fn test_failed_operation_callback() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Start an operation that will fail
-    let shell_params = CallToolRequestParam {
+    let shell_params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(json!({ "command": "exit 1" }).as_object().unwrap().clone()),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(shell_params).await?;
@@ -102,7 +105,7 @@ async fn test_failed_operation_callback() -> Result<()> {
     {
         let op_id = extract_op_id(&text_content.text);
 
-        let await_params = CallToolRequestParam {
+        let await_params = CallToolRequestParams {
             name: Cow::Borrowed("await"),
             arguments: Some(
                 json!({ "operation_id": op_id })
@@ -111,6 +114,7 @@ async fn test_failed_operation_callback() -> Result<()> {
                     .clone(),
             ),
             task: None,
+            meta: None,
         };
 
         let await_result = client.call_tool(await_params).await?;
@@ -129,7 +133,7 @@ async fn test_cancelled_operation_callback() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Start a long-running async operation
-    let shell_params = CallToolRequestParam {
+    let shell_params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({ "command": "sleep 60" })
@@ -138,6 +142,7 @@ async fn test_cancelled_operation_callback() -> Result<()> {
                 .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let start_result = client.call_tool(shell_params).await?;
@@ -149,7 +154,7 @@ async fn test_cancelled_operation_callback() -> Result<()> {
         let op_id = extract_op_id(&text_content.text);
 
         // Cancel the operation - this should trigger Cancelled callback
-        let cancel_params = CallToolRequestParam {
+        let cancel_params = CallToolRequestParams {
             name: Cow::Borrowed("cancel"),
             arguments: Some(
                 json!({ "operation_id": op_id })
@@ -158,13 +163,14 @@ async fn test_cancelled_operation_callback() -> Result<()> {
                     .clone(),
             ),
             task: None,
+            meta: None,
         };
 
         let cancel_result = client.call_tool(cancel_params).await?;
         assert!(!cancel_result.content.is_empty());
 
         // Await the cancelled operation to ensure it completes and resources are cleaned up
-        let await_params = CallToolRequestParam {
+        let await_params = CallToolRequestParams {
             name: Cow::Borrowed("await"),
             arguments: Some(
                 json!({ "operation_id": op_id })
@@ -173,6 +179,7 @@ async fn test_cancelled_operation_callback() -> Result<()> {
                     .clone(),
             ),
             task: None,
+            meta: None,
         };
 
         let await_result = client.call_tool(await_params).await?;
@@ -202,7 +209,7 @@ async fn test_stderr_output_callback() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Command that writes to stderr
-    let shell_params = CallToolRequestParam {
+    let shell_params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({ "command": "echo 'stderr test' >&2" })
@@ -211,6 +218,7 @@ async fn test_stderr_output_callback() -> Result<()> {
                 .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(shell_params).await?;
@@ -223,7 +231,7 @@ async fn test_stderr_output_callback() -> Result<()> {
     {
         let op_id = extract_op_id(&text_content.text);
 
-        let await_params = CallToolRequestParam {
+        let await_params = CallToolRequestParams {
             name: Cow::Borrowed("await"),
             arguments: Some(
                 json!({ "operation_id": op_id })
@@ -232,6 +240,7 @@ async fn test_stderr_output_callback() -> Result<()> {
                     .clone(),
             ),
             task: None,
+            meta: None,
         };
 
         let await_result = client.call_tool(await_params).await?;
@@ -249,7 +258,7 @@ async fn test_concurrent_operations_callbacks() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Start multiple operations
-    let params1 = CallToolRequestParam {
+    let params1 = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({ "command": "echo 'op1'" })
@@ -258,8 +267,9 @@ async fn test_concurrent_operations_callbacks() -> Result<()> {
                 .clone(),
         ),
         task: None,
+        meta: None,
     };
-    let params2 = CallToolRequestParam {
+    let params2 = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({ "command": "echo 'op2'" })
@@ -268,6 +278,7 @@ async fn test_concurrent_operations_callbacks() -> Result<()> {
                 .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     // Start both operations
@@ -278,10 +289,11 @@ async fn test_concurrent_operations_callbacks() -> Result<()> {
     assert!(!result2.content.is_empty());
 
     // Await all to ensure all callbacks complete
-    let await_params = CallToolRequestParam {
+    let await_params = CallToolRequestParams {
         name: Cow::Borrowed("await"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
         task: None,
+        meta: None,
     };
 
     let await_result = client.call_tool(await_params).await?;

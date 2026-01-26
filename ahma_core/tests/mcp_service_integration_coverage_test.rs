@@ -13,7 +13,7 @@ use ahma_core::test_utils::test_client::{new_client, new_client_in_dir};
 use ahma_core::test_utils::test_project::{TestProjectOptions, create_rust_test_project};
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::borrow::Cow;
 
@@ -28,10 +28,11 @@ async fn test_status_tool_no_filters() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Call status with no arguments
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("status"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -63,15 +64,16 @@ async fn test_status_tool_with_tool_filter() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // First start an async operation to have something to query
-    let shell_params = CallToolRequestParam {
+    let shell_params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(json!({"command": "echo test"}).as_object().unwrap().clone()),
         task: None,
+        meta: None,
     };
     let _ = client.call_tool(shell_params).await?;
 
     // Now query status with a tools filter
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("status"),
         arguments: Some(
             json!({"tools": "sandboxed_shell"})
@@ -80,6 +82,7 @@ async fn test_status_tool_with_tool_filter() -> Result<()> {
                 .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -108,7 +111,7 @@ async fn test_status_tool_with_operation_id_filter() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Query status with a non-existent operation_id
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("status"),
         arguments: Some(
             json!({"operation_id": "nonexistent_op_12345"})
@@ -117,6 +120,7 @@ async fn test_status_tool_with_operation_id_filter() -> Result<()> {
                 .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -149,10 +153,11 @@ async fn test_await_tool_no_pending_operations() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma")).await?;
 
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("await"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -181,7 +186,7 @@ async fn test_await_tool_nonexistent_operation_id() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma")).await?;
 
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("await"),
         arguments: Some(
             json!({"operation_id": "fake_operation_xyz"})
@@ -190,6 +195,7 @@ async fn test_await_tool_nonexistent_operation_id() -> Result<()> {
                 .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -218,7 +224,7 @@ async fn test_await_tool_with_tool_filter() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Request await for a specific tool prefix that has no pending operations
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("await"),
         arguments: Some(
             json!({"tools": "nonexistent_tool"})
@@ -227,6 +233,7 @@ async fn test_await_tool_with_tool_filter() -> Result<()> {
                 .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -256,7 +263,7 @@ async fn test_await_for_completed_async_operation() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Start a fast async shell command
-    let shell_params = CallToolRequestParam {
+    let shell_params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({"command": "echo 'quick test'"})
@@ -265,6 +272,7 @@ async fn test_await_for_completed_async_operation() -> Result<()> {
                 .clone(),
         ),
         task: None,
+        meta: None,
     };
     let start_result = client.call_tool(shell_params).await?;
 
@@ -287,7 +295,7 @@ async fn test_await_for_completed_async_operation() -> Result<()> {
     }
 
     // Now await for it - should find it completed
-    let await_params = CallToolRequestParam {
+    let await_params = CallToolRequestParams {
         name: Cow::Borrowed("await"),
         arguments: if let Some(ref id) = operation_id {
             Some(json!({"operation_id": id}).as_object().unwrap().clone())
@@ -300,6 +308,7 @@ async fn test_await_for_completed_async_operation() -> Result<()> {
             )
         },
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(await_params).await?;
@@ -325,10 +334,11 @@ async fn test_cancel_tool_missing_operation_id() -> Result<()> {
     let has_cancel = tools.iter().any(|t| t.name.as_ref() == "cancel");
 
     if has_cancel {
-        let params = CallToolRequestParam {
+        let params = CallToolRequestParams {
             name: Cow::Borrowed("cancel"),
             arguments: Some(json!({}).as_object().unwrap().clone()),
             task: None,
+            meta: None,
         };
 
         let result = client.call_tool(params).await;
@@ -354,7 +364,7 @@ async fn test_cancel_tool_nonexistent_operation() -> Result<()> {
     let has_cancel = tools.iter().any(|t| t.name.as_ref() == "cancel");
 
     if has_cancel {
-        let params = CallToolRequestParam {
+        let params = CallToolRequestParams {
             name: Cow::Borrowed("cancel"),
             arguments: Some(
                 json!({"operation_id": "nonexistent_op_999"})
@@ -363,6 +373,7 @@ async fn test_cancel_tool_nonexistent_operation() -> Result<()> {
                     .clone(),
             ),
             task: None,
+            meta: None,
         };
 
         let result = client.call_tool(params).await?;
@@ -395,10 +406,11 @@ async fn test_call_nonexistent_tool() -> Result<()> {
     init_test_logging();
     let client = new_client(Some(".ahma")).await?;
 
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("this_tool_definitely_does_not_exist_xyz123"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await;
@@ -423,7 +435,7 @@ async fn test_call_tool_invalid_subcommand() -> Result<()> {
         .any(|t| t.name.as_ref().starts_with("file_tools"));
 
     if has_file_tools {
-        let params = CallToolRequestParam {
+        let params = CallToolRequestParams {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(
                 json!({"subcommand": "nonexistent_subcommand"})
@@ -432,6 +444,7 @@ async fn test_call_tool_invalid_subcommand() -> Result<()> {
                     .clone(),
             ),
             task: None,
+            meta: None,
         };
 
         let result = client.call_tool(params).await;
@@ -546,7 +559,7 @@ async fn test_async_operation_full_lifecycle() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Start an async shell command
-    let shell_params = CallToolRequestParam {
+    let shell_params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({"command": "sleep 0.1 && echo lifecycle_test"})
@@ -555,21 +568,23 @@ async fn test_async_operation_full_lifecycle() -> Result<()> {
                 .clone(),
         ),
         task: None,
+        meta: None,
     };
     let start_result = client.call_tool(shell_params).await?;
     assert!(!start_result.content.is_empty());
 
     // Check status immediately
-    let status_params = CallToolRequestParam {
+    let status_params = CallToolRequestParams {
         name: Cow::Borrowed("status"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
         task: None,
+        meta: None,
     };
     let status_result = client.call_tool(status_params).await?;
     assert!(!status_result.content.is_empty());
 
     // Await should find completed operations
-    let await_params = CallToolRequestParam {
+    let await_params = CallToolRequestParams {
         name: Cow::Borrowed("await"),
         arguments: Some(
             json!({"tools": "sandboxed_shell"})
@@ -578,6 +593,7 @@ async fn test_async_operation_full_lifecycle() -> Result<()> {
                 .clone(),
         ),
         task: None,
+        meta: None,
     };
     let await_result = client.call_tool(await_params).await?;
     assert!(!await_result.content.is_empty());
@@ -613,10 +629,11 @@ async fn test_file_tools_in_temp_directory() -> Result<()> {
         .any(|t| t.name.as_ref().starts_with("file_tools"));
 
     if has_file_tools {
-        let params = CallToolRequestParam {
+        let params = CallToolRequestParams {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(json!({"subcommand": "ls"}).as_object().unwrap().clone()),
             task: None,
+            meta: None,
         };
 
         let result = client.call_tool(params).await?;
@@ -650,7 +667,7 @@ async fn test_status_with_multiple_tool_filters() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Query with multiple tool prefixes
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("status"),
         arguments: Some(
             json!({"tools": "cargo,git,sandboxed_shell"})
@@ -659,6 +676,7 @@ async fn test_status_with_multiple_tool_filters() -> Result<()> {
                 .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -690,10 +708,11 @@ async fn test_await_with_multiple_tool_filters() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
 
     // Await with multiple tool prefixes
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("await"),
         arguments: Some(json!({"tools": "cargo,git"}).as_object().unwrap().clone()),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await?;

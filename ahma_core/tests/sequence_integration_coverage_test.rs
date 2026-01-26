@@ -12,7 +12,7 @@ use ahma_core::test_utils::test_client::{new_client_in_dir, new_client_in_dir_wi
 use ahma_core::test_utils::wait_for_condition;
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::borrow::Cow;
 use tempfile::TempDir;
@@ -202,10 +202,11 @@ async fn test_sync_sequence_tool_execution() -> Result<()> {
     );
 
     // Call the synchronous sequence tool
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("sync_sequence"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -241,10 +242,11 @@ async fn test_async_sequence_tool_execution() -> Result<()> {
     let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
 
     // Call the asynchronous sequence tool
-    let params = CallToolRequestParam {
+    let params = CallToolRequestParams {
         name: Cow::Borrowed("async_sequence"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(params).await?;
@@ -273,10 +275,11 @@ async fn test_async_sequence_tool_execution() -> Result<()> {
         || {
             let client = client.clone();
             async move {
-                let status_params = CallToolRequestParam {
+                let status_params = CallToolRequestParams {
                     name: Cow::Borrowed("status"),
                     arguments: Some(json!({}).as_object().unwrap().clone()),
                     task: None,
+                    meta: None,
                 };
                 client
                     .call_tool(status_params)
@@ -290,10 +293,11 @@ async fn test_async_sequence_tool_execution() -> Result<()> {
     .await;
 
     // Check status to verify completion
-    let status_params = CallToolRequestParam {
+    let status_params = CallToolRequestParams {
         name: Cow::Borrowed("status"),
         arguments: Some(json!({}).as_object().unwrap().clone()),
         task: None,
+        meta: None,
     };
     let status_result = client.call_tool(status_params).await?;
     assert!(!status_result.content.is_empty());
@@ -322,7 +326,7 @@ async fn test_subcommand_sequence_execution() -> Result<()> {
 
     if has_multi_step {
         // Call the pipeline subcommand which is a sequence
-        let params = CallToolRequestParam {
+        let params = CallToolRequestParams {
             name: Cow::Borrowed("multi_step"),
             arguments: Some(
                 json!({"subcommand": "pipeline"})
@@ -331,6 +335,7 @@ async fn test_subcommand_sequence_execution() -> Result<()> {
                     .clone(),
             ),
             task: None,
+            meta: None,
         };
 
         let result = client.call_tool(params).await?;
@@ -366,10 +371,11 @@ async fn test_skip_sequence_step_via_env() -> Result<()> {
 
     if has_sync_seq {
         // Call the sync sequence - steps should be skipped
-        let params = CallToolRequestParam {
+        let params = CallToolRequestParams {
             name: Cow::Borrowed("sync_sequence"),
             arguments: Some(json!({}).as_object().unwrap().clone()),
             task: None,
+            meta: None,
         };
 
         let result = client.call_tool(params).await?;
@@ -413,7 +419,7 @@ async fn test_skip_subcommand_sequence_step_via_env() -> Result<()> {
         .any(|t| t.name.as_ref().starts_with("multi_step"));
 
     if has_multi_step {
-        let params = CallToolRequestParam {
+        let params = CallToolRequestParams {
             name: Cow::Borrowed("multi_step"),
             arguments: Some(
                 json!({"subcommand": "pipeline"})
@@ -422,6 +428,7 @@ async fn test_skip_subcommand_sequence_step_via_env() -> Result<()> {
                     .clone(),
             ),
             task: None,
+            meta: None,
         };
 
         let result = client.call_tool(params).await?;
@@ -472,10 +479,11 @@ async fn test_sequence_with_missing_tool_reference() -> Result<()> {
     let has_bad_seq = tools.iter().any(|t| t.name.as_ref() == "bad_sequence");
 
     if has_bad_seq {
-        let params = CallToolRequestParam {
+        let params = CallToolRequestParams {
             name: Cow::Borrowed("bad_sequence"),
             arguments: Some(json!({}).as_object().unwrap().clone()),
             task: None,
+            meta: None,
         };
 
         let result = client.call_tool(params).await;

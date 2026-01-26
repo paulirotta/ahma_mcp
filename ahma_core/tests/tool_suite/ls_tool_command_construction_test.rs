@@ -3,7 +3,7 @@ use ahma_core::test_utils as common;
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;
 use common::test_client::new_client;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::Map;
 use std::borrow::Cow;
 
@@ -23,10 +23,11 @@ async fn test_ls_tool_should_not_add_undefined_path_parameter() -> Result<()> {
     }
 
     // ACT: Execute ls tool without any parameters (empty arguments map)
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("ls_default"),
         arguments: Some(Map::new()), // Empty arguments - should not add --path=.
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await;
@@ -93,10 +94,11 @@ async fn test_ls_tool_executes_plain_ls_command() -> Result<()> {
     }
 
     // ACT: Execute ls tool with empty parameters
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("ls_default"),
         arguments: Some(Map::new()),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await?;
@@ -144,10 +146,11 @@ async fn test_ls_tool_with_valid_options() -> Result<()> {
     }
 
     // ACT: Execute ls tool (should work without adding undefined --path)
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("ls_default"),
         arguments: Some(Map::new()),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await?;

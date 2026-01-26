@@ -5,7 +5,7 @@ use ahma_core::test_utils as common;
 use ahma_core::utils::logging::init_test_logging;
 use anyhow::Result;
 use common::test_client::{new_client, new_client_with_args};
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::{Map, json};
 use std::borrow::Cow;
 
@@ -37,10 +37,11 @@ async fn test_call_tool_basic() -> Result<()> {
     // Use the await tool which should always be available - no timeout parameter needed
     let params = Map::new();
 
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("await"),
         arguments: Some(params),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await?;
@@ -76,10 +77,11 @@ async fn test_async_notification_delivery() -> Result<()> {
     let async_tool_params = json!({
         "command": "sleep 1"
     });
-    let call_params = CallToolRequestParam {
+    let call_params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: async_tool_params.as_object().cloned(),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_params).await?;
@@ -97,10 +99,11 @@ async fn test_async_notification_delivery() -> Result<()> {
 
     // 2. Use the await tool to check that async operations can be tracked - no timeout parameter needed
     let await_params = json!({});
-    let await_call_params = CallToolRequestParam {
+    let await_call_params = CallToolRequestParams {
         name: Cow::Borrowed("await"),
         arguments: await_params.as_object().cloned(),
         task: None,
+        meta: None,
     };
 
     let await_result = client.call_tool(await_call_params).await?;

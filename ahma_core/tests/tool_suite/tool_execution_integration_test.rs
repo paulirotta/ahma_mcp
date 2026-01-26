@@ -10,7 +10,7 @@ use ahma_core::skip_if_disabled_async;
 use ahma_core::test_utils as common;
 
 use common::test_client::new_client;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::borrow::Cow;
 
@@ -29,10 +29,11 @@ async fn test_file_tools_pwd_execution() {
     });
 
     let result = client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
+            meta: None,
         })
         .await;
 
@@ -68,10 +69,11 @@ async fn test_file_tools_cat_with_number_option() {
     });
 
     let result = client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
+            meta: None,
         })
         .await;
 
@@ -107,10 +109,11 @@ async fn test_file_tools_head_with_lines_option() {
     });
 
     let result = client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
+            meta: None,
         })
         .await;
 
@@ -153,10 +156,11 @@ async fn test_file_tools_find_with_name_option() {
     });
 
     let result = client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
+            meta: None,
         })
         .await;
 
@@ -194,10 +198,11 @@ async fn test_file_tools_grep_with_options() {
     });
 
     let result = client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
+            meta: None,
         })
         .await;
 
@@ -233,10 +238,11 @@ async fn test_sandboxed_shell_echo_execution() {
     });
 
     let result = client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("sandboxed_shell"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
+            meta: None,
         })
         .await;
 
@@ -270,10 +276,11 @@ async fn test_sandboxed_shell_pipe_execution() {
     });
 
     let result = client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("sandboxed_shell"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
+            meta: None,
         })
         .await;
 
@@ -300,10 +307,11 @@ async fn test_git_status_execution() {
     });
 
     let result = client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("git"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
+            meta: None,
         })
         .await;
 
@@ -340,10 +348,11 @@ async fn test_git_log_oneline_execution() {
     });
 
     let result = client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("git"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
+            meta: None,
         })
         .await;
 
@@ -367,10 +376,11 @@ async fn test_cargo_check_dry_run() {
     });
 
     let result = client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("cargo"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
+            meta: None,
         })
         .await;
 
@@ -399,10 +409,11 @@ async fn test_file_tools_ls_long_alias() {
     });
 
     let result = client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
+            meta: None,
         })
         .await;
 
@@ -442,10 +453,11 @@ async fn test_file_tools_grep_recursive_alias() {
     });
 
     let result = client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
+            meta: None,
         })
         .await;
 
@@ -484,10 +496,11 @@ async fn test_file_tools_ls_path_validation() {
     });
 
     let result = client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
+            meta: None,
         })
         .await;
 
@@ -512,10 +525,11 @@ async fn test_file_tools_cat_path_format() {
     });
 
     let result = client
-        .call_tool(CallToolRequestParam {
+        .call_tool(CallToolRequestParams {
             name: Cow::Borrowed("file_tools"),
             arguments: Some(args.as_object().unwrap().clone()),
             task: None,
+            meta: None,
         })
         .await;
 

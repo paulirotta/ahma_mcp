@@ -9,7 +9,7 @@ use ahma_core::skip_if_disabled_async_result;
 use ahma_core::test_utils::get_workspace_dir;
 use ahma_core::test_utils::test_client::new_client;
 use anyhow::Result;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::borrow::Cow;
 
@@ -38,7 +38,7 @@ async fn test_gradlew_async_build_commands() -> Result<()> {
     for (command, description) in async_commands {
         println!("Testing async command: {} - {}", command, description);
 
-        let call_param = CallToolRequestParam {
+        let call_param = CallToolRequestParams {
             name: Cow::Borrowed("sandboxed_shell"),
             arguments: Some(
                 json!({
@@ -50,6 +50,7 @@ async fn test_gradlew_async_build_commands() -> Result<()> {
                 .clone(),
             ),
             task: None,
+            meta: None,
         };
 
         let result = client.call_tool(call_param).await;
@@ -106,7 +107,7 @@ async fn test_gradlew_lint_commands() -> Result<()> {
     for (command, description) in lint_commands {
         println!("Testing lint command: {} - {}", command, description);
 
-        let call_param = CallToolRequestParam {
+        let call_param = CallToolRequestParams {
             name: Cow::Borrowed("sandboxed_shell"),
             arguments: Some(
                 json!({
@@ -119,6 +120,7 @@ async fn test_gradlew_lint_commands() -> Result<()> {
                 .clone(),
             ),
             task: None,
+            meta: None,
         };
 
         let result = client.call_tool(call_param).await;
@@ -153,7 +155,7 @@ async fn test_comprehensive_gradlew_validation() -> Result<()> {
     println!("Running comprehensive validation sequence...");
 
     // 1. Help command
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
@@ -166,6 +168,7 @@ async fn test_comprehensive_gradlew_validation() -> Result<()> {
             .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let help_result = client.call_tool(call_param).await;
@@ -176,7 +179,7 @@ async fn test_comprehensive_gradlew_validation() -> Result<()> {
     println!("✓ Help command completed");
 
     // 2. Tasks command
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
@@ -189,6 +192,7 @@ async fn test_comprehensive_gradlew_validation() -> Result<()> {
             .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let tasks_result = client.call_tool(call_param).await;
@@ -203,7 +207,7 @@ async fn test_comprehensive_gradlew_validation() -> Result<()> {
     }
 
     // 3. Properties command
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
@@ -216,6 +220,7 @@ async fn test_comprehensive_gradlew_validation() -> Result<()> {
             .clone(),
         ),
         task: None,
+        meta: None,
     };
 
     let props_result = client.call_tool(call_param).await;

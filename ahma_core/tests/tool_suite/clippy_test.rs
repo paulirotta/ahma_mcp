@@ -1,7 +1,7 @@
 //! Test for running clippy and fixing warnings.
 use ahma_core::test_utils as common;
 use anyhow::Result;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::borrow::Cow;
 
@@ -21,7 +21,7 @@ async fn test_run_clippy() -> Result<()> {
         return Ok(());
     }
 
-    let call_param = CallToolRequestParam {
+    let call_param = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             serde_json::from_value(json!({
@@ -30,6 +30,7 @@ async fn test_run_clippy() -> Result<()> {
             .unwrap(),
         ),
         task: None,
+        meta: None,
     };
 
     let result = client.call_tool(call_param).await?;
@@ -47,7 +48,7 @@ async fn test_run_clippy() -> Result<()> {
 
     if let Some(operation_id) = op_id {
         // Await for the operation to complete
-        let await_param = CallToolRequestParam {
+        let await_param = CallToolRequestParams {
             name: Cow::Borrowed("await"),
             arguments: Some(
                 serde_json::from_value(json!({
@@ -56,6 +57,7 @@ async fn test_run_clippy() -> Result<()> {
                 .unwrap(),
             ),
             task: None,
+            meta: None,
         };
 
         let await_result = client.call_tool(await_param).await?;

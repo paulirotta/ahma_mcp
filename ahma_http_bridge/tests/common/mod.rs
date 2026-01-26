@@ -348,7 +348,7 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
     });
 
     let start = Instant::now();
-    let timeout = Duration::from_secs(10);
+    let timeout = Duration::from_secs(30);
     let mut bound_port: Option<u16> = None;
 
     while start.elapsed() <= timeout {
@@ -383,12 +383,18 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
     let client = Client::new();
     let health_url = format!("http://127.0.0.1:{}/health", bound_port);
 
-    for i in 0..50 {
+    let health_start = Instant::now();
+    let health_timeout = Duration::from_secs(15);
+
+    while health_start.elapsed() <= health_timeout {
         sleep(Duration::from_millis(100)).await;
         if let Ok(resp) = client.get(&health_url).send().await
             && resp.status().is_success()
         {
-            eprintln!("[TestServer] Server ready after {}ms", (i + 1) * 100);
+            eprintln!(
+                "[TestServer] Server ready after {}ms",
+                health_start.elapsed().as_millis()
+            );
             return Ok(TestServerInstance {
                 child,
                 port: bound_port,
@@ -400,7 +406,7 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
     // Failed to start - clean up
     let _ = child.kill();
     let _ = child.wait();
-    Err("Test server failed to respond to health check within 5 seconds".to_string())
+    Err("Test server failed to respond to health check within 15 seconds".to_string())
 }
 
 /// Legacy function for backward compatibility. Spawns a new server each time.
