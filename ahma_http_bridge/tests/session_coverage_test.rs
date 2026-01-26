@@ -469,7 +469,7 @@ async fn test_send_request_nonexistent_session() {
     });
 
     let result = session_manager
-        .send_request(fake_session_id, &request)
+        .send_request(fake_session_id, &request, None)
         .await;
 
     assert!(result.is_err(), "Should fail for nonexistent session");

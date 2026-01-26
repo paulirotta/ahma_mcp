@@ -1,7 +1,9 @@
 //! HTTP-to-stdio bridge implementation
 
 use crate::error::{BridgeError, Result};
-use crate::session::{SessionManager, SessionManagerConfig};
+use crate::session::{
+    SessionManager, SessionManagerConfig, request_timeout_secs, tool_call_timeout_secs,
+};
 use axum::{
     Json, Router,
     extract::State,
@@ -441,8 +443,9 @@ async fn handle_session_isolated_request(
 
                 // Forward the initialize request to the new session
                 // Sandbox will be locked when client responds to roots/list via SSE
+                let init_timeout = Duration::from_secs(request_timeout_secs());
                 match session_manager
-                    .send_request(&new_session_id, &payload)
+                    .send_request(&new_session_id, &payload, Some(init_timeout))
                     .await
                 {
                     Ok(response) => {
@@ -731,7 +734,25 @@ async fn handle_session_isolated_request(
         }
 
         // Forward request to session
-        match session_manager.send_request(&session_id, &payload).await {
+        let request_timeout = if method == Some("tools/call") {
+            let arg_timeout_secs = payload
+                .get("params")
+                .and_then(|p| p.get("arguments"))
+                .and_then(|a| a.get("timeout_seconds"))
+                .and_then(|v| v.as_u64());
+            let default_secs = tool_call_timeout_secs();
+            let capped_secs = arg_timeout_secs
+                .map(|v| v.min(default_secs))
+                .unwrap_or(default_secs);
+            Duration::from_secs(capped_secs)
+        } else {
+            Duration::from_secs(request_timeout_secs())
+        };
+
+        match session_manager
+            .send_request(&session_id, &payload, Some(request_timeout))
+            .await
+        {
             Ok(response) => {
                 // Check if this is a roots/list response - lock sandbox (R8D.7-R8D.8)
                 if method == Some("roots/list")

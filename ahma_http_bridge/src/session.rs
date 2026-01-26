@@ -133,6 +133,24 @@ pub fn handshake_timeout_secs() -> u64 {
         .unwrap_or(30)
 }
 
+/// Get the request timeout in seconds for bridge → subprocess calls.
+/// Defaults to 60 seconds if not set or invalid.
+pub fn request_timeout_secs() -> u64 {
+    std::env::var("AHMA_HTTP_BRIDGE_REQUEST_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(60)
+}
+
+/// Get the tools/call request timeout in seconds.
+/// Defaults to 25 seconds if not set or invalid.
+pub fn tool_call_timeout_secs() -> u64 {
+    std::env::var("AHMA_HTTP_BRIDGE_TOOL_CALL_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(25)
+}
+
 /// Session termination reason
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionTerminationReason {
@@ -645,7 +663,12 @@ impl SessionManager {
     }
 
     /// Send a request and wait for response
-    pub async fn send_request(&self, session_id: &str, request: &Value) -> Result<Value> {
+    pub async fn send_request(
+        &self,
+        session_id: &str,
+        request: &Value,
+        timeout: Option<Duration>,
+    ) -> Result<Value> {
         let session = self.sessions.get(session_id).ok_or_else(|| {
             BridgeError::Communication(format!("Session not found: {}", session_id))
         })?;
@@ -698,7 +721,8 @@ impl SessionManager {
 
         // Wait for response if this is a request (has ID)
         if let Some(rx) = response_rx {
-            match tokio::time::timeout(std::time::Duration::from_secs(60), rx).await {
+            let wait_timeout = timeout.unwrap_or_else(|| Duration::from_secs(request_timeout_secs()));
+            match tokio::time::timeout(wait_timeout, rx).await {
                 Ok(Ok(response)) => Ok(response),
                 Ok(Err(_)) => Err(BridgeError::Communication(
                     "Response channel closed".to_string(),
