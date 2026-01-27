@@ -785,6 +785,14 @@ async fn handle_session_isolated_request(
                     }
                 }
 
+                // Mark MCP as initialized BEFORE constructing response to prevent race conditions
+                if is_initialized_notification
+                    && let Some(session) = session_manager.get_session(&session_id)
+                    && let Err(e) = session.mark_mcp_initialized().await
+                {
+                    warn!(session_id = %session_id, "Failed to mark MCP initialized: {}", e);
+                }
+
                 // Add session ID to response header
                 let mut http_response = json_response(response);
 
@@ -794,13 +802,6 @@ async fn handle_session_isolated_request(
                         .parse()
                         .unwrap_or_else(|_| "invalid".parse().unwrap()),
                 );
-
-                if is_initialized_notification
-                    && let Some(session) = session_manager.get_session(&session_id)
-                    && let Err(e) = session.mark_mcp_initialized().await
-                {
-                    warn!(session_id = %session_id, "Failed to mark MCP initialized: {}", e);
-                }
 
                 http_response
             }

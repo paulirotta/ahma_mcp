@@ -1219,10 +1219,42 @@ impl AhmaMcpService {
     ///
     /// This implements the MCP roots protocol where the server requests the
     /// client's workspace roots to establish sandbox boundaries.
-    async fn configure_sandbox_from_roots(&self, _peer: &Peer<RoleServer>) {
-        tracing::warn!(
-            "Dynamic sandbox configuration from roots/list is temporarily disabled due to architecture refactor."
-        );
+    async fn configure_sandbox_from_roots(&self, peer: &Peer<RoleServer>) {
+        eprintln!("DEBUG: ahma_core calling peer.list_roots()");
+        tracing::info!("Requesting roots/list from client...");
+
+        // Use the list_roots() method provided by Peer<RoleServer>
+        match peer.list_roots().await {
+            Ok(result) => {
+                let roots = result.roots;
+                eprintln!("DEBUG: ahma_core received {} roots", roots.len());
+                tracing::info!("Received {} roots from client: {:?}", roots.len(), roots);
+
+                // Convert McpRoot URIs to PathBufs
+                let mut new_scopes = Vec::new();
+                for root in roots {
+                    #[allow(clippy::collapsible_if)]
+                    if let Ok(url) = url::Url::parse(&root.uri)
+                        && url.scheme() == "file"
+                    {
+                        if let Ok(path) = url.to_file_path() {
+                            new_scopes.push(path);
+                        }
+                    }
+                }
+
+                if !new_scopes.is_empty() {
+                    if let Err(e) = self.adapter.sandbox().update_scopes(new_scopes) {
+                        tracing::error!("Failed to update sandbox from roots: {}", e);
+                    } else {
+                        tracing::info!("Sandbox scopes updated successfully");
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to request roots/list: {}", e);
+            }
+        }
     }
 }
 
@@ -1304,6 +1336,7 @@ impl ServerHandler for AhmaMcpService {
         context: NotificationContext<RoleServer>,
     ) -> impl std::future::Future<Output = ()> + Send + '_ {
         async move {
+            eprintln!("DEBUG: Received roots/list_changed notification in ahma_core");
             tracing::info!("Received roots/list_changed notification");
 
             // This notification is sent by the HTTP bridge when SSE connects.

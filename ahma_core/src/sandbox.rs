@@ -72,11 +72,30 @@ pub enum SandboxMode {
 }
 
 /// The security context for the Ahma session.
-#[derive(Debug, Clone)]
 pub struct Sandbox {
-    scopes: Vec<PathBuf>,
+    scopes: std::sync::RwLock<Vec<PathBuf>>,
     mode: SandboxMode,
     no_temp_files: bool,
+}
+
+impl Clone for Sandbox {
+    fn clone(&self) -> Self {
+        Self {
+            scopes: std::sync::RwLock::new(self.scopes.read().unwrap().clone()),
+            mode: self.mode,
+            no_temp_files: self.no_temp_files,
+        }
+    }
+}
+
+impl std::fmt::Debug for Sandbox {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Sandbox")
+            .field("scopes", &self.scopes.read().unwrap())
+            .field("mode", &self.mode)
+            .field("no_temp_files", &self.no_temp_files)
+            .finish()
+    }
 }
 
 impl Sandbox {
@@ -98,7 +117,7 @@ impl Sandbox {
         }
 
         Ok(Self {
-            scopes: canonicalized,
+            scopes: std::sync::RwLock::new(canonicalized),
             mode,
             no_temp_files,
         })
@@ -107,10 +126,29 @@ impl Sandbox {
     /// Create a sandbox in Test mode (bypasses restrictions).
     pub fn new_test() -> Self {
         Self {
-            scopes: vec![PathBuf::from("/")],
+            scopes: std::sync::RwLock::new(vec![PathBuf::from("/")]),
             mode: SandboxMode::Test,
             no_temp_files: false,
         }
+    }
+
+    /// Update the sandbox scopes.
+    pub fn update_scopes(&self, scopes: Vec<PathBuf>) -> Result<()> {
+        let mut canonicalized = Vec::with_capacity(scopes.len());
+        for scope in scopes {
+            let canonical = std::fs::canonicalize(&scope).map_err(|e| {
+                anyhow!(
+                    "Failed to canonicalize sandbox scope '{}': {}",
+                    scope.display(),
+                    e
+                )
+            })?;
+            canonicalized.push(canonical);
+        }
+
+        let mut current_scopes = self.scopes.write().unwrap();
+        *current_scopes = canonicalized;
+        Ok(())
     }
 
     /// Check if the sandbox is in test mode.
@@ -124,27 +162,29 @@ impl Sandbox {
     }
 
     /// Get the allowed scopes.
-    pub fn scopes(&self) -> &[PathBuf] {
-        &self.scopes
+    pub fn scopes(&self) -> ScopesGuard<'_> {
+        ScopesGuard(self.scopes.read().unwrap())
     }
 
     /// Check if a path is within any of the sandbox scopes.
     pub fn validate_path(&self, path: &Path) -> Result<PathBuf> {
+        let scopes = self.scopes();
+
         // In Test mode, we only bypass validation if the sandbox is explicitly unrestricted (root scope or no scopes).
         // If specific scopes are provided, we enforce them logically even in Test mode, while still bypassing
         // the kernel-level sandboxing in create_command.
         if self.mode == SandboxMode::Test
-            && (self.scopes.is_empty() || self.scopes.iter().any(|s| s == Path::new("/")))
+            && (scopes.is_empty() || scopes.iter().any(|s| s == Path::new("/")))
         {
             return std::fs::canonicalize(path).or_else(|_| Ok(path.to_path_buf()));
         }
 
-        if self.scopes.is_empty() {
+        if scopes.is_empty() {
             return Err(anyhow!("No sandbox scopes configured"));
         }
 
         // We assume the first scope is the "primary" one for relative path resolution
-        let first_scope = self.scopes.first().ok_or_else(|| anyhow!("No scopes"))?;
+        let first_scope = scopes.first().ok_or_else(|| anyhow!("No scopes"))?;
 
         // If path is relative, join with first sandbox scope
         let full_path = if path.is_absolute() {
@@ -177,7 +217,7 @@ impl Sandbox {
 
         // Check if canonical path is within any scope
         // Note: In LANDLOCK (Linux) mode, the kernel enforces this too, but we check here for helpful errors.
-        if self.scopes.iter().any(|scope| canonical.starts_with(scope)) {
+        if scopes.iter().any(|scope| canonical.starts_with(scope)) {
             // High security mode: block temp directories and /dev even if they are within scope
             if self.no_temp_files {
                 let path_str = canonical.to_string_lossy();
@@ -197,7 +237,7 @@ impl Sandbox {
         } else {
             Err(SandboxError::PathOutsideSandbox {
                 path: path.to_path_buf(),
-                scopes: self.scopes.clone(),
+                scopes: scopes.to_vec(),
             }
             .into())
         }
@@ -321,7 +361,7 @@ impl Sandbox {
 
         // Allowed scopes strings (all scopes are read/write allowed)
         let mut scope_rules = String::new();
-        for scope in &self.scopes {
+        for scope in self.scopes.read().unwrap().iter() {
             scope_rules.push_str(&format!(
                 "(allow file-write* (subpath \"{}\"))\n",
                 scope.display()
@@ -580,4 +620,21 @@ pub fn enforce_landlock_sandbox(scopes: &[PathBuf]) -> Result<()> {
 #[cfg(not(target_os = "linux"))]
 pub fn enforce_landlock_sandbox(_scopes: &[PathBuf]) -> Result<()> {
     Ok(())
+}
+
+/// A guard that holds a read lock on the sandbox scopes.
+pub struct ScopesGuard<'a>(std::sync::RwLockReadGuard<'a, Vec<PathBuf>>);
+
+impl std::ops::Deref for ScopesGuard<'_> {
+    type Target = [PathBuf];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for ScopesGuard<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
 }

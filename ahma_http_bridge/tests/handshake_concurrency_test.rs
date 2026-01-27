@@ -93,8 +93,8 @@ async fn start_deferred_sandbox_server(
     SandboxTestEnv::configure(&mut cmd);
 
     let child = cmd
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
         .spawn()
         .expect("Failed to start HTTP bridge");
 
@@ -302,6 +302,10 @@ async fn test_tool_call_before_roots_handshake() {
     });
     let _ = send_mcp_request(&client, &base_url, &initialized, Some(&session_id)).await;
 
+    // Give the session time to process the initialized notification
+    // Increased delay to ensure state transition completes before SSE connection
+    sleep(Duration::from_millis(500)).await;
+
     // 3. IMMEDIATELY try to call a tool (before answering roots/list)
     let tool_call = json!({
         "jsonrpc": "2.0",
@@ -432,6 +436,9 @@ async fn test_slow_client_handshake() {
         "method": "notifications/initialized"
     });
     let _ = send_mcp_request(&client, &base_url, &initialized, Some(&session_id)).await;
+
+    // Give the session time to process the initialized notification
+    sleep(Duration::from_millis(500)).await;
 
     // Start SSE connection but DELAY sending the roots response
     let root_uri = encode_file_uri(temp_dir.path());
@@ -614,6 +621,9 @@ async fn test_rapid_connect_disconnect() {
             "method": "notifications/initialized"
         });
         let _ = send_mcp_request(&client, &base_url, &initialized, Some(&session_id)).await;
+
+        // Give the session time to process the initialized notification
+        sleep(Duration::from_millis(500)).await;
 
         // Complete handshake for second client
         let root_uri = encode_file_uri(temp_dir.path());

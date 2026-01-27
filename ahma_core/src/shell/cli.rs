@@ -239,7 +239,7 @@ pub async fn run() -> Result<()> {
     // 3. Current working directory
     let sandbox_scopes = if cli.defer_sandbox {
         tracing::info!("Sandbox initialization deferred - will be set from client roots/list");
-        None
+        Some(Vec::new())
     } else if !cli.sandbox_scope.is_empty() {
         // CLI override takes precedence
         let mut canonical_scopes = Vec::new();
@@ -288,7 +288,7 @@ pub async fn run() -> Result<()> {
         #[cfg(target_os = "linux")]
         {
             if sandbox_mode == sandbox::SandboxMode::Strict {
-                if let Err(e) = sandbox::enforce_landlock_sandbox(s.scopes()) {
+                if let Err(e) = sandbox::enforce_landlock_sandbox(&s.scopes()) {
                     tracing::error!("Failed to enforce Landlock sandbox: {}", e);
                     return Err(e.into());
                 }

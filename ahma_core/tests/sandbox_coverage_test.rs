@@ -34,10 +34,13 @@ fn test_sandbox_error_debug_format() {
 
 #[test]
 fn test_sandbox_new() {
-    let scope = PathBuf::from("/test/scope");
+    let temp = TempDir::new().unwrap();
+    let scope = temp.path().to_path_buf();
     let sandbox = Sandbox::new(vec![scope.clone()], SandboxMode::Strict, false).unwrap();
 
-    assert!(sandbox.scopes().contains(&scope));
+    // Sandbox canonicalizes paths, so we need to canonicalize for comparison
+    let canonical_scope = std::fs::canonicalize(&scope).unwrap();
+    assert!(sandbox.scopes().contains(&canonical_scope));
     assert!(!sandbox.is_test_mode());
     assert!(!sandbox.is_no_temp_files());
 }
@@ -52,7 +55,8 @@ fn test_sandbox_new_test_mode() {
 
 #[test]
 fn test_sandbox_no_temp_files() {
-    let scope = PathBuf::from("/test/scope");
+    let temp = TempDir::new().unwrap();
+    let scope = temp.path().to_path_buf();
     let sandbox = Sandbox::new(vec![scope], SandboxMode::Strict, true).unwrap();
     assert!(sandbox.is_no_temp_files());
 }

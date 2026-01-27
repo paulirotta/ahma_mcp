@@ -284,8 +284,7 @@ impl Adapter {
         // Validate working directory against sandbox scope.
         let safe_wd = self
             .sandbox
-            .validate_path(std::path::Path::new(working_dir))
-            .context("Sandbox validation failed for working directory")?;
+            .validate_path(std::path::Path::new(working_dir))?;
 
         let (program, args_vec) = self
             .prepare_command_and_args(command, args.as_ref(), subcommand_config, &safe_wd)
@@ -451,8 +450,7 @@ impl Adapter {
         // Validate working directory against sandbox scope.
         let safe_wd = self
             .sandbox
-            .validate_path(std::path::Path::new(working_dir))
-            .context("Sandbox validation failed for working directory")?;
+            .validate_path(std::path::Path::new(working_dir))?;
         let safe_wd_str = safe_wd.to_string_lossy().to_string();
 
         // Validate command arguments

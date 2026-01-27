@@ -359,6 +359,12 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
                     let port_str = &line[idx + "AHMA_BOUND_PORT=".len()..];
                     bound_port = port_str.trim().parse().ok();
                     if bound_port.is_some() {
+                        // Start a background thread to keep echoing logs
+                        std::thread::spawn(move || {
+                            while let Ok(line) = line_rx.recv() {
+                                eprintln!("{}", line);
+                            }
+                        });
                         break;
                     }
                 }
