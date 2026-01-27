@@ -296,13 +296,13 @@ async fn handle_sse_stream(State(state): State<Arc<BridgeState>>, headers: Heade
 
     info!(session_id = %session_id, "SSE stream opened");
 
+    // Subscribe to the session's broadcast channel
+    let rx = session.subscribe();
+
     // Mark SSE as connected - if MCP is already initialized, this will trigger roots/list_changed
     if let Err(e) = session.mark_sse_connected().await {
         warn!(session_id = %session_id, "Failed to mark SSE connected: {}", e);
     }
-
-    // Subscribe to the session's broadcast channel
-    let rx = session.subscribe();
 
     // Convert broadcast receiver to a stream of SSE events
     let stream = BroadcastStream::new(rx).filter_map(move |result| {
