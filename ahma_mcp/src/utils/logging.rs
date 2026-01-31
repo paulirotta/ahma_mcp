@@ -45,8 +45,11 @@
 
 use anyhow::Result;
 use directories::ProjectDirs;
+#[cfg(feature = "opentelemetry")]
 use opentelemetry::{KeyValue, trace::TracerProvider};
+#[cfg(feature = "opentelemetry")]
 use opentelemetry_otlp::WithExportConfig;
+#[cfg(feature = "opentelemetry")]
 use opentelemetry_sdk::{Resource, trace as sdktrace};
 use std::{io::stderr, path::Path, sync::Once};
 use tracing_subscriber::{EnvFilter, fmt::layer, prelude::*};
@@ -76,8 +79,6 @@ pub fn init_logging(log_level: &str, log_to_file: bool) -> Result<()> {
         let env_filter = EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| EnvFilter::new(format!("{log_level},ahma_mcp=debug")));
 
-        let otel_layer = init_otel();
-
         // Attempt to log to a file, fall back to stderr.
         if log_to_file {
             if let Some(proj_dirs) = ProjectDirs::from("com", "AhmaMcp", "ahma_mcp") {
@@ -98,52 +99,40 @@ pub fn init_logging(log_level: &str, log_to_file: bool) -> Result<()> {
                     Err(Box::new("Cannot write to log directory") as Box<dyn std::any::Any + Send>)
                 };
 
-                match file_appender_result {
-                    Ok(file_appender) => {
-                        // Successfully created file appender
-                        let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+                if let Ok(file_appender) = file_appender_result {
+                    // Successfully created file appender
+                    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
-                        tracing_subscriber::registry()
-                            .with(env_filter)
-                            .with(otel_layer)
-                            .with(layer().with_writer(non_blocking).with_ansi(false))
-                            .init();
-                        // The guard is intentionally leaked to ensure logs are flushed on exit.
-                        Box::leak(Box::new(_guard));
-                    }
-                    Err(_) => {
-                        // Fallback to stderr if file appender creation fails or panics
-                        // This handles permission denied, sandboxing issues, etc.
-                        // Enable ANSI colors for terminal output
-                        tracing_subscriber::registry()
-                            .with(env_filter)
-                            .with(otel_layer)
-                            .with(layer().with_writer(stderr).with_ansi(true))
-                            .init();
-                    }
+                    let subscriber = tracing_subscriber::registry()
+                        .with(env_filter)
+                        .with(layer().with_writer(non_blocking).with_ansi(false));
+
+                    #[cfg(feature = "opentelemetry")]
+                    let subscriber = subscriber.with(init_otel());
+
+                    subscriber.init();
+                    // The guard is intentionally leaked to ensure logs are flushed on exit.
+                    Box::leak(Box::new(_guard));
+                    return;
                 }
-            } else {
-                // Fallback to stderr if project directory is not available.
-                // Enable ANSI colors for terminal output
-                tracing_subscriber::registry()
-                    .with(env_filter)
-                    .with(otel_layer)
-                    .with(layer().with_writer(stderr).with_ansi(true))
-                    .init();
             }
-        } else {
-            // Log to stderr with ANSI colors enabled for terminal output
-            tracing_subscriber::registry()
-                .with(env_filter)
-                .with(otel_layer)
-                .with(layer().with_writer(stderr).with_ansi(true))
-                .init();
         }
+
+        // Fallback or explicit stderr logging
+        let subscriber = tracing_subscriber::registry()
+            .with(env_filter)
+            .with(layer().with_writer(stderr).with_ansi(true));
+
+        #[cfg(feature = "opentelemetry")]
+        let subscriber = subscriber.with(init_otel());
+
+        subscriber.init();
     });
 
     Ok(())
 }
 
+#[cfg(feature = "opentelemetry")]
 fn init_otel<S>() -> Option<tracing_opentelemetry::OpenTelemetryLayer<S, sdktrace::Tracer>>
 where
     S: tracing::Subscriber + for<'span> tracing_subscriber::registry::LookupSpan<'span>,

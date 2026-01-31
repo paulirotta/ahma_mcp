@@ -1,7 +1,10 @@
 use ahma_http_bridge::{BridgeConfig, start_bridge};
 use clap::Parser;
+#[cfg(feature = "opentelemetry")]
 use opentelemetry::{KeyValue, trace::TracerProvider};
+#[cfg(feature = "opentelemetry")]
 use opentelemetry_otlp::WithExportConfig;
+#[cfg(feature = "opentelemetry")]
 use opentelemetry_sdk::{Resource, trace as sdktrace};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -50,13 +53,16 @@ async fn main() -> anyhow::Result<()> {
     let env_filter = tracing_subscriber::EnvFilter::new(
         std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
     );
-    let otel_layer = init_otel();
+    let _otel_layer = init_otel();
 
-    tracing_subscriber::registry()
+    let subscriber = tracing_subscriber::registry()
         .with(env_filter)
-        .with(otel_layer)
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+        .with(tracing_subscriber::fmt::layer());
+
+    #[cfg(feature = "opentelemetry")]
+    let subscriber = subscriber.with(_otel_layer);
+
+    subscriber.init();
 
     let args = Args::parse();
 
@@ -97,6 +103,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "opentelemetry")]
 fn init_otel<S>() -> Option<tracing_opentelemetry::OpenTelemetryLayer<S, sdktrace::Tracer>>
 where
     S: tracing::Subscriber + for<'span> tracing_subscriber::registry::LookupSpan<'span>,
@@ -125,6 +132,11 @@ where
     } else {
         None
     }
+}
+
+#[cfg(not(feature = "opentelemetry"))]
+fn init_otel() -> Option<()> {
+    None
 }
 
 fn detect_local_debug_binary(base_dir: &Path) -> Option<String> {
