@@ -1,0 +1,498 @@
+//! Schema generation for MCP tools.
+//!
+//! Contains functions for generating JSON schemas from tool configurations.
+
+use serde_json::{Map, Value};
+use std::sync::Arc;
+
+use crate::config::{CommandOption, SubcommandConfig, ToolConfig};
+
+use super::types::GuidanceConfig;
+
+/// Normalizes option types to JSON Schema types.
+pub fn normalize_option_type(option_type: &str) -> &'static str {
+    match option_type {
+        "bool" | "boolean" => "boolean",
+        "int" | "integer" => "integer",
+        "array" => "array",
+        "number" => "number",
+        "string" => "string",
+        _ => "string",
+    }
+}
+
+/// Builds the items schema for array-type options.
+pub fn build_items_schema(option: &CommandOption) -> Map<String, Value> {
+    let mut items_schema = Map::new();
+
+    if let Some(spec) = option.items.as_ref() {
+        items_schema.insert("type".to_string(), Value::String(spec.item_type.clone()));
+        if let Some(format) = &spec.format {
+            items_schema.insert("format".to_string(), Value::String(format.clone()));
+        }
+        if let Some(description) = &spec.description {
+            items_schema.insert(
+                "description".to_string(),
+                Value::String(description.clone()),
+            );
+        }
+    } else {
+        items_schema.insert("type".to_string(), Value::String("string".to_string()));
+        if let Some(format) = &option.format {
+            items_schema.insert("format".to_string(), Value::String(format.clone()));
+        }
+    }
+
+    items_schema
+}
+
+/// Generates the JSON schema for a subcommand's options.
+pub fn get_schema_for_options(sub_config: &SubcommandConfig) -> (Map<String, Value>, Vec<Value>) {
+    let mut properties = Map::new();
+    let mut required = Vec::new();
+
+    if let Some(options) = sub_config.options.as_deref() {
+        for option in options {
+            let mut option_schema = Map::new();
+            let param_type = normalize_option_type(&option.option_type);
+            option_schema.insert("type".to_string(), Value::String(param_type.to_string()));
+            if param_type == "array" {
+                let items_schema = build_items_schema(option);
+                option_schema.insert("items".to_string(), Value::Object(items_schema));
+            }
+            option_schema.insert(
+                "description".to_string(),
+                Value::String(option.description.clone().unwrap_or_default()),
+            );
+            if let Some(format) = &option.format {
+                option_schema.insert("format".to_string(), Value::String(format.clone()));
+            }
+
+            properties.insert(option.name.clone(), Value::Object(option_schema));
+
+            if option.required.unwrap_or(false) {
+                required.push(Value::String(option.name.clone()));
+            }
+        }
+    }
+
+    if let Some(positional_args) = sub_config.positional_args.as_deref() {
+        for arg in positional_args {
+            let mut arg_schema = Map::new();
+            let param_type = normalize_option_type(&arg.option_type);
+            arg_schema.insert("type".to_string(), Value::String(param_type.to_string()));
+            if let Some(ref desc) = arg.description {
+                arg_schema.insert("description".to_string(), Value::String(desc.clone()));
+            }
+            if let Some(ref format) = arg.format {
+                arg_schema.insert("format".to_string(), Value::String(format.clone()));
+            }
+            if param_type == "array" {
+                let items_schema = build_items_schema(arg);
+                arg_schema.insert("items".to_string(), Value::Object(items_schema));
+            }
+            properties.insert(arg.name.clone(), Value::Object(arg_schema));
+            if arg.required.unwrap_or(false) {
+                required.push(Value::String(arg.name.clone()));
+            }
+        }
+    }
+
+    (properties, required)
+}
+
+/// Recursively collects all leaf subcommands from a tool's configuration.
+pub fn collect_leaf_subcommands<'a>(
+    subcommands: &'a [SubcommandConfig],
+    prefix: &str,
+    leaves: &mut Vec<(String, &'a SubcommandConfig)>,
+) {
+    for sub in subcommands {
+        if !sub.enabled {
+            continue;
+        }
+
+        let current_path = if prefix.is_empty() {
+            sub.name.clone()
+        } else if sub.name == "default" {
+            prefix.to_string()
+        } else {
+            format!("{}_{}", prefix, sub.name)
+        };
+
+        if let Some(nested_subcommands) = &sub.subcommand {
+            collect_leaf_subcommands(nested_subcommands, &current_path, leaves);
+        } else {
+            leaves.push((current_path, sub));
+        }
+    }
+}
+
+/// Generates the JSON schema for a tool configuration file.
+pub fn generate_schema_for_tool_config(
+    tool_config: &ToolConfig,
+    guidance: &Option<GuidanceConfig>,
+) -> Arc<Map<String, Value>> {
+    let mut leaf_subcommands = Vec::new();
+    if let Some(subcommands) = &tool_config.subcommand {
+        collect_leaf_subcommands(subcommands, "", &mut leaf_subcommands);
+    }
+
+    // Case 1: Single default subcommand. No `subcommand` parameter needed.
+    if leaf_subcommands.len() == 1 && leaf_subcommands[0].0 == "default" {
+        let (_, sub_config) = &leaf_subcommands[0];
+        let (mut properties, required) = get_schema_for_options(sub_config);
+
+        if tool_config.name != "cargo" {
+            properties.insert(
+                "working_directory".to_string(),
+                serde_json::json!({
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                }),
+            );
+        }
+
+        let mut schema = Map::new();
+        schema.insert("type".to_string(), Value::String("object".to_string()));
+        schema.insert("properties".to_string(), Value::Object(properties));
+        if !required.is_empty() {
+            schema.insert("required".to_string(), Value::Array(required));
+        }
+        return Arc::new(schema);
+    }
+
+    // Case 2: Multiple subcommands. Use `subcommand` enum and `oneOf`.
+    let mut all_properties = Map::new();
+    let mut one_of = Vec::new();
+    let mut subcommand_enum = Vec::new();
+
+    for (path, sub_config) in leaf_subcommands {
+        subcommand_enum.push(Value::String(path.clone()));
+        let (sub_properties, sub_required) = get_schema_for_options(sub_config);
+
+        // Merge properties into the main properties map
+        all_properties.extend(sub_properties);
+
+        let mut then_clause = Map::new();
+        if !sub_required.is_empty() {
+            then_clause.insert("required".to_string(), Value::Array(sub_required));
+        }
+
+        let if_clause = serde_json::json!({
+            "properties": { "subcommand": { "const": path } }
+        });
+
+        let mut one_of_entry = Map::new();
+        one_of_entry.insert("if".to_string(), if_clause);
+        if !then_clause.is_empty() {
+            one_of_entry.insert("then".to_string(), Value::Object(then_clause));
+        }
+        one_of.push(Value::Object(one_of_entry));
+    }
+
+    if !subcommand_enum.is_empty() {
+        all_properties.insert(
+            "subcommand".to_string(),
+            serde_json::json!({
+                "type": "string",
+                "description": "The subcommand to execute.",
+                "enum": subcommand_enum
+            }),
+        );
+    }
+
+    if tool_config.name != "cargo" {
+        all_properties.insert(
+            "working_directory".to_string(),
+            serde_json::json!({
+                "type": "string",
+                "description": "Working directory for command execution",
+                "format": "path"
+            }),
+        );
+    }
+
+    let mut schema = Map::new();
+    schema.insert("type".to_string(), Value::String("object".to_string()));
+    schema.insert("properties".to_string(), Value::Object(all_properties));
+    if !subcommand_enum.is_empty() {
+        schema.insert(
+            "required".to_string(),
+            Value::Array(vec![Value::String("subcommand".to_string())]),
+        );
+    }
+    if !one_of.is_empty() {
+        schema.insert("oneOf".to_string(), Value::Array(one_of));
+    }
+
+    // Suppress unused guidance warning - guidance is used for tool descriptions, not schemas
+    let _ = guidance;
+
+    Arc::new(schema)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{CommandOption, ItemsSpec, SubcommandConfig};
+
+    // ============= normalize_option_type tests =============
+
+    #[test]
+    fn test_normalize_option_type_bool_variants() {
+        assert_eq!(normalize_option_type("bool"), "boolean");
+        assert_eq!(normalize_option_type("boolean"), "boolean");
+    }
+
+    #[test]
+    fn test_normalize_option_type_int_variants() {
+        assert_eq!(normalize_option_type("int"), "integer");
+        assert_eq!(normalize_option_type("integer"), "integer");
+    }
+
+    #[test]
+    fn test_normalize_option_type_passthrough() {
+        assert_eq!(normalize_option_type("array"), "array");
+        assert_eq!(normalize_option_type("number"), "number");
+        assert_eq!(normalize_option_type("string"), "string");
+    }
+
+    #[test]
+    fn test_normalize_option_type_unknown_defaults_to_string() {
+        assert_eq!(normalize_option_type("unknown"), "string");
+        assert_eq!(normalize_option_type("foo"), "string");
+        assert_eq!(normalize_option_type(""), "string");
+    }
+
+    // ============= build_items_schema tests =============
+
+    #[test]
+    fn test_build_items_schema_without_items_spec() {
+        let option = CommandOption {
+            name: "files".to_string(),
+            option_type: "array".to_string(),
+            description: Some("List of files".to_string()),
+            required: None,
+            format: None,
+            items: None,
+            file_arg: None,
+            file_flag: None,
+            alias: None,
+        };
+
+        let schema = build_items_schema(&option);
+        assert_eq!(schema.get("type").unwrap(), "string");
+        assert!(schema.get("format").is_none());
+    }
+
+    #[test]
+    fn test_build_items_schema_with_format_on_option() {
+        let option = CommandOption {
+            name: "files".to_string(),
+            option_type: "array".to_string(),
+            description: Some("List of files".to_string()),
+            required: None,
+            format: Some("path".to_string()),
+            items: None,
+            file_arg: None,
+            file_flag: None,
+            alias: None,
+        };
+
+        let schema = build_items_schema(&option);
+        assert_eq!(schema.get("type").unwrap(), "string");
+        assert_eq!(schema.get("format").unwrap(), "path");
+    }
+
+    #[test]
+    fn test_build_items_schema_with_full_items_spec() {
+        let option = CommandOption {
+            name: "files".to_string(),
+            option_type: "array".to_string(),
+            description: Some("List of files".to_string()),
+            required: None,
+            format: None,
+            items: Some(ItemsSpec {
+                item_type: "string".to_string(),
+                format: Some("path".to_string()),
+                description: Some("A file path".to_string()),
+            }),
+            file_arg: None,
+            file_flag: None,
+            alias: None,
+        };
+
+        let schema = build_items_schema(&option);
+        assert_eq!(schema.get("type").unwrap(), "string");
+        assert_eq!(schema.get("format").unwrap(), "path");
+        assert_eq!(schema.get("description").unwrap(), "A file path");
+    }
+
+    #[test]
+    fn test_build_items_schema_items_type_override() {
+        // Items spec should override default string type
+        let option = CommandOption {
+            name: "ids".to_string(),
+            option_type: "array".to_string(),
+            description: Some("List of IDs".to_string()),
+            required: None,
+            format: None,
+            items: Some(ItemsSpec {
+                item_type: "integer".to_string(),
+                format: None,
+                description: None,
+            }),
+            file_arg: None,
+            file_flag: None,
+            alias: None,
+        };
+
+        let schema = build_items_schema(&option);
+        assert_eq!(schema.get("type").unwrap(), "integer");
+    }
+
+    // ============= collect_leaf_subcommands tests =============
+
+    fn make_subcommand(name: &str, description: &str, enabled: bool) -> SubcommandConfig {
+        SubcommandConfig {
+            name: name.to_string(),
+            description: description.to_string(),
+            subcommand: None,
+            options: None,
+            positional_args: None,
+            positional_args_first: None,
+            timeout_seconds: None,
+            synchronous: None,
+            enabled,
+            guidance_key: None,
+            sequence: None,
+            step_delay_ms: None,
+            availability_check: None,
+            install_instructions: None,
+        }
+    }
+
+    fn make_subcommand_with_nested(
+        name: &str,
+        description: &str,
+        enabled: bool,
+        nested: Vec<SubcommandConfig>,
+    ) -> SubcommandConfig {
+        SubcommandConfig {
+            name: name.to_string(),
+            description: description.to_string(),
+            subcommand: Some(nested),
+            options: None,
+            positional_args: None,
+            positional_args_first: None,
+            timeout_seconds: None,
+            synchronous: None,
+            enabled,
+            guidance_key: None,
+            sequence: None,
+            step_delay_ms: None,
+            availability_check: None,
+            install_instructions: None,
+        }
+    }
+
+    #[test]
+    fn test_collect_leaf_subcommands_single_default() {
+        let subcommands = vec![make_subcommand("default", "Default subcommand", true)];
+
+        let mut leaves = Vec::new();
+        collect_leaf_subcommands(&subcommands, "", &mut leaves);
+
+        assert_eq!(leaves.len(), 1);
+        assert_eq!(leaves[0].0, "default");
+        assert_eq!(leaves[0].1.name, "default");
+    }
+
+    #[test]
+    fn test_collect_leaf_subcommands_multiple_at_same_level() {
+        let subcommands = vec![
+            make_subcommand("build", "Build", true),
+            make_subcommand("test", "Test", true),
+        ];
+
+        let mut leaves = Vec::new();
+        collect_leaf_subcommands(&subcommands, "", &mut leaves);
+
+        assert_eq!(leaves.len(), 2);
+        let names: Vec<&str> = leaves.iter().map(|(path, _)| path.as_str()).collect();
+        assert!(names.contains(&"build"));
+        assert!(names.contains(&"test"));
+    }
+
+    #[test]
+    fn test_collect_leaf_subcommands_nested() {
+        let nested = vec![
+            make_subcommand("child1", "Child 1", true),
+            make_subcommand("child2", "Child 2", true),
+        ];
+
+        let subcommands = vec![make_subcommand_with_nested(
+            "parent", "Parent", true, nested,
+        )];
+
+        let mut leaves = Vec::new();
+        collect_leaf_subcommands(&subcommands, "", &mut leaves);
+
+        assert_eq!(leaves.len(), 2);
+        let paths: Vec<&str> = leaves.iter().map(|(path, _)| path.as_str()).collect();
+        assert!(paths.contains(&"parent_child1"));
+        assert!(paths.contains(&"parent_child2"));
+    }
+
+    #[test]
+    fn test_collect_leaf_subcommands_skips_disabled() {
+        let subcommands = vec![
+            make_subcommand("enabled", "Enabled", true),
+            make_subcommand("disabled", "Disabled", false),
+        ];
+
+        let mut leaves = Vec::new();
+        collect_leaf_subcommands(&subcommands, "", &mut leaves);
+
+        assert_eq!(leaves.len(), 1);
+        assert_eq!(leaves[0].0, "enabled");
+    }
+
+    #[test]
+    fn test_collect_leaf_subcommands_deeply_nested() {
+        let level3 = vec![make_subcommand("leaf", "Leaf", true)];
+        let level2 = vec![make_subcommand_with_nested("mid", "Mid", true, level3)];
+        let level1 = vec![make_subcommand_with_nested("top", "Top", true, level2)];
+
+        let mut leaves = Vec::new();
+        collect_leaf_subcommands(&level1, "", &mut leaves);
+
+        assert_eq!(leaves.len(), 1);
+        assert_eq!(leaves[0].0, "top_mid_leaf");
+    }
+
+    #[test]
+    fn test_collect_leaf_subcommands_with_prefix() {
+        let subcommands = vec![make_subcommand("child", "Child", true)];
+
+        let mut leaves = Vec::new();
+        collect_leaf_subcommands(&subcommands, "parent", &mut leaves);
+
+        assert_eq!(leaves.len(), 1);
+        assert_eq!(leaves[0].0, "parent_child");
+    }
+
+    #[test]
+    fn test_collect_leaf_subcommands_default_uses_prefix() {
+        // When subcommand name is "default", it should use just the prefix
+        let subcommands = vec![make_subcommand("default", "Default child", true)];
+
+        let mut leaves = Vec::new();
+        collect_leaf_subcommands(&subcommands, "parent", &mut leaves);
+
+        assert_eq!(leaves.len(), 1);
+        assert_eq!(leaves[0].0, "parent");
+    }
+}

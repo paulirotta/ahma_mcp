@@ -1,0 +1,156 @@
+{
+    "name": "git",
+    "description": "Reliable access to the Git command-line client for repository operations.",
+    "command": "git",
+    "enabled": true,
+    "timeout_seconds": 180,
+    "hints": {
+        "custom": {
+            "default": "Use --tool_args -- to forward raw git flags exactly as they should appear after the base command."
+        }
+    },
+    "subcommand": [
+        {
+            "name": "status",
+            "description": "Show the working tree status and staged changes. Automatically runs synchronously when worktree is small.",
+            "options": [
+                {
+                    "name": "short",
+                    "alias": "s",
+                    "type": "boolean",
+                    "description": "Use the short-format output."
+                },
+                {
+                    "name": "branch",
+                    "alias": "b",
+                    "type": "boolean",
+                    "description": "Show the branch and tracking info even in short format."
+                }
+            ],
+            "positional_args": [
+                {
+                    "name": "pathspec",
+                    "type": "string",
+                    "description": "Restrict status output to the provided pathspec.",
+                    "required": false,
+                    "format": "path"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "add",
+            "description": "Add file contents to the index for the next commit. Runs asynchronously, returns an operation_id immediately, and pushes results when complete so you can continue other tasks.",
+            "options": [
+                {
+                    "name": "all",
+                    "alias": "A",
+                    "type": "boolean",
+                    "description": "Stage all tracked and untracked files."
+                },
+                {
+                    "name": "patch",
+                    "alias": "p",
+                    "type": "boolean",
+                    "description": "Interactively choose hunks of patch between the index and the working tree."
+                }
+            ],
+            "positional_args": [
+                {
+                    "name": "pathspec",
+                    "type": "string",
+                    "description": "Files or directories to add to the index.",
+                    "required": false,
+                    "format": "path"
+                }
+            ],
+            "synchronous": false
+        },
+        {
+            "name": "commit",
+            "description": "Record changes to the repository with support for multi-line commit messages via temporary files when required. Runs asynchronously, returns an operation_id immediately, notifies when complete, and you should continue with other work instead of waiting.",
+            "options": [
+                {
+                    "name": "message",
+                    "alias": "m",
+                    "type": "string",
+                    "description": "Commit message content. Multi-line messages are written to a temp file and passed with -F.",
+                    "file_arg": true,
+                    "file_flag": "-F"
+                },
+                {
+                    "name": "all",
+                    "alias": "a",
+                    "type": "boolean",
+                    "description": "Automatically stage files that have been modified and deleted."
+                },
+                {
+                    "name": "amend",
+                    "type": "boolean",
+                    "description": "Amend the tip of the current branch."
+                }
+            ],
+            "positional_args": [],
+            "synchronous": false
+        },
+        {
+            "name": "push",
+            "description": "Update remote refs along with associated objects. Runs asynchronously, returns an operation_id immediately, and completion is pushed via notification so do not wait idly.",
+            "options": [
+                {
+                    "name": "remote",
+                    "type": "string",
+                    "description": "Target remote repository (defaults to origin)."
+                },
+                {
+                    "name": "branch",
+                    "type": "string",
+                    "description": "Remote branch to push to."
+                },
+                {
+                    "name": "set-upstream",
+                    "alias": "u",
+                    "type": "boolean",
+                    "description": "Set upstream for the given branch after push."
+                },
+                {
+                    "name": "force",
+                    "alias": "f",
+                    "type": "boolean",
+                    "description": "Force push even if it results in non-fast-forward updates."
+                }
+            ],
+            "synchronous": false
+        },
+        {
+            "name": "log",
+            "description": "Show commit logs with common formatting options. Runs asynchronously, returns an operation_id immediately, and will notify you on completion so continue working while it processes.",
+            "options": [
+                {
+                    "name": "oneline",
+                    "type": "boolean",
+                    "description": "Condense each commit to a single line."
+                },
+                {
+                    "name": "decorate",
+                    "type": "boolean",
+                    "description": "Print out ref names of any commits that are shown."
+                },
+                {
+                    "name": "graph",
+                    "type": "boolean",
+                    "description": "Display branch and merge history graphically alongside the output."
+                }
+            ],
+            "positional_args": [
+                {
+                    "name": "rev_range",
+                    "type": "string",
+                    "description": "Commit range or revisions to include in the log output.",
+                    "required": false
+                }
+            ],
+            "synchronous": false
+        }
+    ]
+}

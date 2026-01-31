@@ -1,0 +1,22 @@
+{
+    "name": "bash",
+    "description": "Execute a shell command asynchronously",
+    "command": "bash -c",
+    "timeout_seconds": 30,
+    "synchronous": false,
+    "enabled": true,
+    "subcommand": [
+        {
+            "name": "default",
+            "description": "Execute command",
+            "positional_args": [
+                {
+                    "name": "command",
+                    "type": "string",
+                    "description": "The command to execute",
+                    "required": true
+                }
+            ]
+        }
+    ]
+}

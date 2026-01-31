@@ -1,0 +1,406 @@
+{
+    "name": "cargo",
+    "description": "Rust's build tool and package manager",
+    "command": "cargo",
+    "enabled": true,
+    "timeout_seconds": 600,
+    "subcommand": [
+        {
+            "name": "build",
+            "description": "Compile the current package.",
+            "options": [
+                {
+                    "name": "release",
+                    "type": "boolean",
+                    "description": "Build artifacts in release mode, with optimizations"
+                },
+                {
+                    "name": "workspace",
+                    "type": "boolean",
+                    "description": "Build all packages in the workspace"
+                },
+                {
+                    "name": "bin",
+                    "type": "string",
+                    "description": "Build only the specified binary"
+                }
+            ]
+        },
+        {
+            "name": "run",
+            "description": "Run a binary or example of the local package.",
+            "options": [
+                {
+                    "name": "release",
+                    "type": "boolean",
+                    "description": "Run with optimizations (--release)"
+                },
+                {
+                    "name": "bin",
+                    "type": "string",
+                    "description": "Name of the binary to run"
+                },
+                {
+                    "name": "package",
+                    "type": "string",
+                    "description": "Package to run"
+                }
+            ]
+        },
+        {
+            "name": "add",
+            "description": "Add dependencies to a Cargo.toml manifest file.",
+            "options": [
+                {
+                    "name": "features",
+                    "type": "string",
+                    "description": "Space or comma separated list of features to activate"
+                },
+                {
+                    "name": "package",
+                    "type": "string",
+                    "description": "Package to add the dependency to"
+                },
+                {
+                    "name": "dev",
+                    "type": "boolean",
+                    "description": "Add as development dependency"
+                },
+                {
+                    "name": "build",
+                    "type": "boolean",
+                    "description": "Add as build dependency"
+                },
+                {
+                    "name": "no-default-features",
+                    "type": "boolean",
+                    "description": "Disable default features"
+                },
+                {
+                    "name": "optional",
+                    "type": "boolean",
+                    "description": "Mark the dependency as optional"
+                },
+                {
+                    "name": "rename",
+                    "type": "string",
+                    "description": "Rename the dependency"
+                }
+            ],
+            "positional_args": [
+                {
+                    "name": "dependencies",
+                    "type": "string",
+                    "description": "The dependencies to add",
+                    "required": true
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "upgrade",
+            "description": "Upgrade dependencies in Cargo.toml to their latest versions. Requires cargo-edit to be installed.",
+            "availability_check": {
+                "command": "cargo",
+                "args": [
+                    "upgrade",
+                    "--version"
+                ],
+                "skip_subcommand_args": true
+            },
+            "install_instructions": "Install with: cargo install cargo-edit",
+            "options": [
+                {
+                    "name": "workspace",
+                    "type": "boolean",
+                    "description": "Upgrade all packages in the workspace"
+                },
+                {
+                    "name": "incompatible",
+                    "type": "boolean",
+                    "description": "Allow upgrading to incompatible versions (breaking semver)"
+                },
+                {
+                    "name": "dry-run",
+                    "type": "boolean",
+                    "description": "Print changes to be made without actually making them"
+                },
+                {
+                    "name": "package",
+                    "type": "string",
+                    "description": "Package to upgrade dependencies for"
+                }
+            ],
+            "positional_args": [
+                {
+                    "name": "dependencies",
+                    "type": "string",
+                    "description": "Specific dependencies to upgrade (optional, upgrades all if omitted)"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "update",
+            "description": "Update dependencies in Cargo.lock to their latest compatible versions within semver constraints.",
+            "options": [
+                {
+                    "name": "workspace",
+                    "type": "boolean",
+                    "description": "Update all packages in the workspace"
+                },
+                {
+                    "name": "dry-run",
+                    "type": "boolean",
+                    "description": "Print changes without actually updating Cargo.lock"
+                },
+                {
+                    "name": "package",
+                    "type": "string",
+                    "description": "Update only the specified package"
+                },
+                {
+                    "name": "precise",
+                    "type": "string",
+                    "description": "Update a specific package to exactly this version"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "check",
+            "description": "Type-check the current package without producing binaries.",
+            "options": [
+                {
+                    "name": "workspace",
+                    "type": "boolean",
+                    "description": "Check all packages in the workspace"
+                },
+                {
+                    "name": "package",
+                    "type": "string",
+                    "description": "Package to check"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "test",
+            "description": "Run the test suite.",
+            "options": [
+                {
+                    "name": "package",
+                    "type": "string",
+                    "description": "Package to test"
+                },
+                {
+                    "name": "workspace",
+                    "type": "boolean",
+                    "description": "Test all packages in the workspace"
+                }
+            ]
+        },
+        {
+            "name": "fmt",
+            "description": "Format code using rustfmt.",
+            "options": [
+                {
+                    "name": "all",
+                    "type": "boolean",
+                    "description": "Format all packages in the workspace"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "doc",
+            "description": "Build documentation for the current package.",
+            "options": [
+                {
+                    "name": "no-deps",
+                    "type": "boolean",
+                    "description": "Do not build documentation for dependencies"
+                }
+            ],
+            "synchronous": true
+        },
+        {
+            "name": "clippy",
+            "description": "Enhanced linting and code quality checks.",
+            "options": [
+                {
+                    "name": "fix",
+                    "type": "boolean",
+                    "description": "Automatically fix warnings"
+                },
+                {
+                    "name": "allow-dirty",
+                    "type": "boolean",
+                    "description": "Allow fixing when working directory is dirty"
+                },
+                {
+                    "name": "tests",
+                    "type": "boolean",
+                    "description": "Run clippy on tests as well"
+                },
+                {
+                    "name": "workspace",
+                    "type": "boolean",
+                    "description": "Run on all packages in the workspace"
+                }
+            ],
+            "availability_check": {
+                "command": "clippy-driver",
+                "args": [
+                    "--version"
+                ],
+                "skip_subcommand_args": true
+            },
+            "install_instructions": "Install with `rustup component add clippy`.",
+            "synchronous": true
+        },
+        {
+            "name": "qualitycheck",
+            "description": "Comprehensive Rust code quality pipeline: format, lint with auto-fix, test, and build. Runs each step sequentially with proper delays to avoid Cargo.lock contention. This tool runs SYNCHRONOUSLY and provides complete results in a single response, making it ideal for pre-commit validation and CI preparation.",
+            "enabled": true,
+            "synchronous": true,
+            "timeout_seconds": 1800,
+            "sequence": [
+                {
+                    "tool": "cargo",
+                    "subcommand": "fmt",
+                    "description": "Format code using rustfmt.",
+                    "args": {
+                        "all": true
+                    }
+                },
+                {
+                    "tool": "cargo",
+                    "subcommand": "clippy",
+                    "description": "Lint code and automatically fix issues.",
+                    "args": {
+                        "fix": true,
+                        "allow-dirty": true,
+                        "workspace": true
+                    }
+                },
+                {
+                    "tool": "cargo",
+                    "subcommand": "clippy",
+                    "description": "Lint tests and automatically fix issues.",
+                    "args": {
+                        "fix": true,
+                        "tests": true,
+                        "allow-dirty": true,
+                        "workspace": true
+                    }
+                },
+                {
+                    "tool": "cargo",
+                    "subcommand": "nextest_run",
+                    "description": "Run the test suite using nextest.",
+                    "args": {
+                        "workspace": true
+                    }
+                },
+                {
+                    "tool": "cargo",
+                    "subcommand": "build",
+                    "description": "Compile the entire workspace.",
+                    "args": {
+                        "workspace": true
+                    }
+                }
+            ],
+            "step_delay_ms": 500
+        },
+        {
+            "name": "audit",
+            "description": "Audit dependencies for security vulnerabilities using cargo-audit.",
+            "options": [
+                {
+                    "name": "ignore",
+                    "type": "array",
+                    "description": "Advisory IDs to ignore during the audit run.",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                {
+                    "name": "target-arch",
+                    "type": "array",
+                    "description": "Filter vulnerabilities by CPU architecture.",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                {
+                    "name": "target-os",
+                    "type": "array",
+                    "description": "Filter vulnerabilities by operating system.",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                {
+                    "name": "args",
+                    "type": "array",
+                    "description": "Additional arguments passed after the `--` separator.",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                {
+                    "name": "exclude",
+                    "type": "array",
+                    "description": "Packages to exclude from the audit run.",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            ],
+            "availability_check": {
+                "command": "cargo",
+                "args": [
+                    "audit",
+                    "--version"
+                ],
+                "skip_subcommand_args": true
+            },
+            "install_instructions": "Install with `cargo install cargo-audit`."
+        },
+        {
+            "name": "locate-project",
+            "description": "Print a JSON object with the path to the Cargo.toml manifest. Useful for verifying working directory context.",
+            "synchronous": true
+        },
+        {
+            "name": "nextest",
+            "description": "Run tests using cargo nextest.",
+            "install_instructions": "Install with `cargo install cargo-nextest`.",
+            "subcommand": [
+                {
+                    "name": "run",
+                    "description": "Run tests using nextest.",
+                    "options": [
+                        {
+                            "name": "workspace",
+                            "type": "boolean",
+                            "description": "Run tests for all packages in workspace"
+                        }
+                    ],
+                    "timeout_seconds": 1800,
+                    "availability_check": {
+                        "command": "cargo",
+                        "args": [
+                            "nextest",
+                            "--version"
+                        ],
+                        "skip_subcommand_args": true
+                    },
+                    "install_instructions": "Install with `cargo install cargo-nextest` and ensure it is on PATH."
+                }
+            ]
+        }
+    ]
+}
