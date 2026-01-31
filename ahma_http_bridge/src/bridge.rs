@@ -716,6 +716,14 @@ async fn handle_session_isolated_request(
                     match session_manager.lock_sandbox(&session_id, &mcp_roots).await {
                         Ok(true) => {
                             info!(session_id = %session_id, "Sandbox locked from first roots/list response");
+
+                            // Send roots/list_changed notification to subprocess to trigger sandbox configuration.
+                            // The subprocess (with --defer-sandbox) is waiting for this signal to call
+                            // configure_sandbox_from_roots(), which will query roots and update its sandbox.
+                            if let Some(session) = session_manager.get_session(&session_id)
+                                && let Err(e) = session.send_roots_list_changed().await {
+                                    warn!(session_id = %session_id, "Failed to send roots/list_changed to subprocess: {}", e);
+                                }
                         }
                         Ok(false) => {}
                         Err(e) => {

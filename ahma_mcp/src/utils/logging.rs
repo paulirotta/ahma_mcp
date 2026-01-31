@@ -80,8 +80,8 @@ pub fn init_logging(log_level: &str, log_to_file: bool) -> Result<()> {
             .unwrap_or_else(|_| EnvFilter::new(format!("{log_level},ahma_mcp=debug")));
 
         // Attempt to log to a file, fall back to stderr.
-        if log_to_file {
-            if let Some(proj_dirs) = ProjectDirs::from("com", "AhmaMcp", "ahma_mcp") {
+        if log_to_file
+            && let Some(proj_dirs) = ProjectDirs::from("com", "AhmaMcp", "ahma_mcp") {
                 let log_dir = proj_dirs.cache_dir();
 
                 // Test if we can actually write to the log directory before calling
@@ -116,7 +116,6 @@ pub fn init_logging(log_level: &str, log_to_file: bool) -> Result<()> {
                     return;
                 }
             }
-        }
 
         // Fallback or explicit stderr logging
         let subscriber = tracing_subscriber::registry()

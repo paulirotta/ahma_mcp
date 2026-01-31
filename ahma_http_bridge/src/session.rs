@@ -418,7 +418,7 @@ impl Session {
 
     /// Send roots/list_changed notification to subprocess.
     /// This triggers the server to call roots/list, which goes back through SSE.
-    async fn send_roots_list_changed(&self) -> Result<()> {
+    pub async fn send_roots_list_changed(&self) -> Result<()> {
         let notification = serde_json::json!({
             "jsonrpc": "2.0",
             "method": "notifications/roots/list_changed"
