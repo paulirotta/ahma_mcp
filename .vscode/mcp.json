@@ -5,6 +5,8 @@
             "command": "cargo",
             "args": [
                 "run",
+                "--features",
+                "opentelemetry",
                 "--bin",
                 "ahma_mcp",
                 "--",
