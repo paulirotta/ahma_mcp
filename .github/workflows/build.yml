@@ -84,7 +84,6 @@ jobs:
             ~/.cargo/git
             ~/.cargo/.package-cache
             ~/.cargo/bin
-            ./target
           key: cargo-build-target-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
             cargo-build-target-${{ runner.os }}-
@@ -180,7 +179,6 @@ jobs:
             ~/.cargo/git
             ~/.cargo/.package-cache
             ~/.cargo/bin
-            ./target
           key: cargo-nextest-target-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
             cargo-nextest-target-${{ runner.os }}-
@@ -293,7 +291,6 @@ jobs:
             ~/.cargo/git
             ~/.cargo/.package-cache
             ~/.cargo/bin
-            ./target
           key: cargo-android-target-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
             cargo-android-target-${{ runner.os }}-
@@ -420,7 +417,6 @@ jobs:
             ~/.cargo/git
             ~/.cargo/.package-cache
             ~/.cargo/bin
-            ./target
           key: cargo-coverage-target-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
             cargo-coverage-target-${{ runner.os }}-

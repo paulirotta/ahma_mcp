@@ -130,7 +130,7 @@ pub fn handshake_timeout_secs() -> u64 {
     std::env::var("AHMA_HANDSHAKE_TIMEOUT_SECS")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(30)
+        .unwrap_or(45)
 }
 
 /// Get the request timeout in seconds for bridge → subprocess calls.

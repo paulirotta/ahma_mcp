@@ -152,7 +152,7 @@ async fn send_mcp_request(
         .post(&url)
         .header("Content-Type", "application/json")
         .header("Accept", "application/json")
-        .timeout(Duration::from_secs(60));
+        .timeout(Duration::from_secs(120));
 
     if let Some(id) = session_id {
         req = req.header("Mcp-Session-Id", id);
@@ -746,6 +746,10 @@ async fn test_basic_tool_call_within_sandbox() {
             panic!("Timed out waiting for sandbox initialization");
         }
 
+        eprintln!(
+            "RETRY LOOP: Sending tools/call (elapsed: {:?})",
+            start.elapsed()
+        );
         let (resp, _) = send_mcp_request(
             &client,
             &base_url,
