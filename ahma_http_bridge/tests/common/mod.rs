@@ -230,32 +230,50 @@ impl Drop for TestServerInstance {
     }
 }
 
-/// Build the ahma_mcp binary if needed and return the path
+/// Locate the ahma_mcp binary in the target directory.
+///
+/// This avoids running `cargo build` recursively inside tests, which can cause
+/// resource contention and deadlocks in CI (especially on macOS).
 fn get_ahma_mcp_binary() -> PathBuf {
+    static BINARY_LOG_ONCE: std::sync::Once = std::sync::Once::new();
+
     let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("Failed to get workspace dir")
         .to_path_buf();
 
-    // Build ahma_mcp binary
-    let output = Command::new("cargo")
-        .current_dir(&workspace_dir)
-        .args(["build", "--package", "ahma_core", "--bin", "ahma_mcp"])
-        .output()
-        .expect("Failed to run cargo build");
-
-    assert!(
-        output.status.success(),
-        "Failed to build ahma_mcp: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    // Check for CARGO_TARGET_DIR to support tools like llvm-cov
+    // Support CARGO_TARGET_DIR for tools like llvm-cov
     let target_dir = std::env::var("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| workspace_dir.join("target"));
 
-    target_dir.join("debug/ahma_mcp")
+    // Check debug then release locations
+    let debug_bin = target_dir.join("debug/ahma_mcp");
+    let release_bin = target_dir.join("release/ahma_mcp");
+
+    let binary_path = if debug_bin.exists() {
+        debug_bin
+    } else if release_bin.exists() {
+        release_bin
+    } else {
+        panic!(
+            "\n\
+            ❌ ahma_mcp binary NOT FOUND in target directory.\n\n\
+            The integration tests require the server binary to be built first.\n\
+            Please run: cargo build --package ahma_core --bin ahma_mcp\n\n\
+            Target dir: {:?}\n",
+            target_dir
+        );
+    };
+
+    BINARY_LOG_ONCE.call_once(|| {
+        eprintln!(
+            "[TestServer] Using ahma_mcp binary: {}",
+            binary_path.display()
+        );
+    });
+
+    binary_path
 }
 
 /// Spawn a new test server with dynamic port allocation.
