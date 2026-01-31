@@ -11,7 +11,7 @@ name = "ahma_validate"
 path = "src/main.rs"
 
 [dependencies]
-ahma_core = {path = "../ahma_core"}
+ahma_mcp = { path = "../ahma_mcp" }
 anyhow.workspace = true
 clap.workspace = true
 serde_json.workspace = true

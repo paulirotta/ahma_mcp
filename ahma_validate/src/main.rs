@@ -1,4 +1,4 @@
-use ahma_core::schema_validation::MtdfValidator;
+use ahma_mcp::schema_validation::MtdfValidator;
 use anyhow::{Result, anyhow};
 use clap::Parser;
 use std::{
@@ -56,7 +56,7 @@ fn main() -> Result<()> {
 
     // Initialize logging
     let log_level = if cli.debug { "debug" } else { "info" };
-    ahma_core::utils::logging::init_logging(log_level, false)?;
+    ahma_mcp::utils::logging::init_logging(log_level, false)?;
 
     if run_validation_mode(&cli)? {
         info!("All configurations are valid.");
@@ -119,7 +119,7 @@ fn normalize_validation_target(path: PathBuf) -> PathBuf {
 fn run_validation_mode(cli: &Cli) -> Result<bool> {
     let mut all_valid = true;
 
-    // Guidance configuration is now hardcoded in ahma_core
+    // Guidance configuration is now hardcoded in ahma_mcp
     let validator = MtdfValidator::new();
 
     // Process each target in the validation target list

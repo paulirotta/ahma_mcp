@@ -10,7 +10,7 @@
 
 | Module | Status | Confirmed | Mismatches | Notes |
 |--------|--------|-----------|------------|-------|
-| `ahma_core` | ⚠️ Partial | R1-R5, R7.1-R7.5, R15-R17, R19 | R6.9, R7.6 | Nested sandbox handling, workspace config |
+| `ahma_mcp` | ⚠️ Partial | R1-R5, R7.1-R7.5, R15-R17, R19 | R6.9, R7.6 | Nested sandbox handling, workspace config |
 | `ahma_http_bridge` | ⚠️ Partial | R8.1-R8.4.6, R8.4.8+ | R8.4.7 | Missing HTTP DELETE endpoint |
 | `ahma_http_mcp_client` | ✅ Compliant | R9.3-R9.8 | None | OAuth PKCE, token persistence |
 | `ahma_validate` | ✅ Compliant | R5.2, R6.4 | None | MTDF validation, exit codes |
@@ -18,7 +18,7 @@
 
 ---
 
-# Module: ahma_core
+# Module: ahma_mcp
 
 ## ✅ Requirements Confirmed
 
@@ -26,14 +26,14 @@
 
 | Req | Description | Status | Evidence |
 |-----|-------------|--------|----------|
-| R1.1 | JSON tool definitions | ✅ | `ahma_core/src/config.rs` defines `ToolConfig`, `SubcommandConfig` |
+| R1.1 | JSON tool definitions | ✅ | `ahma_mcp/src/config.rs` defines `ToolConfig`, `SubcommandConfig` |
 | R1.2 | Directory scanning | ✅ | `load_tool_configs()` in `config.rs` |
-| R1.3 | Startup validation | ✅ | `ahma_core/src/schema_validation.rs` `MtdfValidator` |
+| R1.3 | Startup validation | ✅ | `ahma_mcp/src/schema_validation.rs` `MtdfValidator` |
 | R1.4 | Hot-reload + notification | ✅ | `mcp_service/mod.rs:202-259` `start_config_watcher()` uses `notify` crate, calls `notify_tool_list_changed()` at line 191 |
 
 **Evidence excerpt:**
 
-```191:198:ahma_core/src/mcp_service/mod.rs
+```191:198:ahma_mcp/src/mcp_service/mod.rs
         if let Some(peer) = peer_opt {
             if let Err(e) = peer.notify_tool_list_changed().await {
                 tracing::error!("Failed to send tools/list_changed notification: {}", e);
@@ -55,7 +55,7 @@
 
 **Evidence excerpt (async default):**
 
-```1437:1443:ahma_core/src/mcp_service/mod.rs
+```1437:1443:ahma_mcp/src/mcp_service/mod.rs
             } else {
                 // Default to ASYNCHRONOUS mode
                 crate::adapter::ExecutionMode::AsyncResultPush
@@ -68,7 +68,7 @@
 
 | Req | Description | Status | Evidence |
 |-----|-------------|--------|----------|
-| R4.1 | Pre-warmed shell pool | ✅ | `ahma_core/src/shell_pool.rs` `ShellPoolManager` |
+| R4.1 | Pre-warmed shell pool | ✅ | `ahma_mcp/src/shell_pool.rs` `ShellPoolManager` |
 | R4.2 | Background replenishment | ✅ | `start_background_tasks()` in shell_pool.rs |
 
 ---
@@ -104,7 +104,7 @@
 
 **Evidence excerpt:**
 
-```836:850:ahma_core/src/adapter.rs
+```836:850:ahma_mcp/src/adapter.rs
     fn ensure_shell_redirect(script: &mut String) {
         if script.trim_end().ends_with("2>&1") {
             return;
@@ -116,7 +116,7 @@
 
 **Test coverage:**
 
-```1091:1102:ahma_core/src/adapter.rs
+```1091:1102:ahma_mcp/src/adapter.rs
     #[tokio::test]
     async fn shell_commands_append_redirect_once() {
         // ... asserts 2>&1 is appended
@@ -154,7 +154,7 @@
 
 **Evidence excerpt:**
 
-```909:915:ahma_core/src/mcp_service/mod.rs
+```909:915:ahma_mcp/src/mcp_service/mod.rs
                     let background_ops: Vec<_> = active_ops
                         .iter()
                         .filter(|op| {
@@ -180,7 +180,7 @@
 
 **Code Evidence:**
 
-```231:254:ahma_core/src/shell/main_logic.rs
+```231:254:ahma_mcp/src/shell/main_logic.rs
         #[cfg(target_os = "macos")]
         {
             if let Err(e) = sandbox::test_sandbox_exec_available() {
@@ -223,24 +223,24 @@
 ```1:9:Cargo.toml
 [workspace]
 default-members = [
-  "ahma_core",
+  "ahma_mcp",
   "ahma_validate",
   "generate_tool_schema",
   "ahma_http_bridge",
   "ahma_http_mcp_client",
 ]
-members = ["ahma_core", "ahma_validate", "generate_tool_schema", "ahma_http_bridge", "ahma_http_mcp_client"]
+members = ["ahma_mcp", "ahma_validate", "generate_tool_schema", "ahma_http_bridge", "ahma_http_mcp_client"]
 ```
 
 - No `ahma_shell` crate exists
-- Binary is `[[bin]] name = "ahma_mcp"` in `ahma_core/Cargo.toml:22-24`
+- Binary is `[[bin]] name = "ahma_mcp"` in `ahma_mcp/Cargo.toml:22-24`
 - `default-members` lists all crates, not just the shell
 
 **Impact:** Developer UX mismatch. `cargo run` behavior differs from spec.
 
 **Recommended Fix:** Either:
 
-1. Update REQUIREMENTS.md to reflect current architecture (binary in ahma_core), or
+1. Update REQUIREMENTS.md to reflect current architecture (binary in ahma_mcp), or
 2. Create `ahma_shell` crate and set `default-members = ["ahma_shell"]`
 
 ---
@@ -374,7 +374,7 @@ async fn handle_session_delete(
 
 ## 1. R7.6 Nested Sandbox Exit Test
 
-**Target:** `ahma_core/tests/nested_sandbox_exit_test.rs`
+**Target:** `ahma_mcp/tests/nested_sandbox_exit_test.rs`
 
 ```rust
 #[test]
@@ -404,7 +404,7 @@ async fn test_delete_session_terminates_subprocess() {
 
 # Requirements Coverage Matrix
 
-| Requirement | ahma_core | ahma_http_bridge | ahma_http_mcp_client | ahma_validate | generate_tool_schema |
+| Requirement | ahma_mcp | ahma_http_bridge | ahma_http_mcp_client | ahma_validate | generate_tool_schema |
 |-------------|-----------|------------------|----------------------|---------------|---------------------|
 | R0 (Terminology) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | R1 (Config/Hot-reload) | ✅ | — | — | — | — |

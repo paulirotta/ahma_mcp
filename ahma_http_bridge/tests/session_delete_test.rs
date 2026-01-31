@@ -43,7 +43,7 @@ fn get_ahma_mcp_binary() -> PathBuf {
     if !binary_path.exists() {
         let output = Command::new("cargo")
             .current_dir(&workspace_dir)
-            .args(["build", "--package", "ahma_core", "--bin", "ahma_mcp"])
+            .args(["build", "--package", "ahma_mcp", "--bin", "ahma_mcp"])
             .output()
             .expect("Failed to run cargo build");
 

@@ -15,8 +15,8 @@
 //! If `OUTPUT_DIR` is not provided, it defaults to `docs`.
 //! The schema file is written to `[OUTPUT_DIR]/mtdf-schema.json`.
 
-use ahma_core::config::ToolConfig;
-use ahma_core::utils::logging::init_logging;
+use ahma_mcp::config::ToolConfig;
+use ahma_mcp::utils::logging::init_logging;
 use std::env;
 use std::fs;
 use std::path::PathBuf;

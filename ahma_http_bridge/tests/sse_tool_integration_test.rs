@@ -893,7 +893,7 @@ async fn test_concurrent_tool_calls() {
     let requests = vec![
         ("file_tools_pwd", json!({})),
         ("file_tools_ls", json!({"path": "."})),
-        ("file_tools_ls", json!({"path": "ahma_core"})),
+        ("file_tools_ls", json!({"path": "ahma_mcp"})),
         ("file_tools_cat", json!({"files": ["Cargo.toml"]})),
         // Use sandboxed_shell which should always be available
         ("sandboxed_shell", json!({"command": "echo test1"})),

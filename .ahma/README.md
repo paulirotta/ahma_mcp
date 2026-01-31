@@ -8,7 +8,7 @@ This directory contains tool configuration files for the AHMA MCP (Model Context
 
 ## Example Tool Configurations
 
-Additional tool configurations are available as examples in `ahma_core/examples/configs/`. These can be copied, customized, and validated before deployment:
+Additional tool configurations are available as examples in `ahma_mcp/examples/configs/`. These can be copied, customized, and validated before deployment:
 
 - **cargo.json** - Rust build tool and package manager
 - **file_tools.json** - Unix file operations (ls, cp, mv, rm, grep, etc.)
@@ -23,10 +23,10 @@ Additional tool configurations are available as examples in `ahma_core/examples/
 
 ```bash
 # Copy an example configuration to .ahma directory
-cp ahma_core/examples/configs/cargo.json .ahma/
+cp ahma_mcp/examples/configs/cargo.json .ahma/
 
 # Or copy all examples
-cp ahma_core/examples/configs/*.json .ahma/
+cp ahma_mcp/examples/configs/*.json .ahma/
 ```
 
 ### 2. Customize the Configuration
@@ -63,8 +63,8 @@ cargo run --example python_tool
 cargo test --test tool_config_schema_validation_test
 
 # Or run all tests including execution tests
-cargo nextest run --package ahma_core --test tool_config_schema_validation_test
-cargo nextest run --package ahma_core --test tool_examples_execution_test
+cargo nextest run --package ahma_mcp --test tool_config_schema_validation_test
+cargo nextest run --package ahma_mcp --test tool_examples_execution_test
 ```
 
 ### 4. Verify Your Configuration Works
@@ -111,7 +111,7 @@ All tool configurations follow the MCP Tool Definition Format (MTDF) schema. Her
 
 ```bash
 # Validate all example configs
-cargo nextest run -p ahma_core tool_config_schema_validation
+cargo nextest run -p ahma_mcp tool_config_schema_validation
 
 # Run a specific example to see detailed output
 cargo run --example cargo_tool
@@ -122,10 +122,10 @@ jq . .ahma/cargo.json
 
 ### Programmatic Validation
 
-Use the `MtdfValidator` from `ahma_core`:
+Use the `MtdfValidator` from `ahma_mcp`:
 
 ```rust
-use ahma_core::schema_validation::MtdfValidator;
+use ahma_mcp::schema_validation::MtdfValidator;
 use std::path::Path;
 
 let validator = MtdfValidator::new();
@@ -163,7 +163,7 @@ match validator.validate_tool_config(config_path, &content) {
 
 1. Run the corresponding example: `cargo run --example mytool`
 2. Check for schema violations in the error output
-3. Compare with working examples in `ahma_core/examples/configs/`
+3. Compare with working examples in `ahma_mcp/examples/configs/`
 4. Verify all required fields are present: `name`, `description`, `command`, `enabled`
 
 ### Tool Not Available in AI
@@ -177,17 +177,17 @@ match validator.validate_tool_config(config_path, &content) {
 
 Full MTDF schema documentation is available at:
 - `docs/mtdf-schema.json` - JSON Schema definition
-- `ahma_core/docs/mtdf-schema.json` - Core library schema
+- `ahma_mcp/docs/mtdf-schema.json` - Core library schema
 
 ## Contributing
 
 To add a new tool configuration:
 
-1. Create the JSON file in `ahma_core/examples/configs/`
-2. Add a corresponding example in `ahma_core/examples/toolname.rs`
-3. Add tests in `ahma_core/tests/tool_config_schema_validation_test.rs`
-4. Add execution tests in `ahma_core/tests/tool_examples_execution_test.rs`
-5. Update `ahma_core/Cargo.toml` with example declaration
+1. Create the JSON file in `ahma_mcp/examples/configs/`
+2. Add a corresponding example in `ahma_mcp/examples/toolname.rs`
+3. Add tests in `ahma_mcp/tests/tool_config_schema_validation_test.rs`
+4. Add execution tests in `ahma_mcp/tests/tool_examples_execution_test.rs`
+5. Update `ahma_mcp/Cargo.toml` with example declaration
 6. Run all tests: `cargo nextest run --workspace`
 
 ## License

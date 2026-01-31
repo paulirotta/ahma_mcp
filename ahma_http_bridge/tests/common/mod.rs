@@ -260,7 +260,7 @@ fn get_ahma_mcp_binary() -> PathBuf {
             "\n\
             ❌ ahma_mcp binary NOT FOUND in target directory.\n\n\
             The integration tests require the server binary to be built first.\n\
-            Please run: cargo build --package ahma_core --bin ahma_mcp\n\n\
+            Please run: cargo build --package ahma_mcp --bin ahma_mcp\n\n\
             Target dir: {:?}\n",
             target_dir
         );

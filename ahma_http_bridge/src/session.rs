@@ -570,7 +570,7 @@ impl SessionManager {
         let mut child = Command::new(&self.config.server_command)
             .args(&args)
             // SECURITY:
-            // Avoid inheriting env vars that can auto-enable permissive test mode in ahma_core,
+            // Avoid inheriting env vars that can auto-enable permissive test mode in ahma_mcp,
             // which can mask real sandbox-scoping behavior.
             .env_remove("AHMA_TEST_MODE")
             .env_remove("NEXTEST")
