@@ -8,7 +8,7 @@
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Core Tool Execution | ✅ tests-pass | `ahma_core` adapter executes CLI tools via MTDF JSON |
+| Core Tool Execution | ✅ tests-pass | `ahma_mcp` adapter executes CLI tools via MTDF JSON |
 | Async-First Operations | ✅ tests-pass | Operations return `operation_id`, push results via MCP notifications |
 | Shell Pool | ✅ tests-pass | Pre-warmed zsh shells for 5-20ms command startup latency |
 | Linux Sandbox (Landlock) | ✅ tests-pass | Kernel-level FS sandboxing on Linux 5.13+ |
@@ -67,7 +67,7 @@ ahma_mcp/
 │   ├── CONSTITUTION.md     # Development principles
 │   ├── USAGE_GUIDE.md      # Workflow patterns
 │   └── mtdf-schema.json    # Tool definition schema
-├── ahma_core/              # Core library crate
+├── ahma_mcp/              # Core library crate
 │   ├── src/
 │   │   ├── lib.rs          # Module exports and architecture docs
 │   │   ├── adapter.rs      # Tool execution engine
@@ -464,7 +464,7 @@ fs::write(&test_file, "test content").unwrap();
 ### 10.3 CLI Binary Integration Tests
 
 - All binaries (`ahma_mcp`, `ahma_validate`, `generate_tool_schema`) **must** have integration tests.
-- Tests in `ahma_core/tests/cli_binary_integration_test.rs`.
+- Tests in `ahma_mcp/tests/cli_binary_integration_test.rs`.
 - Cover: `--help`, `--version`, basic functionality.
 
 ---
@@ -477,7 +477,7 @@ fs::write(&test_file, "test content").unwrap();
 
 1. **Do not weaken tests** - The regression test in `ahma_http_bridge/tests/http_bridge_integration_test.rs` is intentionally strict. If it fails, assume HTTP session scoping is broken.
 
-2. **Test-mode bypass** - `ahma_core::sandbox::is_test_mode()` auto-enables permissive mode when certain env vars are present (`NEXTEST`, `CARGO_TARGET_DIR`, `RUST_TEST_THREADS`). This can mask production failures.
+2. **Test-mode bypass** - `ahma_mcp::sandbox::is_test_mode()` auto-enables permissive mode when certain env vars are present (`NEXTEST`, `CARGO_TARGET_DIR`, `RUST_TEST_THREADS`). This can mask production failures.
 
 3. **HTTP mode must be session-isolated** - Per-session sandbox scope derived from MCP `roots/list`. If this regresses to shared scope, real usage breaks even if tests pass.
 
@@ -491,7 +491,7 @@ fs::write(&test_file, "test content").unwrap();
 
 ## 12. Feature Requirements by Module
 
-### 12.1 ahma_core
+### 12.1 ahma_mcp
 
 | Feature | Status | Description |
 |---------|--------|-------------|

@@ -3,44 +3,6 @@
 version = 4
 
 [[package]]
-name = "ahma_core"
-version = "0.4.1"
-dependencies = [
- "ahma_http_bridge",
- "ahma_http_mcp_client",
- "anyhow",
- "async-trait",
- "chrono",
- "clap",
- "ctrlc",
- "directories",
- "dirs",
- "futures",
- "landlock",
- "notify",
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
- "rand 0.9.2",
- "regex",
- "reqwest 0.13.1",
- "rmcp",
- "schemars",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-util",
- "toml",
- "tracing",
- "tracing-appender",
- "tracing-opentelemetry",
- "tracing-subscriber",
- "url",
-]
-
-[[package]]
 name = "ahma_http_bridge"
 version = "0.4.1"
 dependencies = [
@@ -97,10 +59,48 @@ dependencies = [
 ]
 
 [[package]]
+name = "ahma_mcp"
+version = "0.4.1"
+dependencies = [
+ "ahma_http_bridge",
+ "ahma_http_mcp_client",
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "clap",
+ "ctrlc",
+ "directories",
+ "dirs",
+ "futures",
+ "landlock",
+ "notify",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "rand 0.9.2",
+ "regex",
+ "reqwest 0.13.1",
+ "rmcp",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "toml",
+ "tracing",
+ "tracing-appender",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
+ "url",
+]
+
+[[package]]
 name = "ahma_validate"
 version = "0.4.1"
 dependencies = [
- "ahma_core",
+ "ahma_mcp",
  "anyhow",
  "clap",
  "serde_json",
@@ -903,7 +903,7 @@ dependencies = [
 name = "generate_tool_schema"
 version = "0.4.1"
 dependencies = [
- "ahma_core",
+ "ahma_mcp",
  "schemars",
  "serde_json",
  "tempfile",

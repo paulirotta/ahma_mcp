@@ -375,7 +375,7 @@ jobs:
       - name: Run Android/Gradle tests only
         run: |
           # Run ONLY gradle/android tests (feature-gated and name-filtered for clarity)
-          cargo nextest run --locked -p ahma_core --features android -E 'test(gradlew) | test(android)'
+          cargo nextest run --locked -p ahma_mcp --features android -E 'test(gradlew) | test(android)'
 
       - name: Show sccache stats
         run: sccache --show-stats

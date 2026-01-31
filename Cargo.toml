@@ -1,12 +1,12 @@
 [workspace]
 default-members = [
-  "ahma_core",
+  "ahma_mcp",
   "ahma_validate",
   "generate_tool_schema",
   "ahma_http_bridge",
   "ahma_http_mcp_client",
 ]
-members = ["ahma_core", "ahma_validate", "generate_tool_schema", "ahma_http_bridge", "ahma_http_mcp_client"]
+members = ["ahma_mcp", "ahma_validate", "generate_tool_schema", "ahma_http_bridge", "ahma_http_mcp_client"]
 resolver = "2"
 
 [workspace.package]

@@ -1,0 +1,85 @@
+[package]
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+name = "ahma_mcp"
+readme.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lib]
+name = "ahma_mcp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ahma_mcp"
+path = "src/shell/bin.rs"
+
+[dependencies]
+ahma_http_bridge = { path = "../ahma_http_bridge" }
+ahma_http_mcp_client = { path = "../ahma_http_mcp_client" }
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+clap.workspace = true
+ctrlc.workspace = true
+directories.workspace = true
+dirs.workspace = true
+futures.workspace = true
+notify = "8.2.0"
+opentelemetry-otlp.workspace = true
+opentelemetry.workspace = true
+opentelemetry_sdk.workspace = true
+rand = "0.9.2"
+regex.workspace = true
+reqwest = { workspace = true, features = ["json", "rustls"] }
+rmcp.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+tokio-util.workspace = true
+tokio.workspace = true
+toml.workspace = true
+tracing-appender.workspace = true
+tracing-opentelemetry.workspace = true
+tracing-subscriber.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock.workspace = true
+
+[dev-dependencies]
+futures.workspace = true
+tempfile.workspace = true
+
+[features]
+android = []
+default = ["android"]
+
+# Tool configuration examples
+[[example]]
+name = "cargo_tool"
+path = "examples/cargo_tool.rs"
+
+[[example]]
+name = "file_tools"
+path = "examples/file_tools.rs"
+
+[[example]]
+name = "gh_tool"
+path = "examples/gh_tool.rs"
+
+[[example]]
+name = "git_tool"
+path = "examples/git_tool.rs"
+
+[[example]]
+name = "gradlew_tool"
+path = "examples/gradlew_tool.rs"
+
+[[example]]
+name = "python_tool"
+path = "examples/python_tool.rs"

@@ -16,7 +16,7 @@ This project is actively used and still undergoing rapid evolution. http MCP is 
 
 Ahma MCP follows a **code-first documentation** approach. Architectural details and technical guides are embedded directly in the source code using Rust doc comments (`//!`). This ensures documentation stays in sync with implementation.
 
-- **[Ahma Core API & Architecture](https://paulirotta.github.io/ahma_mcp/doc/ahma_core/index.html)**: Main engine, sandboxing, and SDD philosophy.
+- **[Ahma Core API & Architecture](https://paulirotta.github.io/ahma_mcp/doc/ahma_mcp/index.html)**: Main engine, sandboxing, and SDD philosophy.
 - **[Ahma HTTP Bridge](https://paulirotta.github.io/ahma_mcp/doc/ahma_http_bridge/index.html)**: Session isolation and HTTP protocol bridge details.
 - **[USAGE_GUIDE.md](docs/USAGE_GUIDE.md)**: Productive workflows and CLI flag inheritance.
 
@@ -136,7 +136,7 @@ Here's an example of Claude Sonnet 4.5's workflow. Notice both the tool and the 
 
 `ahma_mcp` is organized as a Cargo workspace with several crates:
 
-- **`ahma_core`**: Library crate containing all core functionality (tool execution, configuration, async orchestration, MCP service)
+- **`ahma_mcp`**: Library crate containing all core functionality (tool execution, configuration, async orchestration, MCP service)
 - **`ahma_shell`**: Binary crate providing the CLI interface and server startup logic (includes `--list-tools` functionality)
 - **`ahma_validate`**: Binary crate for validating tool configuration files against the MTDF schema
 
