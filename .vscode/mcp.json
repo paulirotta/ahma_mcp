@@ -1,9 +1,20 @@
 {
     "servers": {
-        "Ahma stdio": {
+        "Ahma-stdio-debug": {
             "type": "stdio",
-            "cwd": "${workspaceFolder}",
-            "command": "target/release/ahma_mcp"
+            "command": "cargo",
+            "args": [
+                "run",
+                "--package",
+                "ahma_core",
+                "--bin",
+                "ahma_mcp",
+                "--",
+                "--log-to-stderr"
+            ],
+            "env": {
+                "RUST_LOG": "debug"
+            }
         },
         "Ahma http": {
             "type": "http",

@@ -21,7 +21,7 @@ version = "0.4.1"
 anyhow = "1.0.100"
 async-trait = "0.1.89"
 chrono = {version = "0.4.43", features = ["serde"]}
-clap = {version = "4.5.54", features = ["derive"]}
+clap = {version = "4.5.56", features = ["derive"]}
 ctrlc = "3.5.1"
 directories = "6.0.0"
 dirs = "6.0.0"
