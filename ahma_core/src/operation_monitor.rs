@@ -183,10 +183,16 @@ impl OperationMonitor {
     /// This ensures that operations that exceed their timeout are cancelled even if
     /// the executor fails to handle them.
     pub fn start_background_monitor(monitor: Arc<Self>) {
+        let weak_monitor = Arc::downgrade(&monitor);
         tokio::spawn(async move {
             let check_interval = Duration::from_secs(1);
             loop {
-                monitor.check_timeouts().await;
+                if let Some(monitor) = weak_monitor.upgrade() {
+                    monitor.check_timeouts().await;
+                } else {
+                    tracing::debug!("OperationMonitor dropped, stopping background monitor task");
+                    break;
+                }
                 tokio::time::sleep(check_interval).await;
             }
         });

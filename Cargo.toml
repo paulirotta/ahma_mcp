@@ -27,6 +27,9 @@ directories = "6.0.0"
 dirs = "6.0.0"
 futures = "0.3.31"
 landlock = "0.4.4"
+opentelemetry = {version = "0.26", features = ["trace"]}
+opentelemetry-otlp = {version = "0.26", features = ["http-proto", "reqwest-rustls"]}
+opentelemetry_sdk = {version = "0.26", features = ["rt-tokio"]}
 regex = "1.12.2"
 reqwest = {version = "0.13.1", default-features = false}
 rmcp = {version = "0.14.0", features = ["server", "client", "macros", "transport-io", "transport-child-process", "elicitation", "schemars"]}
@@ -40,5 +43,6 @@ tokio-util = "0.7.18"
 toml = "0.9.11"
 tracing = "0.1.44"
 tracing-appender = "0.2.4"
+tracing-opentelemetry = "0.27"
 tracing-subscriber = {version = "0.3.22", features = ["env-filter"]}
 url = "2.5.8"

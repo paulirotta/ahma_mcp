@@ -45,6 +45,9 @@
 
 use anyhow::Result;
 use directories::ProjectDirs;
+use opentelemetry::{KeyValue, trace::TracerProvider};
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::{Resource, trace as sdktrace};
 use std::{io::stderr, path::Path, sync::Once};
 use tracing_subscriber::{EnvFilter, fmt::layer, prelude::*};
 
@@ -73,6 +76,8 @@ pub fn init_logging(log_level: &str, log_to_file: bool) -> Result<()> {
         let env_filter = EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| EnvFilter::new(format!("{log_level},ahma_mcp=debug")));
 
+        let otel_layer = init_otel();
+
         // Attempt to log to a file, fall back to stderr.
         if log_to_file {
             if let Some(proj_dirs) = ProjectDirs::from("com", "AhmaMcp", "ahma_mcp") {
@@ -100,6 +105,7 @@ pub fn init_logging(log_level: &str, log_to_file: bool) -> Result<()> {
 
                         tracing_subscriber::registry()
                             .with(env_filter)
+                            .with(otel_layer)
                             .with(layer().with_writer(non_blocking).with_ansi(false))
                             .init();
                         // The guard is intentionally leaked to ensure logs are flushed on exit.
@@ -111,6 +117,7 @@ pub fn init_logging(log_level: &str, log_to_file: bool) -> Result<()> {
                         // Enable ANSI colors for terminal output
                         tracing_subscriber::registry()
                             .with(env_filter)
+                            .with(otel_layer)
                             .with(layer().with_writer(stderr).with_ansi(true))
                             .init();
                     }
@@ -120,6 +127,7 @@ pub fn init_logging(log_level: &str, log_to_file: bool) -> Result<()> {
                 // Enable ANSI colors for terminal output
                 tracing_subscriber::registry()
                     .with(env_filter)
+                    .with(otel_layer)
                     .with(layer().with_writer(stderr).with_ansi(true))
                     .init();
             }
@@ -127,12 +135,43 @@ pub fn init_logging(log_level: &str, log_to_file: bool) -> Result<()> {
             // Log to stderr with ANSI colors enabled for terminal output
             tracing_subscriber::registry()
                 .with(env_filter)
+                .with(otel_layer)
                 .with(layer().with_writer(stderr).with_ansi(true))
                 .init();
         }
     });
 
     Ok(())
+}
+
+fn init_otel<S>() -> Option<tracing_opentelemetry::OpenTelemetryLayer<S, sdktrace::Tracer>>
+where
+    S: tracing::Subscriber + for<'span> tracing_subscriber::registry::LookupSpan<'span>,
+{
+    if std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").is_ok() || std::env::var("AHMA_TRACING").is_ok()
+    {
+        let exporter = opentelemetry_otlp::new_exporter()
+            .http()
+            .with_endpoint("http://localhost:4318/v1/traces");
+
+        let provider = opentelemetry_otlp::new_pipeline()
+            .tracing()
+            .with_exporter(exporter)
+            .with_trace_config(
+                sdktrace::Config::default().with_resource(Resource::new(vec![KeyValue::new(
+                    "service.name",
+                    "ahma_mcp",
+                )])),
+            )
+            .install_batch(opentelemetry_sdk::runtime::Tokio)
+            .ok()?;
+
+        let tracer = provider.tracer("ahma_mcp");
+
+        Some(tracing_opentelemetry::layer().with_tracer(tracer))
+    } else {
+        None
+    }
 }
 
 /// Test if we can write to the given directory.

@@ -367,27 +367,47 @@ pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<Strin
         }
 
         // Read directory entries
-        let mut entries = fs::read_dir(dir).await?;
-        while let Some(entry) = entries.next_entry().await? {
-            let path = entry.path();
+        let mut entries = match fs::read_dir(&dir).await {
+            Ok(entries) => entries,
+            Err(e) => {
+                tracing::warn!(
+                    "Skipping inaccessible tools directory '{}': {}",
+                    dir.display(),
+                    e
+                );
+                continue;
+            }
+        };
 
-            // Only process .json files
-            if path.extension().and_then(|s| s.to_str()) == Some("json")
-                && let Some(config) = read_tool_config_with_retry(&path).await
-            {
-                // Guard rail: Check for conflicts with hardcoded tool names
-                if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
-                    anyhow::bail!(
-                        "Tool name '{}' conflicts with a hardcoded system tool. Reserved tool names: {:?}. Please rename your tool in {}",
-                        config.name,
-                        RESERVED_TOOL_NAMES,
-                        path.display()
-                    );
+        loop {
+            match entries.next_entry().await {
+                Ok(Some(entry)) => {
+                    let path = entry.path();
+
+                    // Only process .json files
+                    if path.extension().and_then(|s| s.to_str()) == Some("json")
+                        && let Some(config) = read_tool_config_with_retry(&path).await
+                    {
+                        // Guard rail: Check for conflicts with hardcoded tool names
+                        if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
+                            anyhow::bail!(
+                                "Tool name '{}' conflicts with a hardcoded system tool. Reserved tool names: {:?}. Please rename your tool in {}",
+                                config.name,
+                                RESERVED_TOOL_NAMES,
+                                path.display()
+                            );
+                        }
+
+                        // Include all tools (enabled or disabled)
+                        // Disabled tools will be rejected at execution time with a helpful message
+                        configs.insert(config.name.clone(), config);
+                    }
                 }
-
-                // Include all tools (enabled or disabled)
-                // Disabled tools will be rejected at execution time with a helpful message
-                configs.insert(config.name.clone(), config);
+                Ok(None) => break,
+                Err(e) => {
+                    tracing::warn!("Error reading entry in '{}': {}", dir.display(), e);
+                    break;
+                }
             }
         }
     }

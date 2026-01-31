@@ -1,5 +1,8 @@
 use ahma_http_bridge::{BridgeConfig, start_bridge};
 use clap::Parser;
+use opentelemetry::{KeyValue, trace::TracerProvider};
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::{Resource, trace as sdktrace};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -44,10 +47,14 @@ struct Args {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize logging
+    let env_filter = tracing_subscriber::EnvFilter::new(
+        std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
+    );
+    let otel_layer = init_otel();
+
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
-        ))
+        .with(env_filter)
+        .with(otel_layer)
         .with(tracing_subscriber::fmt::layer())
         .init();
 
@@ -90,10 +97,40 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn init_otel<S>() -> Option<tracing_opentelemetry::OpenTelemetryLayer<S, sdktrace::Tracer>>
+where
+    S: tracing::Subscriber + for<'span> tracing_subscriber::registry::LookupSpan<'span>,
+{
+    if std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").is_ok() || std::env::var("AHMA_TRACING").is_ok()
+    {
+        let exporter = opentelemetry_otlp::new_exporter()
+            .http()
+            .with_endpoint("http://localhost:4318/v1/traces");
+
+        let provider = opentelemetry_otlp::new_pipeline()
+            .tracing()
+            .with_exporter(exporter)
+            .with_trace_config(
+                sdktrace::Config::default().with_resource(Resource::new(vec![KeyValue::new(
+                    "service.name",
+                    "ahma_http_bridge",
+                )])),
+            )
+            .install_batch(opentelemetry_sdk::runtime::Tokio)
+            .ok()?;
+
+        let tracer = provider.tracer("ahma_http_bridge");
+
+        Some(tracing_opentelemetry::layer().with_tracer(tracer))
+    } else {
+        None
+    }
+}
+
 fn detect_local_debug_binary(base_dir: &Path) -> Option<String> {
-    let candidate = base_dir.join("target").join("debug").join("ahma_mcp");
-    if candidate.exists() {
-        Some(candidate.to_string_lossy().into())
+    let binary_path = base_dir.join("target").join("debug").join("ahma_mcp");
+    if binary_path.exists() {
+        Some(binary_path.to_str()?.to_owned())
     } else {
         None
     }

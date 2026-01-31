@@ -36,6 +36,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
+use tempfile::TempDir;
 use tokio::time::sleep;
 
 // =============================================================================
@@ -203,6 +204,7 @@ pub const AHMA_INTEGRATION_TEST_SERVER_PORT: u16 = 5721;
 pub struct TestServerInstance {
     child: Child,
     port: u16,
+    _temp_dir: TempDir, // Keep alive for the duration of the server
 }
 
 impl TestServerInstance {
@@ -229,37 +231,31 @@ impl Drop for TestServerInstance {
 }
 
 /// Build the ahma_mcp binary if needed and return the path
-pub fn get_ahma_mcp_binary() -> PathBuf {
+fn get_ahma_mcp_binary() -> PathBuf {
     let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("Failed to get workspace dir")
         .to_path_buf();
+
+    // Build ahma_mcp binary
+    let output = Command::new("cargo")
+        .current_dir(&workspace_dir)
+        .args(["build", "--package", "ahma_core", "--bin", "ahma_mcp"])
+        .output()
+        .expect("Failed to run cargo build");
+
+    assert!(
+        output.status.success(),
+        "Failed to build ahma_mcp: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     // Check for CARGO_TARGET_DIR to support tools like llvm-cov
     let target_dir = std::env::var("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| workspace_dir.join("target"));
 
-    let binary_path = target_dir.join("debug/ahma_mcp");
-
-    // Optimization: Skip manual build if binary already exists to avoid
-    // cargo lock contention during parallel testing (especially in CI).
-    if !binary_path.exists() {
-        // Build ahma_mcp binary
-        let output = Command::new("cargo")
-            .current_dir(&workspace_dir)
-            .args(["build", "--package", "ahma_core", "--bin", "ahma_mcp"])
-            .output()
-            .expect("Failed to run cargo build");
-
-        assert!(
-            output.status.success(),
-            "Failed to build ahma_mcp: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-
-    binary_path
+    target_dir.join("debug/ahma_mcp")
 }
 
 /// Spawn a new test server with dynamic port allocation.
@@ -286,8 +282,11 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
     // Use the workspace .ahma directory
     let tools_dir = workspace_dir.join(".ahma");
 
+    // Create temp directory for sandbox scope
+    let temp_dir = TempDir::new().map_err(|e| format!("Failed to create temp dir: {}", e))?;
+    let sandbox_scope = temp_dir.path().to_path_buf();
+
     // Build command args - use port 0 for dynamic allocation
-    // Use --defer-sandbox so each HTTP session can bind its sandbox to the client's roots
     let args = vec![
         "--mode".to_string(),
         "http".to_string(),
@@ -296,7 +295,8 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
         "--sync".to_string(),
         "--tools-dir".to_string(),
         tools_dir.to_string_lossy().to_string(),
-        "--defer-sandbox".to_string(),
+        "--sandbox-scope".to_string(),
+        sandbox_scope.to_string_lossy().to_string(),
         "--log-to-stderr".to_string(),
     ];
 
@@ -348,7 +348,7 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
     });
 
     let start = Instant::now();
-    let timeout = Duration::from_secs(30);
+    let timeout = Duration::from_secs(10);
     let mut bound_port: Option<u16> = None;
 
     while start.elapsed() <= timeout {
@@ -359,12 +359,6 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
                     let port_str = &line[idx + "AHMA_BOUND_PORT=".len()..];
                     bound_port = port_str.trim().parse().ok();
                     if bound_port.is_some() {
-                        // Start a background thread to keep echoing logs
-                        std::thread::spawn(move || {
-                            while let Ok(line) = line_rx.recv() {
-                                eprintln!("{}", line);
-                            }
-                        });
                         break;
                     }
                 }
@@ -389,21 +383,16 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
     let client = Client::new();
     let health_url = format!("http://127.0.0.1:{}/health", bound_port);
 
-    let health_start = Instant::now();
-    let health_timeout = Duration::from_secs(15);
-
-    while health_start.elapsed() <= health_timeout {
+    for i in 0..50 {
         sleep(Duration::from_millis(100)).await;
         if let Ok(resp) = client.get(&health_url).send().await
             && resp.status().is_success()
         {
-            eprintln!(
-                "[TestServer] Server ready after {}ms",
-                health_start.elapsed().as_millis()
-            );
+            eprintln!("[TestServer] Server ready after {}ms", (i + 1) * 100);
             return Ok(TestServerInstance {
                 child,
                 port: bound_port,
+                _temp_dir: temp_dir,
             });
         }
     }
@@ -411,7 +400,7 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
     // Failed to start - clean up
     let _ = child.kill();
     let _ = child.wait();
-    Err("Test server failed to respond to health check within 15 seconds".to_string())
+    Err("Test server failed to respond to health check within 5 seconds".to_string())
 }
 
 /// Legacy function for backward compatibility. Spawns a new server each time.

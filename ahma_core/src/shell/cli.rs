@@ -777,7 +777,7 @@ async fn run_list_tools_mode(cli: &Cli) -> Result<()> {
             ));
         }
 
-        list_tools::list_tools_stdio(&command_args).await?
+        list_tools::list_tools_stdio_with_env(&command_args, HashMap::new()).await?
     } else if cli.mcp_config.exists() {
         list_tools::list_tools_from_config(&cli.mcp_config, cli.server.as_deref()).await?
     } else {

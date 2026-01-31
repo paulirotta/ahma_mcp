@@ -1,13 +1,23 @@
 {
     "servers": {
-        "Ahma stdio": {
-            "type": "stdio",
+        "ahma-stdio-debug-vscode": {
             "cwd": "${workspaceFolder}",
-            "command": "target/release/ahma_mcp"
-        },
-        "Ahma http": {
-            "type": "http",
-            "url": "http://localhost:3000/mcp"
+            "command": "cargo",
+            "args": [
+                "run",
+                "--bin",
+                "ahma_mcp",
+                "--",
+                "--log-to-stderr"
+            ],
+            "env": {
+                "AHMA_TRACING": "1",
+                "RUST_LOG": "debug"
+            }
         }
+        //,"ahma-http": {
+        //    "type": "http",
+        //    "url": "http://localhost:3000/mcp"
+        //}
     }
 }

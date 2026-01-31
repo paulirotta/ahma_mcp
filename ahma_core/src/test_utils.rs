@@ -500,7 +500,8 @@ pub mod test_client {
                         // Keep tests deterministic even if the developer/CI environment sets these.
                         .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
                         .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
-                        .current_dir(&workspace_dir);
+                        .current_dir(&workspace_dir)
+                        .kill_on_drop(true);
                     if let Some(dir) = tools_dir {
                         let tools_path = if Path::new(dir).is_absolute() {
                             Path::new(dir).to_path_buf()
@@ -569,7 +570,8 @@ pub mod test_client {
                         // Keep tests deterministic even if the developer/CI environment sets these.
                         .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
                         .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
-                        .current_dir(working_dir);
+                        .current_dir(working_dir)
+                        .kill_on_drop(true);
                     if let Some(dir) = tools_dir {
                         let tools_path = if Path::new(dir).is_absolute() {
                             Path::new(dir).to_path_buf()
@@ -640,7 +642,8 @@ pub mod test_client {
                         // Keep tests deterministic even if the developer/CI environment sets these.
                         .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
                         .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
-                        .current_dir(working_dir);
+                        .current_dir(working_dir)
+                        .kill_on_drop(true);
 
                     for (k, v) in extra_env {
                         cmd.env(k, v);

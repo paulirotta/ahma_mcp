@@ -44,14 +44,15 @@ pub enum OutputFormat {
 /// MCP server configuration from mcp.json
 #[derive(Debug, Deserialize, Serialize)]
 pub struct McpConfig {
+    #[serde(alias = "mcpServers")]
     pub servers: HashMap<String, ServerConfig>,
 }
 
 /// Minimal server config entry from mcp.json used by the CLI tool lister.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServerConfig {
-    /// Transport type ("child_process" or "http").
-    #[serde(rename = "type")]
+    /// Transport type ("child_process", "stdio" or "http").
+    #[serde(rename = "type", default = "default_server_type")]
     pub server_type: String,
     /// Command to launch a child-process server (if applicable).
     pub command: Option<String>,
@@ -59,6 +60,14 @@ pub struct ServerConfig {
     pub args: Option<Vec<String>>,
     /// Working directory for launching the server.
     pub cwd: Option<String>,
+    /// Environment variables for the server.
+    pub env: Option<HashMap<String, String>>,
+    /// HTTP URL for the server (if type is "http").
+    pub url: Option<String>,
+}
+
+fn default_server_type() -> String {
+    "stdio".to_string()
 }
 
 /// Tool listing result for JSON output
@@ -102,10 +111,10 @@ pub struct ParameterOutput {
 }
 
 /// Parse mcp.json and get server configuration
-pub fn parse_mcp_config(
+pub fn parse_mcp_config_full(
     path: &PathBuf,
     server_name: Option<&str>,
-) -> Result<(String, String, Vec<String>)> {
+) -> Result<(String, ServerConfig)> {
     let content = fs::read_to_string(path)
         .with_context(|| format!("Failed to read mcp.json from {}", path.display()))?;
 
@@ -126,17 +135,26 @@ pub fn parse_mcp_config(
             .ok_or_else(|| anyhow!("No servers defined in mcp.json"))?
     };
 
-    let command = server_config
+    Ok((name, server_config))
+}
+
+type LegacyMcpConfig = (String, String, Vec<String>, HashMap<String, String>);
+
+/// Parse mcp.json and get server configuration (legacy helper)
+pub fn parse_mcp_config(path: &PathBuf, server_name: Option<&str>) -> Result<LegacyMcpConfig> {
+    let (name, config) = parse_mcp_config_full(path, server_name)?;
+    let command = config
         .command
         .ok_or_else(|| anyhow!("Server '{}' has no command defined", name))?;
-
-    let args = server_config.args.unwrap_or_default();
-
-    // Expand home directory in command
     let command = expand_home(&command);
-    let args: Vec<String> = args.iter().map(|a| expand_home(a)).collect();
-
-    Ok((name, command, args))
+    let args = config
+        .args
+        .unwrap_or_default()
+        .iter()
+        .map(|a| expand_home(a))
+        .collect();
+    let env = config.env.unwrap_or_default();
+    Ok((name, command, args, env))
 }
 
 /// Expand ~ to home directory
@@ -154,20 +172,38 @@ pub async fn list_tools_from_config(
     config_path: &PathBuf,
     server_name: Option<&str>,
 ) -> Result<ToolListResult> {
-    let (name, command, args) = parse_mcp_config(config_path, server_name)?;
-    info!(
-        "Connecting to server '{}' via stdio: {} {:?}",
-        name, command, args
-    );
+    let (name, server_config) = parse_mcp_config_full(config_path, server_name)?;
 
-    let mut all_args = vec![command];
-    all_args.extend(args);
+    if server_config.server_type == "http" {
+        let url_str = server_config
+            .url
+            .ok_or_else(|| anyhow!("Server '{}' (http) has no url defined", name))?;
+        info!("Connecting to server '{}' via HTTP: {}", name, url_str);
+        list_tools_http(&url_str).await
+    } else {
+        let command = server_config
+            .command
+            .ok_or_else(|| anyhow!("Server '{}' has no command defined", name))?;
+        let args = server_config.args.unwrap_or_default();
+        let env = server_config.env.unwrap_or_default();
 
-    list_tools_stdio(&all_args).await
+        info!(
+            "Connecting to server '{}' via stdio: {} {:?} (env: {:?})",
+            name, command, args, env
+        );
+
+        let mut all_args = vec![expand_home(&command)];
+        all_args.extend(args.iter().map(|a| expand_home(a)));
+
+        list_tools_stdio_with_env(&all_args, env).await
+    }
 }
 
-/// List tools from stdio MCP server
-pub async fn list_tools_stdio(command_args: &[String]) -> Result<ToolListResult> {
+/// List tools from stdio MCP server with environment variables
+pub async fn list_tools_stdio_with_env(
+    command_args: &[String],
+    env: HashMap<String, String>,
+) -> Result<ToolListResult> {
     if command_args.is_empty() {
         return Err(anyhow!("No command specified for stdio connection"));
     }
@@ -175,13 +211,20 @@ pub async fn list_tools_stdio(command_args: &[String]) -> Result<ToolListResult>
     let command = &command_args[0];
     let args = &command_args[1..];
 
-    info!("Starting MCP server: {} {:?}", command, args);
+    info!(
+        "Starting MCP server: {} {:?} (env: {:?})",
+        command, args, env
+    );
 
     // Build command using rmcp's ConfigureCommandExt
     let args_clone: Vec<String> = args.to_vec();
+    let env_clone = env.clone();
     let transport = TokioChildProcess::new(Command::new(command).configure(move |cmd| {
         for arg in &args_clone {
             cmd.arg(arg);
+        }
+        for (key, value) in &env_clone {
+            cmd.env(key, value);
         }
     }))
     .with_context(|| format!("Failed to start MCP server process: {} {:?}", command, args))?;
@@ -198,9 +241,9 @@ pub async fn list_tools_stdio(command_args: &[String]) -> Result<ToolListResult>
     });
 
     // List tools
-    let tools_result = client.list_tools(None).await?;
+    let tools = client.list_tools(None).await?;
 
-    let tools: Vec<ToolOutput> = tools_result
+    let tools: Vec<ToolOutput> = tools
         .tools
         .into_iter()
         .map(convert_tool_to_output)
@@ -431,7 +474,8 @@ mod tests {
         let mut file = fs::File::create(&config_path).unwrap();
         file.write_all(config_content.as_bytes()).unwrap();
 
-        let (name, command, args) = parse_mcp_config(&config_path, Some("TestServer")).unwrap();
+        let (name, command, args, _env) =
+            parse_mcp_config(&config_path, Some("TestServer")).unwrap();
 
         assert_eq!(name, "TestServer");
         assert_eq!(command, "/usr/bin/test");
@@ -456,7 +500,7 @@ mod tests {
         let mut file = fs::File::create(&config_path).unwrap();
         file.write_all(config_content.as_bytes()).unwrap();
 
-        let (name, command, _args) = parse_mcp_config(&config_path, None).unwrap();
+        let (name, command, _args, _env) = parse_mcp_config(&config_path, None).unwrap();
 
         assert_eq!(name, "FirstServer");
         assert_eq!(command, "/usr/bin/first");
@@ -572,7 +616,8 @@ mod tests {
         let mut file = fs::File::create(&config_path).unwrap();
         file.write_all(config_content.as_bytes()).unwrap();
 
-        let (name, command, args) = parse_mcp_config(&config_path, Some("HomeServer")).unwrap();
+        let (name, command, args, _env) =
+            parse_mcp_config(&config_path, Some("HomeServer")).unwrap();
 
         assert_eq!(name, "HomeServer");
         // Command and args should have ~ expanded
@@ -893,6 +938,8 @@ mod tests {
             command: Some("/usr/local/bin/server".to_string()),
             args: Some(vec!["--port".to_string(), "8080".to_string()]),
             cwd: Some("/home/user".to_string()),
+            env: Some(HashMap::new()),
+            url: None,
         };
 
         let json = serde_json::to_string(&server).unwrap();
