@@ -24,7 +24,7 @@ url.workspace = true
 webbrowser = "1.0.6"
 
 [dev-dependencies]
-clap = {version = "4.5.54", features = ["derive"]}
+clap = {version = "4.5.56", features = ["derive"]}
 tempfile.workspace = true
 tracing-subscriber = "0.3"
 wiremock = "0.6"
