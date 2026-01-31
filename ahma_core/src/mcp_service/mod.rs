@@ -1262,24 +1262,10 @@ impl AhmaMcpService {
                 }
 
                 if !new_scopes.is_empty() {
-                    if let Err(e) = self.adapter.sandbox().update_scopes(new_scopes.clone()) {
+                    if let Err(e) = self.adapter.sandbox().update_scopes(new_scopes) {
                         tracing::error!("Failed to update sandbox from roots: {}", e);
                     } else {
                         tracing::info!("Sandbox scopes updated successfully");
-
-                        // SECURITY: On Linux, apply Landlock restrictions now that roots are known.
-                        // This is necessary because in deferred mode, the process starts unrestricted.
-                        #[cfg(target_os = "linux")]
-                        {
-                            if let Err(e) = crate::sandbox::enforce_landlock_sandbox(&new_scopes) {
-                                tracing::error!(
-                                    "CRITICAL: Failed to enforce Landlock sandbox: {}",
-                                    e
-                                );
-                                // Should we exit? Probably yes for security, but maybe allow tests to proceed?
-                                // Given this is a bridge session, crashing the worker is probably best.
-                            }
-                        }
                     }
                 }
             }
