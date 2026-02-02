@@ -32,3 +32,6 @@ tmp
 *.temp
 *.tmp
 *.profraw
+
+# Coverage reports
+coverage.json

@@ -201,6 +201,21 @@ where
     }
 
     async fn close(&mut self) -> Result<(), Self::Error> {
+        // Ensure any buffered data is flushed and the writer is cleanly shutdown
+        // so that outgoing notifications are delivered to the peer before
+        // the transport is considered closed.
+        let writer = self.writer.clone();
+        let mut w = writer.lock().await;
+        // Attempt to flush any buffered bytes first
+        if let Err(e) = w.flush().await {
+            eprintln!("[AhmaTransport] Flush on close failed: {}", e);
+            return Err(e);
+        }
+        // Then try a graceful shutdown of the writer (if supported)
+        if let Err(e) = AsyncWriteExt::shutdown(&mut *w).await {
+            eprintln!("[AhmaTransport] Shutdown on close failed: {}", e);
+            return Err(e);
+        }
         Ok(())
     }
 }

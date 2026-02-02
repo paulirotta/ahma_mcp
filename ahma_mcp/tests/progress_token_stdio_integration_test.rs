@@ -158,9 +158,11 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
     )?;
     // Append the execution lines in append mode so we can include the exec logic
     use std::fs::OpenOptions;
-    let mut f = OpenOptions::new().append(true).open(&wrapper_path)?;
-    use std::io::Write;
-    writeln!(f, r#"exec "$@" | tee /dev/stderr"#)?;
+    {
+        use std::io::Write;
+        let mut f = OpenOptions::new().append(true).open(&wrapper_path)?;
+        writeln!(f, r#"exec "$@" | tee /dev/stderr"#)?;
+    } // `f` dropped here to ensure the writer FD is closed before we spawn the wrapper
     // Make the wrapper executable
     let mut perms = std::fs::metadata(&wrapper_path)?.permissions();
     perms.set_mode(0o755);
