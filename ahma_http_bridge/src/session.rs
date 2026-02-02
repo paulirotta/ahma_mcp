@@ -973,15 +973,13 @@ impl SessionManager {
 
                                 // If this is a notification that the subprocess has applied
                                 // the sandbox scopes, mark the session and notify waiters.
-                                if let Some(method_val) = value.get("method") {
-                                    if let Some(method_str) = method_val.as_str() {
-                                        if method_str == "notifications/sandbox/configured" {
+                                if let Some(method_val) = value.get("method")
+                                    && let Some(method_str) = method_val.as_str()
+                                        && method_str == "notifications/sandbox/configured" {
                                             session.sandbox_applied.store(true, Ordering::SeqCst);
                                             session.sandbox_applied_notify.notify_waiters();
                                             debug!(session_id = %session.id, "Observed notifications/sandbox/configured from subprocess");
                                         }
-                                    }
-                                }
 
                                 // Not a response to a pending request - broadcast as SSE event
                                 let _ = session.broadcast_tx.send(line);

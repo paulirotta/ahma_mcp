@@ -767,9 +767,9 @@ async fn handle_session_isolated_request(
 
         // If this is a tools/call and the bridge has locked the sandbox, wait briefly
         // for the subprocess to apply the sandbox scopes (notifications/sandbox/configured).
-        if method == Some("tools/call") {
-            if let Some(session) = session_manager.get_session(&session_id) {
-                if session.is_sandbox_locked() && !session.is_sandbox_applied() {
+        if method == Some("tools/call")
+            && let Some(session) = session_manager.get_session(&session_id)
+                && session.is_sandbox_locked() && !session.is_sandbox_applied() {
                     // Wait a short, bounded time for the subprocess to apply the sandbox.
                     let wait_timeout = std::time::Duration::from_secs(2);
                     let wait_result =
@@ -782,8 +782,6 @@ async fn handle_session_isolated_request(
                         warn!(session_id = %session_id, "Timed out waiting for subprocess sandbox-applied notification; forwarding tools/call optimistically");
                     }
                 }
-            }
-        }
 
         match session_manager
             .send_request(&session_id, &payload, Some(request_timeout))
