@@ -25,5 +25,10 @@
         "titleBar.inactiveForeground": "#e7e7e799"
     },
     "peacock.color": "#23208a",
-    "markdownlint.enable": false
+    "markdownlint.enable": false,
+    "chat.mcp.serverSampling": {
+        "ahma_mcp/.vscode/mcp.json: ahma-stdio-debug-vscode": {
+            "allowedModels": []
+        }
+    }
 }

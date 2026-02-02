@@ -250,11 +250,17 @@ fn get_ahma_mcp_binary() -> PathBuf {
     // Check debug then release locations
     let debug_bin = target_dir.join("debug/ahma_mcp");
     let release_bin = target_dir.join("release/ahma_mcp");
+    let llvm_cov_debug_bin = target_dir.join("llvm-cov-target/debug/ahma_mcp");
+    let llvm_cov_release_bin = target_dir.join("llvm-cov-target/release/ahma_mcp");
 
     let binary_path = if debug_bin.exists() {
         debug_bin
     } else if release_bin.exists() {
         release_bin
+    } else if llvm_cov_debug_bin.exists() {
+        llvm_cov_debug_bin
+    } else if llvm_cov_release_bin.exists() {
+        llvm_cov_release_bin
     } else {
         panic!(
             "\n\
