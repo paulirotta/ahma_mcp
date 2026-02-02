@@ -12,6 +12,7 @@ use rmcp::{
 };
 use serde_json::json;
 use std::borrow::Cow;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -112,6 +113,13 @@ impl rmcp::service::Service<RoleClient> for RecordingClient {
     ) -> impl std::future::Future<Output = Result<(), rmcp::model::ErrorData>> + Send + '_ {
         async move {
             if let ServerNotification::ProgressNotification(n) = notification {
+                // Log receipt for debugging test flakes: include token and timestamp.
+                use std::time::SystemTime;
+                eprintln!(
+                    "[TEST_CLIENT] RECV_PROGRESS: {:?} | ts: {:?}",
+                    n.params.progress_token,
+                    SystemTime::now()
+                );
                 let _ = self.tx.send(n.params).await;
             }
             Ok(())
@@ -138,11 +146,32 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
         .unwrap_or_else(|_| wd.join("target"));
     let binary_path = target_dir.join("debug/ahma_mcp");
 
+    // Create a small wrapper script that tees the child's stdout to stderr so
+    // the test process can observe raw JSON-RPC lines even if the client handler
+    // misses them. This avoids changing rmcp internals.
+    let wrapper_path = temp.path().join("child_wrapper.sh");
+    std::fs::write(
+        &wrapper_path,
+        r#"#!/bin/sh
+# Run the target binary (first arg) with remaining args, teeing stdout to stderr
+"#,
+    )?;
+    // Append the execution lines in append mode so we can include the exec logic
+    use std::fs::OpenOptions;
+    let mut f = OpenOptions::new().append(true).open(&wrapper_path)?;
+    use std::io::Write;
+    writeln!(f, r#"exec "$@" | tee /dev/stderr"#)?;
+    // Make the wrapper executable
+    let mut perms = std::fs::metadata(&wrapper_path)?.permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(&wrapper_path, perms)?;
+
     let service = client_impl
         .clone()
         .serve(TokioChildProcess::new(
-            Command::new(binary_path).configure(|cmd| {
-                cmd.arg("--tools-dir")
+            Command::new(wrapper_path).configure(|cmd| {
+                cmd.arg(&binary_path)
+                    .arg("--tools-dir")
                     .arg(&tools_dir)
                     .arg("--log-to-stderr")
                     .current_dir(&wd)

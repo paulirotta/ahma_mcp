@@ -1266,6 +1266,20 @@ impl AhmaMcpService {
                         tracing::error!("Failed to update sandbox from roots: {}", e);
                     } else {
                         tracing::info!("Sandbox scopes updated successfully");
+                        // Notify bridge that sandbox has been configured so it can safely
+                        // forward tools/call requests. We emit a JSON-RPC notification
+                        // on stdout which the HTTP bridge listens for on the subprocess
+                        // stdout stream.
+                        // NOTE: we intentionally write the raw JSON to stdout instead of
+                        // using rmcp Peer helpers here to avoid relying on generated
+                        // methods for a new notification name.
+                        if let Ok(notification) = serde_json::to_string(&serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "method": "notifications/sandbox/configured"
+                        })) {
+                            // Use println! to write to stdout so the bridge picks it up.
+                            println!("{}", notification);
+                        }
                     }
                 }
             }

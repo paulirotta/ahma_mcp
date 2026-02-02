@@ -721,9 +721,10 @@ async fn handle_session_isolated_request(
                             // The subprocess (with --defer-sandbox) is waiting for this signal to call
                             // configure_sandbox_from_roots(), which will query roots and update its sandbox.
                             if let Some(session) = session_manager.get_session(&session_id)
-                                && let Err(e) = session.send_roots_list_changed().await {
-                                    warn!(session_id = %session_id, "Failed to send roots/list_changed to subprocess: {}", e);
-                                }
+                                && let Err(e) = session.send_roots_list_changed().await
+                            {
+                                warn!(session_id = %session_id, "Failed to send roots/list_changed to subprocess: {}", e);
+                            }
                         }
                         Ok(false) => {}
                         Err(e) => {
@@ -763,6 +764,26 @@ async fn handle_session_isolated_request(
         } else {
             Duration::from_secs(request_timeout_secs())
         };
+
+        // If this is a tools/call and the bridge has locked the sandbox, wait briefly
+        // for the subprocess to apply the sandbox scopes (notifications/sandbox/configured).
+        if method == Some("tools/call") {
+            if let Some(session) = session_manager.get_session(&session_id) {
+                if session.is_sandbox_locked() && !session.is_sandbox_applied() {
+                    // Wait a short, bounded time for the subprocess to apply the sandbox.
+                    let wait_timeout = std::time::Duration::from_secs(2);
+                    let wait_result =
+                        tokio::time::timeout(wait_timeout, session.wait_for_sandbox_applied())
+                            .await;
+                    if wait_result.is_err() {
+                        // Timed out waiting for explicit subprocess ack. Log and proceed
+                        // optimistically to forward the request — the subprocess may already
+                        // be ready even if it didn't emit the notification.
+                        warn!(session_id = %session_id, "Timed out waiting for subprocess sandbox-applied notification; forwarding tools/call optimistically");
+                    }
+                }
+            }
+        }
 
         match session_manager
             .send_request(&session_id, &payload, Some(request_timeout))
@@ -959,6 +980,12 @@ for line in sys.stdin:
             }
         }
         print(json.dumps(resp))
+        sys.stdout.flush()
+        continue
+    
+    if method == "notifications/roots/list_changed":
+        # Simulate subprocess applying sandbox scopes and notify bridge
+        print(json.dumps({"jsonrpc": "2.0", "method": "notifications/sandbox/configured"}))
         sys.stdout.flush()
         continue
 

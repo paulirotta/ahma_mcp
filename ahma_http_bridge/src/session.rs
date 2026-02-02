@@ -202,6 +202,10 @@ pub struct Session {
     handshake_state: AtomicU8,
     /// Notify for waiting on MCP initialization (signals when handshake advances past AwaitingMcpOnly)
     mcp_initialized_notify: Notify,
+    /// Notify for waiting on subprocess applying sandbox scopes (signals when subprocess applied roots)
+    sandbox_applied_notify: Notify,
+    /// Whether the subprocess has applied the sandbox scopes
+    sandbox_applied: AtomicBool,
     /// When the session was created (for handshake timeout tracking)
     created_at: Instant,
     /// Per-session handshake timeout duration captured at session creation to avoid env races
@@ -254,6 +258,20 @@ impl Session {
             return;
         }
         self.mcp_initialized_notify.notified().await;
+    }
+
+    /// Check if subprocess has applied sandbox scopes (observed `notifications/sandbox/configured`).
+    pub fn is_sandbox_applied(&self) -> bool {
+        self.sandbox_applied.load(Ordering::SeqCst)
+    }
+
+    /// Wait for the subprocess to signal that it applied sandbox scopes.
+    /// Returns immediately if already applied, otherwise waits for notification.
+    pub async fn wait_for_sandbox_applied(&self) {
+        if self.is_sandbox_applied() {
+            return;
+        }
+        self.sandbox_applied_notify.notified().await;
     }
 
     /// Check if the handshake has timed out (sandbox not locked within timeout).
@@ -615,6 +633,8 @@ impl SessionManager {
             child_handle: Mutex::new(Some(child)),
             handshake_state: AtomicU8::new(HandshakeState::AwaitingBoth as u8),
             mcp_initialized_notify: Notify::new(),
+            sandbox_applied_notify: Notify::new(),
+            sandbox_applied: AtomicBool::new(false),
             created_at: Instant::now(),
             handshake_timeout,
         });
@@ -948,6 +968,18 @@ impl SessionManager {
                                     if let Some((_, sender)) = session.pending_requests.remove(&id_str) {
                                         let _ = sender.send(value);
                                         continue;
+                                    }
+                                }
+
+                                // If this is a notification that the subprocess has applied
+                                // the sandbox scopes, mark the session and notify waiters.
+                                if let Some(method_val) = value.get("method") {
+                                    if let Some(method_str) = method_val.as_str() {
+                                        if method_str == "notifications/sandbox/configured" {
+                                            session.sandbox_applied.store(true, Ordering::SeqCst);
+                                            session.sandbox_applied_notify.notify_waiters();
+                                            debug!(session_id = %session.id, "Observed notifications/sandbox/configured from subprocess");
+                                        }
                                     }
                                 }
 
