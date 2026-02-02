@@ -148,7 +148,7 @@ pub fn tool_call_timeout_secs() -> u64 {
     std::env::var("AHMA_HTTP_BRIDGE_TOOL_CALL_TIMEOUT_SECS")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(25)
+        .unwrap_or(60)
 }
 
 /// Session termination reason

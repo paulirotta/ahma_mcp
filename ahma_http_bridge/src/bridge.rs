@@ -756,11 +756,15 @@ async fn handle_session_isolated_request(
                 .and_then(|p| p.get("arguments"))
                 .and_then(|a| a.get("timeout_seconds"))
                 .and_then(|v| v.as_u64());
+
             let default_secs = tool_call_timeout_secs();
-            let capped_secs = arg_timeout_secs
-                .map(|v| v.min(default_secs))
+            // Allow user to specify timeout up to 600s (10 min), fallback to default (60s)
+            // Do NOT cap at default_secs, unlike before which forced 25s cap.
+            let effective_secs = arg_timeout_secs
+                .map(|v| v.min(600)) // Cap at 10 minutes to prevent indefinite hangs
                 .unwrap_or(default_secs);
-            Duration::from_secs(capped_secs)
+
+            Duration::from_secs(effective_secs)
         } else {
             Duration::from_secs(request_timeout_secs())
         };
