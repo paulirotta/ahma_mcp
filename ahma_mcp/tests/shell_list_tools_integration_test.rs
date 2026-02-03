@@ -8,17 +8,7 @@ use std::process::Command;
 
 /// Get the path to the pre-built ahma_mcp binary
 fn get_ahma_mcp_binary() -> PathBuf {
-    let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .to_path_buf();
-
-    // Check for CARGO_TARGET_DIR
-    let target_dir = std::env::var("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| project_root.join("target"));
-
-    target_dir.join("debug/ahma_mcp")
+    ahma_mcp::test_utils::cli::get_binary_path("ahma_mcp", "ahma_mcp")
 }
 
 /// Test that the binary shows help for --list-tools

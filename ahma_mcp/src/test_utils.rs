@@ -290,6 +290,30 @@ pub mod cli {
     /// Key: (package, binary) tuple as string "package:binary"
     static BINARY_CACHE: OnceLock<Mutex<HashMap<String, PathBuf>>> = OnceLock::new();
 
+    /// Get the path to a binary in the target directory, resolving CARGO_TARGET_DIR correctly.
+    ///
+    /// This function handles relative `CARGO_TARGET_DIR` paths (e.g., `target`) by resolving
+    /// them relative to the workspace root. This is critical for CI environments that set
+    /// `CARGO_TARGET_DIR` to a relative path.
+    ///
+    /// Does NOT build the binary - caller is responsible for ensuring it exists.
+    /// For automatic building with caching, use `build_binary_cached()` instead.
+    pub fn get_binary_path(_package: &str, binary: &str) -> PathBuf {
+        let workspace = get_workspace_dir();
+        let target_dir = std::env::var("CARGO_TARGET_DIR")
+            .map(PathBuf::from)
+            .map(|p| {
+                if p.is_absolute() {
+                    p
+                } else {
+                    workspace.join(p)
+                }
+            })
+            .unwrap_or_else(|_| workspace.join("target"));
+
+        target_dir.join("debug").join(binary)
+    }
+
     /// Get or build a binary, caching the result.
     ///
     /// This function is optimized for test performance:
@@ -308,19 +332,7 @@ pub mod cli {
             }
         }
 
-        let workspace = get_workspace_dir();
-        let target_dir = std::env::var("CARGO_TARGET_DIR")
-            .map(PathBuf::from)
-            .map(|p| {
-                if p.is_absolute() {
-                    p
-                } else {
-                    workspace.join(p)
-                }
-            })
-            .unwrap_or_else(|_| workspace.join("target"));
-
-        let binary_path = target_dir.join("debug").join(binary);
+        let binary_path = get_binary_path(package, binary);
 
         if binary_path.exists() {
             let mut cache_guard = cache.lock().unwrap();
@@ -328,6 +340,7 @@ pub mod cli {
             return binary_path;
         }
 
+        let workspace = get_workspace_dir();
         let output = Command::new("cargo")
             .current_dir(&workspace)
             .args(["build", "--package", package, "--bin", binary])

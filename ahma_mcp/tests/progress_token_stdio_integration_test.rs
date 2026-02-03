@@ -140,11 +140,7 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
 
     let wd = workspace_dir();
 
-    // Check for CARGO_TARGET_DIR
-    let target_dir = std::env::var("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| wd.join("target"));
-    let binary_path = target_dir.join("debug/ahma_mcp");
+    let binary_path = ahma_mcp::test_utils::cli::get_binary_path("ahma_mcp", "ahma_mcp");
 
     // Create a small wrapper script that tees the child's stdout to stderr so
     // the test process can observe raw JSON-RPC lines even if the client handler

@@ -22,28 +22,7 @@ fn workspace_dir() -> PathBuf {
 }
 
 fn build_binary(package: &str, binary: &str) -> PathBuf {
-    let workspace = workspace_dir();
-
-    // Build the binary
-    let output = Command::new("cargo")
-        .current_dir(&workspace)
-        .args(["build", "--package", package, "--bin", binary])
-        .output()
-        .expect("Failed to run cargo build");
-
-    assert!(
-        output.status.success(),
-        "Failed to build {}: {}",
-        binary,
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    // Check for CARGO_TARGET_DIR
-    let target_dir = std::env::var("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| workspace.join("target"));
-
-    target_dir.join("debug").join(binary)
+    ahma_mcp::test_utils::cli::build_binary_cached(package, binary)
 }
 
 /// Create a command for a binary with test mode enabled (bypasses sandbox checks)
