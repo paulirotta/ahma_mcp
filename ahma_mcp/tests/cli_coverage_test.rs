@@ -2,11 +2,11 @@ use ahma_mcp::config::{SubcommandConfig, ToolConfig};
 use ahma_mcp::shell::cli::{
     self, Cli, normalize_tools_dir, parse_env_list, resolve_cli_subcommand,
 };
-use ahma_mcp::shell::list_tools;
+
 use clap::Parser;
 use std::collections::HashSet;
 use std::fs;
-use std::path::PathBuf;
+
 use tempfile::TempDir;
 
 #[test]
@@ -33,9 +33,11 @@ fn test_normalize_tools_dir_legacy_structure() {
 
 #[test]
 fn test_resolve_cli_subcommand_basic() {
-    let mut config = ToolConfig::default();
-    config.name = "mytool".to_string();
-    config.command = "tool_cmd".to_string();
+    let mut config = ToolConfig {
+        name: "mytool".to_string(),
+        command: "tool_cmd".to_string(),
+        ..Default::default()
+    };
 
     let sub = SubcommandConfig {
         name: "sub".to_string(),
@@ -52,9 +54,11 @@ fn test_resolve_cli_subcommand_basic() {
 
 #[test]
 fn test_resolve_cli_subcommand_nested() {
-    let mut config = ToolConfig::default();
-    config.name = "git".to_string();
-    config.command = "git".to_string();
+    let mut config = ToolConfig {
+        name: "git".to_string(),
+        command: "git".to_string(),
+        ..Default::default()
+    };
 
     let nested_sub = SubcommandConfig {
         name: "list".to_string(),
@@ -78,9 +82,11 @@ fn test_resolve_cli_subcommand_nested() {
 
 #[test]
 fn test_resolve_cli_subcommand_errors() {
-    let mut config = ToolConfig::default();
-    config.name = "mytool".to_string();
-    config.subcommand = Some(vec![]);
+    let config = ToolConfig {
+        name: "mytool".to_string(),
+        subcommand: Some(vec![]),
+        ..Default::default()
+    };
 
     // Invalid format
     let res = resolve_cli_subcommand("mytool", &config, "invalidformat", None);
@@ -138,5 +144,5 @@ fn test_cli_argument_parsing() {
 
     assert_eq!(cli.mode, "http");
     assert_eq!(cli.http_port, 8080);
-    assert_eq!(cli.sync, false);
+    assert!(!cli.sync);
 }

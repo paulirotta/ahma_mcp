@@ -112,12 +112,10 @@ async fn start_deferred_sandbox_server(tools_dir: &std::path::Path) -> (std::pro
     std::thread::spawn(move || {
         use std::io::{BufRead, BufReader};
         let reader = BufReader::new(stderr);
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                eprintln!("{}", line); // Pass through to test output
-                if line.contains("AHMA_BOUND_PORT=") {
-                    let _ = tx.send(line);
-                }
+        for line in reader.lines().map_while(Result::ok) {
+            eprintln!("{}", line); // Pass through to test output
+            if line.contains("AHMA_BOUND_PORT=") {
+                let _ = tx.send(line);
             }
         }
     });
@@ -128,13 +126,13 @@ async fn start_deferred_sandbox_server(tools_dir: &std::path::Path) -> (std::pro
     let mut port = 0;
 
     while start.elapsed() < timeout {
-        if let Ok(line) = rx.recv_timeout(Duration::from_millis(100)) {
-            if let Some(idx) = line.find("AHMA_BOUND_PORT=") {
-                let port_str = &line[idx + "AHMA_BOUND_PORT=".len()..];
-                if let Ok(p) = port_str.trim().parse::<u16>() {
-                    port = p;
-                    break;
-                }
+        if let Ok(line) = rx.recv_timeout(Duration::from_millis(100))
+            && let Some(idx) = line.find("AHMA_BOUND_PORT=")
+        {
+            let port_str = &line[idx + "AHMA_BOUND_PORT=".len()..];
+            if let Ok(p) = port_str.trim().parse::<u16>() {
+                port = p;
+                break;
             }
         }
 

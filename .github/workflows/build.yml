@@ -414,6 +414,26 @@ jobs:
             cargo-nextest-target-${{ runner.os }}-
             cargo-build-target-${{ runner.os }}-
 
+      - name: Cache AGP and more Gradle directories
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/caches/jars-*
+            ~/.gradle/caches/transforms-*
+            ~/.gradle/caches/build-cache-*
+            ~/.gradle/daemon
+            ~/.gradle/wrapper
+          key: gradle-deeper-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
+          restore-keys: |
+            gradle-deeper-${{ runner.os }}-
+
+      - name: Preheat Gradle Daemon
+        run: |
+          ./gradlew tasks > /dev/null &
+          echo "Gradle warming up slowly in background..."
+        working-directory: ./test-data/AndoidTestBasicViews
+
       - name: Cache sccache artifacts
         uses: actions/cache@v5
         with:
@@ -441,6 +461,16 @@ jobs:
           echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
           sccache --show-stats
 
+      - name: Check for cargo-ndk and install if missing
+        run: |
+          if ! command -v cargo-ndk &> /dev/null; then
+            echo "cargo-ndk not found, installing..."
+            cargo binstall cargo-ndk --no-confirm || cargo install cargo-ndk --locked
+          else
+            echo "cargo-ndk is already installed, skipping installation"
+          fi
+          cargo ndk --version
+
       - name: Install cargo-llvm-cov
         run: |
           if ! command -v cargo-llvm-cov &> /dev/null; then
@@ -465,7 +495,7 @@ jobs:
 
       - name: Generate coverage report
         run: |
-          cargo llvm-cov nextest --profile coverage --locked --no-default-features -E 'not test(gradlew) & not test(android)' --html --output-dir ./coverage
+          cargo llvm-cov nextest --profile coverage --locked --no-default-features --html --output-dir ./coverage
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

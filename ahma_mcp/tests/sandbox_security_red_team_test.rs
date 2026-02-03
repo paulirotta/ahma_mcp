@@ -397,7 +397,7 @@ async fn red_team_command_read_escape_blocked_linux() {
 
     // Command should fail or return error exit code
     if let Ok(response) = result {
-        let content = response.content.first().unwrap().as_text().unwrap();
+        let _content = response.content.first().unwrap().as_text().unwrap();
         // Check if output contains "Permission denied" or similar
         // Note: response content is JSON string of the result, we need to check stderr/exit code
         // But client.call_tool returns the ToolResult. Use debug print if needed.
@@ -447,7 +447,7 @@ async fn red_team_command_read_escape_blocked_linux_custom() {
     if let Ok(tools_res) = result {
         for content in tools_res.content {
             if let Some(text) = content.as_text() {
-                let res_json: serde_json::Value = serde_json::from_str(text).unwrap();
+                let res_json: serde_json::Value = serde_json::from_str(&text.text).unwrap();
                 let exit_code = res_json
                     .get("exit_code")
                     .and_then(|v| v.as_i64())
