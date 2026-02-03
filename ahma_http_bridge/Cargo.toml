@@ -45,6 +45,7 @@ opentelemetry = [
 ]
 
 [dev-dependencies]
+ahma_mcp = { path = "../ahma_mcp" }
 futures.workspace = true
 reqwest = { workspace = true, features = ["json", "stream"] }
 tempfile.workspace = true

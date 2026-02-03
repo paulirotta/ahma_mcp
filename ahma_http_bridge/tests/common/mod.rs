@@ -243,8 +243,22 @@ fn get_ahma_mcp_binary() -> PathBuf {
         .to_path_buf();
 
     // Support CARGO_TARGET_DIR for tools like llvm-cov
+    let binary_from_helper = ahma_mcp::test_utils::cli::get_binary_path("ahma_mcp", "ahma_mcp");
+
+    // Check debug then release locations, including llvm-cov variants
+    let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("Failed to get workspace dir")
+        .to_path_buf();
     let target_dir = std::env::var("CARGO_TARGET_DIR")
         .map(PathBuf::from)
+        .map(|p| {
+            if p.is_absolute() {
+                p
+            } else {
+                workspace_dir.join(p)
+            }
+        })
         .unwrap_or_else(|_| workspace_dir.join("target"));
 
     // Check debug then release locations

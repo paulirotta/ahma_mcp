@@ -469,6 +469,18 @@ fs::write(&test_file, "test content").unwrap();
 - Tests in `ahma_mcp/tests/cli_binary_integration_test.rs`.
 - Cover: `--help`, `--version`, basic functionality.
 
+### 10.4 Test Utilities - Prevent Code Duplication
+
+**R-TEST-PATH**: All binary path resolution in tests **MUST** use centralized helpers:
+
+- **R-TEST-PATH.1**: Use `ahma_mcp::test_utils::cli::get_binary_path(package, binary)` to get binary paths
+- **R-TEST-PATH.2**: Use `ahma_mcp::test_utils::cli::build_binary_cached(package, binary)` for builds with caching
+- **R-TEST-PATH.3**: **NEVER** manually access `std::env::var("CARGO_TARGET_DIR")` outside of `test_utils::cli`
+
+**Why**: CI environments may set `CARGO_TARGET_DIR` to relative paths (e.g., `target`). The centralized helpers correctly resolve these relative to the workspace root. Manual path resolution duplicates this logic and inevitably introduces bugs.
+
+**Enforcement**: See `scripts/lint_test_paths.sh` for automated detection of violations.
+
 ---
 
 ## 11. Known Issues & Guardrails

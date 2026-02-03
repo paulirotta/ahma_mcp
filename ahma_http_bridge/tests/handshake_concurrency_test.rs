@@ -43,32 +43,7 @@ fn get_workspace_dir() -> PathBuf {
 }
 
 fn get_ahma_mcp_binary() -> PathBuf {
-    let workspace_dir = get_workspace_dir();
-
-    // Check for CARGO_TARGET_DIR
-    let target_dir = std::env::var("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| workspace_dir.join("target"));
-
-    let binary_path = target_dir.join("debug/ahma_mcp");
-
-    // Optimization: Skip manual build if binary already exists to avoid
-    // cargo lock contention during parallel testing (especially in CI).
-    if !binary_path.exists() {
-        let output = Command::new("cargo")
-            .current_dir(&workspace_dir)
-            .args(["build", "--package", "ahma_mcp", "--bin", "ahma_mcp"])
-            .output()
-            .expect("Failed to run cargo build");
-
-        assert!(
-            output.status.success(),
-            "Failed to build ahma_mcp: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-
-    binary_path
+    ahma_mcp::test_utils::cli::build_binary_cached("ahma_mcp", "ahma_mcp")
 }
 
 async fn start_deferred_sandbox_server(
