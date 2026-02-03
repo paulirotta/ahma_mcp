@@ -41,14 +41,6 @@ use tokio::time::sleep;
 // Test Infrastructure
 // =============================================================================
 
-/// Get the workspace directory
-fn get_workspace_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("Failed to get workspace dir")
-        .to_path_buf()
-}
-
 /// Build and get the ahma_mcp binary path
 fn get_ahma_mcp_binary() -> PathBuf {
     ahma_mcp::test_utils::cli::build_binary_cached("ahma_mcp", "ahma_mcp")

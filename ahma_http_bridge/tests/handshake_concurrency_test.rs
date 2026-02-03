@@ -35,13 +35,6 @@ fn find_available_port() -> u16 {
         .port()
 }
 
-fn get_workspace_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("Failed to get workspace dir")
-        .to_path_buf()
-}
-
 fn get_ahma_mcp_binary() -> PathBuf {
     ahma_mcp::test_utils::cli::build_binary_cached("ahma_mcp", "ahma_mcp")
 }

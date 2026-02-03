@@ -237,13 +237,13 @@ impl Drop for TestServerInstance {
 fn get_ahma_mcp_binary() -> PathBuf {
     static BINARY_LOG_ONCE: std::sync::Once = std::sync::Once::new();
 
-    let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    let _workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("Failed to get workspace dir")
         .to_path_buf();
 
     // Support CARGO_TARGET_DIR for tools like llvm-cov
-    let binary_from_helper = ahma_mcp::test_utils::cli::get_binary_path("ahma_mcp", "ahma_mcp");
+    let _binary_from_helper = ahma_mcp::test_utils::cli::get_binary_path("ahma_mcp", "ahma_mcp");
 
     // Check debug then release locations, including llvm-cov variants
     let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
