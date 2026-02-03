@@ -220,33 +220,82 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
     };
 
     let req = ClientRequest::CallToolRequest(CallToolRequest::new(params));
-    let handle = service
+
+    // Send the request. Note: we DON'T wait for response completion here because
+    // progress notifications are sent during async command execution. The transport
+    // may close as soon as the command finishes (before we can await the response).
+    // Instead, we race notification reception against a deadline.
+    let pending_response = service
         .send_request_with_option(
             req,
             rmcp::service::PeerRequestOptions {
-                timeout: Some(Duration::from_secs(5)),
+                timeout: Some(Duration::from_secs(10)),
                 meta: Some(meta),
             },
         )
-        .await?
-        .await_response()
         .await?;
 
-    // Ignore the call response; we only care about progress notifications.
-    let _ = handle;
+    // Race: wait for EITHER a matching notification OR a timeout.
+    // The response future runs concurrently - we just care that we received the notification.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    let mut notification_received = false;
 
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
-    while tokio::time::Instant::now() < deadline {
-        if let Ok(Some(p)) = tokio::time::timeout(Duration::from_millis(500), rx.recv()).await {
-            assert_eq!(
-                p.progress_token, token,
-                "progressToken must match client token"
-            );
-            service.cancel().await.ok();
-            return Ok(());
+    // Pin the response future so we can poll it alongside notification checking
+    let mut response_fut = std::pin::pin!(pending_response.await_response());
+
+    loop {
+        tokio::select! {
+            biased;
+            // Check for notification first (higher priority)
+            maybe_notification = tokio::time::timeout(Duration::from_millis(100), rx.recv()) => {
+                if let Ok(Some(p)) = maybe_notification {
+                    assert_eq!(
+                        p.progress_token, token,
+                        "progressToken must match client token"
+                    );
+                    notification_received = true;
+                    break;
+                }
+            }
+            // Also poll the response - we don't care if it errors, but we should
+            // let it make progress (and potentially complete the transport cleanly).
+            response_result = &mut response_fut => {
+                // Response completed (success or error). If we haven't received the
+                // notification yet, keep polling the channel for a bit.
+                let _ = response_result; // Ignore errors - transport closure is expected
+                break;
+            }
+        }
+
+        if tokio::time::Instant::now() > deadline {
+            break;
+        }
+    }
+
+    // If response completed but we haven't received notification, drain the channel briefly
+    if !notification_received {
+        let drain_deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        while tokio::time::Instant::now() < drain_deadline {
+            match tokio::time::timeout(Duration::from_millis(100), rx.recv()).await {
+                Ok(Some(p)) => {
+                    assert_eq!(
+                        p.progress_token, token,
+                        "progressToken must match client token"
+                    );
+                    notification_received = true;
+                    break;
+                }
+                Ok(None) => break,  // channel closed
+                Err(_) => continue, // timeout, keep trying
+            }
         }
     }
 
     service.cancel().await.ok();
-    anyhow::bail!("did not observe notifications/progress with token {token_str}");
+
+    if notification_received {
+        Ok(())
+    } else {
+        anyhow::bail!("did not observe notifications/progress with token {token_str}")
+    }
 }
