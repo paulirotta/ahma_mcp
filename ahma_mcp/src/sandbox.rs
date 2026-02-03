@@ -566,7 +566,7 @@ pub fn exit_with_sandbox_error(error: &SandboxError) -> ! {
 
 /// Apply Landlock sandbox restrictions to the current process.
 #[cfg(target_os = "linux")]
-pub fn enforce_landlock_sandbox(scopes: &[PathBuf]) -> Result<()> {
+pub fn enforce_landlock_sandbox(scopes: &[PathBuf], no_temp_files: bool) -> Result<()> {
     use anyhow::Context;
     use landlock::{
         ABI, Access, AccessFs, PathBeneath, PathFd, Ruleset, RulesetAttr, RulesetCreatedAttr,
@@ -592,13 +592,52 @@ pub fn enforce_landlock_sandbox(scopes: &[PathBuf]) -> Result<()> {
     }
 
     // Allow read access to system directories
-    let system_paths = ["/usr", "/bin", "/etc", "/lib", "/lib64", "/proc", "/dev"];
+    let system_paths = [
+        "/usr",
+        "/bin",
+        "/sbin",
+        "/etc",
+        "/lib",
+        "/lib64",
+        "/proc",
+        "/dev",
+        "/sys",
+    ];
     for path in &system_paths {
         let path_obj = Path::new(path);
         if path_obj.exists() {
             if let Ok(fd) = PathFd::new(path_obj) {
                 if let Err(e) = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read)) {
                     tracing::debug!("Could not add Landlock rule for {}: {:?}", path, e);
+                }
+            }
+        }
+    }
+
+    // Allow read access to toolchains in HOME directory
+    if let Ok(home) = std::env::var("HOME") {
+        let home_path = Path::new(&home);
+        let tool_paths = [".cargo", ".rustup", ".nvm", ".npm", ".go", ".cache"];
+        for tool in &tool_paths {
+            let path = home_path.join(tool);
+            if path.exists() {
+                if let Ok(fd) = PathFd::new(&path) {
+                    if let Err(e) = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read)) {
+                        tracing::debug!("Could not add Landlock rule for {}: {:?}", path, e);
+                    }
+                }
+            }
+        }
+    }
+
+    // Allow /tmp unless high security mode is on
+    if !no_temp_files {
+        let tmp_path = Path::new("/tmp");
+        if tmp_path.exists() {
+            if let Ok(fd) = PathFd::new(tmp_path) {
+                // Tools need write access to /tmp
+                if let Err(e) = (&mut ruleset).add_rule(PathBeneath::new(fd, access_all)) {
+                    tracing::debug!("Could not add Landlock rule for /tmp: {:?}", e);
                 }
             }
         }
@@ -618,7 +657,7 @@ pub fn enforce_landlock_sandbox(scopes: &[PathBuf]) -> Result<()> {
 }
 
 #[cfg(not(target_os = "linux"))]
-pub fn enforce_landlock_sandbox(_scopes: &[PathBuf]) -> Result<()> {
+pub fn enforce_landlock_sandbox(_scopes: &[PathBuf], _no_temp_files: bool) -> Result<()> {
     Ok(())
 }
 

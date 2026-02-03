@@ -1275,7 +1275,10 @@ impl AhmaMcpService {
                         #[cfg(target_os = "linux")]
                         {
                             if !self.adapter.sandbox().is_test_mode() {
-                                if let Err(e) = crate::sandbox::enforce_landlock_sandbox(&new_scopes)
+                                if let Err(e) = crate::sandbox::enforce_landlock_sandbox(
+                                    &new_scopes,
+                                    self.adapter.sandbox().is_no_temp_files(),
+                                )
                                 {
                                     tracing::error!(
                                         "FATAL: Failed to enforce Landlock sandbox: {}. \
