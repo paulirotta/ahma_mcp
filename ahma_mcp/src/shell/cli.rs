@@ -197,7 +197,9 @@ pub async fn run() -> Result<()> {
     #[allow(unused_mut)] // mut needed for macOS nested sandbox detection
     let mut no_sandbox = cli.no_sandbox
         || std::env::var("AHMA_NO_SANDBOX").is_ok()
-        || std::env::var("AHMA_TEST_MODE").is_ok();
+        || std::env::var("AHMA_TEST_MODE")
+            .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
+            .unwrap_or(false);
 
     // Determine Sandbox Mode
     let sandbox_mode = if no_sandbox {
