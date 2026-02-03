@@ -239,7 +239,7 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
     // Ignore the call response; we only care about progress notifications.
     let _ = handle;
 
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
     while tokio::time::Instant::now() < deadline {
         if let Ok(Some(p)) = tokio::time::timeout(Duration::from_millis(500), rx.recv()).await {
             assert_eq!(

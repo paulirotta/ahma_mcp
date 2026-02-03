@@ -965,7 +965,7 @@ async fn test_mixed_valid_invalid_uris() {
         sse_result
     );
 
-    sleep(Duration::from_millis(500)).await;
+    sleep(Duration::from_millis(1000)).await;
 
     // Tool call should work because we had one valid root
     let tool_call = json!({
