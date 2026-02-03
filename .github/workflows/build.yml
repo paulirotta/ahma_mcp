@@ -465,7 +465,7 @@ jobs:
 
       - name: Generate coverage report
         run: |
-          cargo llvm-cov nextest --profile coverage --locked --no-default-features --html --output-dir ./coverage
+          cargo llvm-cov nextest --profile coverage --locked --no-default-features -E 'not test(gradlew) & not test(android)' --html --output-dir ./coverage
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

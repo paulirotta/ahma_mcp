@@ -89,90 +89,90 @@ use tracing::info;
    Example: ahma_mcp --list-tools -- /path/to/server
    Example: ahma_mcp --list-tools --http http://localhost:3000"
 )]
-struct Cli {
+pub struct Cli {
     /// List all tools from an MCP server and exit
     #[arg(long)]
-    list_tools: bool,
+    pub list_tools: bool,
 
     /// Name of the server in mcp.json to connect to (for --list-tools mode)
     #[arg(long)]
-    server: Option<String>,
+    pub server: Option<String>,
 
     /// HTTP URL of the MCP server to list tools from (for --list-tools mode)
     #[arg(long)]
-    http: Option<String>,
+    pub http: Option<String>,
 
     /// Output format for --list-tools: text (default) or json
     #[arg(long, default_value = "text")]
-    format: list_tools::OutputFormat,
+    pub format: list_tools::OutputFormat,
 
     /// Server mode: 'stdio' (default) or 'http'
     #[arg(long, default_value = "stdio", value_parser = ["stdio", "http"])]
-    mode: String,
+    pub mode: String,
 
     /// HTTP server port (only used in http mode)
     #[arg(long, default_value = "3000")]
-    http_port: u16,
+    pub http_port: u16,
 
     /// HTTP server host (only used in http mode)
     #[arg(long, default_value = "127.0.0.1")]
-    http_host: String,
+    pub http_host: String,
 
     /// Path to the directory containing tool JSON configuration files.
     /// If not provided, auto-detects .ahma in the current working directory.
     /// Falls back to built-in tools only if no .ahma directory exists.
     #[arg(long, global = true)]
-    tools_dir: Option<PathBuf>,
+    pub tools_dir: Option<PathBuf>,
 
     /// Default timeout for commands in seconds.
     #[arg(long, global = true, default_value = "1800")]
-    timeout: u64,
+    pub timeout: u64,
 
     /// Enable debug logging.
     #[arg(short, long, global = true)]
-    debug: bool,
+    pub debug: bool,
 
     /// Force synchronous mode for all operations (overrides default asynchronous behavior).
     /// By default, tools run asynchronously (non-blocking). Use this flag to force all tools
     /// to run synchronously (blocking until complete).
     #[arg(long, global = true)]
-    sync: bool,
+    pub sync: bool,
 
     /// Override the sandbox scope (root directory for file system operations).
     /// By default, uses the current working directory for stdio mode.
     /// Can be specified multiple times to allow access to multiple roots.
     #[arg(long, global = true)]
-    sandbox_scope: Vec<PathBuf>,
+    pub sandbox_scope: Vec<PathBuf>,
 
     /// Defer sandbox initialization until the client provides workspace roots via roots/list.
     /// Used by HTTP session isolation so each subprocess can bind its sandbox scope to the
     /// connecting IDE's workspace.
     #[arg(long, global = true)]
-    defer_sandbox: bool,
+    pub defer_sandbox: bool,
 
     /// Disable Ahma's kernel-level sandboxing (sandbox-exec on macOS, Landlock on Linux).
     /// Use this when running inside another sandbox (e.g., Cursor, VS Code, Docker) where
     /// nested sandboxing causes "Operation not permitted" errors. The outer sandbox still
     /// provides security. Can also be set via AHMA_NO_SANDBOX=1 environment variable.
     #[arg(long, global = true)]
-    no_sandbox: bool,
+    pub no_sandbox: bool,
 
     /// Log to stderr instead of file (useful for debugging and seeing errors in terminal).
     /// Enables colored output on Mac/Linux.
     #[arg(long, global = true)]
-    log_to_stderr: bool,
+    pub log_to_stderr: bool,
 
     /// The name of the tool to execute (e.g., 'cargo_build').
     #[arg()]
-    tool_name: Option<String>,
+    pub tool_name: Option<String>,
 
     /// Path to the mcp.json file for client configurations.
     #[arg(long, global = true, default_value = ".vscode/mcp.json")]
-    mcp_config: PathBuf,
+    pub mcp_config: PathBuf,
 
     /// Arguments for the tool.
     #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
-    tool_args: Vec<String>,
+    pub tool_args: Vec<String>,
 }
 
 pub async fn run() -> Result<()> {
@@ -469,7 +469,7 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
 /// # Returns
 /// * `Some(PathBuf)` - Path to tools directory (explicit or auto-detected .ahma).
 /// * `None` - No tools directory found (will use only built-in internal tools).
-fn normalize_tools_dir(tools_dir: Option<PathBuf>) -> Option<PathBuf> {
+pub fn normalize_tools_dir(tools_dir: Option<PathBuf>) -> Option<PathBuf> {
     // If explicitly provided via CLI, use it (takes precedence)
     if let Some(explicit_dir) = tools_dir {
         // Handle legacy .ahma/tools format

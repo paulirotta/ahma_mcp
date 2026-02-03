@@ -30,7 +30,7 @@ use common::{
 use futures::StreamExt;
 use reqwest::Client;
 use serde_json::{Value, json};
-use std::net::TcpListener;
+
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -40,15 +40,6 @@ use tokio::time::sleep;
 // =============================================================================
 // Test Infrastructure
 // =============================================================================
-
-/// Find an available port for testing
-fn find_available_port() -> u16 {
-    TcpListener::bind("127.0.0.1:0")
-        .expect("Failed to bind to any port")
-        .local_addr()
-        .expect("Failed to get local address")
-        .port()
-}
 
 /// Get the workspace directory
 fn get_workspace_dir() -> PathBuf {
@@ -89,10 +80,7 @@ fn get_ahma_mcp_binary() -> PathBuf {
 }
 
 /// Start an HTTP bridge server with deferred sandbox (for roots/list testing)
-async fn start_deferred_sandbox_server(
-    port: u16,
-    tools_dir: &std::path::Path,
-) -> std::process::Child {
+async fn start_deferred_sandbox_server(tools_dir: &std::path::Path) -> (std::process::Child, u16) {
     let binary = get_ahma_mcp_binary();
 
     let mut cmd = Command::new(&binary);
@@ -100,7 +88,7 @@ async fn start_deferred_sandbox_server(
         "--mode",
         "http",
         "--http-port",
-        &port.to_string(),
+        "0", // Use dynamic port
         "--sync",
         "--tools-dir",
         &tools_dir.to_string_lossy(),
@@ -111,26 +99,69 @@ async fn start_deferred_sandbox_server(
     // CRITICAL: Remove bypass env vars for real sandbox testing
     SandboxTestEnv::configure(&mut cmd);
 
-    let child = cmd
+    let mut child = cmd
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .expect("Failed to start HTTP bridge");
 
-    // Wait for server to be ready
-    let client = Client::new();
-    let health_url = format!("http://127.0.0.1:{}/health", port);
+    // Capture stderr to find the bound port
+    let stderr = child.stderr.take().expect("Failed to capture stderr");
+    let (tx, rx) = std::sync::mpsc::channel();
 
-    for _ in 0..30 {
-        sleep(Duration::from_millis(200)).await;
-        if let Ok(resp) = client.get(&health_url).send().await
-            && resp.status().is_success()
-        {
-            return child;
+    std::thread::spawn(move || {
+        use std::io::{BufRead, BufReader};
+        let reader = BufReader::new(stderr);
+        for line in reader.lines() {
+            if let Ok(line) = line {
+                eprintln!("{}", line); // Pass through to test output
+                if line.contains("AHMA_BOUND_PORT=") {
+                    let _ = tx.send(line);
+                }
+            }
+        }
+    });
+
+    // Wait for port
+    let start = std::time::Instant::now();
+    let timeout = Duration::from_secs(10);
+    let mut port = 0;
+
+    while start.elapsed() < timeout {
+        if let Ok(line) = rx.recv_timeout(Duration::from_millis(100)) {
+            if let Some(idx) = line.find("AHMA_BOUND_PORT=") {
+                let port_str = &line[idx + "AHMA_BOUND_PORT=".len()..];
+                if let Ok(p) = port_str.trim().parse::<u16>() {
+                    port = p;
+                    break;
+                }
+            }
+        }
+
+        // check if child died
+        if let Ok(Some(status)) = child.try_wait() {
+            panic!("Child process exited unexpectedly with status: {}", status);
         }
     }
 
-    let mut child = child;
+    if port == 0 {
+        let _ = child.kill();
+        panic!("Timed out waiting for server to bind port");
+    }
+
+    // Wait for server to be ready (health check)
+    let client = Client::new();
+    let health_url = format!("http://127.0.0.1:{}/health", port);
+
+    for _ in 0..50 {
+        sleep(Duration::from_millis(100)).await;
+        if let Ok(resp) = client.get(&health_url).send().await
+            && resp.status().is_success()
+        {
+            return (child, port);
+        }
+    }
+
     let _ = child.kill();
     let _ = child.wait();
     panic!("HTTP bridge failed to start within timeout");
@@ -326,8 +357,7 @@ async fn test_empty_roots_rejection() {
     )
     .expect("Failed to write tool config");
 
-    let port = find_available_port();
-    let mut server = start_deferred_sandbox_server(port, &tools_dir).await;
+    let (mut server, port) = start_deferred_sandbox_server(&tools_dir).await;
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -474,8 +504,7 @@ async fn test_session_with_only_malformed_uris() {
     )
     .expect("Failed to write tool config");
 
-    let port = find_available_port();
-    let mut server = start_deferred_sandbox_server(port, &tools_dir).await;
+    let (mut server, port) = start_deferred_sandbox_server(&tools_dir).await;
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -560,8 +589,7 @@ async fn test_multi_root_workspace_scoping() {
     )
     .expect("Failed to write tool config");
 
-    let port = find_available_port();
-    let mut server = start_deferred_sandbox_server(port, &tools_dir).await;
+    let (mut server, port) = start_deferred_sandbox_server(&tools_dir).await;
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -669,8 +697,7 @@ async fn test_url_encoded_path_in_roots() {
     )
     .expect("Failed to write tool config");
 
-    let port = find_available_port();
-    let mut server = start_deferred_sandbox_server(port, &tools_dir).await;
+    let (mut server, port) = start_deferred_sandbox_server(&tools_dir).await;
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -833,8 +860,7 @@ async fn test_handshake_ordering_sse_first() {
     )
     .expect("Failed to write tool config");
 
-    let port = find_available_port();
-    let mut server = start_deferred_sandbox_server(port, &tools_dir).await;
+    let (mut server, port) = start_deferred_sandbox_server(&tools_dir).await;
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -934,8 +960,7 @@ async fn test_mixed_valid_invalid_uris() {
     )
     .expect("Failed to write tool config");
 
-    let port = find_available_port();
-    let mut server = start_deferred_sandbox_server(port, &tools_dir).await;
+    let (mut server, port) = start_deferred_sandbox_server(&tools_dir).await;
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -1027,8 +1052,7 @@ async fn test_post_lock_roots_change_rejected() {
     )
     .expect("Failed to write tool config");
 
-    let port = find_available_port();
-    let mut server = start_deferred_sandbox_server(port, &tools_dir).await;
+    let (mut server, port) = start_deferred_sandbox_server(&tools_dir).await;
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -1161,8 +1185,7 @@ async fn test_working_directory_outside_sandbox_rejected() {
     )
     .expect("Failed to write tool config");
 
-    let port = find_available_port();
-    let mut server = start_deferred_sandbox_server(port, &tools_dir).await;
+    let (mut server, port) = start_deferred_sandbox_server(&tools_dir).await;
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 

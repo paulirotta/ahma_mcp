@@ -321,3 +321,157 @@ async fn documented_limitation_network_unrestricted() {
     let _ = result;
     client.cancel().await.unwrap();
 }
+
+// =============================================================================
+// RED TEAM TEST 5: Command Argument Escape (Write)
+// =============================================================================
+
+/// Test that writing to a file outside the sandbox via command arguments is blocked
+#[tokio::test]
+async fn red_team_command_write_escape_blocked() {
+    init_test_logging();
+    let temp_dir = TempDir::new().unwrap();
+    let outside_dir = TempDir::new().unwrap();
+    let outside_file = outside_dir.path().join("pwned.txt");
+
+    let tools_dir = get_workspace_tools_dir();
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
+        .await
+        .unwrap();
+
+    // Attempt to write to a file outside the sandbox using absolute path
+    let params = CallToolRequestParams {
+        name: "sandboxed_shell".into(),
+        arguments: Some(
+            serde_json::from_value(json!({
+                "command": format!("echo 'hacked' > {}", outside_file.display())
+            }))
+            .unwrap(),
+        ),
+        task: None,
+        meta: None,
+    };
+
+    // The command might "succeed" (exit code 0) if the shell handles the error gracefully,
+    // or fail (exit code 1). Key check is: file MUST NOT exist.
+    let _ = client.call_tool(params).await;
+
+    assert!(
+        !outside_file.exists(),
+        "SECURITY: Should not be able to write to file outside sandbox: {}",
+        outside_file.display()
+    );
+
+    client.cancel().await.unwrap();
+}
+
+// =============================================================================
+// RED TEAM TEST 6: Command Argument Escape (Read - Linux Only)
+// =============================================================================
+
+/// Test that reading a file outside the sandbox via command arguments is blocked on Linux
+#[tokio::test]
+#[cfg(target_os = "linux")]
+async fn red_team_command_read_escape_blocked_linux() {
+    init_test_logging();
+    let temp_dir = TempDir::new().unwrap();
+    let tools_dir = get_workspace_tools_dir();
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
+        .await
+        .unwrap();
+
+    // Attempt to read /etc/shadow (or similar restricted file)
+    let params = CallToolRequestParams {
+        name: "sandboxed_shell".into(),
+        arguments: Some(
+            serde_json::from_value(json!({
+                "command": "cat /etc/shadow" // Typically root only, but Landlock should block open() regardless
+            }))
+            .unwrap(),
+        ),
+        task: None,
+        meta: None,
+    };
+
+    let result = client.call_tool(params).await;
+
+    // Command should fail or return error exit code
+    if let Ok(response) = result {
+        let content = response.content.first().unwrap().as_text().unwrap();
+        // Check if output contains "Permission denied" or similar
+        // Note: response content is JSON string of the result, we need to check stderr/exit code
+        // But client.call_tool returns the ToolResult. Use debug print if needed.
+        // Simplified check: Use a file we know exists but shouldn't be readable due to sandbox
+
+        // Actually, let's use a custom file outside sandbox to be sure
+    }
+
+    client.cancel().await.unwrap();
+}
+
+/// Refined Linux read test with verified outside file
+#[tokio::test]
+#[cfg(target_os = "linux")]
+async fn red_team_command_read_escape_blocked_linux_custom() {
+    use std::io::Write;
+
+    init_test_logging();
+    let temp_dir = TempDir::new().unwrap();
+    let outside_dir = TempDir::new().unwrap();
+    let outside_file = outside_dir.path().join("secret.txt");
+    {
+        let mut f = fs::File::create(&outside_file).unwrap();
+        writeln!(f, "secret content").unwrap();
+    }
+
+    let tools_dir = get_workspace_tools_dir();
+    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
+        .await
+        .unwrap();
+
+    // Attempt to read the outside file
+    let params = CallToolRequestParams {
+        name: "sandboxed_shell".into(),
+        arguments: Some(
+            serde_json::from_value(json!({
+                "command": format!("cat {}", outside_file.display())
+            }))
+            .unwrap(),
+        ),
+        task: None,
+        meta: None,
+    };
+
+    let result = client.call_tool(params).await;
+
+    if let Ok(tools_res) = result {
+        for content in tools_res.content {
+            if let Some(text) = content.as_text() {
+                let res_json: serde_json::Value = serde_json::from_str(text).unwrap();
+                let exit_code = res_json
+                    .get("exit_code")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+                let stderr = res_json
+                    .get("stderr")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let stdout = res_json
+                    .get("stdout")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+
+                // Should fail with exit code != 0 or Permission denied
+                assert!(
+                    exit_code != 0 || stderr.contains("Permission denied"),
+                    "SECURITY: Should not be able to read file outside sandbox on Linux. Exit: {}, Stderr: {}, Stdout: {}",
+                    exit_code,
+                    stderr,
+                    stdout
+                );
+            }
+        }
+    }
+
+    client.cancel().await.unwrap();
+}

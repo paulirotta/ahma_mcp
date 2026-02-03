@@ -200,7 +200,7 @@ These tools are always available regardless of JSON configuration:
 
 ## 4. Security - Kernel-Enforced Sandboxing
 
-The sandbox scope defines the root directory boundary. AI has full access within the sandbox but **zero access** outside it. This is enforced at the kernel level, not by parsing command strings.
+The sandbox scope defines the root directory boundary. AI has **full read/write access** within the sandbox but **zero write access** outside it. Read access outside the sandbox depends on the platform (Linux: strict, macOS: permissive).
 
 ### R5: Sandbox Scope
 
@@ -210,6 +210,7 @@ The sandbox scope defines the root directory boundary. AI has full access within
   1. `--sandbox-scope <path>` CLI parameter
   2. `AHMA_SANDBOX_SCOPE` environment variable
   3. Current working directory
+- **R5.4**: **Write Protection**: The system **must** block any attempt to write to files outside the sandbox scope, including via command arguments (e.g., `touch /outside/file`).
 
 ### R6: Platform-Specific Enforcement
 
@@ -221,8 +222,9 @@ The sandbox scope defines the root directory boundary. AI has full access within
 #### R6.2: macOS (Seatbelt)
 
 - **R6.2.1**: Uses `sandbox-exec` with Seatbelt profiles (SBPL).
-- **R6.2.2**: Profile uses `(deny default)` with explicit allows for read (broad) and write (sandbox scope only).
-- **R6.2.3**: **CRITICAL**: `/var` is symlink to `/private/var` on macOS; profiles **must** use real paths.
+- **R6.2.2**: Profile uses `(deny default)` with allowed writes **strictly limited** to the sandbox scope and necessary temp paths.
+- **R6.2.3**: **Read Limitation**: Due to macOS Seatbelt mechanism and system tool requirements, read access is generally allowed globally on macOS. The security guarantee is **write isolation**.
+- **R6.2.4**: **CRITICAL**: `/var` is symlink to `/private/var` on macOS; profiles **must** use real paths.
 
 ### R7: Nested Sandbox Detection
 
