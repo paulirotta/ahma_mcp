@@ -1,0 +1,390 @@
+# AGENTS.md
+
+## About This File
+
+This file provides AI-specific development guidance for the `ahma_mcp` project. For functional requirements and architecture, see [requirements.md](requirements.md). These files work together:
+
+- **requirements.md**: Single source of truth for **what** the product does and **how** it's architected
+- **AGENTS.md**: Guide for **how** to develop, test, and contribute to the codebase
+
+**Note for crate-specific workflows**: If you're working in a specific crate directory (e.g., `ahma_http_bridge/`), this AGENTS.md is symlinked and applies workspace-wide. Crate-specific functional requirements are in each crate's `requirements.md`.
+
+---
+
+## Setup Commands
+
+### Prerequisites
+- Rust 1.90+ (install via [rustup](https://rustup.rs/))
+- Platform-specific sandbox requirements:
+  - **Linux**: Kernel 5.13+ (Landlock support)
+  - **macOS**: Any modern version (`sandbox-exec` is built-in)
+
+### Initial Setup
+```bash
+# Clone the repository
+git clone https://github.com/paulirotta/ahma_mcp.git
+cd ahma_mcp
+
+# Build the project
+cargo build
+
+# Run tests
+cargo test
+```
+
+### Development Environment
+```bash
+# Install development tools (optional but recommended)
+cargo install cargo-watch cargo-nextest cargo-llvm-cov
+
+# Watch mode for rapid iteration
+cargo watch -x build
+
+# Run the binary
+./target/debug/ahma_mcp --help
+```
+
+---
+
+## Build and Test Commands
+
+### Building
+```bash
+# Debug build (fast compilation)
+cargo build
+
+# Release build (optimized)
+cargo build --release
+
+# Build specific crate
+cargo build -p ahma_core
+cargo build -p ahma_http_bridge
+```
+
+### Testing
+```bash
+# Run all tests
+cargo test
+
+# Run tests for specific crate
+cargo test -p ahma_core
+cargo test -p ahma_http_bridge
+
+# Run specific test
+cargo test test_sandbox_enforcement
+
+# Run tests with nextest (faster, better output)
+cargo nextest run
+
+# Generate coverage report
+cargo llvm-cov --html
+```
+
+### Quality Assurance
+```bash
+# Preferred: run multi-step pipelines via sandboxed_shell
+ahma_mcp sandboxed_shell --working-directory . -- \
+  "cargo fmt --all && cargo clippy --all-targets && cargo test"
+
+# Individual quality checks (direct)
+cargo fmt --all                    # Format code
+cargo clippy --all-targets         # Lint with auto-fix suggestions
+cargo clippy --fix --allow-dirty   # Auto-fix lints
+```
+
+---
+
+## Code Style and Conventions
+
+### Rust Style
+- **Formatting**: Use `rustfmt` (enforced by `cargo fmt`)
+- **Linting**: Pass `clippy` with no warnings
+- **Naming**: Follow Rust naming conventions (`snake_case` for functions/variables, `CamelCase` for types)
+- **Documentation**: Public APIs must have doc comments (`///` for items, `//!` for modules)
+
+### Project-Specific Patterns
+
+#### Error Handling
+- Use `anyhow::Result` for internal error propagation
+- Convert to `rmcp::error::McpError` at the MCP service boundary
+- Include actionable context: `with_context(|| "Failed to X because Y")`
+- Example: "Install with `cargo install cargo-nextest`" in error messages
+
+#### Async/Await
+- **CRITICAL**: Never use `std::fs` or blocking I/O in async functions
+- Use `tokio::fs` and `tokio::io` for all file operations
+- Reserve `tokio::task::spawn_blocking` for:
+  - Third-party libs with only sync APIs
+  - CPU-bound computation (not I/O)
+- Test code is exempt from this rule
+
+#### Logging
+- `error!`: Operation failures affecting user workflows
+- `warn!`: Recoverable issues or deprecated usage
+- `info!`: Normal operation milestones (startup, shutdown, major state changes)
+- `debug!`: Detailed troubleshooting information
+
+---
+
+## Testing Instructions
+
+### Test Organization
+Tests are organized into three categories:
+
+1. **Unit Tests**: In-module `#[cfg(test)]` blocks or crate `tests/` directory
+2. **Integration Tests**: Cross-module workflows in workspace `tests/`
+3. **Regression Tests**: Bug fixes must include a test that would have caught the bug
+
+### Test Requirements
+- **Coverage Target**: ≥80% for all crates except:
+  - `ahma_core/src/test_utils.rs` (testing infrastructure)
+  - `ahma_http_bridge/src/main.rs` (binary entry point, tested via CLI integration)
+- **Fast**: Most tests complete in <100ms
+- **Isolated**: Use `tempfile::TempDir` for all file operations (see below)
+- **Deterministic**: Same input always produces same output
+- **Documented**: Test names describe what they verify
+
+### Hard Invariants (Do Not “Test Around” These)
+
+#### MCP Streamable HTTP Handshake (HTTP Bridge)
+Integration tests MUST mimic real client behavior closely:
+
+1. `initialize` (POST, no session header) → server returns `mcp-session-id`
+2. Open SSE stream (GET `/mcp`, `Accept: text/event-stream`, with `mcp-session-id`) **before** sending `notifications/initialized`
+3. Send `notifications/initialized` (POST with `mcp-session-id`)
+4. Wait for server `roots/list` request over SSE, respond via POST with the same `id`
+5. Only after sandbox is locked, call `tools/call`
+
+If a test client cannot follow this sequence, fix the client/test harness (or the server) rather than weakening assertions.
+
+#### Sandbox Gating Must Be Observable
+`tools/call` before sandbox lock MUST return HTTP 409 with JSON-RPC error code `-32001` ("Sandbox initializing..."). Tests should assert this explicitly where relevant.
+
+#### No Print-Only Integration Tests
+Integration tests MUST include assertions on:
+- success/failure (`result.success` or HTTP status)
+- key output/error patterns
+Printing output is allowed, but never sufficient.
+
+### Debug/Trace Evidence (Required For Repros)
+
+#### Always Capture Text Logs
+When reproducing failures (especially cancellations), always capture complete logs via:
+
+```bash
+<command> 2>&1 | tee /tmp/ahma_debug.log
+```
+
+If output is long, use `tail -200 /tmp/ahma_debug.log` to summarize.
+
+#### Reduce Concurrency When Debugging
+Prefer single-test runs for clarity:
+
+```bash
+RUST_TEST_THREADS=1 cargo test <test_name> -- --nocapture 2>&1 | tee /tmp/ahma_test.log
+```
+
+For `nextest`, run narrow filters so only one failing test prints logs.
+
+### File Isolation (CRITICAL)
+**ALL tests MUST use temporary directories** to prevent repository pollution:
+
+```rust
+use tempfile::tempdir;
+
+#[test]
+fn test_something() {
+    let temp_dir = tempdir().unwrap();  // Auto-cleanup on drop
+    let test_file = temp_dir.path().join("test.txt");
+    
+    // Create test files within temp_dir.path()
+    std::fs::write(&test_file, "test content").unwrap();
+    
+    // Test your code...
+    
+    // temp_dir is automatically cleaned up when it goes out of scope
+}
+```
+
+**Never** create test files directly in the repository structure. Always use `tempfile::tempdir()` or `tempfile::TempDir::new()`.
+
+### Running Tests
+```bash
+# Run all tests
+cargo test
+
+# Run tests with coverage
+cargo llvm-cov --html
+open target/llvm-cov/html/index.html
+
+# Run specific test file
+cargo test --test sandbox_test
+
+# Run test and show output
+cargo test test_name -- --nocapture
+```
+
+---
+
+## Common Development Tasks
+
+### Adding a New Tool
+1. Create a JSON configuration in `.ahma/tools/yourtool.json`
+2. Follow the MTDF schema (see [requirements.md Section 3](requirements.md#3-tool-definition-mtdf-schema))
+3. Test the tool: `ahma_mcp yourtool_subcommand --help`
+4. The server hot-reloads automatically—no restart needed
+
+### Debugging
+```bash
+# Run with debug logging
+ahma_mcp --debug --log-to-stderr
+
+# Inspect MCP protocol communication
+./scripts/ahma-inspector.sh
+
+# Test single tool in CLI mode
+ahma_mcp cargo_build --working-directory . -- --release
+```
+
+### MCP Server Testing
+```bash
+# Start stdio server (used by Cursor/VS Code)
+ahma_mcp --mode stdio
+
+# Start HTTP bridge server
+ahma_mcp --mode http --http-port 3000
+
+# List all tools from a server
+ahma_mcp --list-tools -- ./target/debug/ahma_mcp --tools-dir .ahma/tools
+ahma_mcp --list-tools --http http://localhost:3000 --format json
+```
+
+---
+
+## PR and Commit Guidelines
+
+## Definition of Done (Local Verification)
+
+Before you stop work / hand off / claim “all green”, you MUST run:
+
+1. The normal test suite: `cargo test`
+2. All ignored tests that apply to your platform: `cargo test --workspace -- --ignored`
+
+Notes:
+- “Ignored” tests in this repo are typically expensive stress/regression coverage. They are part of the required verification set.
+- If an ignored test cannot be run due to missing prerequisites (e.g., platform-only features) or it is currently broken, you must:
+  - record the reason (and how to reproduce) in your handoff/PR description
+  - and fix it or open/track an issue before considering the work complete
+
+### Before Committing
+1. **Run quality pipeline**: `cargo fmt --all && cargo clippy --all-targets && cargo test` must pass
+2. **Format code**: `cargo fmt --all`
+3. **Fix clippy warnings**: `cargo clippy --fix --allow-dirty`
+4. **Run tests**: `cargo test` must pass with ≥80% coverage
+
+Optional but recommended for faster runs:
+- `cargo nextest run` (and for ignored: `cargo nextest run --run-ignored all`)
+
+### Commit Messages
+Follow conventional commits format:
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+Types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `chore`
+
+Example:
+```
+feat(sandbox): add nested sandbox detection for Cursor
+
+- Detect when running inside another sandbox (Cursor, VS Code, Docker)
+- Auto-disable internal sandbox with warning
+- Add AHMA_NO_SANDBOX env var for manual override
+
+Closes #123
+```
+
+### PR Title Format
+```
+[<crate>] <description>
+```
+
+Examples:
+- `[ahma_core] Add kernel-level sandboxing via Landlock`
+- `[ahma_http_bridge] Fix session isolation scope derivation`
+
+---
+
+## Security Considerations
+
+### Sandbox Scope
+- The sandbox scope **cannot** be changed during a session (security invariant)
+- Never trust user-provided paths without validation via `path_security` module
+- All file operations are restricted to the sandbox scope by the kernel
+
+### Nested Sandboxes
+When running inside another sandbox (Cursor, VS Code, Docker):
+- System auto-detects and disables internal sandbox
+- Outer sandbox still provides security
+- Use `--no-sandbox` to suppress detection warnings
+
+### Validation
+- All tool configurations are validated against the MTDF JSON schema at startup
+- Invalid configs are rejected with clear error messages
+- `format: "path"` in JSON schema triggers path security validation
+
+---
+
+## Tool Usage Patterns
+
+### Async-First Workflow
+**Default**: Tools run asynchronously and return immediately with an `operation_id`. The AI receives a notification when complete.
+
+```json
+{
+  "name": "cargo_build",
+  "description": "Build the project (async). You can continue with other tasks.",
+  "synchronous": false  // or omit (default is async)
+}
+```
+
+### Synchronous Override
+**When to use**: Commands that modify project state (e.g., `cargo add`, `npm install --save`)
+
+```json
+{
+  "name": "cargo_add",
+  "description": "Add a dependency to Cargo.toml (waits for completion)",
+  "synchronous": true  // Force synchronous execution
+}
+```
+
+### CLI Testing Workflow
+For development and debugging, bypass the MCP protocol:
+
+```bash
+# Execute a single tool command
+ahma_mcp cargo_build --working-directory . -- --release
+
+# With debug logging
+ahma_mcp --debug --log-to-stderr cargo_test --working-directory .
+```
+
+---
+
+## Additional Resources
+
+- **Architecture**: [requirements.md](requirements.md)
+- **HTTP Bridge Details**: [docs/session-isolation.md](docs/session-isolation.md)
+- **Development Methodology**: [docs/spec-driven-development.md](docs/spec-driven-development.md)
+- **Coverage Reports**: https://paulirotta.github.io/ahma_mcp/html/
+- **MCP Protocol**: https://github.com/mcp-rs/rmcp
+
+---
+
+**Last Updated**: 2025-12-21
+**For Questions**: Open an issue on GitHub or check existing documentation in `docs/`

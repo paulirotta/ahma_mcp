@@ -1,17 +1,17 @@
 [workspace]
 default-members = [
-  "ahma_mcp",
-  "ahma_validate",
-  "generate_tool_schema",
-  "ahma_http_bridge",
-  "ahma_http_mcp_client",
+    "ahma_mcp",
+    "ahma_validate",
+    "generate_tool_schema",
+    "ahma_http_bridge",
+    "ahma_http_mcp_client",
 ]
 members = [
-  "ahma_mcp",
-  "ahma_validate",
-  "generate_tool_schema",
-  "ahma_http_bridge",
-  "ahma_http_mcp_client",
+    "ahma_mcp",
+    "ahma_validate",
+    "generate_tool_schema",
+    "ahma_http_bridge",
+    "ahma_http_mcp_client",
 ]
 resolver = "3"
 
@@ -21,7 +21,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 rust-version = "1.90.0"
-version = "0.4.2"
+version = "0.4.3"
 
 [workspace.dependencies]
 anyhow = "1.0.100"
@@ -35,20 +35,20 @@ futures = "0.3.31"
 landlock = "0.4.4"
 opentelemetry = { version = "0.26", features = ["trace"] }
 opentelemetry-otlp = { version = "0.26", features = [
-  "http-proto",
-  "reqwest-rustls",
+    "http-proto",
+    "reqwest-rustls",
 ] }
 opentelemetry_sdk = { version = "0.26", features = ["rt-tokio"] }
 regex = "1.12.2"
 reqwest = { version = "0.13.1", default-features = false }
 rmcp = { version = "0.14.0", features = [
-  "server",
-  "client",
-  "macros",
-  "transport-io",
-  "transport-child-process",
-  "elicitation",
-  "schemars",
+    "server",
+    "client",
+    "macros",
+    "transport-io",
+    "transport-child-process",
+    "elicitation",
+    "schemars",
 ] }
 schemars = "1.2.1"
 serde = "1.0.228"
@@ -56,11 +56,11 @@ serde_json = "1.0.149"
 tempfile = "3.24.0"
 thiserror = "2.0.18"
 tokio = { version = "1.49.0", features = [
-  "macros",
-  "rt-multi-thread",
-  "process",
-  "fs",
-  "signal",
+    "macros",
+    "rt-multi-thread",
+    "process",
+    "fs",
+    "signal",
 ] }
 tokio-util = "0.7.18"
 toml = "0.9.11"
