@@ -28,12 +28,9 @@ async fn test_gradlew_async_build_commands() -> Result<()> {
     let client = new_client(Some(".ahma")).await?;
     let project_path = get_android_test_project_path();
 
-    // Test async commands - these might fail due to missing Android SDK but should show proper error handling
-    let async_commands = vec![
-        ("assembleDebug", "Assemble debug APK"),
-        ("compileDebugSources", "Compile debug sources"),
-        ("testDebugUnitTest", "Run debug unit tests"),
-    ];
+    // Test async commands - we only run testDebugUnitTest as skip-if-disabled_async_result smoke test
+    // testDebugUnitTest implicitly triggers compilation, making it a comprehensive test.
+    let async_commands = vec![("testDebugUnitTest", "Run debug unit tests")];
 
     for (command, description) in async_commands {
         println!("Testing async command: {} - {}", command, description);

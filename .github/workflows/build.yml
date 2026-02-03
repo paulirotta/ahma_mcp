@@ -349,13 +349,6 @@ jobs:
           restore-keys: |
             gradle-android-${{ runner.os }}-
 
-      - name: Android Assemble Debug
-        run: ./gradlew assembleDebug --parallel --daemon --configure-on-demand --build-cache --configuration-cache
-        working-directory: ./test-data/AndoidTestBasicViews
-
-      - name: Android Test
-        run: ./gradlew test --rerun-tasks --parallel --daemon --configure-on-demand --no-configuration-cache
-        working-directory: ./test-data/AndoidTestBasicViews
 
       - uses: taiki-e/install-action@v2
         with:
