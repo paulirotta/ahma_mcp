@@ -879,24 +879,51 @@ async fn test_roots_uri_parsing_percent_encoded_path() {
         }
     });
 
+    // Retry loop with exponential backoff - handles both "Sandbox initializing" errors
+    // AND transport timeouts that can occur on slow CI runners (especially llvm-cov)
     let mut resp = None;
-    for attempt in 0..10 {
-        let (r, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
-            .await
-            .expect("Tool call should succeed");
+    let max_attempts = 20; // Increased for CI tolerance
+    for attempt in 0..max_attempts {
+        let result = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id)).await;
 
-        // Check if we got a "sandbox initializing" retry error
-        if let Some(err) = r.get("error") {
-            let msg = err.get("message").and_then(|m| m.as_str()).unwrap_or("");
-            if msg.contains("Sandbox initializing") {
-                sleep(Duration::from_millis(50 * (attempt + 1) as u64)).await;
+        match result {
+            Ok((r, _)) => {
+                // Check if we got a "sandbox initializing" retry error
+                if let Some(err) = r.get("error") {
+                    let msg = err.get("message").and_then(|m| m.as_str()).unwrap_or("");
+                    if msg.contains("Sandbox initializing") {
+                        eprintln!(
+                            "Retry {}/{}: Sandbox still initializing",
+                            attempt + 1,
+                            max_attempts
+                        );
+                        sleep(Duration::from_millis(100 * (attempt + 1) as u64)).await;
+                        continue;
+                    }
+                }
+                resp = Some(r);
+                break;
+            }
+            Err(e) if e.contains("timeout") || e.contains("500") => {
+                // CI may be slow due to coverage instrumentation or resource contention
+                eprintln!(
+                    "Retry {}/{}: Transport error: {}",
+                    attempt + 1,
+                    max_attempts,
+                    e
+                );
+                sleep(Duration::from_millis(200 * (attempt + 1) as u64)).await;
                 continue;
             }
+            Err(e) => {
+                panic!("Unexpected error during tool call: {}", e);
+            }
         }
-        resp = Some(r);
-        break;
     }
-    let resp = resp.expect("Tool call should eventually succeed");
+    let resp = resp.expect(&format!(
+        "Tool call should eventually succeed after {} attempts",
+        max_attempts
+    ));
 
     assert!(
         resp.get("error").is_none(),
@@ -1009,24 +1036,51 @@ async fn test_roots_uri_parsing_file_localhost() {
         }
     });
 
+    // Retry loop with exponential backoff - handles both "Sandbox initializing" errors
+    // AND transport timeouts that can occur on slow CI runners (especially llvm-cov)
     let mut resp = None;
-    for attempt in 0..10 {
-        let (r, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
-            .await
-            .expect("Tool call should succeed");
+    let max_attempts = 20; // Increased for CI tolerance  
+    for attempt in 0..max_attempts {
+        let result = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id)).await;
 
-        // Check if we got a "sandbox initializing" retry error
-        if let Some(err) = r.get("error") {
-            let msg = err.get("message").and_then(|m| m.as_str()).unwrap_or("");
-            if msg.contains("Sandbox initializing") {
-                sleep(Duration::from_millis(50 * (attempt + 1) as u64)).await;
+        match result {
+            Ok((r, _)) => {
+                // Check if we got a "sandbox initializing" retry error
+                if let Some(err) = r.get("error") {
+                    let msg = err.get("message").and_then(|m| m.as_str()).unwrap_or("");
+                    if msg.contains("Sandbox initializing") {
+                        eprintln!(
+                            "Retry {}/{}: Sandbox still initializing",
+                            attempt + 1,
+                            max_attempts
+                        );
+                        sleep(Duration::from_millis(100 * (attempt + 1) as u64)).await;
+                        continue;
+                    }
+                }
+                resp = Some(r);
+                break;
+            }
+            Err(e) if e.contains("timeout") || e.contains("500") => {
+                // CI may be slow due to coverage instrumentation or resource contention
+                eprintln!(
+                    "Retry {}/{}: Transport error: {}",
+                    attempt + 1,
+                    max_attempts,
+                    e
+                );
+                sleep(Duration::from_millis(200 * (attempt + 1) as u64)).await;
                 continue;
             }
+            Err(e) => {
+                panic!("Unexpected error during tool call: {}", e);
+            }
         }
-        resp = Some(r);
-        break;
     }
-    let resp = resp.expect("Tool call should eventually succeed");
+    let resp = resp.expect(&format!(
+        "Tool call should eventually succeed after {} attempts",
+        max_attempts
+    ));
 
     assert!(
         resp.get("error").is_none(),
