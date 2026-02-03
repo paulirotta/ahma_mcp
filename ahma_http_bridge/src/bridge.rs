@@ -717,14 +717,11 @@ async fn handle_session_isolated_request(
                         Ok(true) => {
                             info!(session_id = %session_id, "Sandbox locked from first roots/list response");
 
-                            // Send roots/list_changed notification to subprocess to trigger sandbox configuration.
-                            // The subprocess (with --defer-sandbox) is waiting for this signal to call
-                            // configure_sandbox_from_roots(), which will query roots and update its sandbox.
-                            if let Some(session) = session_manager.get_session(&session_id)
-                                && let Err(e) = session.send_roots_list_changed().await
-                            {
-                                warn!(session_id = %session_id, "Failed to send roots/list_changed to subprocess: {}", e);
-                            }
+                            // No need to send roots/list_changed here. The fact that we received
+                            // a roots/list response means the subprocess already requested roots
+                            // (triggered by the initial connection notification) and is about to
+                            // receive them and configure itself. Sending another notification
+                            // would just cause a redundant roots/list request loop.
                         }
                         Ok(false) => {}
                         Err(e) => {
@@ -777,7 +774,7 @@ async fn handle_session_isolated_request(
             && !session.is_sandbox_applied()
         {
             // Wait a short, bounded time for the subprocess to apply the sandbox.
-            let wait_timeout = std::time::Duration::from_secs(2);
+            let wait_timeout = std::time::Duration::from_secs(15);
             let wait_result =
                 tokio::time::timeout(wait_timeout, session.wait_for_sandbox_applied()).await;
             if wait_result.is_err() {
