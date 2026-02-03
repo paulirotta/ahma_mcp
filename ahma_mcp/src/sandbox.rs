@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, thiserror::Error)]
 pub enum SandboxError {
     #[error(
-        "Path '{path}' is outside the sandbox root{} (this usually means your MCP session is scoped to a different workspace root; reconnect from the intended workspace or use a multi-root workspace)",
+        "Path '{path:?}' is outside the sandbox root{} (this usually means your MCP session is scoped to a different workspace root; reconnect from the intended workspace or use a multi-root workspace)",
         format_scopes(.scopes)
     )]
     PathOutsideSandbox { path: PathBuf, scopes: Vec<PathBuf> },
@@ -35,13 +35,13 @@ pub enum SandboxError {
     #[error("Unsupported operating system: {0}")]
     UnsupportedOs(String),
 
-    #[error("Failed to canonicalize path '{path}': {reason}")]
+    #[error("Failed to canonicalize path '{path:?}': {reason}")]
     CanonicalizationFailed { path: PathBuf, reason: String },
 
     #[error("Sandbox prerequisite check failed: {0}")]
     PrerequisiteFailed(String),
 
-    #[error("Path '{path}' is blocked by high-security mode (no-temp-files)")]
+    #[error("Path '{path:?}' is blocked by high-security mode (no-temp-files)")]
     HighSecurityViolation { path: PathBuf },
 
     #[error(
@@ -608,7 +608,7 @@ pub fn enforce_landlock_sandbox(scopes: &[PathBuf], no_temp_files: bool) -> Resu
         if path_obj.exists() {
             if let Ok(fd) = PathFd::new(path_obj) {
                 if let Err(e) = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read)) {
-                    tracing::debug!("Could not add Landlock rule for {}: {:?}", path, e);
+                    tracing::debug!("Could not add Landlock rule for {}: {:?}", path.display(), e);
                 }
             }
         }
@@ -623,7 +623,7 @@ pub fn enforce_landlock_sandbox(scopes: &[PathBuf], no_temp_files: bool) -> Resu
             if path.exists() {
                 if let Ok(fd) = PathFd::new(&path) {
                     if let Err(e) = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read)) {
-                        tracing::debug!("Could not add Landlock rule for {}: {:?}", path, e);
+                        tracing::debug!("Could not add Landlock rule for {}: {:?}", path.display(), e);
                     }
                 }
             }
