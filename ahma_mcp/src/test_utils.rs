@@ -311,6 +311,13 @@ pub mod cli {
         let workspace = get_workspace_dir();
         let target_dir = std::env::var("CARGO_TARGET_DIR")
             .map(PathBuf::from)
+            .map(|p| {
+                if p.is_absolute() {
+                    p
+                } else {
+                    workspace.join(p)
+                }
+            })
             .unwrap_or_else(|_| workspace.join("target"));
 
         let binary_path = target_dir.join("debug").join(binary);
