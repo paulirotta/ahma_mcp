@@ -18,10 +18,73 @@ This crate provides an HTTP server that acts as a bridge between HTTP clients an
 
 ## Usage
 
-### As a Library
+```bash
+cargo build --relese
+```
 
-```rust
-use ahma_http_bridge::{BridgeConfig, start_bridge};
+### Cursor MCP
+
+```json
+{
+    "mcpServers": {
+        "ahma-stdio-debug-vscode": {
+            "cwd": "${workspaceFolder}",
+            "command": "/path/to/ahma_mcp/target/release/ahma_mcp",
+            "args": [
+                "--tools-dir",
+                "/path/to/ahma_mcp/.ahma",
+                "--log-to-stderr"
+            ],
+            "env": {
+                "RUST_LOG": "debug"
+            }
+        }
+    }
+}
+```
+
+### LM Studio MCP
+
+```json
+{
+  "mcpServers": {
+    "ahma": {
+      "cwd": "/path/to/working/directory",
+      "command": "/path/to/ahma_mcp/target/release/ahma_mcp",
+      "args": [
+        "--sync",
+        "--tools-dir",
+        "/path/to/ahma_mcp/.ahma",
+        "--log-to-stderr"
+      ],
+      "env": {
+        "RUST_LOG": "debug"
+      }
+    }
+  }
+}
+```
+
+#### VSCode MCP
+
+```json
+{
+    "servers": {
+        "ahma": {
+            "cwd": "/path/to/working/directory",
+            "command": "/path/to/ahma_mcp/target/release/ahma_mcp",
+            "args": [
+                "--sync",
+                "--tools-dir",
+                "/path/to/ahma_mcp/.ahma",
+                "--log-to-stderr"
+            ],
+        }
+    }
+}
+```
+
+### As a Library
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -29,13 +92,7 @@ async fn main() -> anyhow::Result<()> {
         bind_addr: "127.0.0.1:3000".parse().unwrap(),
         server_command: "ahma_mcp".to_string(),
         server_args: vec!["--tools-dir".to_string(), "./tools".to_string()],
-    };
     
-    start_bridge(config).await?;
-    Ok(())
-}
-```
-
 ### Command Line
 
 The bridge is integrated into the `ahma_shell` binary:
