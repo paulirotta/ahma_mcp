@@ -53,9 +53,12 @@ The sandbox scope defines the root directory boundary for all file system operat
 
 #### Linux (Landlock)
 
-On Linux (kernel 5.13+), Ahma uses [Landlock](https://docs.kernel.org/userspace-api/landlock.html) for kernel-level file system sandboxing. No additional installation is required—Landlock is built into modern Linux kernels.
+On Linux, Ahma uses [Landlock](https://docs.kernel.org/userspace-api/landlock.html) for kernel-level file system sandboxing. No additional installation is required—Landlock is built into Linux kernels 5.13 and newer.
 
-**Requirements**: Linux kernel 5.13 or newer. If your kernel is older, the server will refuse to start and display upgrade instructions.
+**Requirements**: 
+- **Linux kernel 5.13 or newer** (released June 2021)
+- The server will **refuse to start** on older kernels and display upgrade instructions
+- Check your kernel version with: `uname -r`
 
 #### macOS (Seatbelt/sandbox-exec)
 

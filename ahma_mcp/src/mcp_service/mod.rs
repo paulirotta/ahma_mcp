@@ -1262,10 +1262,32 @@ impl AhmaMcpService {
                 }
 
                 if !new_scopes.is_empty() {
-                    if let Err(e) = self.adapter.sandbox().update_scopes(new_scopes) {
+                    if let Err(e) = self.adapter.sandbox().update_scopes(new_scopes.clone()) {
                         tracing::error!("Failed to update sandbox from roots: {}", e);
                     } else {
                         tracing::info!("Sandbox scopes updated successfully");
+
+                        // On Linux, apply Landlock kernel-level restrictions now that we have scopes.
+                        // This is critical for HTTP bridge deferred sandbox mode where Landlock
+                        // couldn't be applied at startup (scopes weren't known yet).
+                        // SECURITY: Fail the session if Landlock enforcement fails - we cannot
+                        // guarantee security without kernel-level restrictions.
+                        #[cfg(target_os = "linux")]
+                        {
+                            if !self.adapter.sandbox().is_test_mode() {
+                                if let Err(e) = crate::sandbox::enforce_landlock_sandbox(&new_scopes)
+                                {
+                                    tracing::error!(
+                                        "FATAL: Failed to enforce Landlock sandbox: {}. \
+                                         Exiting to prevent running without kernel-level security.",
+                                        e
+                                    );
+                                    std::process::exit(1);
+                                }
+                                tracing::info!("Landlock sandbox enforced successfully");
+                            }
+                        }
+
                         // Notify bridge that sandbox has been configured so it can safely
                         // forward tools/call requests. We emit a JSON-RPC notification
                         // on stdout which the HTTP bridge listens for on the subprocess
