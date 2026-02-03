@@ -52,7 +52,6 @@ env:
 jobs:
   job-cargo-build:
     strategy:
-      fail-fast: true
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
@@ -147,7 +146,6 @@ jobs:
 
   job-nextest:
     strategy:
-      fail-fast: true
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
