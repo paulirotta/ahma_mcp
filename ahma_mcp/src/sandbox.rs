@@ -608,7 +608,7 @@ pub fn enforce_landlock_sandbox(scopes: &[PathBuf], no_temp_files: bool) -> Resu
         if path_obj.exists() {
             if let Ok(fd) = PathFd::new(path_obj) {
                 if let Err(e) = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read)) {
-                    tracing::debug!("Could not add Landlock rule for {}: {:?}", path.display(), e);
+                    tracing::debug!("Could not add Landlock rule for {}: {:?}", path_obj.display(), e);
                 }
             }
         }
