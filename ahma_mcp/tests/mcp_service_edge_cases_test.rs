@@ -37,7 +37,12 @@ async fn test_status_filter_nonexistent_tool() -> Result<()> {
     // Call status with a filter that matches nothing
     let params = CallToolRequestParams {
         name: Cow::Borrowed("status"),
-        arguments: Some(json!({"tools": "nonexistent_tool_xyz"}).as_object().unwrap().clone()),
+        arguments: Some(
+            json!({"tools": "nonexistent_tool_xyz"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        ),
         task: None,
         meta: None,
     };
@@ -45,10 +50,12 @@ async fn test_status_filter_nonexistent_tool() -> Result<()> {
     let result = client.call_tool(params).await?;
     assert!(!result.is_error.unwrap_or(false));
 
-    let text: String = result.content.iter()
+    let text: String = result
+        .content
+        .iter()
         .filter_map(|c| c.as_text().map(|t| t.text.clone()))
         .collect();
-    
+
     // Should indicate 0 active/completed for that filter
     assert!(text.contains("0 active"));
     assert!(text.contains("0 completed"));
@@ -67,7 +74,12 @@ async fn test_status_nonexistent_operation_id() -> Result<()> {
 
     let params = CallToolRequestParams {
         name: Cow::Borrowed("status"),
-        arguments: Some(json!({"operation_id": "op_999999"}).as_object().unwrap().clone()),
+        arguments: Some(
+            json!({"operation_id": "op_999999"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        ),
         task: None,
         meta: None,
     };
@@ -75,10 +87,12 @@ async fn test_status_nonexistent_operation_id() -> Result<()> {
     let result = client.call_tool(params).await?;
     assert!(!result.is_error.unwrap_or(false));
 
-    let text: String = result.content.iter()
+    let text: String = result
+        .content
+        .iter()
         .filter_map(|c| c.as_text().map(|t| t.text.clone()))
         .collect();
-    
+
     assert!(text.contains("not found"));
 
     client.cancel().await?;
@@ -104,15 +118,15 @@ async fn test_cancel_missing_operation_id() -> Result<()> {
     };
 
     let result = client.call_tool(params).await;
-    
+
     // Should return error because operation_id is required
     match result {
         Err(e) => {
             let msg = format!("{:?}", e);
             assert!(msg.contains("required") || msg.contains("missing"));
-        },
+        }
         Ok(r) => {
-             assert!(r.is_error.unwrap_or(false));
+            assert!(r.is_error.unwrap_or(false));
         }
     }
 
@@ -129,7 +143,12 @@ async fn test_cancel_nonexistent_operation() -> Result<()> {
 
     let params = CallToolRequestParams {
         name: Cow::Borrowed("cancel"),
-        arguments: Some(json!({"operation_id": "op_999999"}).as_object().unwrap().clone()),
+        arguments: Some(
+            json!({"operation_id": "op_999999"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        ),
         task: None,
         meta: None,
     };
@@ -139,10 +158,12 @@ async fn test_cancel_nonexistent_operation() -> Result<()> {
     // This depends on implementation details, but based on code it returns successfully with a message.
     assert!(!result.is_error.unwrap_or(false));
 
-    let text: String = result.content.iter()
+    let text: String = result
+        .content
+        .iter()
         .filter_map(|c| c.as_text().map(|t| t.text.clone()))
         .collect();
-    
+
     assert!(text.contains("not found") || text.contains("completed"));
 
     client.cancel().await?;
@@ -159,42 +180,58 @@ async fn test_cancel_with_reason() -> Result<()> {
     // First start a long running operation
     let start_params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
-        arguments: Some(json!({
-            "command": "sleep 5",
-            "execution_mode": "AsyncResultPush"
-        }).as_object().unwrap().clone()),
+        arguments: Some(
+            json!({
+                "command": "sleep 5",
+                "execution_mode": "AsyncResultPush"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        ),
         task: None,
         meta: None,
     };
-    
+
     let start_result = client.call_tool(start_params).await?;
-    let start_text: String = start_result.content.iter()
+    let start_text: String = start_result
+        .content
+        .iter()
         .filter_map(|c| c.as_text().map(|t| t.text.clone()))
         .collect();
-    
+
     // Extract operation ID (format: "Asynchronous operation started with ID: op_X...")
-    let op_id = start_text.split("ID: ").nth(1)
+    let op_id = start_text
+        .split("ID: ")
+        .nth(1)
         .and_then(|s| s.split_whitespace().next())
         .ok_or_else(|| anyhow::anyhow!("Could not extract op ID"))?;
 
     // Cancel it with a reason
     let cancel_params = CallToolRequestParams {
         name: Cow::Borrowed("cancel"),
-        arguments: Some(json!({
-            "operation_id": op_id,
-            "reason": "Test cancellation reason"
-        }).as_object().unwrap().clone()),
+        arguments: Some(
+            json!({
+                "operation_id": op_id,
+                "reason": "Test cancellation reason"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        ),
         task: None,
         meta: None,
     };
 
     let cancel_result = client.call_tool(cancel_params).await?;
     assert!(!cancel_result.is_error.unwrap_or(false));
-    
-    let cancel_text: String = cancel_result.content.iter()
+
+    let cancel_text: String = cancel_result
+        .content
+        .iter()
         .filter_map(|c| c.as_text().map(|t| t.text.clone()))
         .collect();
-        
+
     assert!(cancel_text.contains("cancelled successfully"));
     assert!(cancel_text.contains("Test cancellation reason"));
 
@@ -221,14 +258,14 @@ async fn test_shell_missing_command() -> Result<()> {
     };
 
     let result = client.call_tool(params).await;
-    
+
     match result {
         Err(e) => {
             let msg = format!("{:?}", e);
             assert!(msg.contains("required") || msg.contains("command parameter"));
-        },
+        }
         Ok(r) => {
-             assert!(r.is_error.unwrap_or(false));
+            assert!(r.is_error.unwrap_or(false));
         }
     }
 
@@ -246,15 +283,22 @@ async fn test_shell_explicit_execution_modes() -> Result<()> {
     // 1. Explicit Synchronous
     let sync_params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
-        arguments: Some(json!({
-            "command": "echo sync",
-            "execution_mode": "Synchronous"
-        }).as_object().unwrap().clone()),
+        arguments: Some(
+            json!({
+                "command": "echo sync",
+                "execution_mode": "Synchronous"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        ),
         task: None,
         meta: None,
     };
     let sync_result = client.call_tool(sync_params).await?;
-    let sync_text: String = sync_result.content.iter()
+    let sync_text: String = sync_result
+        .content
+        .iter()
         .filter_map(|c| c.as_text().map(|t| t.text.clone()))
         .collect();
     assert!(sync_text.contains("sync"));
@@ -263,15 +307,22 @@ async fn test_shell_explicit_execution_modes() -> Result<()> {
     // 2. Explicit AsyncResultPush
     let async_params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
-        arguments: Some(json!({
-            "command": "echo async",
-            "execution_mode": "AsyncResultPush"
-        }).as_object().unwrap().clone()),
+        arguments: Some(
+            json!({
+                "command": "echo async",
+                "execution_mode": "AsyncResultPush"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        ),
         task: None,
         meta: None,
     };
     let async_result = client.call_tool(async_params).await?;
-    let async_text: String = async_result.content.iter()
+    let async_text: String = async_result
+        .content
+        .iter()
         .filter_map(|c| c.as_text().map(|t| t.text.clone()))
         .collect();
     assert!(async_text.contains("ID: op_")); // Async SHOULD return op ID
@@ -279,15 +330,22 @@ async fn test_shell_explicit_execution_modes() -> Result<()> {
     // 3. Invalid mode (should fallback to Async)
     let invalid_params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
-        arguments: Some(json!({
-            "command": "echo fallback",
-            "execution_mode": "InvalidMode"
-        }).as_object().unwrap().clone()),
+        arguments: Some(
+            json!({
+                "command": "echo fallback",
+                "execution_mode": "InvalidMode"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        ),
         task: None,
         meta: None,
     };
     let invalid_result = client.call_tool(invalid_params).await?;
-    let invalid_text: String = invalid_result.content.iter()
+    let invalid_text: String = invalid_result
+        .content
+        .iter()
         .filter_map(|c| c.as_text().map(|t| t.text.clone()))
         .collect();
     assert!(invalid_text.contains("ID: op_")); // Fallback is Async
@@ -306,41 +364,57 @@ async fn test_shell_timeout() -> Result<()> {
     // Run a command that sleeps for 2s with 1s timeout
     let params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
-        arguments: Some(json!({
-            "command": "sleep 2",
-            "timeout_seconds": 1,
-            "execution_mode": "Synchronous"
-        }).as_object().unwrap().clone()),
+        arguments: Some(
+            json!({
+                "command": "sleep 2",
+                "timeout_seconds": 1,
+                "execution_mode": "Synchronous"
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        ),
         task: None,
         meta: None,
     };
 
     let result = client.call_tool(params).await;
-    
+
     // Should fail with timeout
     match result {
         Err(e) => {
             let msg = format!("{:?}", e);
             assert!(msg.contains("timeout") || msg.contains("timed out"));
-        },
+        }
         Ok(r) => {
-             // Or return error result
-             if !r.is_error.unwrap_or(false) {
-                 // It might have succeeded if machine was very fast or sleep implementation varies, 
-                 // but generally we expect failure.
-                 // However, since we can't control system load, a slight race condition is possible.
-                 // If it somehow succeeded, we check output.
-                 let text: String = r.content.iter()
+            // Or return error result
+            if !r.is_error.unwrap_or(false) {
+                // It might have succeeded if machine was very fast or sleep implementation varies,
+                // but generally we expect failure.
+                // However, since we can't control system load, a slight race condition is possible.
+                // If it somehow succeeded, we check output.
+                let text: String = r
+                    .content
+                    .iter()
                     .filter_map(|c| c.as_text().map(|t| t.text.clone()))
                     .collect();
-                 // If it succeeded, it implies timeout didn't trigger.
-                 panic!("Expected timeout failure, but shell command succeeded. Output: {}", text);
-             } else {
-                 let text: String = r.content.iter()
+                // If it succeeded, it implies timeout didn't trigger.
+                panic!(
+                    "Expected timeout failure, but shell command succeeded. Output: {}",
+                    text
+                );
+            } else {
+                let text: String = r
+                    .content
+                    .iter()
                     .filter_map(|c| c.as_text().map(|t| t.text.clone()))
                     .collect();
-                 assert!(text.contains("timeout") || text.contains("timed out") || text.contains("killed"));
-             }
+                assert!(
+                    text.contains("timeout")
+                        || text.contains("timed out")
+                        || text.contains("killed")
+                );
+            }
         }
     }
 
@@ -371,14 +445,16 @@ async fn test_await_no_active_operations() -> Result<()> {
     let duration = start.elapsed();
 
     assert!(!result.is_error.unwrap_or(false));
-    
+
     // Should return very quickly (e.g., < 100ms) since nothing to wait for
     assert!(duration < Duration::from_secs(1));
 
-    let text: String = result.content.iter()
+    let text: String = result
+        .content
+        .iter()
         .filter_map(|c| c.as_text().map(|t| t.text.clone()))
         .collect();
-    
+
     assert!(text.contains("No pending operations to await for."));
 
     client.cancel().await?;

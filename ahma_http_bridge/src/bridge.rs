@@ -773,19 +773,20 @@ async fn handle_session_isolated_request(
         // for the subprocess to apply the sandbox scopes (notifications/sandbox/configured).
         if method == Some("tools/call")
             && let Some(session) = session_manager.get_session(&session_id)
-                && session.is_sandbox_locked() && !session.is_sandbox_applied() {
-                    // Wait a short, bounded time for the subprocess to apply the sandbox.
-                    let wait_timeout = std::time::Duration::from_secs(2);
-                    let wait_result =
-                        tokio::time::timeout(wait_timeout, session.wait_for_sandbox_applied())
-                            .await;
-                    if wait_result.is_err() {
-                        // Timed out waiting for explicit subprocess ack. Log and proceed
-                        // optimistically to forward the request — the subprocess may already
-                        // be ready even if it didn't emit the notification.
-                        warn!(session_id = %session_id, "Timed out waiting for subprocess sandbox-applied notification; forwarding tools/call optimistically");
-                    }
-                }
+            && session.is_sandbox_locked()
+            && !session.is_sandbox_applied()
+        {
+            // Wait a short, bounded time for the subprocess to apply the sandbox.
+            let wait_timeout = std::time::Duration::from_secs(2);
+            let wait_result =
+                tokio::time::timeout(wait_timeout, session.wait_for_sandbox_applied()).await;
+            if wait_result.is_err() {
+                // Timed out waiting for explicit subprocess ack. Log and proceed
+                // optimistically to forward the request — the subprocess may already
+                // be ready even if it didn't emit the notification.
+                warn!(session_id = %session_id, "Timed out waiting for subprocess sandbox-applied notification; forwarding tools/call optimistically");
+            }
+        }
 
         match session_manager
             .send_request(&session_id, &payload, Some(request_timeout))

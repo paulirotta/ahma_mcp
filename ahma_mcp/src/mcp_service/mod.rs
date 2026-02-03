@@ -1074,49 +1074,52 @@ impl AhmaMcpService {
             adapter_args.insert("working_directory".to_string(), wd.clone());
         }
 
+        // Create a minimal SubcommandConfig for bash -c
+        let subcommand_config = crate::config::SubcommandConfig {
+            name: "sandboxed_shell".to_string(),
+            description: "Execute shell commands".to_string(),
+            subcommand: None,
+            options: Some(vec![crate::config::CommandOption {
+                name: "c_flag".to_string(), // Internal name
+                option_type: "boolean".to_string(),
+                description: Some("Execute command string".to_string()),
+                required: Some(false),
+                format: None,
+                items: None,
+                file_arg: None,
+                file_flag: None,
+                alias: Some("c".to_string()), // Single-char alias will create -c
+            }]),
+            positional_args: Some(vec![crate::config::CommandOption {
+                name: "command".to_string(),
+                option_type: "string".to_string(),
+                description: Some("Shell command to execute".to_string()),
+                required: Some(true),
+                format: None,
+                items: None,
+                file_arg: None,
+                file_flag: None,
+                alias: None,
+            }]),
+            positional_args_first: Some(false),
+            timeout_seconds: timeout,
+            synchronous: Some(matches!(
+                execution_mode,
+                crate::adapter::ExecutionMode::Synchronous
+            )),
+            enabled: true,
+            guidance_key: None,
+            sequence: None,
+            step_delay_ms: None,
+            availability_check: None,
+            install_instructions: None,
+        };
+
+        // Add the -c flag to adapter_args using the internal name
+        adapter_args.insert("c_flag".to_string(), serde_json::Value::Bool(true));
+
         match execution_mode {
             crate::adapter::ExecutionMode::Synchronous => {
-                // Create a minimal SubcommandConfig for bash -c
-                let subcommand_config = crate::config::SubcommandConfig {
-                    name: "sandboxed_shell".to_string(),
-                    description: "Execute shell commands".to_string(),
-                    subcommand: None,
-                    options: Some(vec![crate::config::CommandOption {
-                        name: "c_flag".to_string(), // Internal name
-                        option_type: "boolean".to_string(),
-                        description: Some("Execute command string".to_string()),
-                        required: Some(false),
-                        format: None,
-                        items: None,
-                        file_arg: None,
-                        file_flag: None,
-                        alias: Some("c".to_string()), // Single-char alias will create -c
-                    }]),
-                    positional_args: Some(vec![crate::config::CommandOption {
-                        name: "command".to_string(),
-                        option_type: "string".to_string(),
-                        description: Some("Shell command to execute".to_string()),
-                        required: Some(true),
-                        format: None,
-                        items: None,
-                        file_arg: None,
-                        file_flag: None,
-                        alias: None,
-                    }]),
-                    positional_args_first: Some(false),
-                    timeout_seconds: timeout,
-                    synchronous: Some(true),
-                    enabled: true,
-                    guidance_key: None,
-                    sequence: None,
-                    step_delay_ms: None,
-                    availability_check: None,
-                    install_instructions: None,
-                };
-
-                // Add the -c flag to adapter_args using the internal name
-                adapter_args.insert("c_flag".to_string(), serde_json::Value::Bool(true));
-
                 let result = self
                     .adapter
                     .execute_sync_in_dir(
@@ -1149,34 +1152,6 @@ impl AhmaMcpService {
                         client_type,
                     )) as Box<dyn CallbackSender>
                 });
-
-                // Create a minimal SubcommandConfig for bash -c
-                let subcommand_config = crate::config::SubcommandConfig {
-                    name: "sandboxed_shell".to_string(),
-                    description: "Execute shell commands".to_string(),
-                    subcommand: None,
-                    options: None,
-                    positional_args: Some(vec![crate::config::CommandOption {
-                        name: "command".to_string(),
-                        option_type: "string".to_string(),
-                        description: Some("Shell command to execute".to_string()),
-                        required: Some(true),
-                        format: None,
-                        items: None,
-                        file_arg: None,
-                        file_flag: None,
-                        alias: None,
-                    }]),
-                    positional_args_first: Some(false),
-                    timeout_seconds: timeout,
-                    synchronous: Some(false),
-                    enabled: true,
-                    guidance_key: None,
-                    sequence: None,
-                    step_delay_ms: None,
-                    availability_check: None,
-                    install_instructions: None,
-                };
 
                 let job_id = self
                     .adapter
@@ -1278,8 +1253,7 @@ impl AhmaMcpService {
                                 if let Err(e) = crate::sandbox::enforce_landlock_sandbox(
                                     &new_scopes,
                                     self.adapter.sandbox().is_no_temp_files(),
-                                )
-                                {
+                                ) {
                                     tracing::error!(
                                         "FATAL: Failed to enforce Landlock sandbox: {}. \
                                          Exiting to prevent running without kernel-level security.",

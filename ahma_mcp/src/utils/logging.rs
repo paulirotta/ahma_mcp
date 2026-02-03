@@ -80,42 +80,41 @@ pub fn init_logging(log_level: &str, log_to_file: bool) -> Result<()> {
             .unwrap_or_else(|_| EnvFilter::new(format!("{log_level},ahma_mcp=debug")));
 
         // Attempt to log to a file, fall back to stderr.
-        if log_to_file
-            && let Some(proj_dirs) = ProjectDirs::from("com", "AhmaMcp", "ahma_mcp") {
-                let log_dir = proj_dirs.cache_dir();
+        if log_to_file && let Some(proj_dirs) = ProjectDirs::from("com", "AhmaMcp", "ahma_mcp") {
+            let log_dir = proj_dirs.cache_dir();
 
-                // Test if we can actually write to the log directory before calling
-                // tracing_appender::rolling::daily, which panics on permission errors
-                // in tracing-appender 0.2.4+.
-                let can_write = test_write_permission(log_dir);
+            // Test if we can actually write to the log directory before calling
+            // tracing_appender::rolling::daily, which panics on permission errors
+            // in tracing-appender 0.2.4+.
+            let can_write = test_write_permission(log_dir);
 
-                // Try to create the file appender, fall back to stderr if it fails
-                // Use catch_unwind to handle panics from tracing_appender
-                let file_appender_result = if can_write {
-                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        tracing_appender::rolling::daily(log_dir, "ahma_mcp.log")
-                    }))
-                } else {
-                    Err(Box::new("Cannot write to log directory") as Box<dyn std::any::Any + Send>)
-                };
+            // Try to create the file appender, fall back to stderr if it fails
+            // Use catch_unwind to handle panics from tracing_appender
+            let file_appender_result = if can_write {
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    tracing_appender::rolling::daily(log_dir, "ahma_mcp.log")
+                }))
+            } else {
+                Err(Box::new("Cannot write to log directory") as Box<dyn std::any::Any + Send>)
+            };
 
-                if let Ok(file_appender) = file_appender_result {
-                    // Successfully created file appender
-                    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+            if let Ok(file_appender) = file_appender_result {
+                // Successfully created file appender
+                let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
-                    let subscriber = tracing_subscriber::registry()
-                        .with(env_filter)
-                        .with(layer().with_writer(non_blocking).with_ansi(false));
+                let subscriber = tracing_subscriber::registry()
+                    .with(env_filter)
+                    .with(layer().with_writer(non_blocking).with_ansi(false));
 
-                    #[cfg(feature = "opentelemetry")]
-                    let subscriber = subscriber.with(init_otel());
+                #[cfg(feature = "opentelemetry")]
+                let subscriber = subscriber.with(init_otel());
 
-                    subscriber.init();
-                    // The guard is intentionally leaked to ensure logs are flushed on exit.
-                    Box::leak(Box::new(_guard));
-                    return;
-                }
+                subscriber.init();
+                // The guard is intentionally leaked to ensure logs are flushed on exit.
+                Box::leak(Box::new(_guard));
+                return;
             }
+        }
 
         // Fallback or explicit stderr logging
         let subscriber = tracing_subscriber::registry()

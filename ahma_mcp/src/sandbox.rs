@@ -593,22 +593,19 @@ pub fn enforce_landlock_sandbox(scopes: &[PathBuf], no_temp_files: bool) -> Resu
 
     // Allow read access to system directories
     let system_paths = [
-        "/usr",
-        "/bin",
-        "/sbin",
-        "/etc",
-        "/lib",
-        "/lib64",
-        "/proc",
-        "/dev",
-        "/sys",
+        "/usr", "/bin", "/sbin", "/etc", "/lib", "/lib64", "/proc", "/dev", "/sys",
     ];
+    let access_read_execute = access_read | AccessFs::Execute;
     for path in &system_paths {
         let path_obj = Path::new(path);
         if path_obj.exists() {
             if let Ok(fd) = PathFd::new(path_obj) {
-                if let Err(e) = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read)) {
-                    tracing::debug!("Could not add Landlock rule for {}: {:?}", path_obj.display(), e);
+                if let Err(e) = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read_execute)) {
+                    tracing::debug!(
+                        "Could not add Landlock rule for {}: {:?}",
+                        path_obj.display(),
+                        e
+                    );
                 }
             }
         }
@@ -623,7 +620,11 @@ pub fn enforce_landlock_sandbox(scopes: &[PathBuf], no_temp_files: bool) -> Resu
             if path.exists() {
                 if let Ok(fd) = PathFd::new(&path) {
                     if let Err(e) = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read)) {
-                        tracing::debug!("Could not add Landlock rule for {}: {:?}", path.display(), e);
+                        tracing::debug!(
+                            "Could not add Landlock rule for {}: {:?}",
+                            path.display(),
+                            e
+                        );
                     }
                 }
             }
