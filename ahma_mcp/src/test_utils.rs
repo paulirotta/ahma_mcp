@@ -278,6 +278,90 @@ pub async fn wait_for_operation_terminal(
     .await
 }
 
+/// Helpers for CI-resilient stdio MCP integration tests.
+///
+/// # CI-Resilient Stdio Testing Patterns
+///
+/// ## Key Insight
+/// In stdio MCP transport, notifications and responses share the same channel.
+/// When a response arrives, the transport may start tearing down almost immediately.
+/// Notifications in-flight may never be delivered to the client callback.
+///
+/// ## Rule 1: Prefer synchronous operations for notification tests
+/// If testing that notifications are sent, use `synchronous: true` tools.
+/// Notifications are sent during execution, before the response.
+///
+/// ## Rule 2: Don't race response completion against notification
+/// Never use `tokio::select!` to race response vs notification - when the
+/// response branch wins, the transport may already be closing.
+///
+/// ## Rule 3: Use generous timeouts on CI
+/// CI environments (especially with concurrent nextest) are slower and more
+/// variable. Use 10s+ timeouts for notification waiting.
+pub mod stdio_test_helpers {
+    use std::time::Duration;
+    use tokio::sync::mpsc;
+
+    /// Default timeout for CI-resilient notification waiting (10 seconds).
+    ///
+    /// CI environments are slower due to:
+    /// - Concurrent test execution (nextest runs tests in parallel)
+    /// - Shared resources and CPU contention
+    /// - Variable performance characteristics
+    pub const CI_NOTIFICATION_TIMEOUT: Duration = Duration::from_secs(10);
+
+    /// Wait for a notification on an mpsc channel with timeout.
+    ///
+    /// Returns `Some(notification)` if received within timeout, `None` otherwise.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let notification = wait_for_notification(&mut rx, CI_NOTIFICATION_TIMEOUT).await;
+    /// assert!(notification.is_some(), "Expected notification within timeout");
+    /// ```
+    pub async fn wait_for_notification<T>(
+        rx: &mut mpsc::Receiver<T>,
+        timeout: Duration,
+    ) -> Option<T>
+    where
+        T: Send,
+    {
+        tokio::time::timeout(timeout, rx.recv())
+            .await
+            .ok()
+            .flatten()
+    }
+
+    /// Wait for a notification matching a predicate with timeout.
+    ///
+    /// Keeps receiving notifications until one matches or timeout expires.
+    /// Non-matching notifications are discarded.
+    pub async fn wait_for_notification_matching<T, F>(
+        rx: &mut mpsc::Receiver<T>,
+        timeout: Duration,
+        predicate: F,
+    ) -> Option<T>
+    where
+        T: Send,
+        F: Fn(&T) -> bool,
+    {
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                return None;
+            }
+            match tokio::time::timeout(remaining, rx.recv()).await {
+                Ok(Some(item)) if predicate(&item) => return Some(item),
+                Ok(Some(_)) => continue, // Non-matching, try again
+                Ok(None) => return None, // Channel closed
+                Err(_) => return None,   // Timeout
+            }
+        }
+    }
+}
+
 /// CLI testing helpers for reusing cached binaries and shared flags.
 pub mod cli {
     use super::get_workspace_dir;

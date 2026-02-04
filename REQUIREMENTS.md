@@ -481,7 +481,31 @@ fs::write(&test_file, "test content").unwrap();
 
 **Enforcement**: See `scripts/lint_test_paths.sh` for automated detection of violations.
 
+### 10.5 CI-Resilient Testing Patterns
+
+**R15**: Tests must pass reliably in CI environments with concurrent test execution.
+
+#### R15.1: Avoid Race Conditions in Async Tests
+
+- **R15.1.1**: Never use `tokio::select!` to race response completion against notification reception. When the response branch wins, the transport may already be closing.
+- **R15.1.2**: For stdio MCP tests that verify notifications, prefer **synchronous tool execution** (`synchronous: true`). Notifications are sent **during** execution, before the response.
+- **R15.1.3**: Use generous timeouts (10+ seconds) for notification waiting. CI environments are slower and more variable than local development.
+
+#### R15.2: Test Timeout and Polling Guidelines
+
+- **R15.2.1**: Never use fixed `sleep()` to wait for async conditions. Use `wait_for_condition()` from `test_utils`.
+- **R15.2.2**: For health checks and server readiness, poll with increasing backoff instead of fixed delays.
+- **R15.2.3**: When testing notifications or async events, use channel-based communication with explicit timeouts.
+
+#### R15.3: Stdio Transport Gotchas
+
+- **R15.3.1**: In stdio transport, notifications and responses share the same stream. The client's reader task may exit before processing all in-flight notifications.
+- **R15.3.2**: The `handle_notification` callback is only invoked when rmcp's internal reader successfully parses and delivers the notification. Transport teardown can prevent this.
+- **R15.3.3**: For notification tests, consider using HTTP mode with SSE instead of stdio - SSE keeps the notification stream open independently.
+- **R15.3.4**: For async operations, the server immediately returns "operation started" and sends notifications in parallel. This creates an unwinnable race condition for notification testing.
+
 ---
+
 
 ## 11. Known Issues & Guardrails
 

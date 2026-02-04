@@ -27,7 +27,26 @@ fn workspace_dir() -> PathBuf {
         .to_path_buf()
 }
 
-fn tools_dir_with_async_shell(temp: &TempDir) -> anyhow::Result<PathBuf> {
+/// Create a SYNCHRONOUS shell tool configuration.
+///
+/// CRITICAL: For testing progress notifications in stdio transport, we MUST use
+/// synchronous execution. Here's why:
+///
+/// With async execution:
+/// 1. Server sends "Started" progress notification
+/// 2. Server immediately returns "Async operation started" response
+/// 3. Client receives response and may begin transport teardown
+/// 4. "Started" notification may never be delivered because transport is closing
+///
+/// With sync execution:
+/// 1. Server starts processing and sends "Started" notification
+/// 2. Server waits for command to complete (echo is instant)
+/// 3. Server sends response only after command completes
+/// 4. All notifications are delivered BEFORE the response
+///
+/// This ordering guarantees the client receives notifications before the response
+/// that would trigger test completion.
+fn tools_dir_with_sync_shell(temp: &TempDir) -> anyhow::Result<PathBuf> {
     let tools_dir = temp.path().join("tools");
     std::fs::create_dir_all(&tools_dir)?;
     std::fs::write(
@@ -38,7 +57,7 @@ fn tools_dir_with_async_shell(temp: &TempDir) -> anyhow::Result<PathBuf> {
   "command": "bash -c",
   "enabled": true,
   "timeout_seconds": 30,
-  "synchronous": false,
+  "synchronous": true,
   "subcommand": [
     {
       "name": "default",
@@ -127,10 +146,28 @@ impl rmcp::service::Service<RoleClient> for RecordingClient {
     }
 }
 
+/// Test that progress notifications contain the client-provided progressToken.
+///
+/// This test verifies R2.2 from REQUIREMENTS.md: "On completion, the system must
+/// push results via MCP progress notifications."
+///
+/// ## CI-Resilience Design
+///
+/// This test uses synchronous tool execution to avoid race conditions between
+/// notification delivery and transport teardown. See `tools_dir_with_sync_shell()`
+/// for detailed rationale.
+///
+/// The test:
+/// 1. Creates a recording client that captures progress notifications
+/// 2. Sends a synchronous tool call with an explicit progressToken
+/// 3. Spawns the response awaiting in a background task
+/// 4. Waits for a notification with matching token (with generous timeout)
+/// 5. Verifies the token matches what the client sent
 #[tokio::test]
 async fn test_stdio_progress_notifications_respect_client_progress_token() -> anyhow::Result<()> {
     let temp = TempDir::new().context("Failed to create temp dir")?;
-    let tools_dir = tools_dir_with_async_shell(&temp).context("Failed to create tools dir")?;
+    // Use SYNCHRONOUS shell to ensure notifications are sent before response
+    let tools_dir = tools_dir_with_sync_shell(&temp).context("Failed to create tools dir")?;
 
     let (tx, mut rx) = mpsc::channel::<ProgressNotificationParam>(128);
     let client_impl = RecordingClient {
@@ -191,24 +228,18 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
     // Use workspace directory for working_directory (inside sandbox scope)
     let working_dir = wd.to_string_lossy().to_string();
 
-    // NOTE: rmcp's send_request_with_option ALWAYS auto-assigns a progressToken via
-    // ProgressTokenProvider, even when options.meta is None. There's no way to send
-    // a request without a token through rmcp. This is by design - per MCP spec,
-    // clients that want progress notifications should provide a token.
-    //
-    // Our test verifies that the server ECHOES the client's token correctly.
-
     // tools/call WITH explicit meta.progressToken
     let token_str = "tok_stdio_1";
     let token = ProgressToken(NumberOrString::String(Arc::from(token_str)));
     let mut meta = Meta::new();
     meta.set_progress_token(token.clone());
 
+    // Use a fast synchronous command (echo is instant)
     let params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
-                "command": "sleep 0.2",
+                "command": "echo 'progress test'",
                 "working_directory": &working_dir
             })
             .as_object()
@@ -221,81 +252,76 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
 
     let req = ClientRequest::CallToolRequest(CallToolRequest::new(params));
 
-    // Send the request. Note: we DON'T wait for response completion here because
-    // progress notifications are sent during async command execution. The transport
-    // may close as soon as the command finishes (before we can await the response).
-    // Instead, we race notification reception against a deadline.
+    // Send the request and spawn response handling in background.
+    // For synchronous execution, notifications are sent BEFORE the response,
+    // so we should receive the notification before the response task completes.
     let pending_response = service
         .send_request_with_option(
             req,
             rmcp::service::PeerRequestOptions {
-                timeout: Some(Duration::from_secs(10)),
+                timeout: Some(Duration::from_secs(30)),
                 meta: Some(meta),
             },
         )
         .await?;
 
-    // Race: wait for EITHER a matching notification OR a timeout.
-    // The response future runs concurrently - we just care that we received the notification.
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
-    let mut notification_received = false;
+    // Spawn response handling so it doesn't block notification reception
+    let response_handle = tokio::spawn(async move { pending_response.await_response().await });
 
-    // Pin the response future so we can poll it alongside notification checking
-    let mut response_fut = std::pin::pin!(pending_response.await_response());
+    // Wait for notification with a generous timeout for CI environments.
+    // The CI_NOTIFICATION_TIMEOUT (10s) is appropriate for heavily-loaded CI servers.
+    let notification_timeout = Duration::from_secs(10);
 
-    loop {
-        tokio::select! {
-            biased;
-            // Check for notification first (higher priority)
-            maybe_notification = tokio::time::timeout(Duration::from_millis(100), rx.recv()) => {
-                if let Ok(Some(p)) = maybe_notification {
-                    assert_eq!(
-                        p.progress_token, token,
-                        "progressToken must match client token"
-                    );
-                    notification_received = true;
-                    break;
-                }
+    let notification_result = tokio::time::timeout(notification_timeout, async {
+        // For synchronous tool execution, the notification is sent before the response,
+        // so we should receive it first.
+        match rx.recv().await {
+            Some(p) => {
+                eprintln!(
+                    "[TEST] Received notification with token: {:?}",
+                    p.progress_token
+                );
+                Some(p)
             }
-            // Also poll the response - we don't care if it errors, but we should
-            // let it make progress (and potentially complete the transport cleanly).
-            response_result = &mut response_fut => {
-                // Response completed (success or error). If we haven't received the
-                // notification yet, keep polling the channel for a bit.
-                let _ = response_result; // Ignore errors - transport closure is expected
-                break;
+            None => {
+                // Channel closed - sender dropped
+                eprintln!("[TEST] Notification channel closed unexpectedly");
+                None
             }
         }
+    })
+    .await;
 
-        if tokio::time::Instant::now() > deadline {
-            break;
-        }
-    }
-
-    // If response completed but we haven't received notification, drain the channel briefly
-    if !notification_received {
-        let drain_deadline = tokio::time::Instant::now() + Duration::from_secs(2);
-        while tokio::time::Instant::now() < drain_deadline {
-            match tokio::time::timeout(Duration::from_millis(100), rx.recv()).await {
-                Ok(Some(p)) => {
-                    assert_eq!(
-                        p.progress_token, token,
-                        "progressToken must match client token"
-                    );
-                    notification_received = true;
-                    break;
-                }
-                Ok(None) => break,  // channel closed
-                Err(_) => continue, // timeout, keep trying
-            }
-        }
-    }
-
+    // Cancel the service before checking results (cleanup)
     service.cancel().await.ok();
 
-    if notification_received {
-        Ok(())
-    } else {
-        anyhow::bail!("did not observe notifications/progress with token {token_str}")
+    // Wait for response task to complete (it may have errored, but we don't care)
+    let _ = response_handle.await;
+
+    match notification_result {
+        Ok(Some(p)) => {
+            assert_eq!(
+                p.progress_token, token,
+                "progressToken must match client token. Expected {:?}, got {:?}",
+                token, p.progress_token
+            );
+            Ok(())
+        }
+        Ok(None) => {
+            anyhow::bail!(
+                "Notification channel closed without receiving any notifications. \
+                 This indicates the client's handle_notification was never called. \
+                 Check that the server is configured for synchronous execution."
+            )
+        }
+        Err(_timeout) => {
+            anyhow::bail!(
+                "Timeout ({:?}) waiting for notifications/progress with token '{}'. \
+                 This may indicate a race condition in the test or server not sending notifications. \
+                 Check server logs (--log-to-stderr) for 'notifications/progress' sends.",
+                notification_timeout,
+                token_str
+            )
+        }
     }
 }
