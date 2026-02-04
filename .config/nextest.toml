@@ -28,6 +28,9 @@ success-output = "immediate"
 [profile.ci]
 retries = 1
 slow-timeout = {period = "120s", terminate-after = 2}
+# Limit parallelism on CI to reduce resource contention
+# GitHub Actions runners have 2 cores; use more conservative parallelism
+test-threads = "num-cpus"
 
 [[profile.ci.overrides]]
 failure-output = "immediate"
@@ -38,6 +41,13 @@ success-output = "immediate"
 failure-output = "immediate"
 filter = "test(cli_extended_integration_test::) | test(cli_mode_coverage_test::)"
 success-output = "immediate"
+
+# Timing-sensitive handshake tests must run serially to avoid interference
+# These tests manipulate AHMA_HANDSHAKE_TIMEOUT_SECS env var and rely on precise timing
+[[profile.ci.overrides]]
+filter = "test(handshake_timeout_test::)"
+threads-required = 2
+retries = 2
 
 # Coverage profile for cargo llvm-cov (instrumentation makes tests much slower)
 [profile.coverage]

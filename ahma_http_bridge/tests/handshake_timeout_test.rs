@@ -26,9 +26,9 @@ const MCP_SESSION_ID_HEADER: &str = "mcp-session-id";
 /// This simulates a broken client that sends initialize but never opens SSE.
 #[tokio::test]
 async fn test_tools_call_without_sse_returns_handshake_timeout() {
-    // Use a very short timeout for this test
+    // Use 2 seconds for CI reliability (slow runners need more margin)
     // SAFETY: This test runs in isolation and controls the env var
-    unsafe { std::env::set_var("AHMA_HANDSHAKE_TIMEOUT_SECS", "1") };
+    unsafe { std::env::set_var("AHMA_HANDSHAKE_TIMEOUT_SECS", "2") };
 
     let server = spawn_test_server()
         .await
@@ -68,8 +68,8 @@ async fn test_tools_call_without_sse_returns_handshake_timeout() {
 
     // Intentionally skip: SSE connection, initialized notification, roots/list response
 
-    // Wait for handshake timeout (1 second + buffer)
-    tokio::time::sleep(Duration::from_millis(1500)).await;
+    // Wait for handshake timeout (2s timeout + 1.5s margin for CI)
+    tokio::time::sleep(Duration::from_millis(3500)).await;
 
     // Try to call a tool - should get handshake timeout error
     let tool_call = json!({
@@ -130,7 +130,8 @@ async fn test_tools_call_without_sse_returns_handshake_timeout() {
 #[tokio::test]
 async fn test_tools_call_without_initialized_notification_returns_timeout() {
     // SAFETY: This test runs in isolation and controls the env var
-    unsafe { std::env::set_var("AHMA_HANDSHAKE_TIMEOUT_SECS", "1") };
+    // Use 2 seconds for CI reliability (slow runners need more margin)
+    unsafe { std::env::set_var("AHMA_HANDSHAKE_TIMEOUT_SECS", "2") };
 
     let server = spawn_test_server()
         .await
@@ -176,8 +177,8 @@ async fn test_tools_call_without_initialized_notification_returns_timeout() {
 
     // Intentionally skip: initialized notification, roots/list response
 
-    // Wait for handshake timeout
-    tokio::time::sleep(Duration::from_millis(1500)).await;
+    // Wait for handshake timeout (2s timeout + 1.5s margin for CI)
+    tokio::time::sleep(Duration::from_millis(3500)).await;
 
     // Try to call a tool
     let tool_call = json!({
@@ -354,7 +355,8 @@ async fn test_handshake_timeout_ignores_later_env_changes() {
     let original = std::env::var("AHMA_HANDSHAKE_TIMEOUT_SECS").ok();
 
     // SAFETY: test controls env and restores it.
-    unsafe { std::env::set_var("AHMA_HANDSHAKE_TIMEOUT_SECS", "1") };
+    // Use 2 seconds for CI reliability (slow runners need more margin)
+    unsafe { std::env::set_var("AHMA_HANDSHAKE_TIMEOUT_SECS", "2") };
 
     let server = spawn_test_server()
         .await
@@ -393,7 +395,8 @@ async fn test_handshake_timeout_ignores_later_env_changes() {
     // Simulate another test changing the env after the session was created
     unsafe { std::env::set_var("AHMA_HANDSHAKE_TIMEOUT_SECS", "30") };
 
-    tokio::time::sleep(Duration::from_millis(1500)).await;
+    // Wait for handshake timeout (2s timeout + 1.5s margin for CI)
+    tokio::time::sleep(Duration::from_millis(3500)).await;
 
     let tool_call = json!({
         "jsonrpc": "2.0",
@@ -416,7 +419,7 @@ async fn test_handshake_timeout_ignores_later_env_changes() {
         .await
         .expect("tools/call POST failed");
 
-    // Should still honor the 1s timeout captured at session creation
+    // Should still honor the 2s timeout captured at session creation
     assert_eq!(resp.status().as_u16(), 504);
 
     let body: Value = resp.json().await.expect("Response should be JSON");

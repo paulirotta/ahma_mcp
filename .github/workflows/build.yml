@@ -227,7 +227,8 @@ jobs:
           echo "--- cargo --help (first 40 lines)" && cargo --help | head -n 40 || true
           echo "--- cargo --list (first 40 lines)" && cargo --list | head -n 40 || true
           # Exclude gradle/android tests - they run in job-android only
-          cargo nextest run --locked --no-default-features -E 'not test(gradlew) & not test(android)'
+          # Use CI profile for longer timeouts and retry on flaky tests
+          cargo nextest run --locked --no-default-features --profile ci -E 'not test(gradlew) & not test(android)'
 
       - name: Show sccache stats
         run: sccache --show-stats

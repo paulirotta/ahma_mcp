@@ -1,6 +1,6 @@
-use ahma_mcp::sandbox::{
-    Sandbox, SandboxMode, check_sandbox_prerequisites, test_sandbox_exec_available,
-};
+use ahma_mcp::sandbox::{Sandbox, SandboxMode, check_sandbox_prerequisites};
+#[cfg(target_os = "macos")]
+use ahma_mcp::sandbox::test_sandbox_exec_available;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
