@@ -71,11 +71,11 @@ where
             serde_json::to_string(&msg).map_err(|e| Error::new(std::io::ErrorKind::InvalidData, e));
 
         async move {
-            let json = json_res?;
+            let mut json = json_res?;
+            json.push('\n');
             let mut w = writer.lock().await;
-            eprintln!("[AhmaTransport] SEND: {}", json);
+            eprintln!("[AhmaTransport] SEND: {}", json.trim_end());
             w.write_all(json.as_bytes()).await?;
-            w.write_all(b"\n").await?;
             w.flush().await?;
             Ok(())
         }

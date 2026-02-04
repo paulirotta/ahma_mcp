@@ -1120,6 +1120,27 @@ impl AhmaMcpService {
 
         match execution_mode {
             crate::adapter::ExecutionMode::Synchronous => {
+                let operation_id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
+                let progress_token = context.meta.get_progress_token();
+                let client_type = McpClientType::from_peer(&context.peer);
+
+                // Send 'Started' notification if progress token is present
+                if let Some(token) = progress_token.clone() {
+                    let callback = McpCallbackSender::new(
+                        context.peer.clone(),
+                        operation_id.clone(),
+                        Some(token),
+                        client_type.clone(),
+                    );
+                    let _ = callback
+                        .send_progress(crate::callback_system::ProgressUpdate::Started {
+                            operation_id: operation_id.clone(),
+                            command: "/bin/bash".to_string(),
+                            description: format!("Execute /bin/bash in {}", working_directory),
+                        })
+                        .await;
+                }
+
                 let result = self
                     .adapter
                     .execute_sync_in_dir(
@@ -1130,6 +1151,54 @@ impl AhmaMcpService {
                         Some(&subcommand_config),
                     )
                     .await;
+
+                // Send completion notification if progress token is present
+                if let Some(token) = progress_token {
+                    let callback = McpCallbackSender::new(
+                        context.peer.clone(),
+                        operation_id.clone(),
+                        Some(token),
+                        client_type,
+                    );
+                    match &result {
+                        Ok(output) => {
+                            let _ = callback
+                                .send_progress(
+                                    crate::callback_system::ProgressUpdate::FinalResult {
+                                        operation_id: operation_id.clone(),
+                                        command: "/bin/bash".to_string(),
+                                        description: format!(
+                                            "Execute /bin/bash in {}",
+                                            working_directory
+                                        ),
+                                        working_directory: working_directory.clone(),
+                                        success: true,
+                                        duration_ms: 0, // Duration not easily available here
+                                        full_output: output.clone(),
+                                    },
+                                )
+                                .await;
+                        }
+                        Err(e) => {
+                            let _ = callback
+                                .send_progress(
+                                    crate::callback_system::ProgressUpdate::FinalResult {
+                                        operation_id: operation_id.clone(),
+                                        command: "/bin/bash".to_string(),
+                                        description: format!(
+                                            "Execute /bin/bash in {}",
+                                            working_directory
+                                        ),
+                                        working_directory: working_directory.clone(),
+                                        success: false,
+                                        duration_ms: 0,
+                                        full_output: format!("Error: {}", e),
+                                    },
+                                )
+                                .await;
+                        }
+                    }
+                }
 
                 match result {
                     Ok(output) => Ok(CallToolResult::success(vec![Content::text(output)])),
@@ -1276,8 +1345,9 @@ impl AhmaMcpService {
                             "jsonrpc": "2.0",
                             "method": "notifications/sandbox/configured"
                         })) {
-                            // Use println! to write to stdout so the bridge picks it up.
-                            println!("{}", notification);
+                            // Use println! with a leading newline to write to stdout so the bridge
+                            // picks it up even if it was concatenated with a previous partial message.
+                            println!("\n{}", notification);
                         }
                     }
                 }
@@ -1724,6 +1794,30 @@ impl ServerHandler for AhmaMcpService {
 
             match execution_mode {
                 crate::adapter::ExecutionMode::Synchronous => {
+                    let operation_id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
+                    let progress_token = context.meta.get_progress_token();
+                    let client_type = McpClientType::from_peer(&context.peer);
+
+                    // Send 'Started' notification if progress token is present
+                    if let Some(token) = progress_token.clone() {
+                        let callback = McpCallbackSender::new(
+                            context.peer.clone(),
+                            operation_id.clone(),
+                            Some(token),
+                            client_type.clone(),
+                        );
+                        let _ = callback
+                            .send_progress(crate::callback_system::ProgressUpdate::Started {
+                                operation_id: operation_id.clone(),
+                                command: base_command.clone(),
+                                description: format!(
+                                    "Execute {} in {}",
+                                    base_command, working_directory
+                                ),
+                            })
+                            .await;
+                    }
+
                     let result = self
                         .adapter
                         .execute_sync_in_dir(
@@ -1734,6 +1828,54 @@ impl ServerHandler for AhmaMcpService {
                             Some(subcommand_config),
                         )
                         .await;
+
+                    // Send completion notification if progress token is present
+                    if let Some(token) = progress_token {
+                        let callback = McpCallbackSender::new(
+                            context.peer.clone(),
+                            operation_id.clone(),
+                            Some(token),
+                            client_type,
+                        );
+                        match &result {
+                            Ok(output) => {
+                                let _ = callback
+                                    .send_progress(
+                                        crate::callback_system::ProgressUpdate::FinalResult {
+                                            operation_id: operation_id.clone(),
+                                            command: base_command.clone(),
+                                            description: format!(
+                                                "Execute {} in {}",
+                                                base_command, working_directory
+                                            ),
+                                            working_directory: working_directory.clone(),
+                                            success: true,
+                                            duration_ms: 0,
+                                            full_output: output.clone(),
+                                        },
+                                    )
+                                    .await;
+                            }
+                            Err(e) => {
+                                let _ = callback
+                                    .send_progress(
+                                        crate::callback_system::ProgressUpdate::FinalResult {
+                                            operation_id: operation_id.clone(),
+                                            command: base_command.clone(),
+                                            description: format!(
+                                                "Execute {} in {}",
+                                                base_command, working_directory
+                                            ),
+                                            working_directory: working_directory.clone(),
+                                            success: false,
+                                            duration_ms: 0,
+                                            full_output: format!("Error: {}", e),
+                                        },
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
 
                     match result {
                         Ok(output) => Ok(CallToolResult::success(vec![Content::text(output)])),

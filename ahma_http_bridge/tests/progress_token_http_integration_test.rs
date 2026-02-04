@@ -31,6 +31,14 @@ async fn test_http_no_progress_token_does_not_emit_progress_notifications() -> a
                     "description": "Shell command to execute",
                     "required": true
                 }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Directory to execute the command in",
+                    "format": "path"
+                }
             ]
         }
     ]
@@ -108,6 +116,14 @@ async fn test_http_progress_token_is_echoed_in_progress_notifications() -> anyho
                     "type": "string",
                     "description": "Shell command to execute",
                     "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Directory to execute the command in",
+                    "format": "path"
                 }
             ]
         }

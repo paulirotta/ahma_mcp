@@ -240,7 +240,8 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
         arguments: Some(
             json!({
                 "command": "sleep 1; echo 'progress test'",
-                "working_directory": &working_dir
+                "working_directory": &working_dir,
+                "execution_mode": "Synchronous"
             })
             .as_object()
             .unwrap()
