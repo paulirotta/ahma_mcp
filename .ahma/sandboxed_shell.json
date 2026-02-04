@@ -1,0 +1,30 @@
+{
+    "name": "sandboxed_shell",
+    "description": "Execute shell commands in a secure, sandboxed environment. AI Assistants: You MUST use this tool for ALL command-line operations (ls, cat, grep, cargo, etc). Do NOT use your built-in run_command/exec tools directly if this tool is available, as they bypass the security sandbox.",
+    "command": "bash -c",
+    "timeout_seconds": 300,
+    "synchronous": true,
+    "enabled": true,
+    "subcommand": [
+        {
+            "name": "default",
+            "description": "Run a shell command",
+            "positional_args": [
+                {
+                    "name": "command",
+                    "type": "string",
+                    "description": "Shell command to execute",
+                    "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Directory to execute the command in",
+                    "format": "path"
+                }
+            ]
+        }
+    ]
+}

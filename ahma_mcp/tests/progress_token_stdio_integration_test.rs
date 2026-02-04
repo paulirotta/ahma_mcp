@@ -239,7 +239,7 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(
             json!({
-                "command": "echo 'progress test'",
+                "command": "sleep 1; echo 'progress test'",
                 "working_directory": &working_dir
             })
             .as_object()

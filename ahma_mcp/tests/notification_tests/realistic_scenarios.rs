@@ -17,20 +17,29 @@ use std::time::Duration;
 /// 2. Repeatedly check the `completion_history`.
 /// 3. Ensure the operation appears once and is not duplicated on subsequent checks.
 #[tokio::test]
-async fn test_realistic_notification_scenario_with_history() {
-    // Setup
+async fn test_realistic_notification_scenario_with_history() -> anyhow::Result<()> {
+    use ahma_mcp::test_utils::concurrent_test_helpers::*;
+    use ahma_mcp::test_utils::test_project::*;
+
+    // Setup isolated temp project
+    let temp = create_rust_test_project(TestProjectOptions {
+        with_tool_configs: true,
+        ..Default::default()
+    })
+    .await?;
+
     let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_pool_config = ShellPoolConfig::default();
     let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
     shell_pool_manager.clone().start_background_tasks();
-    let adapter =
-        Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager.clone()).unwrap());
-    let configs = Arc::new(
-        load_tool_configs(&std::path::PathBuf::from(".ahma"))
-            .await
-            .unwrap(),
+    let adapter = Arc::new(
+        Adapter::new(operation_monitor.clone(), shell_pool_manager.clone())
+            .unwrap()
+            .with_root(temp.path().to_path_buf()),
     );
+
+    let configs = Arc::new(load_tool_configs(&temp.path().join(".ahma")).await.unwrap());
     let _service = AhmaMcpService::new(
         adapter.clone(),
         operation_monitor.clone(),
@@ -51,14 +60,20 @@ async fn test_realistic_notification_scenario_with_history() {
                 "_subcommand".to_string(),
                 serde_json::Value::String("version".to_string()),
             )])),
-            ".",
+            temp.path().to_str().unwrap(),
             Some(30),
         )
         .await
         .expect("Failed to execute async operation");
 
-    // Wait for the operation to appear in the completion history
-    let completed_op = operation_monitor.wait_for_operation(&operation_id).await;
+    // Wait for the operation to appear in the completion history with CI-resilient helper
+    let completed_op = with_ci_timeout(
+        "operation completion",
+        CI_DEFAULT_TIMEOUT,
+        operation_monitor.wait_for_operation(&operation_id),
+    )
+    .await?;
+
     assert!(
         completed_op.is_some(),
         "Operation never appeared in completion history"
@@ -86,33 +101,66 @@ async fn test_realistic_notification_scenario_with_history() {
         notifications_sent, 1,
         "Should have sent exactly one notification."
     );
+    Ok(())
 }
 
 /// Test if multiple operations are handled correctly by the completion history.
 #[tokio::test]
-async fn test_multiple_operations_notification_behavior() {
+async fn test_multiple_operations_notification_behavior() -> anyhow::Result<()> {
+    use ahma_mcp::test_utils::concurrent_test_helpers::*;
+    use ahma_mcp::test_utils::test_project::*;
+
+    // Setup isolated temp project
+    let temp = create_rust_test_project(TestProjectOptions {
+        with_tool_configs: true,
+        ..Default::default()
+    })
+    .await?;
+
     let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_pool_config = ShellPoolConfig::default();
     let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
     shell_pool_manager.clone().start_background_tasks();
-    let adapter = Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager).unwrap());
+    let adapter = Arc::new(
+        Adapter::new(operation_monitor.clone(), shell_pool_manager)
+            .unwrap()
+            .with_root(temp.path().to_path_buf()),
+    );
 
     // Start multiple operations
     let op_ids = vec![
         adapter
-            .execute_async_in_dir("cargo", "version", None, ".", Some(30))
+            .execute_async_in_dir(
+                "cargo",
+                "version",
+                None,
+                temp.path().to_str().unwrap(),
+                Some(30),
+            )
             .await
             .expect("Failed to execute first async operation"),
         adapter
-            .execute_async_in_dir("cargo", "--version", None, ".", Some(30))
+            .execute_async_in_dir(
+                "cargo",
+                "--version",
+                None,
+                temp.path().to_str().unwrap(),
+                Some(30),
+            )
             .await
             .expect("Failed to execute second async operation"),
     ];
 
     // Wait for both to complete
     for op_id in &op_ids {
-        let completed_op = operation_monitor.wait_for_operation(op_id).await;
+        let completed_op = with_ci_timeout(
+            "operation completion",
+            CI_DEFAULT_TIMEOUT,
+            operation_monitor.wait_for_operation(op_id),
+        )
+        .await?;
+
         assert!(
             completed_op.is_some(),
             "Operation {} did not complete in time",
@@ -126,7 +174,7 @@ async fn test_multiple_operations_notification_behavior() {
         "Not all operations completed in time."
     );
 
-    // Simulate notification loop
+    // Simulate notification loop using utility if applicable (manual here to preserve logic)
     let mut all_seen_operations = HashSet::new();
     let mut total_notifications = 0;
 
@@ -140,9 +188,13 @@ async fn test_multiple_operations_notification_behavior() {
         }
     }
 
+    // Verify uniqueness using helper
+    assert_all_unique(&op_ids);
+
     assert_eq!(
         total_notifications,
         op_ids.len(),
         "Incorrect number of notifications sent."
     );
+    Ok(())
 }

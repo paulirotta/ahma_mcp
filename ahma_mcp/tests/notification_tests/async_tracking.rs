@@ -14,10 +14,11 @@ use std::{sync::Arc, time::Duration};
 use tempfile::TempDir;
 
 #[tokio::test]
-async fn test_async_operations_complete_and_are_tracked() {
+async fn test_async_operations_complete_and_are_tracked() -> anyhow::Result<()> {
+    use ahma_mcp::test_utils::concurrent_test_helpers::*;
     init_test_sandbox();
 
-    // Set up the test environment
+    // Set up the test environment using TempDir
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
@@ -52,8 +53,13 @@ async fn test_async_operations_complete_and_are_tracked() {
         .await
         .expect("Failed to start operation");
 
-    // Wait for the operation to complete
-    let result = operation_monitor.wait_for_operation(&operation_id).await;
+    // Wait for the operation to complete using CI-resilient helper
+    let result = with_ci_timeout(
+        "operation completion",
+        CI_DEFAULT_TIMEOUT,
+        operation_monitor.wait_for_operation(&operation_id),
+    )
+    .await?;
 
     assert!(
         result.is_some(),
@@ -104,10 +110,12 @@ async fn test_async_operations_complete_and_are_tracked() {
         completed_ops.iter().any(|op| op.id == operation_id),
         "Completed operation should appear in completed operations list"
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_operation_monitoring_provides_clear_results() {
+async fn test_operation_monitoring_provides_clear_results() -> anyhow::Result<()> {
+    use ahma_mcp::test_utils::concurrent_test_helpers::*;
     init_test_sandbox();
 
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
@@ -144,10 +152,14 @@ async fn test_operation_monitoring_provides_clear_results() {
         .await
         .expect("Failed to start success operation");
 
-    let success_result = operation_monitor
-        .wait_for_operation(&success_id)
-        .await
-        .unwrap();
+    let success_result = with_ci_timeout(
+        "success operation",
+        CI_DEFAULT_TIMEOUT,
+        operation_monitor.wait_for_operation(&success_id),
+    )
+    .await?
+    .expect("Operation should complete");
+
     let success_result_data = success_result.result.as_ref().unwrap();
 
     let success_exit_code = success_result_data
@@ -181,10 +193,14 @@ async fn test_operation_monitoring_provides_clear_results() {
         .await
         .expect("Failed to start failure operation");
 
-    let failure_result = operation_monitor
-        .wait_for_operation(&failure_id)
-        .await
-        .unwrap();
+    let failure_result = with_ci_timeout(
+        "failure operation",
+        CI_DEFAULT_TIMEOUT,
+        operation_monitor.wait_for_operation(&failure_id),
+    )
+    .await?
+    .expect("Operation should complete");
+
     let failure_result_data = failure_result.result.as_ref().unwrap();
 
     let failure_exit_code = failure_result_data
@@ -204,11 +220,21 @@ async fn test_operation_monitoring_provides_clear_results() {
         all_completed.len() >= 2,
         "Both operations should be tracked"
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_operation_completion_tracking() {
-    // Testing if operations are properly tracked to completion
+async fn test_operation_completion_tracking() -> anyhow::Result<()> {
+    use ahma_mcp::test_utils::concurrent_test_helpers::*;
+    use ahma_mcp::test_utils::test_project::*;
+
+    // Create a temporary project using specialized helper
+    let temp = create_rust_test_project(TestProjectOptions {
+        with_cargo: true,
+        with_tool_configs: true,
+        ..Default::default()
+    })
+    .await?;
 
     // Create the components
     let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
@@ -225,14 +251,15 @@ async fn test_operation_completion_tracking() {
         health_check_interval: Duration::from_secs(60),
     };
     let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));
-    let adapter = Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager).unwrap());
-
-    // Load configs and create service (not used in this test)
-    let configs = Arc::new(
-        load_tool_configs(&std::path::PathBuf::from(".ahma"))
-            .await
-            .unwrap(),
+    let adapter = Arc::new(
+        Adapter::new(operation_monitor.clone(), shell_pool_manager)
+            .unwrap()
+            .with_root(temp.path().to_path_buf()),
     );
+
+    // Load configs from the temp PROJECT, not the repository
+    let configs = Arc::new(load_tool_configs(&temp.path().join(".ahma")).await.unwrap());
+
     let _service = AhmaMcpService::new(
         adapter.clone(),
         operation_monitor.clone(),
@@ -244,9 +271,6 @@ async fn test_operation_completion_tracking() {
     .await
     .unwrap();
 
-    let current_dir = std::env::current_dir().unwrap();
-    let current_dir_str = current_dir.to_str().unwrap();
-
     // Test using direct adapter call to see what happens with the fix
     let job_id = adapter
         .execute_async_in_dir(
@@ -256,14 +280,20 @@ async fn test_operation_completion_tracking() {
                 "_subcommand".to_string(),
                 serde_json::Value::String("version".to_string()),
             )])),
-            current_dir_str,
+            temp.path().to_str().unwrap(),
             Some(10),
         )
         .await
         .expect("Failed to execute async operation");
 
-    // Wait for completion
-    let completed_op = operation_monitor.wait_for_operation(&job_id).await;
+    // Wait for completion with CI-resilient helper
+    let completed_op = with_ci_timeout(
+        "cargo version completion",
+        CI_DEFAULT_TIMEOUT,
+        operation_monitor.wait_for_operation(&job_id),
+    )
+    .await?;
+
     assert!(completed_op.is_some(), "Operation did not complete in time");
 
     let completed_ops = operation_monitor.get_completed_operations().await;
@@ -271,4 +301,5 @@ async fn test_operation_completion_tracking() {
         !completed_ops.is_empty(),
         "Should have completed operations"
     );
+    Ok(())
 }

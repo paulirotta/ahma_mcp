@@ -234,6 +234,88 @@ jobs:
 
   #######################################
 
+  # Alternative test runner using cargo test instead of nextest
+  # This job runs in parallel with job-nextest for comparison
+  # Useful for diagnosing issues that may be specific to one test runner
+  job-cargo-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Configure deterministic tooling env
+        run: |
+          git config --global core.pager cat
+          echo "PAGER=cat" >> $GITHUB_ENV
+          echo "LC_ALL=C" >> $GITHUB_ENV
+          echo "LANG=C" >> $GITHUB_ENV
+
+      - name: Get current day number
+        id: day-number
+        run: echo "day=$(date +%j)" >> $GITHUB_OUTPUT
+
+      - name: Cache Cargo build artifacts
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/.package-cache
+            ~/.cargo/bin
+          key: cargo-test-target-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
+          restore-keys: |
+            cargo-test-target-${{ runner.os }}-
+            cargo-nextest-target-${{ runner.os }}-
+
+      - name: Cache sccache artifacts
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cache/sccache
+            ~/Library/Caches/Mozilla.sccache
+          key: sccache-test-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
+          restore-keys: |
+            sccache-test-${{ runner.os }}-
+            sccache-nextest-${{ runner.os }}-
+
+      - name: Setup Cargo Binstall
+        uses: cargo-bins/cargo-binstall@main
+
+      - name: Add Cargo Bin to PATH
+        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install sccache
+        run: |
+          if ! command -v sccache &> /dev/null; then
+            echo "sccache not found, installing..."
+            cargo binstall sccache --no-confirm || cargo install sccache
+          else
+            echo "sccache is already installed"
+          fi
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          sccache --show-stats
+
+      - name: Cargo Test (excluding Android/Gradle tests)
+        run: |
+          echo "--- cargo --version" && cargo --version
+          echo "--- Running cargo test (standard test harness)"
+          # Exclude gradle/android tests - they run in job-android only
+          # Using --skip for pattern-based exclusion in standard test runner
+          cargo test --locked --no-default-features -- --skip gradlew --skip android
+
+      - name: Show sccache stats
+        run: sccache --show-stats
+
+  #######################################
+
   job-android:
     runs-on: macos-latest
     env:

@@ -504,6 +504,147 @@ fs::write(&test_file, "test content").unwrap();
 - **R15.3.3**: For notification tests, consider using HTTP mode with SSE instead of stdio - SSE keeps the notification stream open independently.
 - **R15.3.4**: For async operations, the server immediately returns "operation started" and sends notifications in parallel. This creates an unwinnable race condition for notification testing.
 
+### 10.6 Testing Patterns and Helpers
+
+> [!IMPORTANT]
+> **ALL** integration tests MUST use the centralized helpers in `ahma_mcp/src/test_utils.rs`. Do NOT reinvent spawn logic, HTTP clients, or project scaffolding.
+
+#### R16.1: Project Scaffolding (`test_utils::test_project`)
+Use `create_rust_test_project` for all tests that need a filesystem. This ensures isolated unique directories via `tempfile` and no repository pollution.
+
+#### R16.2: MCP Service Helpers
+- **Stdio**: Use `setup_mcp_service_with_client()` for standard stdio handshake tests.
+- **HTTP**: Use `spawn_http_bridge()` and `HttpMcpTestClient` for HTTP/SSE integration testing.
+
+#### R16.3: Binary Resolution
+Always use `cli::build_binary_cached()` to avoid redundant `cargo build` calls and ensure tests are fast and CI-friendly.
+
+#### R16.4: Concurrent Test Helpers (`test_utils::concurrent_test_helpers`)
+
+**Purpose**: Safe patterns for testing concurrent operations.
+
+```rust
+use ahma_mcp::test_utils::concurrent_test_helpers::*;
+
+// Spawn tasks that start simultaneously
+let results = spawn_tasks_with_barrier(5, |task_id| async move {
+    // All tasks start at the exact same instant
+    perform_operation(task_id).await
+}).await;
+
+// Verify no duplicates
+assert_all_unique(&results);
+
+// Bounded concurrency for resource-limited CI
+let results = spawn_bounded_concurrent(items, 4, |item| async move {
+    process(item).await
+}).await;
+```
+
+**Why**: AI-generated concurrent tests often have subtle race conditions. Barriers ensure deterministic starts; bounded spawning prevents OOM.
+
+#### R16.4: Timeout and Polling (`test_utils::concurrent_test_helpers`)
+
+**Purpose**: CI-resilient waiting patterns.
+
+```rust
+use ahma_mcp::test_utils::concurrent_test_helpers::*;
+
+// Wrap operations with clear timeout errors
+let result = with_ci_timeout(
+    "operation completion",
+    CI_DEFAULT_TIMEOUT,
+    async { monitor.wait_for_operation("op-1").await }
+).await?;
+
+// Wait with exponential backoff (more efficient)
+wait_with_backoff("server ready", Duration::from_secs(10), || async {
+    health_check().await.is_ok()
+}).await?;
+```
+
+**Why**: Fixed `sleep()` is flaky on variable CI. Timeouts provide clear diagnostics when things hang.
+
+#### R16.5: Async Assertions (`test_utils::async_assertions`)
+
+**Purpose**: Assert timing behavior in async tests.
+
+```rust
+use ahma_mcp::test_utils::async_assertions::*;
+
+// Assert operation completes in time
+let result = assert_completes_within(
+    Duration::from_secs(5),
+    "quick operation",
+    async { fetch_data().await }
+).await;
+
+// Assert condition becomes true
+assert_eventually(
+    Duration::from_secs(10),
+    Duration::from_millis(100),
+    "operation becomes complete",
+    || async { monitor.is_complete("op-1").await }
+).await;
+```
+
+**Why**: Standard assertions don't work with async conditions. These provide clear failure messages.
+
+### 10.7 CI Anti-Patterns to Avoid
+
+**R17**: Avoid these patterns that reliably cause CI failures but may work locally.
+
+| Anti-Pattern | Problem | Solution |
+|-------------|---------|----------|
+| `tokio::time::sleep(Duration::from_secs(1))` | Flaky on slow CI runners | Use `wait_for_condition()` or `wait_with_backoff()` |
+| `tokio::select!` racing response vs notification | Transport teardown wins | Use synchronous mode for notification tests |
+| `std::fs::create_dir("./test_dir")` | Pollutes repo, conflicts between tests | Use `tempdir()` or `test_project::create_rust_test_project()` |
+| `Command::new("cargo").arg("build")` | Slow, skips cached binaries | Use `cli::build_binary_cached()` |
+| Spawning 100+ concurrent tasks | OOM on CI, thread exhaustion | Use `spawn_bounded_concurrent()` |
+| Expecting notification order | Async execution order is undefined | Collect notifications, assert set membership |
+| Hard-coded ports | Port conflicts with parallel tests | Use port 0 for auto-assignment |
+| Shared mutable state without locks | Data races under concurrent tests | Use `Arc<Mutex<_>>` or channels |
+
+#### R17.1: Example Anti-Pattern vs Correct Pattern
+
+❌ **WRONG**: Fixed sleep for operation completion
+```rust
+async fn test_operation_completes() {
+    let op_id = start_operation().await;
+    tokio::time::sleep(Duration::from_secs(2)).await;  // Flaky!
+    assert!(is_complete(&op_id));
+}
+```
+
+✅ **CORRECT**: Condition-based waiting
+```rust
+async fn test_operation_completes() {
+    let op_id = start_operation().await;
+    wait_with_backoff("operation complete", Duration::from_secs(10), || async {
+        is_complete(&op_id).await
+    }).await?;
+    // Now we know it's complete
+}
+```
+
+❌ **WRONG**: Creating files in repo directory
+```rust
+fn test_file_processing() {
+    std::fs::create_dir_all("./test_files").unwrap();  // Pollutes repo!
+    std::fs::write("./test_files/input.txt", "data").unwrap();
+}
+```
+
+✅ **CORRECT**: Using temp directory
+```rust
+fn test_file_processing() {
+    let temp = tempdir().unwrap();
+    let input = temp.path().join("input.txt");
+    std::fs::write(&input, "data").unwrap();
+    // Auto-cleaned on drop
+}
+```
+
 ---
 
 
