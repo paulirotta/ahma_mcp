@@ -84,6 +84,7 @@ mod transport_construction {
 
     #[test]
     fn new_transport_with_invalid_url_fails() {
+        let _guard = token_env_guard().lock().unwrap();
         // The URL parsing happens before transport construction,
         // so we test what happens with a valid URL but invalid structure
         let url = Url::parse("http://localhost:8080/mcp").unwrap();
