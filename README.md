@@ -101,7 +101,7 @@ In `mcp.json` for Cursor/VS Code:
       "type": "stdio",
       "cwd": "${workspaceFolder}",
       "command": "/path/to/ahma_mcp",
-      "args": ["--no-sandbox", "--tools-dir", ".ahma/tools"]
+      "args": ["--tools-dir", ".ahma/tools"]
     }
   }
 }

@@ -1,26 +1,32 @@
 {
-    "servers": {
-        "ahma-stdio-debug-vscode": {
-            "cwd": "${workspaceFolder}",
-            "command": "cargo",
-            "args": [
-                "run",
-                "--release",
-                "--features",
-                "opentelemetry",
-                "--bin",
-                "ahma_mcp",
-                "--",
-                "--log-to-stderr"
-            ],
-            "env": {
-                "AHMA_TRACING": "1",
-                "RUST_LOG": "debug"
-            }
-        }
-        //,"ahma-http": {
-        //    "type": "http",
-        //    "url": "http://localhost:3000/mcp"
-        //}
-    }
+	"servers": {
+		"ahma-debug": {
+			"type": "stdio",
+			"cwd": "${workspaceFolder}",
+			"command": "cargo",
+			"args": [
+				"run",
+				"--features",
+				"opentelemetry",
+				"--bin",
+				"ahma_mcp",
+				"--",
+				"--log-to-stderr"
+			],
+			"env": {
+				"AHMA_TRACING": "1",
+				"RUST_LOG": "debug"
+			}
+		},
+		"ahma-release": {
+			"type": "stdio",
+			"command": "${workspaceFolder}/target/release/ahma_mcp",
+			"args": [
+				"--log-to-stderr",
+			],
+			"env": {
+				"RUST_LOG": "debug"
+			}
+		}
+	}
 }
