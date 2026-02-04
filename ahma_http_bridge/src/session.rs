@@ -124,14 +124,10 @@ pub struct McpRoot {
     pub name: Option<String>,
 }
 
-/// Get the handshake timeout in seconds from AHMA_HANDSHAKE_TIMEOUT_SECS env var.
-/// Defaults to 30 seconds if not set or invalid.
-pub fn handshake_timeout_secs() -> u64 {
-    std::env::var("AHMA_HANDSHAKE_TIMEOUT_SECS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(45)
-}
+/// Default handshake timeout in seconds.
+/// This is the time allowed for the MCP handshake (SSE connection + roots/list response)
+/// to complete before tool calls return a timeout error.
+pub const DEFAULT_HANDSHAKE_TIMEOUT_SECS: u64 = 45;
 
 /// Get the request timeout in seconds for bridge → subprocess calls.
 /// Defaults to 60 seconds if not set or invalid.
@@ -461,6 +457,11 @@ pub struct SessionManagerConfig {
     pub default_scope: PathBuf,
     /// Whether to preserve ANSI colors in the server's output streams.
     pub enable_colored_output: bool,
+    /// Timeout in seconds for the MCP handshake to complete.
+    /// If the handshake (SSE connection + roots/list response) doesn't complete
+    /// within this time, tool calls will return a timeout error.
+    /// Defaults to 45 seconds if not specified.
+    pub handshake_timeout_secs: u64,
 }
 
 /// Manages the lifecycle of concurrent MCP sessions.
@@ -619,7 +620,7 @@ impl SessionManager {
         let (broadcast_tx, _) = broadcast::channel::<String>(100);
         let pending_requests = Arc::new(DashMap::new());
 
-        let handshake_timeout = Duration::from_secs(handshake_timeout_secs());
+        let handshake_timeout = Duration::from_secs(self.config.handshake_timeout_secs);
 
         let session = Arc::new(Session {
             id: session_id.clone(),

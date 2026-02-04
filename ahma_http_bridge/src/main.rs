@@ -45,6 +45,12 @@ struct Args {
     /// When enabled, passes --no-temp-files to all spawned MCP subprocesses.
     #[arg(long)]
     no_temp_files: bool,
+
+    /// Timeout in seconds for the MCP handshake to complete.
+    /// If the handshake (SSE connection + roots/list response) doesn't complete
+    /// within this time, tool calls will return a timeout error.
+    #[arg(long, default_value = "45")]
+    handshake_timeout_secs: u64,
 }
 
 #[tokio::main]
@@ -93,6 +99,7 @@ async fn main() -> anyhow::Result<()> {
         server_args,
         enable_colored_output,
         default_sandbox_scope: args.default_sandbox_scope,
+        handshake_timeout_secs: args.handshake_timeout_secs,
     };
 
     tracing::info!("Starting Ahma HTTP Bridge on {}", config.bind_addr);

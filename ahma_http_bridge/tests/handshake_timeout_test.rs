@@ -14,7 +14,7 @@
 
 mod common;
 
-use common::spawn_test_server;
+use common::{spawn_test_server, spawn_test_server_with_timeout};
 use reqwest::Client;
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use serde_json::{Value, json};
@@ -26,11 +26,8 @@ const MCP_SESSION_ID_HEADER: &str = "mcp-session-id";
 /// This simulates a broken client that sends initialize but never opens SSE.
 #[tokio::test]
 async fn test_tools_call_without_sse_returns_handshake_timeout() {
-    // Use 2 seconds for CI reliability (slow runners need more margin)
-    // SAFETY: This test runs in isolation and controls the env var
-    unsafe { std::env::set_var("AHMA_HANDSHAKE_TIMEOUT_SECS", "2") };
-
-    let server = spawn_test_server()
+    // Use 2 second timeout via CLI argument (not env var) for test isolation
+    let server = spawn_test_server_with_timeout(Some(2))
         .await
         .expect("Failed to spawn test server");
     let client = Client::new();
@@ -129,11 +126,8 @@ async fn test_tools_call_without_sse_returns_handshake_timeout() {
 /// This simulates a client that opens SSE but forgets to send initialized.
 #[tokio::test]
 async fn test_tools_call_without_initialized_notification_returns_timeout() {
-    // SAFETY: This test runs in isolation and controls the env var
-    // Use 2 seconds for CI reliability (slow runners need more margin)
-    unsafe { std::env::set_var("AHMA_HANDSHAKE_TIMEOUT_SECS", "2") };
-
-    let server = spawn_test_server()
+    // Use 2 second timeout via CLI argument (not env var) for test isolation
+    let server = spawn_test_server_with_timeout(Some(2))
         .await
         .expect("Failed to spawn test server");
     let client = Client::new();
@@ -272,10 +266,7 @@ async fn test_proper_vscode_handshake_allows_tool_calls() {
 #[tokio::test]
 async fn test_tools_call_during_handshake_returns_conflict() {
     // Use a long timeout so we hit 409, not 504
-    // SAFETY: This test runs in isolation and controls the env var
-    unsafe { std::env::set_var("AHMA_HANDSHAKE_TIMEOUT_SECS", "60") };
-
-    let server = spawn_test_server()
+    let server = spawn_test_server_with_timeout(Some(60))
         .await
         .expect("Failed to spawn test server");
     let client = Client::new();
@@ -347,57 +338,73 @@ async fn test_tools_call_during_handshake_returns_conflict() {
     );
 }
 
-/// Ensure handshake timeout uses the per-session snapshot of the env value.
-/// This guards against concurrent tests mutating the global env between
-/// session creation and tools/call.
+/// Test that handshake timeout is configured per-server via CLI argument.
+/// This verifies that the timeout is properly isolated per test (not using env vars).
 #[tokio::test]
-async fn test_handshake_timeout_ignores_later_env_changes() {
-    let original = std::env::var("AHMA_HANDSHAKE_TIMEOUT_SECS").ok();
-
-    // SAFETY: test controls env and restores it.
-    // Use 2 seconds for CI reliability (slow runners need more margin)
-    unsafe { std::env::set_var("AHMA_HANDSHAKE_TIMEOUT_SECS", "2") };
-
-    let server = spawn_test_server()
+async fn test_handshake_timeout_is_per_server_via_cli() {
+    // Spawn two servers with different timeouts
+    // Server 1: 2 second timeout
+    let server1 = spawn_test_server_with_timeout(Some(2))
         .await
-        .expect("Failed to spawn test server");
+        .expect("Failed to spawn server 1");
+
+    // Server 2: 60 second timeout (won't timeout in this test)
+    let server2 = spawn_test_server_with_timeout(Some(60))
+        .await
+        .expect("Failed to spawn server 2");
+
     let client = Client::new();
 
-    // Initialize session
-    let init_req = json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": "2024-11-05",
-            "capabilities": { "roots": {} },
-            "clientInfo": { "name": "env_race_test", "version": "0.1" }
-        }
-    });
+    // Initialize both servers
+    let init_req = |name: &str| {
+        json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": { "roots": {} },
+                "clientInfo": { "name": name, "version": "0.1" }
+            }
+        })
+    };
 
-    let init_resp = client
-        .post(format!("{}/mcp", server.base_url()))
+    let resp1 = client
+        .post(format!("{}/mcp", server1.base_url()))
         .header(CONTENT_TYPE, "application/json")
-        .header(ACCEPT, "application/json")
-        .json(&init_req)
+        .json(&init_req("server1-client"))
         .timeout(Duration::from_secs(10))
         .send()
         .await
-        .expect("initialize POST failed");
+        .expect("Initialize server1 failed");
 
-    let session_id = init_resp
+    let session_id1 = resp1
         .headers()
         .get(MCP_SESSION_ID_HEADER)
         .and_then(|h| h.to_str().ok())
         .expect("Should have session ID")
         .to_string();
 
-    // Simulate another test changing the env after the session was created
-    unsafe { std::env::set_var("AHMA_HANDSHAKE_TIMEOUT_SECS", "30") };
+    let resp2 = client
+        .post(format!("{}/mcp", server2.base_url()))
+        .header(CONTENT_TYPE, "application/json")
+        .json(&init_req("server2-client"))
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .expect("Initialize server2 failed");
 
-    // Wait for handshake timeout (2s timeout + 1.5s margin for CI)
+    let session_id2 = resp2
+        .headers()
+        .get(MCP_SESSION_ID_HEADER)
+        .and_then(|h| h.to_str().ok())
+        .expect("Should have session ID")
+        .to_string();
+
+    // Wait for server1's timeout to expire (2s + margin)
     tokio::time::sleep(Duration::from_millis(3500)).await;
 
+    // Server1 should return 504 (timeout)
     let tool_call = json!({
         "jsonrpc": "2.0",
         "id": 2,
@@ -408,36 +415,36 @@ async fn test_handshake_timeout_ignores_later_env_changes() {
         }
     });
 
-    let resp = client
-        .post(format!("{}/mcp", server.base_url()))
+    let resp1_tool = client
+        .post(format!("{}/mcp", server1.base_url()))
         .header(CONTENT_TYPE, "application/json")
-        .header(ACCEPT, "application/json")
-        .header(MCP_SESSION_ID_HEADER, &session_id)
+        .header(MCP_SESSION_ID_HEADER, &session_id1)
         .json(&tool_call)
         .timeout(Duration::from_secs(5))
         .send()
         .await
-        .expect("tools/call POST failed");
+        .expect("tools/call server1 failed");
 
-    // Should still honor the 2s timeout captured at session creation
-    assert_eq!(resp.status().as_u16(), 504);
-
-    let body: Value = resp.json().await.expect("Response should be JSON");
-    let error = body.get("error").expect("Should have error");
-    let msg = error
-        .get("message")
-        .and_then(|m| m.as_str())
-        .unwrap_or_default();
-
-    assert!(
-        msg.contains("Handshake timeout"),
-        "Error message should indicate handshake timeout. Got: {msg}"
+    assert_eq!(
+        resp1_tool.status().as_u16(),
+        504,
+        "Server1 should timeout (504)"
     );
 
-    // Restore env to avoid leaking changes into other tests
-    if let Some(prev) = original {
-        unsafe { std::env::set_var("AHMA_HANDSHAKE_TIMEOUT_SECS", prev) };
-    } else {
-        unsafe { std::env::remove_var("AHMA_HANDSHAKE_TIMEOUT_SECS") };
-    }
+    // Server2 should still return 409 (still in handshake, not timed out)
+    let resp2_tool = client
+        .post(format!("{}/mcp", server2.base_url()))
+        .header(CONTENT_TYPE, "application/json")
+        .header(MCP_SESSION_ID_HEADER, &session_id2)
+        .json(&tool_call)
+        .timeout(Duration::from_secs(5))
+        .send()
+        .await
+        .expect("tools/call server2 failed");
+
+    assert_eq!(
+        resp2_tool.status().as_u16(),
+        409,
+        "Server2 should still be in handshake (409), not timed out"
+    );
 }

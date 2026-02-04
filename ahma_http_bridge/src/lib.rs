@@ -53,5 +53,6 @@ pub mod session;
 pub use bridge::{BridgeConfig, start_bridge};
 pub use error::{BridgeError, Result};
 pub use session::{
-    McpRoot, Session, SessionManager, SessionManagerConfig, SessionTerminationReason,
+    DEFAULT_HANDSHAKE_TIMEOUT_SECS, McpRoot, Session, SessionManager, SessionManagerConfig,
+    SessionTerminationReason,
 };

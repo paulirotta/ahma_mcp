@@ -9,6 +9,7 @@
 //! challenging in unit tests. These tests focus on the configuration and
 //! state management aspects.
 
+use ahma_http_bridge::DEFAULT_HANDSHAKE_TIMEOUT_SECS;
 use ahma_http_bridge::session::{McpRoot, SessionManager, SessionManagerConfig};
 use std::path::PathBuf;
 
@@ -28,6 +29,7 @@ fn test_no_temp_files_flag_in_server_args() {
         server_args: server_args.clone(),
         default_scope: PathBuf::from("/tmp/test"),
         enable_colored_output: false,
+        handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
     };
 
     assert!(
@@ -75,6 +77,7 @@ fn test_session_manager_config_default_scope() {
         server_args: vec![],
         default_scope: default_scope.clone(),
         enable_colored_output: false,
+        handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
     };
 
     assert_eq!(
@@ -91,6 +94,7 @@ async fn test_session_isolation_creates_separate_sessions() {
         server_args: vec!["test".to_string()],
         default_scope: PathBuf::from("/tmp/isolation_test"),
         enable_colored_output: false,
+        handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
     };
 
     let manager = SessionManager::new(config);
@@ -126,6 +130,7 @@ async fn test_sandbox_lock_immutability() {
         server_args: vec![],
         default_scope: PathBuf::from("/tmp/lock_test"),
         enable_colored_output: false,
+        handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
     };
 
     let manager = SessionManager::new(config);
@@ -212,6 +217,7 @@ async fn test_multi_root_workspace_sandbox() {
         server_args: vec![],
         default_scope: PathBuf::from("/tmp/multi_root_test"),
         enable_colored_output: false,
+        handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
     };
 
     let manager = SessionManager::new(config);
@@ -264,6 +270,7 @@ async fn test_empty_roots_rejected() {
         server_args: vec![],
         default_scope: default_scope.clone(),
         enable_colored_output: false,
+        handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
     };
 
     let manager = SessionManager::new(config);

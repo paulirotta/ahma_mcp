@@ -2,7 +2,8 @@
 
 use crate::error::{BridgeError, Result};
 use crate::session::{
-    SessionManager, SessionManagerConfig, request_timeout_secs, tool_call_timeout_secs,
+    DEFAULT_HANDSHAKE_TIMEOUT_SECS, SessionManager, SessionManagerConfig, request_timeout_secs,
+    tool_call_timeout_secs,
 };
 use axum::{
     Json, Router,
@@ -63,6 +64,12 @@ pub struct BridgeConfig {
     /// handshake doesn't specify roots (e.g. empty `roots/list` response), this path
     /// limits the subprocess's file access.
     pub default_sandbox_scope: PathBuf,
+
+    /// Timeout in seconds for the MCP handshake to complete.
+    /// If the handshake (SSE connection + roots/list response) doesn't complete
+    /// within this time, tool calls will return a timeout error.
+    /// Defaults to 45 seconds.
+    pub handshake_timeout_secs: u64,
 }
 
 impl Default for BridgeConfig {
@@ -73,6 +80,7 @@ impl Default for BridgeConfig {
             server_args: vec![],
             enable_colored_output: false,
             default_sandbox_scope: PathBuf::from("."),
+            handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
         }
     }
 }
@@ -124,6 +132,7 @@ pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
         server_args: config.server_args.clone(),
         default_scope: config.default_sandbox_scope.clone(),
         enable_colored_output: config.enable_colored_output,
+        handshake_timeout_secs: config.handshake_timeout_secs,
     };
     let session_manager = Arc::new(SessionManager::new(session_config));
     let state = Arc::new(BridgeState { session_manager });
@@ -551,7 +560,7 @@ async fn handle_session_isolated_request(
                     Ensure client: 1) opens SSE stream (GET /mcp with session header), \
                     2) sends notifications/initialized, \
                     3) responds to roots/list request over SSE. \
-                    Set AHMA_HANDSHAKE_TIMEOUT_SECS to adjust timeout.",
+                    Use --handshake-timeout-secs to adjust timeout.",
                     elapsed_secs, sse_connected, mcp_initialized
                 );
 
@@ -897,12 +906,14 @@ mod tests {
             server_args: vec!["--arg1".to_string(), "value1".to_string()],
             enable_colored_output: false,
             default_sandbox_scope: PathBuf::from("/tmp"),
+            handshake_timeout_secs: 10,
         };
         assert_eq!(config.bind_addr.to_string(), "0.0.0.0:8080");
         assert_eq!(config.server_command, "custom_server");
         assert_eq!(config.server_args.len(), 2);
         assert_eq!(config.server_args[0], "--arg1");
         assert_eq!(config.server_args[1], "value1");
+        assert_eq!(config.handshake_timeout_secs, 10);
     }
 
     #[test]
@@ -1009,6 +1020,7 @@ for line in sys.stdin:
             server_args: vec![script_path.to_string_lossy().to_string()],
             default_scope: temp_dir.path().to_path_buf(),
             enable_colored_output: false,
+            handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
         }));
 
         let state = create_state_with_session_manager(Arc::clone(&session_manager));
@@ -1159,6 +1171,7 @@ for line in sys.stdin:
             server_args: vec![script_path.to_string_lossy().to_string()],
             default_scope: temp_dir.path().to_path_buf(),
             enable_colored_output: false,
+            handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
         }));
         let state = create_state_with_session_manager(session_manager);
         let app = create_app(state);

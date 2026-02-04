@@ -309,6 +309,20 @@ fn get_ahma_mcp_binary() -> PathBuf {
 /// // Server stops when `server` goes out of scope
 /// ```
 pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
+    spawn_test_server_with_timeout(None).await
+}
+
+/// Spawn a new test server with a custom handshake timeout.
+///
+/// This is useful for tests that need to verify timeout behavior.
+/// The timeout is passed as a CLI argument, not an environment variable,
+/// to avoid global state issues in parallel tests.
+///
+/// # Arguments
+/// * `handshake_timeout_secs` - Optional timeout in seconds. If None, uses the default (45s).
+pub async fn spawn_test_server_with_timeout(
+    handshake_timeout_secs: Option<u64>,
+) -> Result<TestServerInstance, String> {
     let binary = get_ahma_mcp_binary();
 
     // Get the workspace directory
@@ -325,7 +339,7 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
     let sandbox_scope = temp_dir.path().to_path_buf();
 
     // Build command args - use port 0 for dynamic allocation
-    let args = vec![
+    let mut args = vec![
         "--mode".to_string(),
         "http".to_string(),
         "--http-port".to_string(),
@@ -337,6 +351,12 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
         sandbox_scope.to_string_lossy().to_string(),
         "--log-to-stderr".to_string(),
     ];
+
+    // Add handshake timeout if specified (via CLI argument, not env var)
+    if let Some(timeout) = handshake_timeout_secs {
+        args.push("--handshake-timeout-secs".to_string());
+        args.push(timeout.to_string());
+    }
 
     eprintln!("[TestServer] Starting test server with dynamic port");
 
@@ -352,13 +372,10 @@ pub async fn spawn_test_server() -> Result<TestServerInstance, String> {
         .env_remove("NEXTEST_EXECUTION_MODE")
         .env_remove("CARGO_TARGET_DIR")
         .env_remove("RUST_TEST_THREADS")
+        // Remove legacy env var - timeout is now passed via CLI
+        .env_remove("AHMA_HANDSHAKE_TIMEOUT_SECS")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-
-    // Explicitly propagate handshake timeout so tests can shrink it reliably
-    if let Ok(timeout) = env::var("AHMA_HANDSHAKE_TIMEOUT_SECS") {
-        cmd.env("AHMA_HANDSHAKE_TIMEOUT_SECS", timeout);
-    }
 
     let mut child = cmd
         .spawn()

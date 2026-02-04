@@ -42,8 +42,8 @@ failure-output = "immediate"
 filter = "test(cli_extended_integration_test::) | test(cli_mode_coverage_test::)"
 success-output = "immediate"
 
-# Timing-sensitive handshake tests must run serially to avoid interference
-# These tests manipulate AHMA_HANDSHAKE_TIMEOUT_SECS env var and rely on precise timing
+# Timing-sensitive handshake tests benefit from reduced parallelism
+# These tests rely on precise timing (waiting for timeout expiration)
 [[profile.ci.overrides]]
 filter = "test(handshake_timeout_test::)"
 threads-required = 2

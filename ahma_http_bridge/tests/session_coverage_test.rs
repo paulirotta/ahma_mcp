@@ -8,6 +8,7 @@
 //!
 //! These tests improve session.rs coverage from ~47% to higher.
 
+use ahma_http_bridge::DEFAULT_HANDSHAKE_TIMEOUT_SECS;
 use ahma_http_bridge::session::{
     HandshakeState, McpRoot, SessionManager, SessionManagerConfig, SessionTerminationReason,
 };
@@ -21,6 +22,7 @@ fn create_test_session_manager(default_scope: PathBuf) -> SessionManager {
         server_args: vec!["test".to_string()],
         default_scope,
         enable_colored_output: false,
+        handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
     };
     SessionManager::new(config)
 }

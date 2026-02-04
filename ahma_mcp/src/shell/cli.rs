@@ -162,6 +162,12 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub log_to_stderr: bool,
 
+    /// Timeout in seconds for the MCP handshake to complete (HTTP mode only).
+    /// If the handshake (SSE connection + roots/list response) doesn't complete
+    /// within this time, tool calls will return a timeout error.
+    #[arg(long, global = true, default_value = "45")]
+    pub handshake_timeout_secs: u64,
+
     /// The name of the tool to execute (e.g., 'cargo_build').
     #[arg()]
     pub tool_name: Option<String>,
@@ -456,6 +462,7 @@ async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         server_args,
         enable_colored_output,
         default_sandbox_scope: default_scope,
+        handshake_timeout_secs: cli.handshake_timeout_secs,
     };
 
     start_bridge(config).await?;
