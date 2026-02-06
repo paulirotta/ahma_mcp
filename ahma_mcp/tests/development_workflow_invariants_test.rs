@@ -96,8 +96,8 @@ fn test_json_tool_configuration_count_invariant() {
     use std::fs;
 
     // Count actual JSON files in tools directory and examples config directory
-    let ahma_dir = common::get_workspace_path(".ahma");
-    let examples_dir = common::get_workspace_path("ahma_mcp/examples/configs");
+    let ahma_dir = common::fs::get_workspace_path(".ahma");
+    let examples_dir = common::fs::get_workspace_path("ahma_mcp/examples/configs");
 
     let mut json_files = Vec::new();
 
@@ -300,7 +300,7 @@ fn test_signal_handling_requirements_invariant() {
 
 #[cfg(test)]
 mod documentation_requirements {
-    use super::common::get_workspace_path;
+    use super::common::fs::get_workspace_path;
 
     /// INVARIANT 7: Documentation completeness for user guidance
     ///

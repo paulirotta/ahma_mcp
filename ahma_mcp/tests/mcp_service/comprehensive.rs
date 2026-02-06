@@ -1,4 +1,4 @@
-use ahma_mcp::test_utils as common;
+use ahma_mcp::test_utils::client::ClientBuilder;
 /// Comprehensive integration tests for mcp_service.rs coverage improvement
 ///
 /// Target: Improve mcp_service.rs coverage from 59.44% to 85%+
@@ -6,7 +6,6 @@ use ahma_mcp::test_utils as common;
 ///
 /// Uses the integration test pattern from existing working tests
 use anyhow::Result;
-use common::test_client::new_client;
 use rmcp::model::CallToolRequestParams;
 use serde_json::{Map, json};
 use std::borrow::Cow;
@@ -14,7 +13,7 @@ use std::borrow::Cow;
 /// Test that hardcoded tools are properly listed
 #[tokio::test]
 async fn test_hardcoded_tools_listing() -> Result<()> {
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
     let result = client.list_all_tools().await?;
 
     // Should have the hardcoded tools (await, status)
@@ -43,7 +42,7 @@ async fn test_hardcoded_tools_listing() -> Result<()> {
 /// Test await tool functionality and error handling
 #[tokio::test]
 async fn test_await_tool_comprehensive() -> Result<()> {
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test valid await call with no timeout parameter (uses intelligent timeout)
     let params = Map::new();
@@ -90,7 +89,7 @@ async fn test_await_tool_comprehensive() -> Result<()> {
 /// Test status tool functionality
 #[tokio::test]
 async fn test_status_tool_comprehensive() -> Result<()> {
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test basic status call
     let params = Map::new();
@@ -137,7 +136,7 @@ async fn test_status_tool_comprehensive() -> Result<()> {
 /// Test error handling for unknown tools
 #[tokio::test]
 async fn test_unknown_tool_error_handling() -> Result<()> {
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let params = Map::new();
 
@@ -178,13 +177,13 @@ async fn test_unknown_tool_error_handling() -> Result<()> {
 /// Test concurrent tool execution
 #[tokio::test]
 async fn test_concurrent_tool_execution() -> Result<()> {
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Execute multiple status calls concurrently
     let mut handles = vec![];
 
     for i in 0..5 {
-        let client_clone = new_client(Some(".ahma")).await?;
+        let client_clone = ClientBuilder::new().tools_dir(".ahma").build().await?;
         let handle = tokio::spawn(async move {
             let mut params = Map::new();
             params.insert(
@@ -223,7 +222,7 @@ async fn test_concurrent_tool_execution() -> Result<()> {
 /// Test path validation and security
 #[tokio::test]
 async fn test_path_validation_security() -> Result<()> {
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test with potentially dangerous path arguments
     let mut params = Map::new();
@@ -259,7 +258,7 @@ async fn test_path_validation_security() -> Result<()> {
 /// Test tool schema generation and validation
 #[tokio::test]
 async fn test_tool_schema_validation() -> Result<()> {
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
     let tools = client.list_all_tools().await?;
 
     // Verify all tools have valid schemas
@@ -293,7 +292,7 @@ async fn test_tool_schema_validation() -> Result<()> {
 /// Test resilience under stress and mixed operations
 #[tokio::test]
 async fn test_service_resilience_stress() -> Result<()> {
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Execute a mix of valid and invalid operations
     let operations = vec![
@@ -344,7 +343,7 @@ async fn test_service_resilience_stress() -> Result<()> {
 /// Test argument parsing and parameter handling
 #[tokio::test]
 async fn test_argument_parsing_edge_cases() -> Result<()> {
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test with empty arguments
     let empty_call_param = CallToolRequestParams {

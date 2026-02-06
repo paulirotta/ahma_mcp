@@ -6,7 +6,7 @@
 //! 3. Sandboxed Shell (validation, timeouts, execution modes)
 //! 4. Await tool (empty states)
 
-use ahma_mcp::test_utils::test_client::new_client_in_dir;
+use ahma_mcp::test_utils::client::ClientBuilder;
 use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParams;
@@ -32,7 +32,11 @@ async fn setup_test_env() -> Result<tempfile::TempDir> {
 async fn test_status_filter_nonexistent_tool() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_test_env().await?;
-    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     // Call status with a filter that matches nothing
     let params = CallToolRequestParams {
@@ -70,7 +74,11 @@ async fn test_status_filter_nonexistent_tool() -> Result<()> {
 async fn test_status_nonexistent_operation_id() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_test_env().await?;
-    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     let params = CallToolRequestParams {
         name: Cow::Borrowed("status"),
@@ -108,7 +116,11 @@ async fn test_status_nonexistent_operation_id() -> Result<()> {
 async fn test_cancel_missing_operation_id() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_test_env().await?;
-    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     let params = CallToolRequestParams {
         name: Cow::Borrowed("cancel"),
@@ -139,7 +151,11 @@ async fn test_cancel_missing_operation_id() -> Result<()> {
 async fn test_cancel_nonexistent_operation() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_test_env().await?;
-    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     let params = CallToolRequestParams {
         name: Cow::Borrowed("cancel"),
@@ -175,7 +191,11 @@ async fn test_cancel_nonexistent_operation() -> Result<()> {
 async fn test_cancel_with_reason() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_test_env().await?;
-    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     // First start a long running operation
     let start_params = CallToolRequestParams {
@@ -248,7 +268,11 @@ async fn test_cancel_with_reason() -> Result<()> {
 async fn test_shell_missing_command() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_test_env().await?;
-    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     let params = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),
@@ -278,7 +302,11 @@ async fn test_shell_missing_command() -> Result<()> {
 async fn test_shell_explicit_execution_modes() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_test_env().await?;
-    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     // 1. Explicit Synchronous
     let sync_params = CallToolRequestParams {
@@ -359,7 +387,11 @@ async fn test_shell_explicit_execution_modes() -> Result<()> {
 async fn test_shell_timeout() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_test_env().await?;
-    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     // Run a command that sleeps for 2s with 1s timeout
     let params = CallToolRequestParams {
@@ -431,7 +463,11 @@ async fn test_shell_timeout() -> Result<()> {
 async fn test_await_no_active_operations() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_test_env().await?;
-    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     let start = std::time::Instant::now();
     let params = CallToolRequestParams {

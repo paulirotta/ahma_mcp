@@ -8,15 +8,15 @@
 //! do not need the feature gate.
 
 use ahma_mcp::skip_if_disabled_async_result;
-use ahma_mcp::test_utils::get_workspace_dir;
-use ahma_mcp::test_utils::test_client::new_client;
+use ahma_mcp::test_utils::client::ClientBuilder;
+use ahma_mcp::test_utils::fs::get_workspace_dir;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParams;
 use serde_json::{Map, json};
 use std::borrow::Cow;
 
 /// Get the workspace Android test project path
-fn get_android_test_project_path() -> String {
+fn get_android_project_path() -> String {
     let workspace_dir = get_workspace_dir();
     let android_project_path = workspace_dir.join("test-data").join("AndoidTestBasicViews");
     android_project_path.to_string_lossy().to_string()
@@ -31,8 +31,8 @@ fn get_android_test_project_path() -> String {
 async fn test_gradlew_sync_commands_interactive() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     skip_if_disabled_async_result!("gradlew");
-    let client = new_client(Some(".ahma")).await?;
-    let project_path = get_android_test_project_path();
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
+    let project_path = get_android_project_path();
 
     // Test synchronous commands that should complete quickly
     let sync_commands = vec![
@@ -105,8 +105,8 @@ async fn test_gradlew_sync_commands_interactive() -> Result<()> {
 async fn test_gradlew_working_directory_handling() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     skip_if_disabled_async_result!("gradlew");
-    let client = new_client(Some(".ahma")).await?;
-    let project_path = get_android_test_project_path();
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
+    let project_path = get_android_project_path();
 
     // Test: Valid project directory with a quick command
     // Using "help" instead of "tasks" as it's slightly faster
@@ -152,8 +152,8 @@ async fn test_gradlew_working_directory_handling() -> Result<()> {
 async fn test_gradlew_subcommand_validation() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     skip_if_disabled_async_result!("gradlew");
-    let client = new_client(Some(".ahma")).await?;
-    let project_path = get_android_test_project_path();
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
+    let project_path = get_android_project_path();
 
     // Test 1: Valid subcommand
     let call_param = CallToolRequestParams {
@@ -262,8 +262,8 @@ async fn test_gradlew_subcommand_validation() -> Result<()> {
 async fn test_gradlew_optional_parameters() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     skip_if_disabled_async_result!("gradlew");
-    let client = new_client(Some(".ahma")).await?;
-    let project_path = get_android_test_project_path();
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
+    let project_path = get_android_project_path();
 
     // Test 1: tasks command with --all option
     let call_param = CallToolRequestParams {
@@ -369,7 +369,7 @@ async fn test_gradlew_optional_parameters() -> Result<()> {
 async fn test_gradlew_tool_availability() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     skip_if_disabled_async_result!("gradlew");
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test that sandboxed_shell tool is available
     let tools = client.list_tools(None).await?;
@@ -419,7 +419,7 @@ async fn test_gradlew_tool_availability() -> Result<()> {
 async fn test_gradlew_error_handling() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     skip_if_disabled_async_result!("gradlew");
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test 1: Completely invalid parameters for sandboxed_shell
     let call_param = CallToolRequestParams {
@@ -504,7 +504,7 @@ async fn test_gradlew_error_handling() -> Result<()> {
 /// Test that we can read the Android project structure correctly
 #[tokio::test]
 async fn test_android_project_structure_validation() -> Result<()> {
-    let project_path_str = get_android_test_project_path();
+    let project_path_str = get_android_project_path();
     let project_path = std::path::Path::new(&project_path_str);
 
     // Verify key Android project files exist

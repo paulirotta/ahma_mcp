@@ -1,9 +1,7 @@
 //! TDD tests for tool configuration and execution issues
-use ahma_mcp::{
-    skip_if_disabled_async_result, test_utils as common, utils::logging::init_test_logging,
-};
+use ahma_mcp::test_utils::client::ClientBuilder;
+use ahma_mcp::{skip_if_disabled_async_result, utils::logging::init_test_logging};
 use anyhow::Result;
-use common::test_client::new_client;
 use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::borrow::Cow;
@@ -14,7 +12,7 @@ async fn test_synchronous_cargo_check_returns_actual_results() -> Result<()> {
     skip_if_disabled_async_result!("cargo");
     // This test identifies the issue where cargo check should return actual results
 
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let call_param = CallToolRequestParams {
         name: Cow::Borrowed("cargo"),
@@ -58,7 +56,7 @@ async fn test_ls_tool_command_structure() -> Result<()> {
     // This test identifies the issue where ls_ls tool fails with command structure
     // The tool appears to be running "ls ls" instead of just "ls"
 
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Check if ls tool is available (optional since ls.json was removed)
     let tools = client.list_tools(None).await?;
@@ -118,7 +116,7 @@ async fn test_tool_descriptions_match_actual_behavior() -> Result<()> {
     // This test identifies inconsistencies between tool descriptions and actual behavior
     // Specifically checking if synchronous tools are properly described
 
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
     let tools_result = client.list_tools(None).await?;
 
     // Find cargo tool and verify its description
@@ -152,7 +150,7 @@ async fn test_sandboxed_shell_returns_actual_results() -> Result<()> {
     init_test_logging();
     // sandboxed_shell is always available - no skip needed
 
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let call_param = CallToolRequestParams {
         name: Cow::Borrowed("sandboxed_shell"),

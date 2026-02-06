@@ -6,11 +6,10 @@
 //! - Tool schema generation validation
 //! - Error handling for malformed MCP messages
 use ahma_mcp::skip_if_disabled_async_result;
-use ahma_mcp::test_utils as common;
 
+use ahma_mcp::test_utils::client::ClientBuilder;
 use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
-use common::test_client::{new_client, new_client_with_args};
 use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::borrow::Cow;
@@ -19,7 +18,7 @@ use std::borrow::Cow;
 #[tokio::test]
 async fn test_async_notification_malformed_operation_ids() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test status tool with numeric operation_id (should be handled gracefully)
     let malformed_params = CallToolRequestParams {
@@ -51,7 +50,7 @@ async fn test_async_notification_malformed_operation_ids() -> Result<()> {
 #[tokio::test]
 async fn test_async_notification_extreme_timeout_values() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test await with no timeout parameter (uses intelligent timeout)
     let no_timeout_params = CallToolRequestParams {
@@ -90,7 +89,7 @@ async fn test_async_notification_extreme_timeout_values() -> Result<()> {
 #[tokio::test]
 async fn test_tool_schema_generation_comprehensive() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test list_tools generates proper schemas
     let tools_result = client.list_all_tools().await?;
@@ -138,7 +137,7 @@ async fn test_tool_schema_generation_comprehensive() -> Result<()> {
 #[tokio::test]
 async fn test_error_handling_malformed_call_tool_params() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test with missing required parameters for cancel tool
     let missing_params = CallToolRequestParams {
@@ -188,7 +187,7 @@ async fn test_error_handling_malformed_call_tool_params() -> Result<()> {
 #[tokio::test]
 async fn test_error_handling_unknown_tools() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let unknown_tool_params = CallToolRequestParams {
         name: Cow::Borrowed("nonexistent_tool_xyz_123"),
@@ -208,7 +207,7 @@ async fn test_error_handling_unknown_tools() -> Result<()> {
 #[tokio::test]
 async fn test_async_notification_concurrent_load() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Start multiple async operations concurrently
     let mut handles = Vec::new();
@@ -252,7 +251,7 @@ async fn test_async_notification_concurrent_load() -> Result<()> {
 #[tokio::test]
 async fn test_status_tool_filter_combinations() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test with tool filter
     let tool_filter_params = CallToolRequestParams {
@@ -308,7 +307,7 @@ async fn test_status_tool_filter_combinations() -> Result<()> {
 async fn test_async_operation_with_real_execution() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
-    let client = new_client_with_args(Some(".ahma"), &[]).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Start a real async operation (shell command)
     let async_params = CallToolRequestParams {
@@ -359,7 +358,7 @@ async fn test_async_operation_with_real_execution() -> Result<()> {
 #[tokio::test]
 async fn test_error_recovery_and_resilience() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test that service continues working after errors
 

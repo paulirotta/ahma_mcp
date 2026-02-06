@@ -12,7 +12,7 @@ use ahma_mcp::test_utils as common;
 
 use ahma_mcp::config::{SubcommandConfig, ToolConfig, load_tool_configs};
 use ahma_mcp::utils::logging::init_test_logging;
-use common::get_tools_dir;
+use common::fs::get_tools_dir;
 use std::collections::HashSet;
 
 /// Validates that all expected tools are present in the tools directory.

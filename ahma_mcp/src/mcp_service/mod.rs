@@ -1946,7 +1946,7 @@ mod tests {
     use super::*;
     use crate::config::{SubcommandConfig, ToolConfig, ToolHints};
     use crate::operation_monitor::{MonitorConfig, Operation, OperationMonitor, OperationStatus};
-    use crate::test_utils;
+
     use serde_json::json;
     use std::collections::HashMap;
     use std::path::Path;
@@ -1958,7 +1958,8 @@ mod tests {
         guidance: Arc<Option<GuidanceConfig>>,
     ) -> AhmaMcpService {
         // Adapter is required by the service but not used by these unit tests.
-        let adapter = test_utils::create_test_config(Path::new(".")).expect("adapter");
+        let adapter =
+            crate::test_utils::client::create_test_config(Path::new(".")).expect("adapter");
         let configs: Arc<HashMap<String, ToolConfig>> = Arc::new(HashMap::new());
         AhmaMcpService::new(adapter, monitor, configs, guidance, false, false)
             .await

@@ -6,7 +6,7 @@ use std::process::Command;
 #[cfg(test)]
 mod tool_validation_tdd_tests {
     use super::*;
-    use common::get_workspace_dir;
+    use common::fs::get_workspace_dir;
 
     #[test]
     fn test_cargo_test_is_available_via_cargo_tool() {

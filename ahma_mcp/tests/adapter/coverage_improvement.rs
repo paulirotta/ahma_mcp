@@ -22,7 +22,7 @@ use ahma_mcp::{
     config::{CommandOption, SubcommandConfig},
     operation_monitor::{MonitorConfig, OperationMonitor},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
-    test_utils::wait_for_condition,
+    test_utils::concurrency::wait_for_condition,
 };
 
 /// Helper function to create test adapter with custom configuration

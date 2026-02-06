@@ -10,8 +10,8 @@
 use ahma_mcp::skip_if_disabled_async;
 use ahma_mcp::test_utils as common;
 
-use common::test_client::new_client_in_dir;
-use common::test_project::{TestProjectOptions, create_rust_test_project};
+use ahma_mcp::test_utils::client::ClientBuilder;
+use common::project::{TestProjectOptions, create_rust_project};
 use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::borrow::Cow;
@@ -20,13 +20,16 @@ use std::borrow::Cow;
 async fn test_ls_command_with_long_flag() {
     skip_if_disabled_async!("file_tools");
     // Setup: Create a test client with file_tools
-    let temp = create_rust_test_project(TestProjectOptions {
+    let temp = create_rust_project(TestProjectOptions {
         with_cargo: true,
         ..Default::default()
     })
     .await
     .unwrap();
-    let client = new_client_in_dir(Some(".ahma"), &[], temp.path())
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp.path())
+        .build()
         .await
         .expect("Failed to create test client");
 
@@ -84,13 +87,16 @@ async fn test_ls_command_with_long_flag() {
 async fn test_ls_command_without_flags() {
     skip_if_disabled_async!("file_tools");
     // Setup
-    let temp = create_rust_test_project(TestProjectOptions {
+    let temp = create_rust_project(TestProjectOptions {
         with_cargo: true,
         ..Default::default()
     })
     .await
     .unwrap();
-    let client = new_client_in_dir(Some(".ahma"), &[], temp.path())
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp.path())
+        .build()
         .await
         .expect("Failed to create test client");
 
@@ -132,13 +138,16 @@ async fn test_ls_command_without_flags() {
 async fn test_ls_command_with_all_flag() {
     skip_if_disabled_async!("file_tools");
     // Setup
-    let temp = create_rust_test_project(TestProjectOptions {
+    let temp = create_rust_project(TestProjectOptions {
         with_cargo: true,
         ..Default::default()
     })
     .await
     .unwrap();
-    let client = new_client_in_dir(Some(".ahma"), &[], temp.path())
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp.path())
+        .build()
         .await
         .expect("Failed to create test client");
 
@@ -181,13 +190,16 @@ async fn test_ls_command_with_all_flag() {
 async fn test_ls_command_with_multiple_flags() {
     skip_if_disabled_async!("file_tools");
     // Setup
-    let temp = create_rust_test_project(TestProjectOptions {
+    let temp = create_rust_project(TestProjectOptions {
         with_cargo: true,
         ..Default::default()
     })
     .await
     .unwrap();
-    let client = new_client_in_dir(Some(".ahma"), &[], temp.path())
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp.path())
+        .build()
         .await
         .expect("Failed to create test client");
 

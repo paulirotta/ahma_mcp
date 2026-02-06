@@ -2,7 +2,7 @@ use ahma_mcp::test_utils as common;
 
 use ahma_mcp::config::ToolConfig;
 use anyhow::Result;
-use common::get_workspace_path;
+use common::fs::get_workspace_path;
 
 #[test]
 fn test_synchronous_inheritance_loading() -> Result<()> {

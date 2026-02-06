@@ -8,7 +8,7 @@ use ahma_mcp::config::{CommandOption, SubcommandConfig};
 use ahma_mcp::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_mcp::sandbox::{Sandbox, SandboxMode};
 use ahma_mcp::shell_pool::{ShellPoolConfig, ShellPoolManager};
-use ahma_mcp::test_utils::wait_for_condition;
+use ahma_mcp::test_utils::concurrency::wait_for_condition;
 use serde_json::{Map, Value, json};
 use std::sync::Arc;
 use std::time::Duration;

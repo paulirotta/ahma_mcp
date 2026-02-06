@@ -2,12 +2,12 @@ use ahma_mcp::test_utils as common;
 
 use ahma_mcp::config::load_tool_configs;
 use ahma_mcp::utils::logging::init_test_logging;
-use common::get_tools_dir;
+use common::fs::get_tools_dir;
 
 #[tokio::test]
 async fn test_gh_tool_expansion_all_synchronous() {
     init_test_logging();
-    let workspace_dir = ahma_mcp::test_utils::get_workspace_dir();
+    let workspace_dir = ahma_mcp::test_utils::fs::get_workspace_dir();
     let tools_dir = workspace_dir.join("ahma_mcp/examples/configs");
     let configs = load_tool_configs(&tools_dir)
         .await
@@ -73,7 +73,7 @@ async fn test_gh_tool_expansion_all_synchronous() {
 #[tokio::test]
 async fn test_gh_cache_subcommands_schema() {
     init_test_logging();
-    let workspace_dir = ahma_mcp::test_utils::get_workspace_dir();
+    let workspace_dir = ahma_mcp::test_utils::fs::get_workspace_dir();
     let tools_dir = workspace_dir.join("ahma_mcp/examples/configs");
     let configs = load_tool_configs(&tools_dir)
         .await

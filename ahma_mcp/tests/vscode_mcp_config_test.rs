@@ -3,7 +3,7 @@ use ahma_mcp::test_utils as common;
 
 use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
-use common::get_workspace_path;
+use common::fs::get_workspace_path;
 use serde_json::Value;
 use std::fs;
 

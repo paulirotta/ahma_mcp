@@ -177,7 +177,7 @@ fn test_ansi_enabled_for_stderr_logging() {
 // ============= ProjectDirs Fallback Tests =============
 
 #[test]
-fn test_project_dirs_structure() {
+fn project_dirs_structure() {
     use directories::ProjectDirs;
 
     // Test that ProjectDirs can be created for the application

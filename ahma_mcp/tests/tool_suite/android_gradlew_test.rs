@@ -1,7 +1,7 @@
 #[cfg(feature = "android")]
 mod android_tests {
-    use ahma_mcp::test_utils::get_workspace_dir;
-    use ahma_mcp::test_utils::{dir_exists, file_exists};
+    use ahma_mcp::test_utils::fs::get_workspace_dir;
+    use ahma_mcp::test_utils::fs::{dir_exists, file_exists};
     use anyhow::Result;
     use serde_json::Value;
     use std::{future::Future, path::Path, pin::Pin};
@@ -9,7 +9,7 @@ mod android_tests {
     use tokio::task::spawn_blocking;
 
     /// Copy the Android test project to a unique temporary directory
-    async fn copy_android_test_project() -> Result<TempDir> {
+    async fn copy_android_project() -> Result<TempDir> {
         let process_id = std::process::id();
         let temp_dir = spawn_blocking(move || {
             tempfile::Builder::new()
@@ -65,8 +65,8 @@ mod android_tests {
 
     /// Test that Android test project can be copied successfully
     #[tokio::test]
-    async fn test_copy_android_test_project() -> Result<()> {
-        let temp_dir = copy_android_test_project().await?;
+    async fn test_copy_android_project() -> Result<()> {
+        let temp_dir = copy_android_project().await?;
         let project_path = temp_dir.path();
 
         // Verify essential Android project files exist
@@ -107,7 +107,7 @@ mod android_tests {
     async fn test_concurrent_android_project_isolation() -> Result<()> {
         // Create multiple temporary projects concurrently
         let tasks: Vec<_> = (0..3)
-            .map(|_| tokio::spawn(copy_android_test_project()))
+            .map(|_| tokio::spawn(copy_android_project()))
             .collect();
 
         let temp_dirs = futures::future::try_join_all(tasks).await?;

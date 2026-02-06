@@ -4,7 +4,7 @@
 //! instead of waiting for the operation to actually complete.
 
 use ahma_mcp::skip_if_disabled_async_result;
-use ahma_mcp::test_utils::test_client::new_client_with_args;
+use ahma_mcp::test_utils::client::ClientBuilder;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParams;
 use serde_json::json;
@@ -14,7 +14,7 @@ use std::borrow::Cow;
 async fn test_await_blocks_correctly() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     // Use the real tools directory with --async flag
-    let client = new_client_with_args(Some(".ahma"), &[]).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Start a long-running asynchronous task (sleep for 2 seconds)
 
@@ -94,7 +94,7 @@ async fn test_await_blocks_correctly() -> Result<()> {
 async fn test_await_detects_pending_operation_without_delay() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     // Use the real tools directory with --async flag
-    let client = new_client_with_args(Some(".ahma"), &[]).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Launch an async operation and immediately await it.
     let call_params = CallToolRequestParams {

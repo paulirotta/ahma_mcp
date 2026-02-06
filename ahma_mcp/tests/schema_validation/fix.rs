@@ -1,9 +1,8 @@
 //! Test to reproduce and fix the VSCode GitHub Copilot Chat catastrophic failure
 //! Error: "tool parameters array type must have items"
-use ahma_mcp::test_utils as common;
 
+use ahma_mcp::test_utils::client::ClientBuilder;
 use ahma_mcp::utils::logging::init_test_logging;
-use common::test_client::new_client;
 use serde_json::Value;
 
 /// This test reproduces the exact VSCode GitHub Copilot Chat failure
@@ -12,7 +11,7 @@ use serde_json::Value;
 async fn test_array_parameters_have_items_property_fixed() -> anyhow::Result<()> {
     init_test_logging();
     // Create a test client with the real tool configurations
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
     let tools = client.list_all_tools().await?;
 
     println!(
@@ -134,7 +133,7 @@ async fn test_array_parameters_have_items_property_fixed() -> anyhow::Result<()>
 #[tokio::test]
 async fn test_all_tools_array_schemas_are_valid_fixed() -> anyhow::Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
     let tools = client.list_all_tools().await?;
 
     let mut total_tools = 0;

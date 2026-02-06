@@ -1,8 +1,8 @@
 //! Integration tests for sequence tools - composite tools that execute multiple steps
 
 use ahma_mcp::skip_if_disabled_async_result;
-use ahma_mcp::test_utils::get_workspace_path;
-use ahma_mcp::test_utils::test_client::{new_client, new_client_in_dir};
+use ahma_mcp::test_utils::client::ClientBuilder;
+use ahma_mcp::test_utils::fs::get_workspace_path;
 use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParams;
@@ -12,7 +12,7 @@ use std::borrow::Cow;
 #[tokio::test]
 async fn test_sequence_tool_loads() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let tools = client.list_tools(None).await?;
     let tool_names: Vec<_> = tools.tools.iter().map(|t| t.name.as_ref()).collect();
@@ -80,7 +80,11 @@ async fn test_simple_sequence_execution() -> Result<()> {
         serde_json::to_string_pretty(&simple_sequence)?,
     )?;
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(tools_dir.to_str().unwrap())
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     let call_param = CallToolRequestParams {
         name: Cow::Borrowed("test_sequence"),
@@ -171,7 +175,10 @@ async fn test_sequence_with_invalid_tool() -> Result<()> {
         serde_json::to_string_pretty(&invalid_sequence)?,
     )?;
 
-    let client = new_client(Some(tools_dir.to_str().unwrap())).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(tools_dir.to_str().unwrap())
+        .build()
+        .await?;
 
     let call_param = CallToolRequestParams {
         name: Cow::Borrowed("invalid_sequence"),
@@ -268,7 +275,11 @@ async fn test_sequence_delay_is_applied() -> Result<()> {
         serde_json::to_string_pretty(&timed_sequence)?,
     )?;
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(tools_dir.to_str().unwrap())
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     let call_param = CallToolRequestParams {
         name: Cow::Borrowed("timed_sequence"),

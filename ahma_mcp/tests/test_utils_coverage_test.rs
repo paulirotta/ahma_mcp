@@ -91,12 +91,15 @@ fn test_strip_ansi_handles_lone_escape() {
 // Tests for contains_any
 #[test]
 fn test_contains_any_with_single_match() {
-    assert!(test_utils::contains_any("hello world", &["world"]));
+    assert!(test_utils::assertions::contains_any(
+        "hello world",
+        &["world"]
+    ));
 }
 
 #[test]
 fn test_contains_any_with_multiple_patterns_one_matches() {
-    assert!(test_utils::contains_any(
+    assert!(test_utils::assertions::contains_any(
         "hello world",
         &["foo", "bar", "world"]
     ));
@@ -104,24 +107,27 @@ fn test_contains_any_with_multiple_patterns_one_matches() {
 
 #[test]
 fn test_contains_any_with_no_matches() {
-    assert!(!test_utils::contains_any("hello world", &["foo", "bar"]));
+    assert!(!test_utils::assertions::contains_any(
+        "hello world",
+        &["foo", "bar"]
+    ));
 }
 
 #[test]
 fn test_contains_any_with_empty_patterns() {
-    assert!(!test_utils::contains_any("hello world", &[]));
+    assert!(!test_utils::assertions::contains_any("hello world", &[]));
 }
 
 #[test]
 fn test_contains_any_with_empty_string() {
     // Empty string contains empty pattern
-    assert!(test_utils::contains_any("hello world", &[""]));
+    assert!(test_utils::assertions::contains_any("hello world", &[""]));
 }
 
 // Tests for contains_all
 #[test]
 fn test_contains_all_with_all_present() {
-    assert!(test_utils::contains_all(
+    assert!(test_utils::assertions::contains_all(
         "hello world foo bar",
         &["hello", "world"]
     ));
@@ -129,7 +135,7 @@ fn test_contains_all_with_all_present() {
 
 #[test]
 fn test_contains_all_with_some_missing() {
-    assert!(!test_utils::contains_all(
+    assert!(!test_utils::assertions::contains_all(
         "hello world",
         &["hello", "missing"]
     ));
@@ -138,13 +144,19 @@ fn test_contains_all_with_some_missing() {
 #[test]
 fn test_contains_all_with_empty_patterns() {
     // Empty pattern list - all patterns are present (vacuously true)
-    assert!(test_utils::contains_all("hello world", &[]));
+    assert!(test_utils::assertions::contains_all("hello world", &[]));
 }
 
 #[test]
 fn test_contains_all_with_single_pattern() {
-    assert!(test_utils::contains_all("hello world", &["hello"]));
-    assert!(!test_utils::contains_all("hello world", &["missing"]));
+    assert!(test_utils::assertions::contains_all(
+        "hello world",
+        &["hello"]
+    ));
+    assert!(!test_utils::assertions::contains_all(
+        "hello world",
+        &["missing"]
+    ));
 }
 
 // Tests for extract_tool_names
@@ -155,7 +167,7 @@ INFO Loading tool: cargo
 INFO Loading tool: git
 INFO Other log message
 "#;
-    let tool_names = test_utils::extract_tool_names(debug_output);
+    let tool_names = test_utils::assertions::extract_tool_names(debug_output);
     assert_eq!(tool_names, vec!["cargo", "git"]);
 }
 
@@ -165,7 +177,7 @@ fn test_extract_tool_names_with_tool_loaded_lines() {
 DEBUG Tool loaded: npm
 DEBUG Tool loaded: yarn
 "#;
-    let tool_names = test_utils::extract_tool_names(debug_output);
+    let tool_names = test_utils::assertions::extract_tool_names(debug_output);
     assert_eq!(tool_names, vec!["npm", "yarn"]);
 }
 
@@ -176,20 +188,20 @@ Loading tool: rustc
 Tool loaded: clippy
 Loading tool: fmt
 "#;
-    let tool_names = test_utils::extract_tool_names(debug_output);
+    let tool_names = test_utils::assertions::extract_tool_names(debug_output);
     assert_eq!(tool_names, vec!["rustc", "clippy", "fmt"]);
 }
 
 #[test]
 fn test_extract_tool_names_with_no_matches() {
     let debug_output = "Some random log output\nNo tools here";
-    let tool_names = test_utils::extract_tool_names(debug_output);
+    let tool_names = test_utils::assertions::extract_tool_names(debug_output);
     assert!(tool_names.is_empty());
 }
 
 #[test]
 fn test_extract_tool_names_with_empty_input() {
-    let tool_names = test_utils::extract_tool_names("");
+    let tool_names = test_utils::assertions::extract_tool_names("");
     assert!(tool_names.is_empty());
 }
 
@@ -200,7 +212,7 @@ async fn test_file_exists_with_existing_file() {
     let file_path = temp_dir.path().join("test.txt");
     tokio::fs::write(&file_path, "test content").await.unwrap();
 
-    assert!(test_utils::file_exists(&file_path).await);
+    assert!(test_utils::fs::file_exists(&file_path).await);
 }
 
 #[tokio::test]
@@ -208,20 +220,20 @@ async fn test_file_exists_with_non_existing_file() {
     let temp_dir = tempfile::tempdir().unwrap();
     let file_path = temp_dir.path().join("non_existing.txt");
 
-    assert!(!test_utils::file_exists(&file_path).await);
+    assert!(!test_utils::fs::file_exists(&file_path).await);
 }
 
 #[tokio::test]
 async fn test_file_exists_with_directory() {
     let temp_dir = tempfile::tempdir().unwrap();
     // temp_dir.path() is a directory, not a file
-    assert!(!test_utils::file_exists(temp_dir.path()).await);
+    assert!(!test_utils::fs::file_exists(temp_dir.path()).await);
 }
 
 #[tokio::test]
 async fn test_dir_exists_with_existing_directory() {
     let temp_dir = tempfile::tempdir().unwrap();
-    assert!(test_utils::dir_exists(temp_dir.path()).await);
+    assert!(test_utils::fs::dir_exists(temp_dir.path()).await);
 }
 
 #[tokio::test]
@@ -229,7 +241,7 @@ async fn test_dir_exists_with_non_existing_directory() {
     let temp_dir = tempfile::tempdir().unwrap();
     let dir_path = temp_dir.path().join("non_existing_dir");
 
-    assert!(!test_utils::dir_exists(&dir_path).await);
+    assert!(!test_utils::fs::dir_exists(&dir_path).await);
 }
 
 #[tokio::test]
@@ -239,7 +251,7 @@ async fn test_dir_exists_with_file() {
     tokio::fs::write(&file_path, "test content").await.unwrap();
 
     // file_path is a file, not a directory
-    assert!(!test_utils::dir_exists(&file_path).await);
+    assert!(!test_utils::fs::dir_exists(&file_path).await);
 }
 
 // Tests for read_file_contents and write_file_contents
@@ -249,10 +261,12 @@ async fn test_read_write_file_contents() {
     let file_path = temp_dir.path().join("test.txt");
     let content = "Hello, World!\nSecond line.";
 
-    test_utils::write_file_contents(&file_path, content)
+    test_utils::fs::write_file_contents(&file_path, content)
         .await
         .unwrap();
-    let read_content = test_utils::read_file_contents(&file_path).await.unwrap();
+    let read_content = test_utils::fs::read_file_contents(&file_path)
+        .await
+        .unwrap();
 
     assert_eq!(read_content, content);
 }
@@ -262,14 +276,16 @@ async fn test_write_file_contents_overwrites() {
     let temp_dir = tempfile::tempdir().unwrap();
     let file_path = temp_dir.path().join("test.txt");
 
-    test_utils::write_file_contents(&file_path, "first")
+    test_utils::fs::write_file_contents(&file_path, "first")
         .await
         .unwrap();
-    test_utils::write_file_contents(&file_path, "second")
+    test_utils::fs::write_file_contents(&file_path, "second")
         .await
         .unwrap();
 
-    let content = test_utils::read_file_contents(&file_path).await.unwrap();
+    let content = test_utils::fs::read_file_contents(&file_path)
+        .await
+        .unwrap();
     assert_eq!(content, "second");
 }
 
@@ -278,6 +294,6 @@ async fn test_read_file_contents_non_existing() {
     let temp_dir = tempfile::tempdir().unwrap();
     let file_path = temp_dir.path().join("non_existing.txt");
 
-    let result = test_utils::read_file_contents(&file_path).await;
+    let result = test_utils::fs::read_file_contents(&file_path).await;
     assert!(result.is_err());
 }

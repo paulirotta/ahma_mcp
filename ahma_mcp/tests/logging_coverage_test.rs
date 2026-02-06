@@ -12,7 +12,7 @@
 //! can only initialize once. We use separate test binaries/processes to
 //! test different configurations.
 
-use ahma_mcp::test_utils::test_client::new_client_with_args;
+use ahma_mcp::test_utils::client::ClientBuilder;
 use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParams;
@@ -63,7 +63,11 @@ fn test_init_logging_idempotent() {
 async fn test_client_with_debug_logging() -> Result<()> {
     init_test_logging();
 
-    let client = new_client_with_args(Some(".ahma"), &["--debug"]).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .arg("--debug")
+        .build()
+        .await?;
 
     // Verify client works with debug logging
     let params = CallToolRequestParams {
@@ -86,7 +90,11 @@ async fn test_client_with_debug_logging() -> Result<()> {
 async fn test_client_with_stderr_logging() -> Result<()> {
     init_test_logging();
 
-    let client = new_client_with_args(Some(".ahma"), &["--log-to-stderr"]).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .arg("--log-to-stderr")
+        .build()
+        .await?;
 
     // Verify client works with stderr logging
     let params = CallToolRequestParams {
@@ -108,7 +116,11 @@ async fn test_client_with_stderr_logging() -> Result<()> {
 async fn test_client_with_debug_and_stderr_logging() -> Result<()> {
     init_test_logging();
 
-    let client = new_client_with_args(Some(".ahma"), &["--debug", "--log-to-stderr"]).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .args(["--debug", "--log-to-stderr"])
+        .build()
+        .await?;
 
     // Verify client works with both flags by listing tools
     let tools = client.list_all_tools().await?;
@@ -124,7 +136,7 @@ async fn test_client_with_default_file_logging() -> Result<()> {
     init_test_logging();
 
     // No logging flags - should use file logging by default
-    let client = new_client_with_args(Some(".ahma"), &[]).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Verify client works with default logging
     let params = CallToolRequestParams {

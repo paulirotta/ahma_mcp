@@ -3,7 +3,7 @@ use ahma_mcp::{
     operation_monitor::{MonitorConfig, OperationMonitor, OperationStatus},
     sandbox::Sandbox,
     shell_pool::{ShellPoolConfig, ShellPoolManager},
-    test_utils::wait_for_condition,
+    test_utils::concurrency::wait_for_condition,
 };
 use serde_json::{Map, Value};
 use std::{sync::Arc, time::Duration};

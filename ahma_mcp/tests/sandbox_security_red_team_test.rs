@@ -10,8 +10,9 @@
 
 use ahma_mcp::sandbox::{Sandbox, SandboxMode};
 use ahma_mcp::test_utils as common;
+use ahma_mcp::test_utils::client::ClientBuilder;
 use ahma_mcp::utils::logging::init_test_logging;
-use common::test_client::{get_workspace_tools_dir, new_client_in_dir_with_env};
+use common::fs::get_workspace_tools_dir;
 use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::fs;
@@ -27,14 +28,13 @@ async fn red_team_basic_path_traversal_blocked() {
     init_test_logging();
     let temp_dir = TempDir::new().unwrap();
     let tools_dir = get_workspace_tools_dir();
-    let client = new_client_in_dir_with_env(
-        Some(tools_dir.to_str().unwrap()),
-        &[],
-        temp_dir.path(),
-        &[("AHMA_TEST_MODE", "0")],
-    )
-    .await
-    .unwrap();
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .env("AHMA_TEST_MODE", "0")
+        .build()
+        .await
+        .unwrap();
 
     // Attempt to escape via simple ../
     let params = CallToolRequestParams {
@@ -63,14 +63,13 @@ async fn red_team_deep_path_traversal_blocked() {
     init_test_logging();
     let temp_dir = TempDir::new().unwrap();
     let tools_dir = get_workspace_tools_dir();
-    let client = new_client_in_dir_with_env(
-        Some(tools_dir.to_str().unwrap()),
-        &[],
-        temp_dir.path(),
-        &[("AHMA_TEST_MODE", "0")],
-    )
-    .await
-    .unwrap();
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .env("AHMA_TEST_MODE", "0")
+        .build()
+        .await
+        .unwrap();
 
     // Attempt to escape via deeply nested traversal
     let params = CallToolRequestParams {
@@ -99,14 +98,13 @@ async fn red_team_absolute_path_escape_blocked() {
     init_test_logging();
     let temp_dir = TempDir::new().unwrap();
     let tools_dir = get_workspace_tools_dir();
-    let client = new_client_in_dir_with_env(
-        Some(tools_dir.to_str().unwrap()),
-        &[],
-        temp_dir.path(),
-        &[("AHMA_TEST_MODE", "0")],
-    )
-    .await
-    .unwrap();
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .env("AHMA_TEST_MODE", "0")
+        .build()
+        .await
+        .unwrap();
 
     // Attempt to use absolute path outside sandbox
     let params = CallToolRequestParams {
@@ -142,14 +140,13 @@ async fn red_team_symlink_escape_blocked() {
 
     let temp_dir = TempDir::new().unwrap();
     let tools_dir = get_workspace_tools_dir();
-    let client = new_client_in_dir_with_env(
-        Some(tools_dir.to_str().unwrap()),
-        &[],
-        temp_dir.path(),
-        &[("AHMA_TEST_MODE", "0")],
-    )
-    .await
-    .unwrap();
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .env("AHMA_TEST_MODE", "0")
+        .build()
+        .await
+        .unwrap();
 
     // Create a symlink inside sandbox pointing to /etc (outside)
     let malicious_link = temp_dir.path().join("etc_link");
@@ -185,14 +182,13 @@ async fn red_team_symlink_to_home_blocked() {
 
     let temp_dir = TempDir::new().unwrap();
     let tools_dir = get_workspace_tools_dir();
-    let client = new_client_in_dir_with_env(
-        Some(tools_dir.to_str().unwrap()),
-        &[],
-        temp_dir.path(),
-        &[("AHMA_TEST_MODE", "0")],
-    )
-    .await
-    .unwrap();
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .env("AHMA_TEST_MODE", "0")
+        .build()
+        .await
+        .unwrap();
 
     // Create symlink to home directory
     let home = std::env::var("HOME").unwrap_or_else(|_| "/Users/Shared".to_string());
@@ -230,14 +226,13 @@ async fn red_team_shell_metacharacters_in_path() {
     init_test_logging();
     let temp_dir = TempDir::new().unwrap();
     let tools_dir = get_workspace_tools_dir();
-    let client = new_client_in_dir_with_env(
-        Some(tools_dir.to_str().unwrap()),
-        &[],
-        temp_dir.path(),
-        &[("AHMA_TEST_MODE", "0")],
-    )
-    .await
-    .unwrap();
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .env("AHMA_TEST_MODE", "0")
+        .build()
+        .await
+        .unwrap();
 
     // Attempt to inject shell commands via path
     // The path "; cat /etc/passwd #" doesn't exist as a directory
@@ -291,14 +286,13 @@ async fn documented_limitation_read_access_unrestricted() {
     init_test_logging();
     let temp_dir = TempDir::new().unwrap();
     let tools_dir = get_workspace_tools_dir();
-    let client = new_client_in_dir_with_env(
-        Some(tools_dir.to_str().unwrap()),
-        &[],
-        temp_dir.path(),
-        &[("AHMA_TEST_MODE", "0")],
-    )
-    .await
-    .unwrap();
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .env("AHMA_TEST_MODE", "0")
+        .build()
+        .await
+        .unwrap();
 
     // Note: We're testing from within the sandbox scope, but the command
     // attempts to READ a file outside. On macOS with Seatbelt, this succeeds
@@ -333,14 +327,13 @@ async fn documented_limitation_network_unrestricted() {
     init_test_logging();
     let temp_dir = TempDir::new().unwrap();
     let tools_dir = get_workspace_tools_dir();
-    let client = new_client_in_dir_with_env(
-        Some(tools_dir.to_str().unwrap()),
-        &[],
-        temp_dir.path(),
-        &[("AHMA_TEST_MODE", "0")],
-    )
-    .await
-    .unwrap();
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .env("AHMA_TEST_MODE", "0")
+        .build()
+        .await
+        .unwrap();
 
     // Test that network access works (e.g., DNS lookup)
     // This documents that network is unrestricted
@@ -375,14 +368,14 @@ async fn red_team_command_write_escape_blocked() {
     let outside_file = outside_dir.path().join("pwned.txt");
 
     let tools_dir = get_workspace_tools_dir();
-    let client = new_client_in_dir_with_env(
-        Some(tools_dir.to_str().unwrap()),
-        &[],
-        temp_dir.path(),
-        &[("AHMA_TEST_MODE", "0"), ("AHMA_NO_TEMP_FILES", "1")],
-    )
-    .await
-    .unwrap();
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .env("AHMA_TEST_MODE", "0")
+        .env("AHMA_NO_TEMP_FILES", "1")
+        .build()
+        .await
+        .unwrap();
 
     // Attempt to write to a file outside the sandbox using absolute path
     let params = CallToolRequestParams {
@@ -422,14 +415,14 @@ async fn red_team_command_read_escape_blocked_linux() {
     init_test_logging();
     let temp_dir = TempDir::new().unwrap();
     let tools_dir = get_workspace_tools_dir();
-    let client = new_client_in_dir_with_env(
-        Some(tools_dir.to_str().unwrap()),
-        &[],
-        temp_dir.path(),
-        &[("AHMA_TEST_MODE", "0"), ("AHMA_NO_TEMP_FILES", "1")],
-    )
-    .await
-    .unwrap();
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .env("AHMA_TEST_MODE", "0")
+        .env("AHMA_NO_TEMP_FILES", "1")
+        .build()
+        .await
+        .unwrap();
 
     // Attempt to read /etc/shadow (or similar restricted file)
     let params = CallToolRequestParams {
@@ -477,14 +470,14 @@ async fn red_team_command_read_escape_blocked_linux_custom() {
     }
 
     let tools_dir = get_workspace_tools_dir();
-    let client = new_client_in_dir_with_env(
-        Some(tools_dir.to_str().unwrap()),
-        &[],
-        temp_dir.path(),
-        &[("AHMA_TEST_MODE", "0"), ("AHMA_NO_TEMP_FILES", "1")],
-    )
-    .await
-    .unwrap();
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .env("AHMA_TEST_MODE", "0")
+        .env("AHMA_NO_TEMP_FILES", "1")
+        .build()
+        .await
+        .unwrap();
 
     // Attempt to read the outside file
     let params = CallToolRequestParams {

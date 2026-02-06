@@ -5,7 +5,7 @@
 //!
 //! JSON Schema spec: https://json-schema.org/understanding-json-schema/
 
-use ahma_mcp::test_utils::test_client::new_client;
+use ahma_mcp::test_utils::client::ClientBuilder;
 use ahma_mcp::utils::logging::init_test_logging;
 use serde_json::{Map, Value};
 
@@ -96,7 +96,11 @@ fn validate_json_schema_map(obj: &Map<String, Value>, tool_name: &str) -> Result
 async fn test_builtin_tools_have_valid_json_schema() {
     init_test_logging();
 
-    let client = new_client(Some(".ahma")).await.unwrap();
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
+        .await
+        .unwrap();
     let tools = client.list_tools(None).await.unwrap();
 
     let builtin_tools = ["await", "status", "sandboxed_shell"];
@@ -121,7 +125,11 @@ async fn test_builtin_tools_have_valid_json_schema() {
 async fn test_all_tools_have_valid_json_schema() {
     init_test_logging();
 
-    let client = new_client(Some(".ahma")).await.unwrap();
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
+        .await
+        .unwrap();
     let tools = client.list_tools(None).await.unwrap();
 
     let mut errors = Vec::new();
@@ -147,7 +155,11 @@ async fn test_all_tools_have_valid_json_schema() {
 async fn test_sandboxed_shell_schema_no_required_in_properties() {
     init_test_logging();
 
-    let client = new_client(Some(".ahma")).await.unwrap();
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
+        .await
+        .unwrap();
     let tools = client.list_tools(None).await.unwrap();
 
     let sandboxed_shell = tools

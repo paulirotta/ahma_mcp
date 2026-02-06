@@ -1,17 +1,17 @@
 //! Test for running clippy and fixing warnings.
-use ahma_mcp::test_utils as common;
+
 use anyhow::Result;
 use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::borrow::Cow;
 
+use ahma_mcp::test_utils::client::ClientBuilder;
 use ahma_mcp::utils::logging::init_test_logging;
-use common::test_client::new_client;
 
 #[tokio::test]
 async fn test_run_clippy() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Check if sandboxed_shell tool is available
     let tools = client.list_all_tools().await?;

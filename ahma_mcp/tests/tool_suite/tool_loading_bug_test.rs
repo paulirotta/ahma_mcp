@@ -7,12 +7,10 @@
 //! - But users may add them anyway for documentation/IDE support
 //!   MAINTENANCE: Update expected counts when adding new CLI tool integrations
 
-use ahma_mcp::test_utils as common;
-
 use anyhow::Result;
 
+use ahma_mcp::test_utils::client::ClientBuilder;
 use ahma_mcp::utils::logging::init_test_logging;
-use common::test_client::new_client;
 
 /// TEST: Validates core CLI tool configurations are loaded
 ///
@@ -25,7 +23,7 @@ use common::test_client::new_client;
 async fn test_tools_are_loaded_after_json_migration() -> Result<()> {
     init_test_logging();
     // Test that core tool configurations are properly loaded
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let tools = client.list_tools(None).await?;
 
@@ -63,7 +61,7 @@ async fn test_tools_are_loaded_after_json_migration() -> Result<()> {
 async fn test_specific_json_tool_functionality() -> Result<()> {
     init_test_logging();
     // Test that a specific tool from JSON config actually works
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let tools = client.list_tools(None).await?;
 

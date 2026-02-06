@@ -19,7 +19,7 @@ pub struct TestProjectOptions {
 
 /// Create a temporary project with flexible tool configurations for testing ahma_mcp.
 /// Ensures unique directory via tempfile and process ID and never writes to the repo root.
-pub async fn create_rust_test_project(opts: TestProjectOptions) -> Result<TempDir> {
+pub async fn create_rust_project(opts: TestProjectOptions) -> Result<TempDir> {
     let process_id = std::process::id();
     let prefix = opts.prefix.unwrap_or_else(|| "ahma_mcp_test_".to_string());
 
@@ -56,7 +56,7 @@ async fn create_cargo_structure(project_path: &Path) -> Result<()> {
         project_path.join("Cargo.toml"),
         r#"
 [package]
-name = "test_project"
+name = "project"
 version = "0.1.0"
 edition = "2021"
 
@@ -119,8 +119,8 @@ async fn create_tool_configs(project_path: &Path) -> Result<()> {
 }
 
 /// Create a temporary project with full Rust project setup for testing
-pub async fn create_full_rust_test_project() -> Result<TempDir> {
-    create_rust_test_project(TestProjectOptions {
+pub async fn create_full_rust_project() -> Result<TempDir> {
+    create_rust_project(TestProjectOptions {
         prefix: None,
         with_cargo: true,
         with_text_files: true,

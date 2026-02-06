@@ -1,5 +1,6 @@
-/// Enhanced Wait Tool Test Suite
-use ahma_mcp::test_utils as common;
+//! Enhanced Wait Tool Test Suite
+
+use ahma_mcp::test_utils::client::ClientBuilder;
 ///
 /// PURPOSE: Validates the enhanced await tool functionality implemented to address:
 /// "I think 'await' should have an optional timeout, and a default timeout of 240sec"
@@ -12,14 +13,13 @@ use ahma_mcp::test_utils as common;
 /// - Status tool integration for non-blocking operation monitoring
 use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
-use common::test_client::new_client;
 use std::time::Duration;
 use tokio::time::timeout;
 
 #[tokio::test]
 async fn test_await_tool_timeout_functionality() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test that await tool uses intelligent timeout calculation only
     let call_param = rmcp::model::CallToolRequestParams {
@@ -56,7 +56,7 @@ async fn test_await_tool_timeout_functionality() -> Result<()> {
 #[tokio::test]
 async fn test_await_tool_timeout_validation() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test that timeout parameter is no longer accepted
     let call_param = rmcp::model::CallToolRequestParams {
@@ -93,7 +93,7 @@ async fn test_await_tool_timeout_validation() -> Result<()> {
 #[tokio::test]
 async fn test_status_tool_functionality() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test status tool - should return current operation status
     let call_param = rmcp::model::CallToolRequestParams {
@@ -130,7 +130,7 @@ async fn test_status_tool_functionality() -> Result<()> {
 #[tokio::test]
 async fn test_await_tool_with_tool_filter() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test await tool with tool filter only (no timeout parameter)
     let call_param = rmcp::model::CallToolRequestParams {

@@ -1144,7 +1144,7 @@ mod tests {
     use std::path::Path;
 
     fn test_adapter() -> Arc<Adapter> {
-        test_utils::create_test_config(Path::new(".")).expect("adapter")
+        test_utils::client::create_test_config(Path::new(".")).expect("adapter")
     }
 
     #[tokio::test]

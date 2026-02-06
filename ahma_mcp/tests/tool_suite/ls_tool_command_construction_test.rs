@@ -1,8 +1,6 @@
-use ahma_mcp::test_utils as common;
-
+use ahma_mcp::test_utils::client::ClientBuilder;
 use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
-use common::test_client::new_client;
 use rmcp::model::CallToolRequestParams;
 use serde_json::Map;
 use std::borrow::Cow;
@@ -11,7 +9,7 @@ use std::borrow::Cow;
 async fn test_ls_tool_should_not_add_undefined_path_parameter() -> Result<()> {
     init_test_logging();
     // ARRANGE: Set up test client to execute ls tool
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Check if ls tool is available (optional since ls.json was removed)
     let tools = client.list_tools(None).await?;
@@ -82,7 +80,7 @@ async fn test_ls_tool_should_not_add_undefined_path_parameter() -> Result<()> {
 async fn test_ls_tool_executes_plain_ls_command() -> Result<()> {
     init_test_logging();
     // ARRANGE: Set up test client
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Check if ls tool is available (optional since ls.json was removed)
     let tools = client.list_tools(None).await?;
@@ -134,7 +132,7 @@ async fn test_ls_tool_executes_plain_ls_command() -> Result<()> {
 async fn test_ls_tool_with_valid_options() -> Result<()> {
     init_test_logging();
     // ARRANGE: Set up test client with tools directory
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Check if ls tool is available (optional since ls.json was removed)
     let tools = client.list_tools(None).await?;

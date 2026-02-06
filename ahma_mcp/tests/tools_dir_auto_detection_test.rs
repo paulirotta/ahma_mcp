@@ -9,7 +9,7 @@
 //! - R1.2.2: Explicit --tools-dir takes precedence over auto-detection
 //! - Built-in tools (await, status, sandboxed_shell) always available
 
-use ahma_mcp::test_utils::test_client::new_client_in_dir;
+use ahma_mcp::test_utils::client::ClientBuilder;
 use std::time::Duration;
 use tempfile::TempDir;
 
@@ -59,12 +59,7 @@ async fn test_auto_detect_ahma_in_cwd() -> anyhow::Result<()> {
 
     // Start server with CWD set to temp_dir and NO --tools-dir argument
     // This should trigger auto-detection
-    let service = new_client_in_dir(
-        None, // No tools_dir - should auto-detect .ahma
-        &[],  // No extra args
-        cwd,  // Working directory
-    )
-    .await?;
+    let service = ClientBuilder::new().working_dir(cwd).build().await?;
 
     // Give server a moment to initialize
     tokio::time::sleep(Duration::from_millis(300)).await;
@@ -124,12 +119,11 @@ async fn test_explicit_tools_dir_takes_precedence() -> anyhow::Result<()> {
     )?;
 
     // Start server with explicit --tools-dir pointing to explicit_tools_dir
-    let service = new_client_in_dir(
-        Some(explicit_tools_dir.to_str().unwrap()), // Explicit tools dir
-        &[],
-        cwd,
-    )
-    .await?;
+    let service = ClientBuilder::new()
+        .tools_dir(explicit_tools_dir)
+        .working_dir(cwd)
+        .build()
+        .await?;
 
     tokio::time::sleep(Duration::from_millis(300)).await;
 
@@ -176,12 +170,7 @@ async fn test_no_ahma_fallback_to_builtin_tools() -> anyhow::Result<()> {
     let cwd = temp_dir.path();
 
     // Start server with CWD set and no --tools-dir
-    let service = new_client_in_dir(
-        None, // No tools dir - should fallback to built-ins only
-        &[],
-        cwd,
-    )
-    .await?;
+    let service = ClientBuilder::new().working_dir(cwd).build().await?;
 
     tokio::time::sleep(Duration::from_millis(300)).await;
 
@@ -221,7 +210,7 @@ async fn test_sandboxed_shell_builtin_without_json_file() -> anyhow::Result<()> 
     let cwd = temp_dir.path();
 
     // Start server
-    let service = new_client_in_dir(None, &[], cwd).await?;
+    let service = ClientBuilder::new().working_dir(cwd).build().await?;
     tokio::time::sleep(Duration::from_millis(300)).await;
 
     // List tools

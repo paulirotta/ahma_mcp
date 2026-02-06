@@ -1,7 +1,5 @@
-use ahma_mcp::test_utils as common;
-
+use ahma_mcp::test_utils::client::ClientBuilder;
 use anyhow::Result;
-use common::test_client;
 use rmcp::model::CallToolRequestParams;
 use serde_json::{Map, json};
 use std::borrow::Cow;
@@ -52,8 +50,11 @@ async fn test_synchronous_flag_overrides_async_tools() -> Result<()> {
     let working_dir = temp_dir.path().to_string_lossy().to_string();
 
     // Baseline: without --sync flag, expect asynchronous (default is async)
-    let baseline_client =
-        test_client::new_client_in_dir(Some(&tools_dir_str), &[], temp_dir.path()).await?;
+    let baseline_client = ClientBuilder::new()
+        .tools_dir(&tools_dir_str)
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
     let baseline_args = build_args("echo WITHOUT_OVERRIDE", &working_dir);
     let baseline_response = baseline_client
         .call_tool(CallToolRequestParams {
@@ -81,8 +82,13 @@ async fn test_synchronous_flag_overrides_async_tools() -> Result<()> {
     baseline_client.cancel().await?;
 
     // With --sync flag, force sync mode for all tools
-    let override_client =
-        test_client::new_client_in_dir(Some(&tools_dir_str), &["--sync"], temp_dir.path()).await?;
+    let override_client = ClientBuilder::new()
+        .tools_dir(&tools_dir_str)
+        .arg("--sync")
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
+
     let override_args = build_args("echo WITH_SYNC_FLAG", &working_dir);
     let override_response = override_client
         .call_tool(CallToolRequestParams {

@@ -1,4 +1,5 @@
-use ahma_mcp::test_utils::{test_client::new_client_with_args, wait_for_condition};
+use ahma_mcp::test_utils::client::ClientBuilder;
+use ahma_mcp::test_utils::concurrency::wait_for_condition;
 use anyhow::Result;
 use std::fs;
 use std::time::Duration;
@@ -31,7 +32,7 @@ async fn test_dynamic_config_reload() -> Result<()> {
 
     // 3. Start the MCP server using the test client
     // We pass the tools_dir to the server
-    let client = new_client_with_args(Some(tools_dir.to_str().unwrap()), &[]).await?;
+    let client = ClientBuilder::new().tools_dir(&tools_dir).build().await?;
 
     // 4. Verify initial tool is present
     let tools = client.list_tools(None).await?;

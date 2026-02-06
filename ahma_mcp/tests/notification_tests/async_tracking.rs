@@ -15,7 +15,7 @@ use tempfile::TempDir;
 
 #[tokio::test]
 async fn test_async_operations_complete_and_are_tracked() -> anyhow::Result<()> {
-    use ahma_mcp::test_utils::concurrent_test_helpers::*;
+    use ahma_mcp::test_utils::concurrency::*;
     init_test_sandbox();
 
     // Set up the test environment using TempDir
@@ -115,7 +115,7 @@ async fn test_async_operations_complete_and_are_tracked() -> anyhow::Result<()> 
 
 #[tokio::test]
 async fn test_operation_monitoring_provides_clear_results() -> anyhow::Result<()> {
-    use ahma_mcp::test_utils::concurrent_test_helpers::*;
+    use ahma_mcp::test_utils::concurrency::*;
     init_test_sandbox();
 
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
@@ -225,11 +225,11 @@ async fn test_operation_monitoring_provides_clear_results() -> anyhow::Result<()
 
 #[tokio::test]
 async fn test_operation_completion_tracking() -> anyhow::Result<()> {
-    use ahma_mcp::test_utils::concurrent_test_helpers::*;
-    use ahma_mcp::test_utils::test_project::*;
+    use ahma_mcp::test_utils::concurrency::*;
+    use ahma_mcp::test_utils::project::*;
 
     // Create a temporary project using specialized helper
-    let temp = create_rust_test_project(TestProjectOptions {
+    let temp = create_rust_project(TestProjectOptions {
         with_cargo: true,
         with_tool_configs: true,
         ..Default::default()

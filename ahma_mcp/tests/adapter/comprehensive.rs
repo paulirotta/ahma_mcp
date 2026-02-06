@@ -12,7 +12,7 @@ use ahma_mcp::{
     config::SubcommandConfig,
     operation_monitor::{MonitorConfig, OperationMonitor},
     shell_pool::{ShellPoolConfig, ShellPoolManager},
-    test_utils::wait_for_condition,
+    test_utils::concurrency::wait_for_condition,
     utils::logging::init_test_logging,
 };
 use anyhow::Result;

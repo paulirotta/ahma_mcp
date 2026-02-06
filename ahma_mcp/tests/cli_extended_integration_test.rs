@@ -10,7 +10,7 @@
 
 use ahma_mcp::test_utils::cli::build_binary_cached as build_binary;
 use ahma_mcp::test_utils::cli::{build_binary_cached, test_command};
-use ahma_mcp::test_utils::get_workspace_dir as workspace_dir;
+use ahma_mcp::test_utils::fs::get_workspace_dir as workspace_dir;
 use std::process::Command;
 use tempfile::TempDir;
 

@@ -11,8 +11,8 @@
 //! These tests use the real ahma_mcp binary to ensure full integration coverage.
 
 use ahma_mcp::skip_if_disabled_async_result;
-use ahma_mcp::test_utils::test_client::{new_client, new_client_with_args};
-use ahma_mcp::test_utils::test_project::{TestProjectOptions, create_rust_test_project};
+use ahma_mcp::test_utils::client::ClientBuilder;
+use ahma_mcp::test_utils::project::{TestProjectOptions, create_rust_project};
 use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParams;
@@ -27,7 +27,7 @@ use std::borrow::Cow;
 #[tokio::test]
 async fn test_client_start_process_with_tools_dir() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Verify client is functional by listing tools (using the MCP protocol)
     let tools = client.list_all_tools().await?;
@@ -52,7 +52,11 @@ async fn test_client_start_process_with_sync_flag() -> Result<()> {
     init_test_logging();
 
     // Start client with --sync flag
-    let client = new_client_with_args(Some(".ahma"), &["--sync"]).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .arg("--sync")
+        .build()
+        .await?;
 
     // Verify client works by listing tools
     let tools = client.list_all_tools().await?;
@@ -68,7 +72,11 @@ async fn test_client_start_process_with_debug_flag() -> Result<()> {
     init_test_logging();
 
     // Create client with --debug flag
-    let client = new_client_with_args(Some(".ahma"), &["--debug"]).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .arg("--debug")
+        .build()
+        .await?;
 
     // Verify client is functional by listing tools
     let tools = client.list_all_tools().await?;
@@ -84,7 +92,11 @@ async fn test_client_start_process_with_log_to_stderr() -> Result<()> {
     init_test_logging();
 
     // Create client with --log-to-stderr flag
-    let client = new_client_with_args(Some(".ahma"), &["--log-to-stderr"]).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .arg("--log-to-stderr")
+        .build()
+        .await?;
 
     // Verify client is functional
     let params = CallToolRequestParams {
@@ -109,7 +121,7 @@ async fn test_client_start_process_with_log_to_stderr() -> Result<()> {
 #[tokio::test]
 async fn test_client_status_no_operations() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let params = CallToolRequestParams {
         name: Cow::Borrowed("status"),
@@ -141,7 +153,7 @@ async fn test_client_status_no_operations() -> Result<()> {
 #[tokio::test]
 async fn test_client_status_with_operation_id() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Query status for a nonexistent operation
     let params = CallToolRequestParams {
@@ -170,7 +182,7 @@ async fn test_client_status_with_operation_id() -> Result<()> {
 #[tokio::test]
 async fn test_client_await_no_pending() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let params = CallToolRequestParams {
         name: Cow::Borrowed("await"),
@@ -189,7 +201,7 @@ async fn test_client_await_no_pending() -> Result<()> {
 #[tokio::test]
 async fn test_client_await_nonexistent_operation() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let params = CallToolRequestParams {
         name: Cow::Borrowed("await"),
@@ -218,7 +230,7 @@ async fn test_client_await_nonexistent_operation() -> Result<()> {
 async fn test_async_operation_lifecycle() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Start an async operation (short sleep)
     let shell_params = CallToolRequestParams {
@@ -283,7 +295,7 @@ async fn test_async_operation_lifecycle() -> Result<()> {
 async fn test_multiple_async_operations() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Start two async operations
     let shell_params1 = CallToolRequestParams {
@@ -347,7 +359,7 @@ async fn test_multiple_async_operations() -> Result<()> {
 async fn test_sandboxed_shell_execution() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Run a simple command
     let params = CallToolRequestParams {
@@ -371,12 +383,12 @@ async fn test_sandboxed_shell_execution() -> Result<()> {
 /// Uses a directory inside the workspace to comply with sandbox restrictions
 #[tokio::test]
 async fn test_sandboxed_shell_with_working_dir() -> Result<()> {
-    use ahma_mcp::test_utils::test_client::get_workspace_tools_dir;
+    use ahma_mcp::test_utils::fs::get_workspace_tools_dir;
     skip_if_disabled_async_result!("sandboxed_shell");
 
     init_test_logging();
 
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Use the workspace's target directory which is inside the sandbox
     let tools_dir = get_workspace_tools_dir();
@@ -420,7 +432,7 @@ async fn test_sandboxed_shell_with_working_dir() -> Result<()> {
 #[tokio::test]
 async fn test_call_nonexistent_tool() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let params = CallToolRequestParams {
         name: Cow::Borrowed("this_tool_definitely_does_not_exist_xyz"),
@@ -439,7 +451,7 @@ async fn test_call_nonexistent_tool() -> Result<()> {
 #[tokio::test]
 async fn test_list_tools_format() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Verify by listing tools
     let tools = client.list_all_tools().await?;
@@ -467,11 +479,9 @@ async fn test_list_tools_format() -> Result<()> {
 /// This test verifies that custom tool configurations are loaded correctly
 #[tokio::test]
 async fn test_client_with_custom_tools_dir() -> Result<()> {
-    use ahma_mcp::test_utils::test_client::new_client_in_dir;
-
     init_test_logging();
 
-    let temp_project = create_rust_test_project(TestProjectOptions {
+    let temp_project = create_rust_project(TestProjectOptions {
         prefix: Some("custom_tools_test_".to_string()),
         with_cargo: false,
         with_text_files: false,
@@ -482,8 +492,11 @@ async fn test_client_with_custom_tools_dir() -> Result<()> {
     // Use new_client_in_dir to set the working directory to the temp project
     // This way the sandbox scope will include the temp directory
     let tools_dir = temp_project.path().join(".ahma");
-    let client =
-        new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_project.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_project.path())
+        .build()
+        .await?;
 
     // The custom project has an "echo" tool defined - use list_all_tools
     let tools = client.list_all_tools().await?;

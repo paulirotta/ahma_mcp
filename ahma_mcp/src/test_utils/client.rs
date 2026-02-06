@@ -1,12 +1,12 @@
-pub use super::file_helpers::get_workspace_tools_dir;
-use super::file_helpers::{get_workspace_dir, get_workspace_path};
+use super::fs::get_workspace_dir;
+pub use super::fs::get_workspace_tools_dir;
 
 use crate::adapter::Adapter;
 use crate::client::Client;
 use crate::mcp_service::AhmaMcpService;
 use crate::operation_monitor::{MonitorConfig, OperationMonitor};
 use crate::shell_pool::{ShellPoolConfig, ShellPoolManager};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use rmcp::{
     ServiceExt,
     service::{RoleClient, RunningService},
@@ -72,161 +72,130 @@ fn use_prebuilt_binary() -> bool {
     !path.as_os_str().is_empty() && path.exists()
 }
 
-pub async fn new_client(tools_dir: Option<&str>) -> Result<RunningService<RoleClient, ()>> {
-    new_client_with_args(tools_dir, &[]).await
+/// Builder for creating MCP clients in tests.
+#[derive(Default)]
+pub struct ClientBuilder {
+    tools_dir: Option<PathBuf>,
+    extra_args: Vec<String>,
+    extra_env: Vec<(String, String)>,
+    working_dir: Option<PathBuf>,
 }
 
-pub async fn new_client_with_args(
-    tools_dir: Option<&str>,
-    extra_args: &[&str],
-) -> Result<RunningService<RoleClient, ()>> {
-    let workspace_dir = get_workspace_dir();
+impl ClientBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-    let client = if use_prebuilt_binary() {
-        // Fast path: use pre-built binary directly
-        let binary_path = get_test_binary_path();
-        ().serve(TokioChildProcess::new(
-            Command::new(&binary_path).configure(|cmd| {
-                cmd.env("AHMA_TEST_MODE", "1")
-                    .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
-                    .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
-                    .current_dir(&workspace_dir)
-                    .kill_on_drop(true);
-                if let Some(dir) = tools_dir {
-                    let tools_path = if Path::new(dir).is_absolute() {
-                        Path::new(dir).to_path_buf()
-                    } else {
-                        get_workspace_path(dir)
-                    };
-                    cmd.arg("--tools-dir").arg(tools_path);
-                }
-                for arg in extra_args {
-                    cmd.arg(arg);
-                }
-            }),
-        )?)
-        .await?
-    } else {
-        // Slow fallback: use cargo run
-        eprintln!(
-            "Warning: Using slow 'cargo run' path. Run 'cargo build' first for faster tests."
-        );
-        ().serve(TokioChildProcess::new(Command::new("cargo").configure(
-            |cmd| {
-                cmd.env("AHMA_TEST_MODE", "1")
-                    .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
-                    .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
-                    .current_dir(&workspace_dir)
-                    .arg("run")
-                    .arg("--package")
-                    .arg("ahma_mcp")
-                    .arg("--bin")
-                    .arg("ahma_mcp")
-                    .arg("--");
-                if let Some(dir) = tools_dir {
-                    let tools_path = if Path::new(dir).is_absolute() {
-                        Path::new(dir).to_path_buf()
-                    } else {
-                        get_workspace_path(dir)
-                    };
-                    cmd.arg("--tools-dir").arg(tools_path);
-                }
-                for arg in extra_args {
-                    cmd.arg(arg);
-                }
-            },
-        ))?)
-        .await?
-    };
+    pub fn tools_dir<P: AsRef<Path>>(mut self, path: P) -> Self {
+        let path = path.as_ref();
+        if path.is_absolute() {
+            self.tools_dir = Some(path.to_path_buf());
+        } else {
+            // Resolve relative to workspace or working dir if set?
+            // Existing logic resolved relative to workspace if not absolute.
+            // Let's resolve it here to avoid ambiguity.
+            // If working_dir is set later, it might be tricky.
+            // For now, let's keep the existing logic: if relative, resolve via get_workspace_path
+            // BUT, `new_client_in_dir` resolved relative to `working_dir`.
+            // So we'll store it as is and resolve at build time.
+            self.tools_dir = Some(path.to_path_buf());
+        }
+        self
+    }
 
-    Ok(client)
+    pub fn arg(mut self, arg: impl Into<String>) -> Self {
+        self.extra_args.push(arg.into());
+        self
+    }
+
+    pub fn args<I, S>(mut self, args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        for arg in args {
+            self.extra_args.push(arg.into());
+        }
+        self
+    }
+
+    pub fn env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.extra_env.push((key.into(), value.into()));
+        self
+    }
+
+    pub fn working_dir<P: AsRef<Path>>(mut self, path: P) -> Self {
+        self.working_dir = Some(path.as_ref().to_path_buf());
+        self
+    }
+
+    pub async fn build(self) -> Result<RunningService<RoleClient, ()>> {
+        let workspace_dir = get_workspace_dir();
+        let working_dir = self
+            .working_dir
+            .clone()
+            .unwrap_or_else(|| workspace_dir.clone());
+
+        if use_prebuilt_binary() {
+            let binary_path = get_test_binary_path();
+            self.run_command(Command::new(&binary_path), &working_dir)
+                .await
+        } else {
+            eprintln!(
+                "Warning: Using slow 'cargo run' path. Run 'cargo build' first for faster tests."
+            );
+            let mut cmd = Command::new("cargo");
+            cmd.arg("run")
+                .arg("--manifest-path")
+                .arg(workspace_dir.join("Cargo.toml"))
+                .arg("--package")
+                .arg("ahma_mcp")
+                .arg("--bin")
+                .arg("ahma_mcp")
+                .arg("--");
+            self.run_command(cmd, &working_dir).await
+        }
+    }
+
+    async fn run_command(
+        self,
+        command: Command,
+        working_dir: &Path,
+    ) -> Result<RunningService<RoleClient, ()>> {
+        ().serve(TokioChildProcess::new(command.configure(|cmd| {
+            cmd.env("AHMA_TEST_MODE", "1")
+                .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
+                .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
+                .current_dir(working_dir)
+                .kill_on_drop(true);
+
+            for (k, v) in self.extra_env {
+                cmd.env(k, v);
+            }
+
+            if let Some(dir) = self.tools_dir {
+                let tools_path = if dir.is_absolute() {
+                    dir
+                } else {
+                    // Resolve relative to working_dir
+                    // Note: Original code logic was:
+                    // new_client uses get_workspace_path(dir)
+                    // new_client_in_dir uses working_dir.join(dir)
+                    // Since default working_dir is workspace, this unifies correctly.
+                    working_dir.join(dir)
+                };
+                cmd.arg("--tools-dir").arg(tools_path);
+            }
+            for arg in self.extra_args {
+                cmd.arg(arg);
+            }
+        }))?)
+        .await
+        .context("Failed to start client service")
+    }
 }
 
-pub async fn new_client_in_dir(
-    tools_dir: Option<&str>,
-    extra_args: &[&str],
-    working_dir: &Path,
-) -> Result<RunningService<RoleClient, ()>> {
-    new_client_in_dir_with_env(tools_dir, extra_args, working_dir, &[]).await
-}
-
-pub async fn new_client_in_dir_with_env(
-    tools_dir: Option<&str>,
-    extra_args: &[&str],
-    working_dir: &Path,
-    extra_env: &[(&str, &str)],
-) -> Result<RunningService<RoleClient, ()>> {
-    let workspace_dir = get_workspace_dir();
-
-    let client = if use_prebuilt_binary() {
-        let binary_path = get_test_binary_path();
-        ().serve(TokioChildProcess::new(
-            Command::new(&binary_path).configure(|cmd| {
-                cmd.env("AHMA_TEST_MODE", "1")
-                    .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
-                    .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
-                    .current_dir(working_dir)
-                    .kill_on_drop(true);
-
-                for (k, v) in extra_env {
-                    cmd.env(k, v);
-                }
-
-                if let Some(dir) = tools_dir {
-                    let tools_path = if Path::new(dir).is_absolute() {
-                        Path::new(dir).to_path_buf()
-                    } else {
-                        working_dir.join(dir)
-                    };
-                    cmd.arg("--tools-dir").arg(tools_path);
-                }
-                for arg in extra_args {
-                    cmd.arg(arg);
-                }
-            }),
-        )?)
-        .await?
-    } else {
-        eprintln!(
-            "Warning: Using slow 'cargo run' path. Run 'cargo build' first for faster tests."
-        );
-        ().serve(TokioChildProcess::new(Command::new("cargo").configure(
-            |cmd| {
-                cmd.env("AHMA_TEST_MODE", "1")
-                    .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
-                    .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
-                    .current_dir(working_dir)
-                    .arg("run")
-                    .arg("--manifest-path")
-                    .arg(workspace_dir.join("Cargo.toml"))
-                    .arg("--package")
-                    .arg("ahma_mcp")
-                    .arg("--bin")
-                    .arg("ahma_mcp")
-                    .arg("--");
-
-                for (k, v) in extra_env {
-                    cmd.env(k, v);
-                }
-
-                if let Some(dir) = tools_dir {
-                    let tools_path = if Path::new(dir).is_absolute() {
-                        Path::new(dir).to_path_buf()
-                    } else {
-                        working_dir.join(dir)
-                    };
-                    cmd.arg("--tools-dir").arg(tools_path);
-                }
-                for arg in extra_args {
-                    cmd.arg(arg);
-                }
-            },
-        ))?)
-        .await?
-    };
-
-    Ok(client)
-}
+// Backward compatibility wrappers
 
 pub async fn setup_mcp_service_with_client() -> Result<(TempDir, Client)> {
     // Create a temporary directory for tool configs
@@ -279,7 +248,8 @@ pub async fn setup_test_environment() -> (AhmaMcpService, TempDir) {
     let tools_dir = temp_dir.path().join("tools");
     std::fs::create_dir_all(&tools_dir).unwrap();
 
-    let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
+    let config = super::config::default_config();
+    let monitor_config = MonitorConfig::with_timeout(config.default_timeout);
     let monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_pool_config = ShellPoolConfig::default();
     let shell_pool = Arc::new(ShellPoolManager::new(shell_pool_config));
@@ -305,7 +275,8 @@ pub async fn setup_test_environment_with_io()
     // Use Tokio's async filesystem API so we don't block the runtime
     tokio::fs::create_dir_all(&tools_dir).await.unwrap();
 
-    let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
+    let config = super::config::default_config();
+    let monitor_config = MonitorConfig::with_timeout(config.default_timeout);
     let monitor = Arc::new(OperationMonitor::new(monitor_config));
     let shell_pool_config = ShellPoolConfig::default();
     let shell_pool = Arc::new(ShellPoolManager::new(shell_pool_config));
@@ -327,18 +298,19 @@ pub async fn setup_test_environment_with_io()
 /// Create a test config for integration tests
 #[allow(dead_code)]
 pub fn create_test_config(_workspace_dir: &Path) -> Result<Arc<Adapter>> {
+    let config = super::config::default_config();
     // Create test monitor and shell pool configurations
-    let monitor_config = MonitorConfig::with_timeout(Duration::from_secs(30));
+    let monitor_config = MonitorConfig::with_timeout(config.default_timeout);
     let operation_monitor = Arc::new(OperationMonitor::new(monitor_config));
 
     let shell_pool_config = ShellPoolConfig {
         enabled: true,
         shells_per_directory: 2,
-        max_total_shells: 20,
+        max_total_shells: config.max_concurrent_tasks as usize,
         shell_idle_timeout: Duration::from_secs(1800),
         pool_cleanup_interval: Duration::from_secs(300),
-        shell_spawn_timeout: Duration::from_secs(5),
-        command_timeout: Duration::from_secs(30),
+        shell_spawn_timeout: config.quick_timeout,
+        command_timeout: config.default_timeout,
         health_check_interval: Duration::from_secs(60),
     };
     let shell_pool_manager = Arc::new(ShellPoolManager::new(shell_pool_config));

@@ -17,7 +17,7 @@
 //! - ProgressUpdate::FinalResult notification
 
 use ahma_mcp::skip_if_disabled_async_result;
-use ahma_mcp::test_utils::test_client::new_client;
+use ahma_mcp::test_utils::client::ClientBuilder;
 use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParams;
@@ -34,7 +34,7 @@ use std::borrow::Cow;
 async fn test_async_operation_triggers_callbacks() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Start an async operation that produces output
     let shell_params = CallToolRequestParams {
@@ -85,7 +85,7 @@ async fn test_async_operation_triggers_callbacks() -> Result<()> {
 async fn test_failed_operation_callback() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Start an operation that will fail
     let shell_params = CallToolRequestParams {
@@ -130,7 +130,7 @@ async fn test_failed_operation_callback() -> Result<()> {
 async fn test_cancelled_operation_callback() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Start a long-running async operation
     let shell_params = CallToolRequestParams {
@@ -206,7 +206,7 @@ async fn test_cancelled_operation_callback() -> Result<()> {
 async fn test_stderr_output_callback() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Command that writes to stderr
     let shell_params = CallToolRequestParams {
@@ -255,7 +255,7 @@ async fn test_stderr_output_callback() -> Result<()> {
 async fn test_concurrent_operations_callbacks() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Start multiple operations
     let params1 = CallToolRequestParams {

@@ -15,7 +15,7 @@
 //! - Only falls back to building if the binary doesn't exist
 
 use ahma_mcp::test_utils::cli::{build_binary_cached, test_command};
-use ahma_mcp::test_utils::get_workspace_dir;
+use ahma_mcp::test_utils::fs::get_workspace_dir;
 use std::process::Command;
 use tempfile::TempDir;
 

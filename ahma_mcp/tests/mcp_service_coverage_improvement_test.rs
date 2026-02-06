@@ -3,7 +3,7 @@
 //! These tests target low-coverage areas in mcp_service.rs to improve overall
 //! code coverage. Based on coverage analysis showing 25.73% line coverage.
 
-use ahma_mcp::test_utils::test_client::new_client_in_dir;
+use ahma_mcp::test_utils::client::ClientBuilder;
 use ahma_mcp::utils::logging::init_test_logging;
 use serde_json::json;
 use tempfile::tempdir;
@@ -44,7 +44,10 @@ async fn test_schema_generation_normalizes_option_types() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
         .await
         .unwrap();
 
@@ -147,7 +150,10 @@ async fn test_schema_generation_array_with_items() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
         .await
         .unwrap();
 
@@ -228,7 +234,10 @@ async fn test_schema_generation_positional_args() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
         .await
         .unwrap();
 
@@ -328,7 +337,10 @@ async fn test_schema_generation_multiple_subcommands() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
         .await
         .unwrap();
 
@@ -424,7 +436,10 @@ async fn test_schema_generation_nested_subcommands() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
         .await
         .unwrap();
 
@@ -499,7 +514,10 @@ async fn test_disabled_tools_not_in_list() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
         .await
         .unwrap();
 
@@ -545,7 +563,10 @@ async fn test_disabled_subcommands_skipped() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
         .await
         .unwrap();
 
@@ -604,7 +625,10 @@ async fn test_default_subcommand_no_enum() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
         .await
         .unwrap();
 
@@ -656,7 +680,10 @@ async fn test_working_directory_added_for_non_cargo_tools() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
         .await
         .unwrap();
 
@@ -687,7 +714,10 @@ async fn test_hardwired_tools_always_present() {
     let tools_dir = temp_dir.path().join(".ahma");
     std::fs::create_dir_all(&tools_dir).unwrap();
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
         .await
         .unwrap();
 
@@ -749,7 +779,10 @@ async fn test_required_options_in_schema() {
     )
     .unwrap();
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path())
+    let client = ClientBuilder::new()
+        .tools_dir(&tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
         .await
         .unwrap();
 

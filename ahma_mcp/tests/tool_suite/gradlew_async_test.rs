@@ -6,15 +6,15 @@
 #![cfg(feature = "android")]
 
 use ahma_mcp::skip_if_disabled_async_result;
-use ahma_mcp::test_utils::get_workspace_dir;
-use ahma_mcp::test_utils::test_client::new_client;
+use ahma_mcp::test_utils::client::ClientBuilder;
+use ahma_mcp::test_utils::fs::get_workspace_dir;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::borrow::Cow;
 
 /// Get the workspace Android test project path
-fn get_android_test_project_path() -> String {
+fn get_android_project_path() -> String {
     let workspace_dir = get_workspace_dir();
     let android_project_path = workspace_dir.join("test-data").join("AndoidTestBasicViews");
     android_project_path.to_string_lossy().to_string()
@@ -25,8 +25,8 @@ fn get_android_test_project_path() -> String {
 async fn test_gradlew_async_build_commands() -> Result<()> {
     skip_if_disabled_async_result!("sandboxed_shell");
     skip_if_disabled_async_result!("gradlew");
-    let client = new_client(Some(".ahma")).await?;
-    let project_path = get_android_test_project_path();
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
+    let project_path = get_android_project_path();
 
     // Test async commands - we only run testDebugUnitTest as skip-if-disabled_async_result smoke test
     // testDebugUnitTest implicitly triggers compilation, making it a comprehensive test.
@@ -92,8 +92,8 @@ async fn test_gradlew_async_build_commands() -> Result<()> {
 /// Test lint commands that are async but don't require compilation
 #[tokio::test]
 async fn test_gradlew_lint_commands() -> Result<()> {
-    let client = new_client(Some(".ahma")).await?;
-    let project_path = get_android_test_project_path();
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
+    let project_path = get_android_project_path();
 
     // Test lint-related commands
     let lint_commands = vec![
@@ -145,8 +145,8 @@ async fn test_gradlew_lint_commands() -> Result<()> {
 /// Test final comprehensive validation that the tool works end-to-end
 #[tokio::test]
 async fn test_comprehensive_gradlew_validation() -> Result<()> {
-    let client = new_client(Some(".ahma")).await?;
-    let project_path = get_android_test_project_path();
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
+    let project_path = get_android_project_path();
 
     // Test that we can chain multiple gradlew commands successfully
     println!("Running comprehensive validation sequence...");

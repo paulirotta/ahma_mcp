@@ -8,8 +8,8 @@
 //!
 //! These tests spawn the actual ahma_mcp binary and use real tool configs.
 
-use ahma_mcp::test_utils::test_client::{new_client_in_dir, new_client_in_dir_with_env};
-use ahma_mcp::test_utils::wait_for_condition;
+use ahma_mcp::test_utils::client::ClientBuilder;
+use ahma_mcp::test_utils::concurrency::wait_for_condition;
 use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
 use rmcp::model::CallToolRequestParams;
@@ -189,7 +189,11 @@ async fn test_sync_sequence_tool_execution() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_sequence_tool_config().await?;
 
-    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     // List tools to verify our sequence tool is loaded
     let tools = client.list_all_tools().await?;
@@ -239,7 +243,11 @@ async fn test_async_sequence_tool_execution() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_sequence_tool_config().await?;
 
-    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     // Call the asynchronous sequence tool
     let params = CallToolRequestParams {
@@ -316,7 +324,11 @@ async fn test_subcommand_sequence_execution() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_sequence_tool_config().await?;
 
-    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     // List tools to verify our tool is loaded
     let tools = client.list_all_tools().await?;
@@ -358,13 +370,12 @@ async fn test_skip_sequence_step_via_env() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_sequence_tool_config().await?;
 
-    let client = new_client_in_dir_with_env(
-        Some(".ahma"),
-        &[],
-        temp_dir.path(),
-        &[("AHMA_SKIP_SEQUENCE_TOOLS", "echo")],
-    )
-    .await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp_dir.path())
+        .env("AHMA_SKIP_SEQUENCE_TOOLS", "echo")
+        .build()
+        .await?;
 
     let tools = client.list_all_tools().await?;
     let has_sync_seq = tools.iter().any(|t| t.name.as_ref() == "sync_sequence");
@@ -405,13 +416,12 @@ async fn test_skip_subcommand_sequence_step_via_env() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_sequence_tool_config().await?;
 
-    let client = new_client_in_dir_with_env(
-        Some(".ahma"),
-        &[],
-        temp_dir.path(),
-        &[("AHMA_SKIP_SEQUENCE_SUBCOMMANDS", "default")],
-    )
-    .await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp_dir.path())
+        .env("AHMA_SKIP_SEQUENCE_SUBCOMMANDS", "default")
+        .build()
+        .await?;
 
     let tools = client.list_all_tools().await?;
     let has_multi_step = tools
@@ -473,7 +483,11 @@ async fn test_sequence_with_missing_tool_reference() -> Result<()> {
 "#;
     fs::write(tools_dir.join("bad_sequence.json"), bad_sequence_config).await?;
 
-    let client = new_client_in_dir(Some(".ahma"), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     let tools = client.list_all_tools().await?;
     let has_bad_seq = tools.iter().any(|t| t.name.as_ref() == "bad_sequence");

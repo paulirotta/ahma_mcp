@@ -1,5 +1,6 @@
-/// Intelligent Await Timeout Test Suite
-use ahma_mcp::test_utils as common;
+//! Intelligent Await Timeout Test Suite
+
+use ahma_mcp::test_utils::client::ClientBuilder;
 ///
 /// PURPOSE: Tests the intelligent timeout behavior for the await tool:
 /// 1. The await tool uses intelligent timeout calculation only (no timeout parameter)
@@ -9,7 +10,6 @@ use ahma_mcp::test_utils as common;
 /// This test suite validates the intelligent timeout implementation.
 use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
-use common::test_client::new_client;
 use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::time::Duration;
@@ -20,7 +20,7 @@ use tokio::time::{Instant, timeout};
 #[tokio::test]
 async fn test_no_timeout_no_operations_uses_default() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let call_param = CallToolRequestParams {
         name: "await".into(),
@@ -49,7 +49,7 @@ async fn test_no_timeout_no_operations_uses_default() -> Result<()> {
 #[tokio::test]
 async fn test_intelligent_timeout_calculation_needed() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test basic await functionality without explicit timeout
     let await_param = CallToolRequestParams {
@@ -83,7 +83,7 @@ async fn test_intelligent_timeout_calculation_needed() -> Result<()> {
 #[tokio::test]
 async fn test_no_timeout_parameter_accepted() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test that await tool no longer accepts timeout_seconds parameter
     // It should use intelligent timeout calculation only
@@ -124,7 +124,7 @@ async fn test_no_timeout_parameter_accepted() -> Result<()> {
 #[tokio::test]
 async fn test_tool_filtered_intelligent_timeout() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test await with tool filtering (should complete immediately when no matching operations)
     let await_param = CallToolRequestParams {
@@ -163,7 +163,7 @@ async fn test_tool_filtered_intelligent_timeout() -> Result<()> {
 #[tokio::test]
 async fn test_intelligent_timeout_with_long_operations() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Start operation with long timeout
     let long_op_param = CallToolRequestParams {
@@ -206,7 +206,7 @@ async fn test_intelligent_timeout_with_long_operations() -> Result<()> {
 #[tokio::test]
 async fn test_intelligent_timeout_no_pending_operations() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Test intelligent timeout behavior - should complete immediately when no operations pending
     let await_param = CallToolRequestParams {

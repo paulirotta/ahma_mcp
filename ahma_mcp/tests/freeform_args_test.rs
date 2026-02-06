@@ -1,11 +1,11 @@
 use ahma_mcp::test_utils as common;
 use anyhow::Result;
-use common::test_project::create_full_rust_test_project;
+use common::project::create_full_rust_project;
 use serde_json::json;
 
 #[tokio::test]
 async fn test_freeform_argument_passing_ls() -> Result<()> {
-    let temp_dir = create_full_rust_test_project().await?;
+    let temp_dir = create_full_rust_project().await?;
     let project_path = temp_dir.path().to_str().unwrap();
 
     // Create a dummy file to ensure `ls -l` has some output
@@ -60,14 +60,14 @@ async fn test_freeform_argument_passing_ls() -> Result<()> {
 
 #[tokio::test]
 async fn test_freeform_argument_passing_clippy() -> Result<()> {
-    let temp_dir = create_full_rust_test_project().await?;
+    let temp_dir = create_full_rust_project().await?;
     // Create a dummy cargo project in a unique subdirectory
-    let project_name = format!("test_project_{}", std::process::id());
+    let project_name = format!("project_{}", std::process::id());
     let cargo_project_dir = temp_dir.path().join(&project_name);
     tokio::fs::create_dir_all(&cargo_project_dir).await?;
 
     let cargo_toml = r#"[package]
-name = "test_project"
+name = "project"
 version = "0.1.0"
 edition = "2021"
 "#;

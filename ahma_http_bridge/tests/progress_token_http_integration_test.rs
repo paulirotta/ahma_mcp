@@ -1,4 +1,4 @@
-use ahma_mcp::test_utils::{HttpMcpTestClient, spawn_http_bridge};
+use ahma_mcp::test_utils::http::{HttpMcpTestClient, spawn_http_bridge};
 use anyhow::Context;
 use serde_json::json;
 use std::time::Duration;

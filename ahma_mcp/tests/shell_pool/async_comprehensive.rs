@@ -9,9 +9,9 @@
 /// - Async execution behavior
 use ahma_mcp::test_utils as common;
 
+use ahma_mcp::test_utils::client::ClientBuilder;
 use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
-use common::test_client::new_client_with_args;
 use rmcp::model::CallToolRequestParam;
 use serde_json::{Map, json};
 use std::borrow::Cow;
@@ -23,7 +23,10 @@ use tokio::fs;
 async fn new_async_client(
     tools_dir: Option<&str>,
 ) -> Result<rmcp::service::RunningService<rmcp::service::RoleClient, ()>> {
-    new_client_with_args(tools_dir, &[]).await
+    ClientBuilder::new()
+        .tools_dir(tools_dir.unwrap_or(".ahma"))
+        .build()
+        .await
 }
 
 fn make_workdir(prefix: &str) -> Result<(TempDir, PathBuf)> {
@@ -55,7 +58,6 @@ async fn test_basic_shell_command_execution() -> Result<()> {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await;
@@ -93,7 +95,6 @@ async fn test_working_directory_handling() -> Result<()> {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await;
@@ -126,7 +127,6 @@ async fn test_complex_shell_commands() -> Result<()> {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await;
@@ -159,7 +159,6 @@ async fn test_invalid_command_handling() -> Result<()> {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await;
@@ -188,7 +187,6 @@ async fn test_missing_command_parameter() -> Result<()> {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await;
@@ -227,7 +225,6 @@ async fn test_invalid_working_directory() -> Result<()> {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await;
@@ -264,7 +261,6 @@ async fn test_environment_variables() -> Result<()> {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await;
@@ -297,7 +293,6 @@ async fn test_shell_builtins() -> Result<()> {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await;
@@ -330,7 +325,6 @@ async fn test_special_characters() -> Result<()> {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await;
@@ -363,7 +357,6 @@ async fn test_multiple_arguments() -> Result<()> {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await;
@@ -396,7 +389,6 @@ async fn test_long_running_command() -> Result<()> {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
         task: None,
-
     };
 
     // Measure time to ensure it returns quickly (async)
@@ -443,7 +435,6 @@ async fn test_working_directory_not_passed_to_command() -> Result<()> {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args),
         task: None,
-
     };
 
     let result = client.call_tool(call_param).await;
@@ -483,7 +474,6 @@ async fn test_different_working_directories() -> Result<()> {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args1),
         task: None,
-
     };
 
     let result1 = client.call_tool(call_param1).await;
@@ -501,7 +491,6 @@ async fn test_different_working_directories() -> Result<()> {
         name: Cow::Borrowed("sandboxed_shell"),
         arguments: Some(args2),
         task: None,
-
     };
 
     let result2 = client.call_tool(call_param2).await;

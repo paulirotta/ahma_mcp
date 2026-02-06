@@ -7,9 +7,8 @@
 //! Tests skip gracefully if the corresponding tool is disabled (enabled: false in JSON config).
 
 use ahma_mcp::skip_if_disabled_async;
-use ahma_mcp::test_utils as common;
 
-use common::test_client::new_client;
+use ahma_mcp::test_utils::client::ClientBuilder;
 use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use std::borrow::Cow;
@@ -20,7 +19,9 @@ use std::borrow::Cow;
 async fn test_file_tools_pwd_execution() {
     skip_if_disabled_async!("file_tools");
 
-    let client = new_client(Some(".ahma"))
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
         .await
         .expect("Failed to create test client");
 
@@ -58,7 +59,10 @@ async fn test_file_tools_pwd_execution() {
 #[tokio::test]
 async fn test_file_tools_cat_with_number_option() {
     skip_if_disabled_async!("file_tools");
-    let client = new_client(Some(".ahma"))
+
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
         .await
         .expect("Failed to create test client");
 
@@ -98,7 +102,10 @@ async fn test_file_tools_cat_with_number_option() {
 #[tokio::test]
 async fn test_file_tools_head_with_lines_option() {
     skip_if_disabled_async!("file_tools");
-    let client = new_client(Some(".ahma"))
+
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
         .await
         .expect("Failed to create test client");
 
@@ -141,7 +148,10 @@ async fn test_file_tools_head_with_lines_option() {
 #[tokio::test]
 async fn test_file_tools_find_with_name_option() {
     skip_if_disabled_async!("file_tools");
-    let client = new_client(Some(".ahma"))
+
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
         .await
         .expect("Failed to create test client");
 
@@ -185,7 +195,10 @@ async fn test_file_tools_find_with_name_option() {
 #[tokio::test]
 async fn test_file_tools_grep_with_options() {
     skip_if_disabled_async!("file_tools");
-    let client = new_client(Some(".ahma"))
+
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
         .await
         .expect("Failed to create test client");
 
@@ -229,7 +242,10 @@ async fn test_file_tools_grep_with_options() {
 #[tokio::test]
 async fn test_sandboxed_shell_echo_execution() {
     skip_if_disabled_async!("sandboxed_shell");
-    let client = new_client(Some(".ahma"))
+
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
         .await
         .expect("Failed to create test client");
 
@@ -267,7 +283,10 @@ async fn test_sandboxed_shell_echo_execution() {
 #[tokio::test]
 async fn test_sandboxed_shell_pipe_execution() {
     skip_if_disabled_async!("sandboxed_shell");
-    let client = new_client(Some(".ahma"))
+
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
         .await
         .expect("Failed to create test client");
 
@@ -297,7 +316,9 @@ async fn test_sandboxed_shell_pipe_execution() {
 async fn test_git_status_execution() {
     skip_if_disabled_async!("git");
 
-    let client = new_client(Some(".ahma"))
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
         .await
         .expect("Failed to create test client");
 
@@ -337,7 +358,9 @@ async fn test_git_status_execution() {
 async fn test_git_log_oneline_execution() {
     skip_if_disabled_async!("git");
 
-    let client = new_client(Some(".ahma"))
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
         .await
         .expect("Failed to create test client");
 
@@ -365,7 +388,10 @@ async fn test_git_log_oneline_execution() {
 #[tokio::test]
 async fn test_cargo_check_dry_run() {
     skip_if_disabled_async!("cargo");
-    let client = new_client(Some(".ahma"))
+
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
         .await
         .expect("Failed to create test client");
 
@@ -397,7 +423,10 @@ async fn test_cargo_check_dry_run() {
 #[tokio::test]
 async fn test_file_tools_ls_long_alias() {
     skip_if_disabled_async!("file_tools");
-    let client = new_client(Some(".ahma"))
+
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
         .await
         .expect("Failed to create test client");
 
@@ -438,7 +467,9 @@ async fn test_file_tools_ls_long_alias() {
 #[tokio::test]
 async fn test_file_tools_grep_recursive_alias() {
     skip_if_disabled_async!("file_tools");
-    let client = new_client(Some(".ahma"))
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
         .await
         .expect("Failed to create test client");
 
@@ -485,7 +516,9 @@ async fn test_file_tools_grep_recursive_alias() {
 #[tokio::test]
 async fn test_file_tools_ls_path_validation() {
     skip_if_disabled_async!("file_tools");
-    let client = new_client(Some(".ahma"))
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
         .await
         .expect("Failed to create test client");
 
@@ -514,7 +547,9 @@ async fn test_file_tools_ls_path_validation() {
 #[tokio::test]
 async fn test_file_tools_cat_path_format() {
     skip_if_disabled_async!("file_tools");
-    let client = new_client(Some(".ahma"))
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
         .await
         .expect("Failed to create test client");
 

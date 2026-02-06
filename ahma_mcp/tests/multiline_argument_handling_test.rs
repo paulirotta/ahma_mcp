@@ -1,4 +1,5 @@
-use ahma_mcp::test_utils::{get_workspace_path, wait_for_operation_terminal};
+use ahma_mcp::test_utils::concurrency::wait_for_operation_terminal;
+use ahma_mcp::test_utils::fs::get_workspace_path;
 use ahma_mcp::utils::logging::init_test_logging;
 /// Test multi-line argument handling functionality
 ///

@@ -1,4 +1,4 @@
-use super::file_helpers::get_workspace_dir;
+use super::fs::get_workspace_dir;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;

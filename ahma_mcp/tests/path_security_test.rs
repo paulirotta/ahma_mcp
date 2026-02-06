@@ -1,9 +1,8 @@
 //! Tests for path security and sandboxing
 use ahma_mcp::skip_if_disabled_async;
-use ahma_mcp::test_utils as common;
 
+use ahma_mcp::test_utils::client::ClientBuilder;
 use ahma_mcp::utils::logging::init_test_logging;
-use common::test_client::new_client;
 use rmcp::{ServiceError, model::CallToolRequestParams};
 use serde_json::json;
 
@@ -13,7 +12,11 @@ async fn test_path_validation_success() {
     init_test_logging();
     skip_if_disabled_async!("sandboxed_shell");
     // Use existing sandboxed_shell tool for path validation test
-    let client = new_client(Some(".ahma")).await.unwrap();
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
+        .await
+        .unwrap();
 
     let params = CallToolRequestParams {
         name: "sandboxed_shell".into(),
@@ -39,7 +42,11 @@ async fn test_path_validation_failure_absolute() {
     init_test_logging();
     skip_if_disabled_async!("sandboxed_shell");
     // Use existing sandboxed_shell tool for path validation test
-    let client = new_client(Some(".ahma")).await.unwrap();
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
+        .await
+        .unwrap();
 
     let params = CallToolRequestParams {
         name: "sandboxed_shell".into(),
@@ -79,7 +86,11 @@ async fn test_path_validation_failure_relative() {
     init_test_logging();
     skip_if_disabled_async!("sandboxed_shell");
     // Use existing sandboxed_shell tool for path validation test
-    let client = new_client(Some(".ahma")).await.unwrap();
+    let client = ClientBuilder::new()
+        .tools_dir(".ahma")
+        .build()
+        .await
+        .unwrap();
 
     let params = CallToolRequestParams {
         name: "sandboxed_shell".into(),

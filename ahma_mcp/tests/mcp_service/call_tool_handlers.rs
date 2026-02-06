@@ -7,10 +7,9 @@
 //!
 //! These tests target untested paths to improve coverage from 36.71% to 65%+.
 
-use ahma_mcp::test_utils as common;
+use ahma_mcp::test_utils::client::ClientBuilder;
 use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
-use common::test_client::new_client;
 use rmcp::model::CallToolRequestParams;
 use serde_json::{Map, json};
 use std::borrow::Cow;
@@ -22,7 +21,7 @@ use tempfile::tempdir;
 #[tokio::test]
 async fn test_status_tool_with_tool_name_filter() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Filter by multiple tool names
     let mut params = Map::new();
@@ -58,7 +57,7 @@ async fn test_status_tool_with_tool_name_filter() -> Result<()> {
 #[tokio::test]
 async fn test_status_tool_with_operation_id() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Query for a specific operation (non-existent)
     let mut params = Map::new();
@@ -89,7 +88,7 @@ async fn test_status_tool_with_operation_id() -> Result<()> {
 #[tokio::test]
 async fn test_status_tool_empty_filter() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Empty tools parameter should show all operations
     let mut params = Map::new();
@@ -113,7 +112,7 @@ async fn test_status_tool_empty_filter() -> Result<()> {
 #[tokio::test]
 async fn test_status_tool_combined_filters() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let mut params = Map::new();
     params.insert("tools".to_string(), json!("cargo"));
@@ -139,7 +138,7 @@ async fn test_status_tool_combined_filters() -> Result<()> {
 #[tokio::test]
 async fn test_await_tool_with_operation_id_not_found() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let mut params = Map::new();
     params.insert("operation_id".to_string(), json!("op_does_not_exist"));
@@ -171,7 +170,7 @@ async fn test_await_tool_with_operation_id_not_found() -> Result<()> {
 #[tokio::test]
 async fn test_await_tool_with_tool_filter_no_pending() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let mut params = Map::new();
     params.insert("tools".to_string(), json!("nonexistent_tool"));
@@ -203,7 +202,7 @@ async fn test_await_tool_with_tool_filter_no_pending() -> Result<()> {
 #[tokio::test]
 async fn test_await_tool_multiple_tool_filters() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let mut params = Map::new();
     params.insert("tools".to_string(), json!("cargo, git, npm"));
@@ -226,7 +225,7 @@ async fn test_await_tool_multiple_tool_filters() -> Result<()> {
 #[tokio::test]
 async fn test_await_tool_empty_params() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let call_param = CallToolRequestParams {
         name: Cow::Borrowed("await"),
@@ -259,7 +258,7 @@ async fn test_await_tool_empty_params() -> Result<()> {
 #[tokio::test]
 async fn test_cancel_tool_missing_operation_id() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Cancel requires operation_id
     let call_param = CallToolRequestParams {
@@ -282,7 +281,7 @@ async fn test_cancel_tool_missing_operation_id() -> Result<()> {
 #[tokio::test]
 async fn test_cancel_tool_nonexistent_operation() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let mut params = Map::new();
     params.insert("operation_id".to_string(), json!("op_does_not_exist"));
@@ -316,7 +315,7 @@ async fn test_cancel_tool_nonexistent_operation() -> Result<()> {
 #[tokio::test]
 async fn test_cancel_tool_with_reason() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let mut params = Map::new();
     params.insert("operation_id".to_string(), json!("op_test_cancel"));
@@ -340,7 +339,7 @@ async fn test_cancel_tool_with_reason() -> Result<()> {
 #[tokio::test]
 async fn test_cancel_tool_invalid_operation_id_type() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let mut params = Map::new();
     // Pass number instead of string
@@ -368,7 +367,7 @@ async fn test_cancel_tool_invalid_operation_id_type() -> Result<()> {
 #[tokio::test]
 async fn test_call_nonexistent_tool() -> Result<()> {
     init_test_logging();
-    let client = new_client(Some(".ahma")).await?;
+    let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let call_param = CallToolRequestParams {
         name: Cow::Borrowed("completely_fake_tool_that_does_not_exist"),
@@ -392,7 +391,6 @@ async fn test_call_nonexistent_tool() -> Result<()> {
 #[tokio::test]
 async fn test_call_disabled_tool() -> Result<()> {
     init_test_logging();
-    use ahma_mcp::test_utils::test_client::new_client_in_dir;
 
     let temp_dir = tempdir()?;
     let tools_dir = temp_dir.path().join(".ahma");
@@ -415,7 +413,11 @@ async fn test_call_disabled_tool() -> Result<()> {
         serde_json::to_string_pretty(&tool_json)?,
     )?;
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     // Try to call the disabled tool
     let call_param = CallToolRequestParams {
@@ -440,7 +442,6 @@ async fn test_call_disabled_tool() -> Result<()> {
 #[tokio::test]
 async fn test_call_tool_invalid_subcommand() -> Result<()> {
     init_test_logging();
-    use ahma_mcp::test_utils::test_client::new_client_in_dir;
 
     let temp_dir = tempdir()?;
     let tools_dir = temp_dir.path().join(".ahma");
@@ -465,7 +466,11 @@ async fn test_call_tool_invalid_subcommand() -> Result<()> {
         serde_json::to_string_pretty(&tool_json)?,
     )?;
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     // Call with invalid subcommand
     let mut params = Map::new();
@@ -491,7 +496,6 @@ async fn test_call_tool_invalid_subcommand() -> Result<()> {
 #[tokio::test]
 async fn test_call_tool_disabled_subcommand() -> Result<()> {
     init_test_logging();
-    use ahma_mcp::test_utils::test_client::new_client_in_dir;
 
     let temp_dir = tempdir()?;
     let tools_dir = temp_dir.path().join(".ahma");
@@ -521,7 +525,11 @@ async fn test_call_tool_disabled_subcommand() -> Result<()> {
         serde_json::to_string_pretty(&tool_json)?,
     )?;
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     // Call with disabled subcommand
     let mut params = Map::new();
@@ -549,7 +557,6 @@ async fn test_call_tool_disabled_subcommand() -> Result<()> {
 #[tokio::test]
 async fn test_synchronous_execution_mode() -> Result<()> {
     init_test_logging();
-    use ahma_mcp::test_utils::test_client::new_client_in_dir;
 
     let temp_dir = tempdir()?;
     let tools_dir = temp_dir.path().join(".ahma");
@@ -576,7 +583,11 @@ async fn test_synchronous_execution_mode() -> Result<()> {
         serde_json::to_string_pretty(&tool_json)?,
     )?;
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     let mut params = Map::new();
     params.insert("message".to_string(), json!("hello world"));
@@ -610,7 +621,6 @@ async fn test_synchronous_execution_mode() -> Result<()> {
 #[tokio::test]
 async fn test_async_execution_mode() -> Result<()> {
     init_test_logging();
-    use ahma_mcp::test_utils::test_client::new_client_in_dir;
 
     let temp_dir = tempdir()?;
     let tools_dir = temp_dir.path().join(".ahma");
@@ -636,7 +646,11 @@ async fn test_async_execution_mode() -> Result<()> {
         serde_json::to_string_pretty(&tool_json)?,
     )?;
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     let mut params = Map::new();
     params.insert("message".to_string(), json!("async test"));
@@ -674,7 +688,6 @@ async fn test_async_execution_mode() -> Result<()> {
 #[tokio::test]
 async fn test_explicit_execution_mode_argument() -> Result<()> {
     init_test_logging();
-    use ahma_mcp::test_utils::test_client::new_client_in_dir;
 
     let temp_dir = tempdir()?;
     let tools_dir = temp_dir.path().join(".ahma");
@@ -696,7 +709,11 @@ async fn test_explicit_execution_mode_argument() -> Result<()> {
         serde_json::to_string_pretty(&tool_json)?,
     )?;
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     // Request synchronous execution via argument
     let mut params = Map::new();
@@ -726,7 +743,6 @@ async fn test_explicit_execution_mode_argument() -> Result<()> {
 #[tokio::test]
 async fn test_nested_subcommand_execution() -> Result<()> {
     init_test_logging();
-    use ahma_mcp::test_utils::test_client::new_client_in_dir;
 
     let temp_dir = tempdir()?;
     let tools_dir = temp_dir.path().join(".ahma");
@@ -759,7 +775,11 @@ async fn test_nested_subcommand_execution() -> Result<()> {
         serde_json::to_string_pretty(&tool_json)?,
     )?;
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     // Call nested subcommand with underscore-separated path
     let mut params = Map::new();
@@ -789,7 +809,6 @@ async fn test_nested_subcommand_execution() -> Result<()> {
 #[tokio::test]
 async fn test_working_directory_parameter() -> Result<()> {
     init_test_logging();
-    use ahma_mcp::test_utils::test_client::new_client_in_dir;
 
     let temp_dir = tempdir()?;
     let tools_dir = temp_dir.path().join(".ahma");
@@ -814,7 +833,11 @@ async fn test_working_directory_parameter() -> Result<()> {
         serde_json::to_string_pretty(&tool_json)?,
     )?;
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     let mut params = Map::new();
     params.insert(
@@ -847,7 +870,6 @@ async fn test_working_directory_parameter() -> Result<()> {
 #[tokio::test]
 async fn test_default_working_directory() -> Result<()> {
     init_test_logging();
-    use ahma_mcp::test_utils::test_client::new_client_in_dir;
 
     let temp_dir = tempdir()?;
     let tools_dir = temp_dir.path().join(".ahma");
@@ -870,7 +892,11 @@ async fn test_default_working_directory() -> Result<()> {
         serde_json::to_string_pretty(&tool_json)?,
     )?;
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     // Call without working_directory - should use default "."
     let call_param = CallToolRequestParams {
@@ -893,7 +919,6 @@ async fn test_default_working_directory() -> Result<()> {
 #[tokio::test]
 async fn test_timeout_parameter() -> Result<()> {
     init_test_logging();
-    use ahma_mcp::test_utils::test_client::new_client_in_dir;
 
     let temp_dir = tempdir()?;
     let tools_dir = temp_dir.path().join(".ahma");
@@ -916,7 +941,11 @@ async fn test_timeout_parameter() -> Result<()> {
         serde_json::to_string_pretty(&tool_json)?,
     )?;
 
-    let client = new_client_in_dir(Some(tools_dir.to_str().unwrap()), &[], temp_dir.path()).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(tools_dir)
+        .working_dir(temp_dir.path())
+        .build()
+        .await?;
 
     let mut params = Map::new();
     params.insert("timeout_seconds".to_string(), json!(60));

@@ -18,11 +18,11 @@ use std::time::Duration;
 /// 3. Ensure the operation appears once and is not duplicated on subsequent checks.
 #[tokio::test]
 async fn test_realistic_notification_scenario_with_history() -> anyhow::Result<()> {
-    use ahma_mcp::test_utils::concurrent_test_helpers::*;
-    use ahma_mcp::test_utils::test_project::*;
+    use ahma_mcp::test_utils::concurrency::*;
+    use ahma_mcp::test_utils::project::*;
 
     // Setup isolated temp project
-    let temp = create_rust_test_project(TestProjectOptions {
+    let temp = create_rust_project(TestProjectOptions {
         with_tool_configs: true,
         ..Default::default()
     })
@@ -107,11 +107,11 @@ async fn test_realistic_notification_scenario_with_history() -> anyhow::Result<(
 /// Test if multiple operations are handled correctly by the completion history.
 #[tokio::test]
 async fn test_multiple_operations_notification_behavior() -> anyhow::Result<()> {
-    use ahma_mcp::test_utils::concurrent_test_helpers::*;
-    use ahma_mcp::test_utils::test_project::*;
+    use ahma_mcp::test_utils::concurrency::*;
+    use ahma_mcp::test_utils::project::*;
 
     // Setup isolated temp project
-    let temp = create_rust_test_project(TestProjectOptions {
+    let temp = create_rust_project(TestProjectOptions {
         with_tool_configs: true,
         ..Default::default()
     })

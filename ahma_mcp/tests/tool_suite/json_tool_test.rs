@@ -1,8 +1,7 @@
 //! Test for loading tool definitions from JSON files.
-use ahma_mcp::test_utils as common;
 
+use ahma_mcp::test_utils::client::ClientBuilder;
 use anyhow::Result;
-use common::test_client::new_client;
 use std::fs;
 use tempfile::tempdir;
 
@@ -32,7 +31,10 @@ async fn test_json_tool_definition_loading() -> Result<()> {
     fs::write(tools_dir.join("test_tool.json"), json_tool_def)?;
 
     // Start the server, pointing it to our temporary tools directory.
-    let client = new_client(Some(tools_dir.to_str().unwrap())).await?;
+    let client = ClientBuilder::new()
+        .tools_dir(tools_dir.to_str().unwrap())
+        .build()
+        .await?;
 
     // List the available tools.
     let tools = client.list_all_tools().await?;
