@@ -103,6 +103,24 @@ jobs:
       - name: Add Cargo Bin to PATH
         run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+      - name: Install cargo-audit
+        run: |
+          if ! command -v cargo-audit &> /dev/null; then
+            echo "cargo-audit not found, installing..."
+            cargo binstall cargo-audit --no-confirm || cargo install cargo-audit
+          else
+            echo "cargo-audit is already installed"
+          fi
+
+      - name: Install cargo-edit
+        run: |
+          if ! command -v cargo-upgrade &> /dev/null; then
+            echo "cargo-edit (cargo-upgrade) not found, installing..."
+            cargo binstall cargo-edit --no-confirm || cargo install cargo-edit
+          else
+            echo "cargo-edit is already installed"
+          fi
+
       - name: Install sccache
         run: |
           if ! command -v sccache &> /dev/null; then
@@ -196,6 +214,24 @@ jobs:
 
       - name: Add Cargo Bin to PATH
         run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install cargo-audit
+        run: |
+          if ! command -v cargo-audit &> /dev/null; then
+            echo "cargo-audit not found, installing..."
+            cargo binstall cargo-audit --no-confirm || cargo install cargo-audit
+          else
+            echo "cargo-audit is already installed"
+          fi
+
+      - name: Install cargo-edit
+        run: |
+          if ! command -v cargo-upgrade &> /dev/null; then
+            echo "cargo-edit (cargo-upgrade) not found, installing..."
+            cargo binstall cargo-edit --no-confirm || cargo install cargo-edit
+          else
+            echo "cargo-edit is already installed"
+          fi
 
       - name: Install sccache
         run: |
@@ -292,6 +328,24 @@ jobs:
 
       - name: Add Cargo Bin to PATH
         run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install cargo-audit
+        run: |
+          if ! command -v cargo-audit &> /dev/null; then
+            echo "cargo-audit not found, installing..."
+            cargo binstall cargo-audit --no-confirm || cargo install cargo-audit
+          else
+            echo "cargo-audit is already installed"
+          fi
+
+      - name: Install cargo-edit
+        run: |
+          if ! command -v cargo-upgrade &> /dev/null; then
+            echo "cargo-edit (cargo-upgrade) not found, installing..."
+            cargo binstall cargo-edit --no-confirm || cargo install cargo-edit
+          else
+            echo "cargo-edit is already installed"
+          fi
 
       - name: Install sccache
         run: |

@@ -270,8 +270,9 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
     let response_handle = tokio::spawn(async move { pending_response.await_response().await });
 
     // Wait for notification with a generous timeout for CI environments.
-    // The CI_NOTIFICATION_TIMEOUT (10s) is appropriate for heavily-loaded CI servers.
-    let notification_timeout = Duration::from_secs(10);
+    // The CI_NOTIFICATION_TIMEOUT (30s) is appropriate for heavily-loaded CI servers
+    // and coverage builds (llvm-cov adds significant overhead).
+    let notification_timeout = Duration::from_secs(30);
 
     let notification_result = tokio::time::timeout(notification_timeout, async {
         // For synchronous tool execution, the notification is sent before the response,

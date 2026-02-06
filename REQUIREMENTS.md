@@ -504,6 +504,12 @@ fs::write(&test_file, "test content").unwrap();
 - **R15.3.3**: For notification tests, consider using HTTP mode with SSE instead of stdio - SSE keeps the notification stream open independently.
 - **R15.3.4**: For async operations, the server immediately returns "operation started" and sends notifications in parallel. This creates an unwinnable race condition for notification testing.
 
+#### R15.4: Coverage Overhead Mitigation
+
+- **R15.4.1**: `llvm-cov` instrumentation significantly slows down execution (10x-20x), especially for process-heavy tests like stdio integration.
+- **R15.4.2**: Integration tests involving child processes or networks **must** use generous timeouts (30s+). A 10s timeout that works in `release` mode will reliably fail in `coverage` mode.
+- **R15.4.3**: Flaky failures that occur ONLY in coverage CI jobs almost always indicate timeouts being too tight for the instrumented binary overhead.
+
 ### 10.6 Testing Patterns and Helpers
 
 > [!IMPORTANT]

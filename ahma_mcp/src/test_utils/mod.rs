@@ -42,13 +42,13 @@ pub fn is_tool_disabled(tool_name: &str) -> bool {
 
     for config_path in config_paths {
         if config_path.exists()
-            && let Ok(content) = std::fs::read_to_string(&config_path) {
-                // Simple check for "enabled": false
-                if content.contains(r#""enabled": false"#) || content.contains(r#""enabled":false"#)
-                {
-                    return true;
-                }
+            && let Ok(content) = std::fs::read_to_string(&config_path)
+        {
+            // Simple check for "enabled": false
+            if content.contains(r#""enabled": false"#) || content.contains(r#""enabled":false"#) {
+                return true;
             }
+        }
     }
 
     false
