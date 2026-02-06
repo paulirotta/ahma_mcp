@@ -734,7 +734,7 @@ async fn handle_session_isolated_request(
                         }
                         Ok(false) => {}
                         Err(e) => {
-                            warn!(session_id = %session_id, "Failed to record sandbox scopes: {}", e)
+                            warn!(session_id = %session_id, "Failed to record sandbox scopes (this will cause tools/call to hang/fail): {}", e)
                         }
                     }
                 }

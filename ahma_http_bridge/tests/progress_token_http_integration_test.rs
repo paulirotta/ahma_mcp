@@ -77,14 +77,13 @@ async fn test_http_no_progress_token_does_not_emit_progress_notifications() -> a
     // Assert: no notifications/progress arrive within a short window.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
     while tokio::time::Instant::now() < deadline {
-        if let Ok(Some(ev)) =
-            tokio::time::timeout(Duration::from_millis(200), events_rx.recv()).await
-        {
-            if ev.get("method").and_then(|m| m.as_str()) == Some("notifications/progress") {
-                anyhow::bail!(
-                    "unexpected notifications/progress without client progressToken: {ev}"
-                );
-            }
+        let Ok(Some(ev)) = tokio::time::timeout(Duration::from_millis(200), events_rx.recv()).await
+        else {
+            continue;
+        };
+
+        if ev.get("method").and_then(|m| m.as_str()) == Some("notifications/progress") {
+            anyhow::bail!("unexpected notifications/progress without client progressToken: {ev}");
         }
     }
 

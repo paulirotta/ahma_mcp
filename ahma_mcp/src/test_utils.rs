@@ -1573,14 +1573,17 @@ pub async fn spawn_http_bridge() -> anyhow::Result<HttpBridgeTestInstance> {
     let timeout = Duration::from_secs(10);
 
     while start.elapsed() < timeout {
-        if let Ok(resp) = client.get(&health_url).send().await {
-            if resp.status().is_success() {
-                return Ok(HttpBridgeTestInstance {
-                    child,
-                    port,
-                    temp_dir,
-                });
-            }
+        if client
+            .get(&health_url)
+            .send()
+            .await
+            .is_ok_and(|resp| resp.status().is_success())
+        {
+            return Ok(HttpBridgeTestInstance {
+                child,
+                port,
+                temp_dir,
+            });
         }
         sleep(Duration::from_millis(100)).await;
     }

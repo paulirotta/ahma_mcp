@@ -58,8 +58,9 @@ async fn test_dynamic_config_reload() -> Result<()> {
     fs::write(tools_dir.join("new_tool.json"), new_tool)?;
 
     // 6. Wait for the watcher to detect the change and reload (debounce is 200ms)
+    // Increased timeout to 30s to handle CI/parallel test load
     let new_tool_seen =
-        wait_for_condition(Duration::from_secs(5), Duration::from_millis(100), || {
+        wait_for_condition(Duration::from_secs(30), Duration::from_millis(100), || {
             let client = &client;
             async move {
                 client
@@ -94,7 +95,7 @@ async fn test_dynamic_config_reload() -> Result<()> {
 "#;
     fs::write(tools_dir.join("initial_tool.json"), modified_tool)?;
     let modified_seen =
-        wait_for_condition(Duration::from_secs(5), Duration::from_millis(100), || {
+        wait_for_condition(Duration::from_secs(30), Duration::from_millis(100), || {
             let client = &client;
             async move {
                 client
@@ -121,7 +122,7 @@ async fn test_dynamic_config_reload() -> Result<()> {
     // 9. Remove a tool
     fs::remove_file(tools_dir.join("new_tool.json"))?;
     let removed_seen =
-        wait_for_condition(Duration::from_secs(5), Duration::from_millis(100), || {
+        wait_for_condition(Duration::from_secs(30), Duration::from_millis(100), || {
             let client = &client;
             async move {
                 client

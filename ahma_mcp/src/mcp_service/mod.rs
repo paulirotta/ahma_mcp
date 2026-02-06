@@ -1130,7 +1130,7 @@ impl AhmaMcpService {
                         context.peer.clone(),
                         operation_id.clone(),
                         Some(token),
-                        client_type.clone(),
+                        client_type,
                     );
                     let _ = callback
                         .send_progress(crate::callback_system::ProgressUpdate::Started {
@@ -1804,7 +1804,7 @@ impl ServerHandler for AhmaMcpService {
                             context.peer.clone(),
                             operation_id.clone(),
                             Some(token),
-                            client_type.clone(),
+                            client_type,
                         );
                         let _ = callback
                             .send_progress(crate::callback_system::ProgressUpdate::Started {

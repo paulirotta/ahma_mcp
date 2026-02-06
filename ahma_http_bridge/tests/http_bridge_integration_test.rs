@@ -920,10 +920,12 @@ async fn test_roots_uri_parsing_percent_encoded_path() {
             }
         }
     }
-    let resp = resp.expect(&format!(
-        "Tool call should eventually succeed after {} attempts",
-        max_attempts
-    ));
+    let resp = resp.unwrap_or_else(|| {
+        panic!(
+            "Tool call should eventually succeed after {} attempts",
+            max_attempts
+        )
+    });
 
     assert!(
         resp.get("error").is_none(),
@@ -1077,10 +1079,12 @@ async fn test_roots_uri_parsing_file_localhost() {
             }
         }
     }
-    let resp = resp.expect(&format!(
-        "Tool call should eventually succeed after {} attempts",
-        max_attempts
-    ));
+    let resp = resp.unwrap_or_else(|| {
+        panic!(
+            "Tool call should eventually succeed after {} attempts",
+            max_attempts
+        )
+    });
 
     assert!(
         resp.get("error").is_none(),
@@ -1186,7 +1190,13 @@ async fn test_rejects_working_directory_path_traversal_outside_root() {
     let mut resp;
     loop {
         if start.elapsed() > Duration::from_secs(60) {
-            panic!("Timed out waiting for sandbox initialization");
+            let _ = server.kill();
+            let output = server.wait_with_output().expect("Failed to wait on server");
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            panic!(
+                "Timed out waiting for sandbox initialization. Server logs:\n{}",
+                stderr
+            );
         }
 
         let (r, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
@@ -1313,7 +1323,13 @@ async fn test_symlink_escape_attempt_is_blocked() {
     let mut resp;
     loop {
         if start.elapsed() > Duration::from_secs(60) {
-            panic!("Timed out waiting for sandbox initialization");
+            let _ = server.kill();
+            let output = server.wait_with_output().expect("Failed to wait on server");
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            panic!(
+                "Timed out waiting for sandbox initialization. Server logs:\n{}",
+                stderr
+            );
         }
 
         let (r, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
