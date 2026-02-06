@@ -312,9 +312,14 @@ impl Transport<RoleClient> for HttpMcpTransport {
 
             // Try to parse response as JSON-RPC message and send to channel
             // Note: Notifications might not return a body, or return empty body
-            let content_length = res.content_length().unwrap_or(0);
-            if content_length > 0 {
-                match res.json::<RxJsonRpcMessage<RoleClient>>().await {
+            // Try to parse response as JSON-RPC message and send to channel
+            // Note: Notifications might not return a body, or return empty body
+            // We read the full body bytes to determine if it's empty, rather than relying on
+            // Content-Length header which might be missing or unreliable in some environments (e.g. CI).
+            let body_bytes = res.bytes().await?;
+            if !body_bytes.is_empty() {
+                // Try to parse non-empty body
+                match serde_json::from_slice::<RxJsonRpcMessage<RoleClient>>(&body_bytes) {
                     Ok(msg) => {
                         if let Err(e) = sender.send(msg).await {
                             error!("Failed to send response to channel: {}", e);
@@ -322,13 +327,15 @@ impl Transport<RoleClient> for HttpMcpTransport {
                         }
                     }
                     Err(e) => {
-                        // If we can't parse it as a message, maybe it's empty or something else?
-                        // For now, log error but don't fail the send if it was a notification?
-                        // But we don't know if it was a notification here easily without checking item.
-                        // If it was a request, we expect a response.
                         error!("Failed to parse response body: {}", e);
-                        // We should probably return error if we expected a response but got garbage
-                        return Err(McpHttpError::HttpRequest(e));
+                        // Start of body for debugging context (first 100 chars)
+                        let preview = String::from_utf8_lossy(&body_bytes)
+                            .chars()
+                            .take(100)
+                            .collect::<String>();
+                        error!("Response body start: {:?}", preview);
+
+                        return Err(McpHttpError::Json(e));
                     }
                 }
             }
