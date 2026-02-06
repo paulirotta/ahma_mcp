@@ -8,23 +8,29 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+ahma_common = { path = "../ahma_common" }
 anyhow.workspace = true
 async-stream = "0.3.6"
 async-trait.workspace = true
 futures.workspace = true
-oauth2 = {version = "5.0.0", features = ["reqwest"]}
-reqwest = {workspace = true, features = ["json", "stream"]}
-rmcp = {workspace = true, features = ["client"]}
+oauth2 = { version = "5.0.0", features = ["reqwest"] }
+reqwest = { workspace = true, features = ["json", "stream"] }
+rmcp = { workspace = true, features = ["client"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = {workspace = true, features = ["rt-multi-thread", "macros", "io-util", "net"]}
+tokio = { workspace = true, features = [
+    "rt-multi-thread",
+    "macros",
+    "io-util",
+    "net",
+] }
 tracing.workspace = true
 url.workspace = true
 webbrowser = "1.0.6"
 
 [dev-dependencies]
-clap = {version = "4.5.57", features = ["derive"]}
+clap = { version = "4.5.57", features = ["derive"] }
 tempfile.workspace = true
 tracing-subscriber = "0.3"
 wiremock = "0.6"

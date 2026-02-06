@@ -5,6 +5,7 @@ default-members = [
     "generate_tool_schema",
     "ahma_http_bridge",
     "ahma_http_mcp_client",
+    "ahma_common",
 ]
 members = [
     "ahma_mcp",
@@ -12,6 +13,7 @@ members = [
     "generate_tool_schema",
     "ahma_http_bridge",
     "ahma_http_mcp_client",
+    "ahma_common",
 ]
 resolver = "3"
 

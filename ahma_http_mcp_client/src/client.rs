@@ -5,6 +5,7 @@
 //! providers.
 
 use crate::error::{McpHttpError, Result};
+use ahma_common::state_machine::StateMachine;
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, RedirectUrl,
     Scope, TokenResponse, TokenUrl, basic::BasicClient,
@@ -21,7 +22,7 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
-use tokio::sync::{Mutex, mpsc};
+use tokio::sync::{Mutex, Notify, mpsc};
 use tracing::{error, info};
 use url::Url;
 
@@ -59,11 +60,19 @@ const TOKEN_PATH_ENV: &str = "AHMA_HTTP_CLIENT_TOKEN_PATH";
 pub struct HttpMcpTransport {
     client: reqwest::Client,
     mcp_url: Url,
-    token: Arc<Mutex<Option<StoredToken>>>,
+
+    auth_state: Arc<StateMachine<AuthState>>,
     #[allow(dead_code)] // Will be used for token refresh
     oauth_client: Option<ConfiguredOAuthClient>,
     receiver: Arc<Mutex<mpsc::Receiver<RxJsonRpcMessage<RoleClient>>>>,
     sender: mpsc::Sender<RxJsonRpcMessage<RoleClient>>,
+}
+
+#[derive(Debug)]
+enum AuthState {
+    Unauthenticated,
+    Authenticating(Arc<Notify>),
+    Authenticated(StoredToken),
 }
 
 impl HttpMcpTransport {
@@ -115,10 +124,16 @@ impl HttpMcpTransport {
 
         let (sender, receiver) = mpsc::channel(100);
 
+        let initial_token = load_token()?;
+        let initial_state = match initial_token {
+            Some(token) => AuthState::Authenticated(token),
+            None => AuthState::Unauthenticated,
+        };
+
         let transport = Self {
             client: reqwest::Client::new(),
             mcp_url: url,
-            token: Arc::new(Mutex::new(load_token()?)),
+            auth_state: Arc::new(StateMachine::new(initial_state)),
             oauth_client,
             receiver: Arc::new(Mutex::new(receiver)),
             sender,
@@ -141,24 +156,61 @@ impl HttpMcpTransport {
     /// If no OAuth2 client is configured, this returns an error if no token is present.
     #[allow(dead_code)] // Will be used when HTTP client is integrated
     pub async fn ensure_authenticated(&self) -> Result<()> {
-        let token_lock = self.token.lock().await;
-        if token_lock.is_some() {
-            // TODO: check for expiration and refresh
-            return Ok(());
-        }
-        drop(token_lock);
+        loop {
+            enum Action {
+                PerformAuth(Arc<Notify>),
+                Wait(Arc<Notify>),
+                Ok,
+            }
 
-        if let Some(oauth_client) = &self.oauth_client {
-            info!("No token found, starting authentication flow.");
-            let new_token = self.perform_oauth_flow(oauth_client).await?;
-            let mut token_lock = self.token.lock().await;
-            *token_lock = Some(new_token);
-            info!("Authentication successful.");
-            Ok(())
-        } else {
-            Err(McpHttpError::Auth(
-                "OAuth client not configured, but authentication is required.".to_string(),
-            ))
+            let action = self.auth_state.transition(|state| match state {
+                AuthState::Authenticated(_) => Action::Ok,
+                AuthState::Authenticating(notify) => Action::Wait(notify.clone()),
+                AuthState::Unauthenticated => {
+                    let notify = Arc::new(Notify::new());
+                    *state = AuthState::Authenticating(notify.clone());
+                    Action::PerformAuth(notify)
+                }
+            });
+
+            match action {
+                Action::Ok => return Ok(()),
+                Action::Wait(notify) => {
+                    notify.notified().await;
+                    continue;
+                }
+                Action::PerformAuth(notify) => {
+                    if let Some(oauth_client) = &self.oauth_client {
+                        info!("No token found, starting authentication flow.");
+                        match self.perform_oauth_flow(oauth_client).await {
+                            Ok(new_token) => {
+                                self.auth_state.transition(|state| {
+                                    *state = AuthState::Authenticated(new_token);
+                                });
+                                info!("Authentication successful.");
+                                notify.notify_waiters();
+                                return Ok(());
+                            }
+                            Err(e) => {
+                                self.auth_state.transition(|state| {
+                                    *state = AuthState::Unauthenticated;
+                                });
+                                notify.notify_waiters();
+                                return Err(e);
+                            }
+                        }
+                    } else {
+                        self.auth_state.transition(|state| {
+                            *state = AuthState::Unauthenticated;
+                        });
+                        notify.notify_waiters();
+                        return Err(McpHttpError::Auth(
+                            "OAuth client not configured, but authentication is required."
+                                .to_string(),
+                        ));
+                    }
+                }
+            }
         }
     }
 
@@ -282,18 +334,16 @@ impl Transport<RoleClient> for HttpMcpTransport {
     ) -> impl std::future::Future<Output = std::result::Result<(), Self::Error>> + Send + 'static
     {
         let client = self.client.clone();
-        let token = self.token.clone();
+        let auth_state = self.auth_state.clone();
         let mcp_url = self.mcp_url.clone();
         let sender = self.sender.clone();
 
         async move {
             // Ensure authenticated
-            let token_lock = token.lock().await;
-            let access_token = token_lock
-                .as_ref()
-                .map(|t| t.access_token.clone())
-                .ok_or(McpHttpError::MissingAccessToken)?;
-            drop(token_lock);
+            let access_token = auth_state.transition(|state| match state {
+                AuthState::Authenticated(token) => Ok(token.access_token.clone()),
+                _ => Err(McpHttpError::MissingAccessToken),
+            })?;
 
             let res = client
                 .post(mcp_url)

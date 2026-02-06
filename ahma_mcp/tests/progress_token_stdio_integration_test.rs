@@ -172,7 +172,7 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
     let (tx, mut rx) = mpsc::channel::<ProgressNotificationParam>(128);
     let client_impl = RecordingClient {
         tx,
-        roots: vec![temp.path().to_path_buf()],
+        roots: vec![temp.path().to_path_buf(), workspace_dir()],
     };
 
     let wd = workspace_dir();
