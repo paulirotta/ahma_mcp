@@ -1,5 +1,5 @@
 use ahma_mcp::terminal_output::TerminalOutput;
-use ahma_mcp::test_utils::test_utils::assert_formatted_json_contains;
+use ahma_mcp::test_utils::assert_formatted_json_contains;
 use ahma_mcp::utils::logging::init_test_logging;
 use serde_json::json;
 

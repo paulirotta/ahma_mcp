@@ -1,7 +1,7 @@
 #[cfg(feature = "android")]
 mod android_tests {
     use ahma_mcp::test_utils::get_workspace_dir;
-    use ahma_mcp::test_utils::test_utils::{dir_exists, file_exists};
+    use ahma_mcp::test_utils::{dir_exists, file_exists};
     use anyhow::Result;
     use serde_json::Value;
     use std::{future::Future, path::Path, pin::Pin};

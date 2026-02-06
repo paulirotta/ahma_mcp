@@ -1,0 +1,252 @@
+use super::cli_helpers;
+use anyhow::Context;
+use reqwest::Client;
+use std::process::Child;
+use std::time::{Duration, Instant};
+use tempfile::TempDir;
+use tokio::time::sleep;
+
+/// A running HTTP bridge instance for integration testing.
+pub struct HttpBridgeTestInstance {
+    pub child: Child,
+    pub port: u16,
+    pub temp_dir: TempDir,
+}
+
+impl HttpBridgeTestInstance {
+    pub fn base_url(&self) -> String {
+        format!("http://127.0.0.1:{}", self.port)
+    }
+
+    pub fn kill(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+impl Drop for HttpBridgeTestInstance {
+    fn drop(&mut self) {
+        self.kill();
+    }
+}
+
+/// Spawn a robust HTTP bridge for testing.
+pub async fn spawn_http_bridge() -> anyhow::Result<HttpBridgeTestInstance> {
+    use std::net::TcpListener;
+    use std::process::{Command, Stdio};
+
+    // Find available port
+    let port = TcpListener::bind("127.0.0.1:0")?.local_addr()?.port();
+
+    let binary = cli_helpers::build_binary_cached("ahma_mcp", "ahma_mcp");
+
+    let temp_dir = TempDir::new()?;
+    let tools_dir = temp_dir.path().join("tools");
+    std::fs::create_dir_all(&tools_dir)?;
+
+    let mut child = Command::new(&binary)
+        .args([
+            "--mode",
+            "http",
+            "--http-port",
+            &port.to_string(),
+            "--tools-dir",
+            &tools_dir.to_string_lossy(),
+            "--sandbox-scope",
+            &temp_dir.path().to_string_lossy(),
+            "--log-to-stderr",
+        ])
+        .env_remove("AHMA_TEST_MODE")
+        .env_remove("NEXTEST")
+        .env_remove("NEXTEST_EXECUTION_MODE")
+        .env_remove("CARGO_TARGET_DIR")
+        .env_remove("RUST_TEST_THREADS")
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    // Wait for server health
+    let client = Client::new();
+    let health_url = format!("http://127.0.0.1:{}/health", port);
+
+    let start = Instant::now();
+    let timeout = Duration::from_secs(10);
+
+    while start.elapsed() < timeout {
+        if client
+            .get(&health_url)
+            .send()
+            .await
+            .is_ok_and(|resp| resp.status().is_success())
+        {
+            return Ok(HttpBridgeTestInstance {
+                child,
+                port,
+                temp_dir,
+            });
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+
+    let _ = child.kill();
+    let _ = child.wait();
+    anyhow::bail!("Timed out waiting for HTTP bridge health");
+}
+
+/// A client for testing the MCP protocol over HTTP and SSE.
+pub struct HttpMcpTestClient {
+    pub client: Client,
+    pub base_url: String,
+    pub session_id: Option<String>,
+}
+
+impl HttpMcpTestClient {
+    pub fn new(base_url: String) -> Self {
+        Self {
+            client: Client::new(),
+            base_url,
+            session_id: None,
+        }
+    }
+
+    pub async fn send_request(
+        &self,
+        request: &serde_json::Value,
+    ) -> anyhow::Result<(serde_json::Value, Option<String>)> {
+        let url = format!("{}/mcp", self.base_url);
+        let mut req = self
+            .client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json");
+
+        if let Some(ref sid) = self.session_id {
+            req = req.header("Mcp-Session-Id", sid);
+        }
+
+        let resp = req.json(request).send().await.context("POST /mcp failed")?;
+
+        let session_id = resp
+            .headers()
+            .get("mcp-session-id")
+            .or_else(|| resp.headers().get("Mcp-Session-Id"))
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        let body: serde_json::Value = resp.json().await.context("Failed to parse JSON response")?;
+
+        Ok((body, session_id))
+    }
+
+    pub async fn initialize(&mut self) -> anyhow::Result<()> {
+        let init_request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "test-client", "version": "1.0.0"}
+            }
+        });
+
+        let (resp, sid) = self.send_request(&init_request).await?;
+        if let Some(err) = resp.get("error") {
+            anyhow::bail!("Initialize failed: {:?}", err);
+        }
+        self.session_id = sid;
+
+        let initialized = serde_json::json!({"jsonrpc":"2.0","method":"notifications/initialized"});
+        self.send_request(&initialized).await?;
+
+        Ok(())
+    }
+
+    pub async fn start_sse_events(
+        &self,
+        roots: Vec<std::path::PathBuf>,
+    ) -> anyhow::Result<tokio::sync::mpsc::Receiver<serde_json::Value>> {
+        use futures::StreamExt;
+
+        let sid = self.session_id.as_ref().context("Not initialized")?.clone();
+        let url = format!("{}/mcp", self.base_url);
+        let resp = self
+            .client
+            .get(&url)
+            .header("Accept", "text/event-stream")
+            .header("Cache-Control", "no-cache")
+            .header("Mcp-Session-Id", &sid)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            anyhow::bail!("SSE failed: {}", resp.status());
+        }
+
+        let mut stream = resp.bytes_stream();
+        let (tx, rx) = tokio::sync::mpsc::channel::<serde_json::Value>(256);
+        let client = self.client.clone();
+        let base_url = self.base_url.clone();
+
+        tokio::spawn(async move {
+            let mut buffer = String::new();
+            loop {
+                let chunk = match stream.next().await {
+                    Some(Ok(c)) => c,
+                    _ => break,
+                };
+                buffer.push_str(&String::from_utf8_lossy(&chunk));
+
+                while let Some(idx) = buffer.find("\n\n") {
+                    let raw_event = buffer[..idx].to_string();
+                    buffer = buffer[idx + 2..].to_string();
+
+                    let mut data_lines = Vec::new();
+                    for line in raw_event.lines() {
+                        let line = line.trim_end_matches('\r');
+                        if let Some(rest) = line.strip_prefix("data:") {
+                            data_lines.push(rest.trim());
+                        }
+                    }
+                    if data_lines.is_empty() {
+                        continue;
+                    }
+
+                    let data = data_lines.join("\n");
+                    let value: serde_json::Value = match serde_json::from_str(&data) {
+                        Ok(v) => v,
+                        Err(_) => continue,
+                    };
+
+                    if value.get("method").and_then(|m| m.as_str()) == Some("roots/list") {
+                        let id = value.get("id").cloned().expect("roots/list must have id");
+                        let roots_json: Vec<serde_json::Value> = roots
+                            .iter()
+                            .map(|p| {
+                                serde_json::json!({
+                                    "uri": format!("file://{}", p.display()),
+                                    "name": p.file_name().and_then(|n| n.to_str()).unwrap_or("root")
+                                })
+                            })
+                            .collect();
+                        let response = serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "result": { "roots": roots_json }
+                        });
+
+                        let _ = client
+                            .post(format!("{}/mcp", base_url))
+                            .header("Mcp-Session-Id", &sid)
+                            .json(&response)
+                            .send()
+                            .await;
+                    }
+                    let _ = tx.send(value).await;
+                }
+            }
+        });
+
+        Ok(rx)
+    }
+}

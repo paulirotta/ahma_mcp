@@ -3,7 +3,7 @@
 //! These tests verify the pure utility functions in test_utils
 //! that are reusable across the test suite.
 
-use ahma_mcp::test_utils::{strip_ansi, test_utils};
+use ahma_mcp::test_utils::{self, strip_ansi};
 
 #[test]
 fn test_strip_ansi_removes_simple_color_codes() {
