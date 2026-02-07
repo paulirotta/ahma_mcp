@@ -16,6 +16,10 @@ struct Cli {
     /// Output directory for analysis results
     #[arg(short, long, default_value = "analysis_results")]
     output: PathBuf,
+
+    /// Number of issues to show in the report
+    #[arg(short, long, default_value_t = 10)]
+    limit: usize,
 }
 
 #[derive(Debug, Deserialize)]
@@ -126,6 +130,19 @@ fn run_analysis(dir: &Path, output_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+fn is_cargo_workspace(dir: &Path) -> bool {
+    let cargo_toml = dir.join("Cargo.toml");
+    if !cargo_toml.exists() {
+        return false;
+    }
+
+    if let Ok(content) = fs::read_to_string(cargo_toml) {
+        content.contains("[workspace]")
+    } else {
+        false
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -138,28 +155,26 @@ fn main() -> Result<()> {
     // Create output directory
     fs::create_dir_all(&cli.output).context("Failed to create output directory")?;
 
-    // In a real workspace, we might want to find all members.
-    // For now, we follow the logic of analyzing the provided directory.
-    // However, if it's the root, we might want to analyze subdirectories like the script did.
-    // Let's check for subdirectories with Cargo.toml or just analyze the whole thing if it's small.
-    // The script hardcoded: ahma_common ahma_core ahma_http_bridge ahma_http_mcp_client ahma_mcp ahma_validate
-
-    // To match the script's behavior exactly when run on root:
-    let targets = vec![
-        "ahma_common",
-        "ahma_core",
-        "ahma_http_bridge",
-        "ahma_http_mcp_client",
-        "ahma_mcp",
-        "ahma_validate",
-    ];
+    let is_workspace = is_cargo_workspace(&cli.directory);
 
     let mut analyzed_something = false;
-    for target in targets {
-        let target_path = cli.directory.join(target);
-        if target_path.is_dir() {
-            run_analysis(&target_path, &cli.output)?;
-            analyzed_something = true;
+    if is_workspace {
+        // To match the script's behavior exactly when run on root:
+        let targets = vec![
+            "ahma_common",
+            "ahma_core",
+            "ahma_http_bridge",
+            "ahma_http_mcp_client",
+            "ahma_mcp",
+            "ahma_validate",
+        ];
+
+        for target in targets {
+            let target_path = cli.directory.join(target);
+            if target_path.is_dir() {
+                run_analysis(&target_path, &cli.output)?;
+                analyzed_something = true;
+            }
         }
     }
 
@@ -193,19 +208,32 @@ fn main() -> Result<()> {
     // Sort by score (worst first)
     files_health.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
 
-    generate_report(&files_health)?;
+    generate_report(&files_health, is_workspace, cli.limit, &cli.directory)?;
 
-    println!("Report generated: CODE_HEALTH_REPORT.md");
+    println!(
+        "Report generated: {}",
+        cli.directory.join("CODE_HEALTH_REPORT.md").display()
+    );
     Ok(())
 }
 
-fn generate_report(files: &[FileHealth]) -> Result<(), std::io::Error> {
-    let report = create_report(files);
-    fs::write("CODE_HEALTH_REPORT.md", report)?;
+fn generate_report(
+    files: &[FileHealth],
+    is_workspace: bool,
+    limit: usize,
+    output_dir: &Path,
+) -> Result<(), std::io::Error> {
+    let report = create_report(files, is_workspace, limit, output_dir);
+    fs::write(output_dir.join("CODE_HEALTH_REPORT.md"), report)?;
     Ok(())
 }
 
-fn create_report(files: &[FileHealth]) -> String {
+fn create_report(
+    files: &[FileHealth],
+    is_workspace: bool,
+    limit: usize,
+    base_dir: &Path,
+) -> String {
     let mut report = String::new();
     report.push_str("# Unified Code Health Report\n\n");
 
@@ -224,11 +252,12 @@ fn create_report(files: &[FileHealth]) -> String {
         report.push_str("The repository requires significant architectural review. Multiple areas show high risk.\n\n");
     }
 
-    report.push_str("## Top 10 Medical Emergencies (Lowest Health Score)\n\n");
-    report.push_str("| File | Health Score | Cognitive | Cyclomatic | SLOC | Primary Culprit |\n");
-    report.push_str("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
+    let display_limit = std::cmp::min(limit, files.len());
+    report.push_str(&format!(
+        "## Top {display_limit} Code Health Emergencies (Lowest Health Scores)\n\n",
+    ));
 
-    for f in files.iter().take(10) {
+    for (i, f) in files.iter().take(display_limit).enumerate() {
         let culprit = if f.cognitive > 20.0 {
             "High Cognitive Complexity"
         } else if f.cyclomatic > 20.0 {
@@ -241,16 +270,33 @@ fn create_report(files: &[FileHealth]) -> String {
             "General Complexity"
         };
 
+        let relative_path = Path::new(&f.path)
+            .strip_prefix(base_dir)
+            .unwrap_or(Path::new(&f.path))
+            .to_string_lossy();
+
+        report.push_str(&format!("{}. **{}**\n", i + 1, relative_path));
+        report.push_str(&format!("   - **Health Score**: {:.1}%\n", f.score));
         report.push_str(&format!(
-            "| {} | **{:.1}** | {} | {} | {} | {} |\n",
-            f.path, f.score, f.cognitive, f.cyclomatic, f.sloc, culprit
+            "   - **Metrics**: Cognitive: {}, Cyclomatic: {}, SLOC: {}, MI: {:.1}\n",
+            f.cognitive, f.cyclomatic, f.sloc, f.mi
         ));
+        report.push_str(&format!("   - **Primary Culprit**: {}\n\n", culprit));
     }
 
-    report.push_str("\n## Health by Package\n\n");
+    let group_label = if is_workspace { "Crate" } else { "Package" };
+    report.push_str(&format!("## Health by {}\n\n", group_label));
+
     let mut package_scores: HashMap<String, Vec<f64>> = HashMap::new();
     for f in files {
-        let package = f.path.split('/').next().unwrap_or("unknown").to_string();
+        let path = Path::new(&f.path);
+        let relative = path.strip_prefix(base_dir).unwrap_or(path);
+        let package = relative
+            .to_string_lossy()
+            .split('/')
+            .next()
+            .unwrap_or("unknown")
+            .to_string();
         package_scores.entry(package).or_default().push(f.score);
     }
 
@@ -263,11 +309,27 @@ fn create_report(files: &[FileHealth]) -> String {
         .collect();
     package_avg.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
-    report.push_str("| Package | Avg Health Score |\n");
-    report.push_str("| :--- | :--- |\n");
-    for (p, score) in package_avg {
-        report.push_str(&format!("| {} | {:.1}% |\n", p, score));
+    for (i, (p, score)) in package_avg.iter().enumerate() {
+        report.push_str(&format!("{}. **{}**: {:.1}%\n", i + 1, p, score));
     }
+
+    report.push_str("\n---\n\n");
+    report.push_str("## Metrics Glossary\n\n");
+    report.push_str("### Cognitive Complexity (Cognitive)\n");
+    report.push_str("- **Description**: Measures how hard it is to understand the control flow of the code. [Authoritative Source](https://www.sonarsource.com/docs/CognitiveComplexity.pdf)\n");
+    report.push_str("- **How to Improve**: Extract complex conditions into well-named functions and reduce nesting levels.\n\n");
+
+    report.push_str("### Cyclomatic Complexity (Cyclomatic)\n");
+    report.push_str("- **Description**: Measures the number of linearly independent paths through the source code. [Authoritative Source](https://www.nist.gov/publications/structured-testing-software-testing-methodology-using-cyclomatic-complexity-metric)\n");
+    report.push_str("- **How to Improve**: Use polymorphic abstractions instead of complex switch/if-else chains, and break down large functions into smaller components.\n\n");
+
+    report.push_str("### Source Lines of Code (SLOC)\n");
+    report.push_str("- **Description**: A measure of the size of the computer program by counting the number of lines in the text of the source code. [Authoritative Source](https://en.wikipedia.org/wiki/Source_lines_of_code)\n");
+    report.push_str("- **How to Improve**: Remove dead code and refactor repetitive logic into reusable helper functions or macros.\n\n");
+
+    report.push_str("### Maintainability Index (MI)\n");
+    report.push_str("- **Description**: A composite metric representing the relative ease of maintaining the code; higher is better. [Authoritative Source](https://learn.microsoft.com/en-us/visualstudio/code-quality/code-metrics-maintainability-index-range-and-meaning)\n");
+    report.push_str("- **How to Improve**: Simultaneously reduce complexity (both cognitive and cyclomatic) and file size to boost the index.\n");
 
     report
 }
@@ -372,14 +434,14 @@ mod tests {
             },
         ];
 
-        let report = create_report(&files);
+        let report = create_report(&files, false, 10, Path::new("."));
         assert!(report.contains("# Unified Code Health Report"));
         assert!(report.contains("## Overall Repository Health: **60.0%**"));
         assert!(report.contains("pkg1/file1.rs"));
         assert!(report.contains("pkg2/file2.rs"));
         assert!(report.contains("High Cognitive Complexity")); // for pkg2/file2.rs
-        assert!(report.contains("| pkg1 | 80.0% |"));
-        assert!(report.contains("| pkg2 | 40.0% |"));
+        assert!(report.contains("1. **pkg1**: 80.0%"));
+        assert!(report.contains("2. **pkg2**: 40.0%"));
     }
 
     #[test]
@@ -392,7 +454,9 @@ mod tests {
             sloc: 0.0,
             mi: 90.0,
         }];
-        assert!(create_report(&files_good).contains("good health overall"));
+        assert!(
+            create_report(&files_good, false, 10, Path::new(".")).contains("good health overall")
+        );
 
         let files_mid = vec![FileHealth {
             path: "f.rs".to_string(),
@@ -402,7 +466,10 @@ mod tests {
             sloc: 0.0,
             mi: 70.0,
         }];
-        assert!(create_report(&files_mid).contains("moderate technical debt"));
+        assert!(
+            create_report(&files_mid, false, 10, Path::new("."))
+                .contains("moderate technical debt")
+        );
 
         let files_bad = vec![FileHealth {
             path: "f.rs".to_string(),
@@ -412,7 +479,10 @@ mod tests {
             sloc: 0.0,
             mi: 30.0,
         }];
-        assert!(create_report(&files_bad).contains("significant architectural review"));
+        assert!(
+            create_report(&files_bad, false, 10, Path::new("."))
+                .contains("significant architectural review")
+        );
     }
 
     #[test]
@@ -444,10 +514,24 @@ mod tests {
             },
         ];
 
-        let report = create_report(&files);
+        let report = create_report(&files, false, 10, Path::new("."));
         // pkg1 avg = (100+80)/2 = 90
-        assert!(report.contains("| pkg1 | 90.0% |"));
-        // root_file.rs package = root_file.rs (since split('/').next() returns the first part)
-        assert!(report.contains("| root_file.rs | 50.0% |"));
+        assert!(report.contains("1. **pkg1**: 90.0%"));
+        assert!(report.contains("2. **root_file.rs**: 50.0%"));
+    }
+
+    #[test]
+    fn test_create_report_crate_label_if_workspace() {
+        let files = vec![FileHealth {
+            path: "pkg1/a.rs".to_string(),
+            score: 100.0,
+            cognitive: 0.0,
+            cyclomatic: 0.0,
+            sloc: 0.0,
+            mi: 100.0,
+        }];
+        let report = create_report(&files, true, 10, Path::new("."));
+        assert!(report.contains("## Health by Crate"));
+        assert!(report.contains("1. **pkg1**: 100.0%"));
     }
 }
