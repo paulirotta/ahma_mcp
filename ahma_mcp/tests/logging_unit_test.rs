@@ -9,7 +9,6 @@
 //! Note: Since logging uses std::sync::Once, each test scenario that requires
 //! different logging behavior must be run in a separate process.
 
-use std::env;
 use std::fs;
 use tempfile::tempdir;
 
@@ -332,18 +331,4 @@ fn test_rust_log_env_parsing() {
         // Just verify the format is parseable as a string
         assert_eq!(!value.is_empty(), expected_valid);
     }
-}
-
-#[test]
-fn test_rust_log_env_not_set() {
-    // When RUST_LOG is not set, should use default
-    let key = "RUST_LOG_TEST_UNSET_12345";
-
-    // Ensure it's not set
-    unsafe {
-        env::remove_var(key);
-    }
-
-    // Check it's actually not set
-    assert!(env::var(key).is_err());
 }

@@ -274,6 +274,12 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
     // and coverage builds (llvm-cov adds significant overhead).
     let notification_timeout = Duration::from_secs(30);
 
+    // CRITICAL: We must wait for both the notification AND the response to complete
+    // before cancelling the service. If we cancel while the tool is in flight,
+    // the adapter shuts down and will never send the progress notification.
+    //
+    // Use tokio::select! to race between notification and timeout, while also
+    // ensuring the response task continues running in the background.
     let notification_result = tokio::time::timeout(notification_timeout, async {
         // For synchronous tool execution, the notification is sent before the response,
         // so we should receive it first.
@@ -294,11 +300,13 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
     })
     .await;
 
-    // Cancel the service before checking results (cleanup)
-    service.cancel().await.ok();
-
-    // Wait for response task to complete (it may have errored, but we don't care)
+    // Wait for response task to complete BEFORE cancelling the service.
+    // This ensures the tool has fully completed execution and had a chance
+    // to send all notifications before we tear down the transport.
     let _ = response_handle.await;
+
+    // Now cancel the service (cleanup)
+    service.cancel().await.ok();
 
     match notification_result {
         Ok(Some(p)) => {
