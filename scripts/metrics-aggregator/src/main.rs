@@ -34,6 +34,10 @@ struct Cli {
     /// Open the report automatically
     #[arg(long)]
     open: bool,
+
+    /// Shorthand for --format html
+    #[arg(long)]
+    html: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -90,22 +94,20 @@ impl FileHealth {
         // Determine base score
         // If MI is 0.0 but complexity is minimal, it's likely a file with only comments or trivial code.
         // We treat these as 100% healthy.
-        let mut score = if mi == 0.0 && cognitive == 0.0 && cyclomatic <= 1.0 {
+        let score = if mi == 0.0 && cognitive == 0.0 && cyclomatic <= 1.0 {
             100.0
         } else {
-            mi
+            // New 60/20/20 formula to provide better resolution at the low end
+            let mi_score = mi.clamp(0.0, 100.0);
+            let cog_score = (100.0 - cognitive).max(0.0);
+            let cyc_score = (100.0 - cyclomatic).max(0.0);
+
+            0.6 * mi_score + 0.2 * cog_score + 0.2 * cyc_score
         };
-
-        // Penalize for cognitive complexity as MI doesn't include it.
-        // We use a milder penalty (0.2 instead of 0.5) to avoid driving everything to zero.
-        score -= cognitive * 0.2;
-
-        // Ensure result stays in 0-100 range.
-        let score = score.clamp(0.0, 100.0);
 
         Self {
             path: results.name.clone(),
-            score,
+            score: score.clamp(0.0, 100.0),
             cognitive,
             cyclomatic,
             sloc,
@@ -188,7 +190,12 @@ fn is_cargo_workspace(dir: &Path) -> bool {
 }
 
 fn main() -> Result<()> {
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
+
+    // Handle shorthand
+    if cli.html {
+        cli.format = OutputFormat::Html;
+    }
 
     check_dependencies()?;
 
@@ -200,7 +207,14 @@ fn main() -> Result<()> {
         .canonicalize()
         .context("Failed to canonicalize directory")?;
 
-    // Create output directory
+    // Create or clear output directory
+    if cli.output.exists() {
+        println!(
+            "Clearing existing analysis results in {}...",
+            cli.output.display()
+        );
+        let _ = fs::remove_dir_all(&cli.output);
+    }
     fs::create_dir_all(&cli.output).context("Failed to create output directory")?;
 
     let is_workspace = is_cargo_workspace(&cli.directory);
@@ -253,8 +267,13 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    // Sort by score (worst first)
-    files_health.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
+    // Sort by score (worst first), then by cognitive complexity (worst first) to break ties
+    files_health.sort_by(|a, b| {
+        a.score
+            .partial_cmp(&b.score)
+            .unwrap()
+            .then_with(|| b.cognitive.partial_cmp(&a.cognitive).unwrap())
+    });
 
     let project_name = get_project_name(&directory);
 
@@ -291,10 +310,11 @@ fn generate_report(
 ) -> Result<(), std::io::Error> {
     let md_content = create_report(files, is_workspace, limit, output_dir, project_name);
 
+    // Always write the markdown version as it's the source for everything else
+    fs::write(output_dir.join("CODE_HEALTH_REPORT.md"), &md_content)?;
+
     match format {
-        OutputFormat::Markdown => {
-            fs::write(output_dir.join("CODE_HEALTH_REPORT.md"), md_content)?;
-        }
+        OutputFormat::Markdown => {}
         OutputFormat::Html => {
             let mut options = pulldown_cmark::Options::empty();
             options.insert(pulldown_cmark::Options::ENABLE_TABLES);
@@ -340,8 +360,14 @@ fn create_report(
 
     let avg_score = files.iter().map(|f| f.score).sum::<f64>() / files.len() as f64;
     report.push_str(&format!(
-        "## Overall Repository Health: **{:.1}%**\n\n",
+        "## Overall Repository Health: **{:.0}%**\n\n",
         avg_score
+    ));
+
+    let now = chrono::Local::now();
+    report.push_str(&format!(
+        "*Generated on: {}*\n\n",
+        now.format("%Y-%m-%d %H:%M:%S")
     ));
 
     report.push_str("### Executive Summary\n");
@@ -359,7 +385,13 @@ fn create_report(
     let mut package_scores: HashMap<String, Vec<f64>> = HashMap::new();
     for f in files {
         let path = Path::new(&f.path);
-        let relative = path.strip_prefix(base_dir).unwrap_or(path);
+        // Ensure path strings are matching in format before stripping prefix
+        let abs_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let abs_base = base_dir
+            .canonicalize()
+            .unwrap_or_else(|_| base_dir.to_path_buf());
+
+        let relative = abs_path.strip_prefix(&abs_base).unwrap_or(path);
         let package = relative
             .components()
             .find_map(|c| match c {
@@ -380,7 +412,7 @@ fn create_report(
     package_avg.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
     for (i, (p, score)) in package_avg.iter().enumerate() {
-        report.push_str(&format!("{}. **{}**: {:.1}%\n", i + 1, p, score));
+        report.push_str(&format!("{}. **{}**: {:.0}%\n", i + 1, p, score));
     }
     report.push_str("\n");
 
@@ -403,7 +435,12 @@ fn create_report(
         };
 
         let path = Path::new(&f.path);
-        let relative = path.strip_prefix(base_dir).unwrap_or(path);
+
+        let abs_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let abs_base = base_dir
+            .canonicalize()
+            .unwrap_or_else(|_| base_dir.to_path_buf());
+        let relative = abs_path.strip_prefix(&abs_base).unwrap_or(path);
         let relative_path = relative.to_string_lossy();
 
         let basename = path
@@ -412,7 +449,7 @@ fn create_report(
             .unwrap_or_else(|| relative_path.to_string());
 
         report.push_str(&format!(
-            "{}. **{}: {:.1}% ({})**\n\t{}\n",
+            "{}. **{}: {:.0}% ({})**\n\t{}\n",
             i + 1,
             basename,
             f.score,
@@ -489,9 +526,10 @@ mod tests {
                 loc: Loc { sloc: 500.0 },             // -1
             },
         };
-        // 60 - 10 = 50
+        // mi_score: 60, cog_score: 50, cyc_score: 50
+        // 0.6*60 + 0.2*50 + 0.2*50 = 36 + 10 + 10 = 56
         let health = FileHealth::calculate(&results);
-        assert_eq!(health.score, 50.0);
+        assert_eq!(health.score, 56.0);
     }
 
     #[test]
@@ -548,12 +586,12 @@ mod tests {
 
         let report = create_report(&files, false, 10, Path::new("."), "test_project");
         assert!(report.contains("# Code Health Metrics: test_project"));
-        assert!(report.contains("## Overall Repository Health: **60.0%**"));
+        assert!(report.contains("## Overall Repository Health: **60%**"));
         assert!(report.contains("pkg1/file1.rs"));
         assert!(report.contains("pkg2/file2.rs"));
         assert!(report.contains("High Cognitive Complexity")); // for pkg2/file2.rs
-        assert!(report.contains("1. **pkg1**: 80.0%"));
-        assert!(report.contains("2. **pkg2**: 40.0%"));
+        assert!(report.contains("1. **pkg1**: 80%"));
+        assert!(report.contains("2. **pkg2**: 40%"));
     }
 
     #[test]
@@ -629,8 +667,8 @@ mod tests {
 
         let report = create_report(&files, false, 10, Path::new("."), "test_project");
         // pkg1 avg = (100+80)/2 = 90
-        assert!(report.contains("1. **pkg1**: 90.0%"));
-        assert!(report.contains("2. **root_file.rs**: 50.0%"));
+        assert!(report.contains("1. **pkg1**: 90%"));
+        assert!(report.contains("2. **root_file.rs**: 50%"));
     }
 
     #[test]
@@ -645,7 +683,7 @@ mod tests {
         }];
         let report = create_report(&files, true, 10, Path::new("."), "test_project");
         assert!(report.contains("## Health by Crate"));
-        assert!(report.contains("1. **pkg1**: 100.0%"));
+        assert!(report.contains("1. **pkg1**: 100%"));
     }
 
     #[test]
