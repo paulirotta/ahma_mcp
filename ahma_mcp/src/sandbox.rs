@@ -564,7 +564,9 @@ pub fn exit_with_sandbox_error(error: &SandboxError) -> ! {
 #[cfg(target_os = "linux")]
 pub fn enforce_landlock_sandbox(scopes: &[PathBuf], no_temp_files: bool) -> Result<()> {
     use anyhow::Context;
-    use landlock::{ABI, AccessFs, PathBeneath, PathFd, Ruleset, RulesetCreatedAttr};
+    use landlock::{
+        ABI, Access, AccessFs, PathBeneath, PathFd, Ruleset, RulesetAttr, RulesetCreatedAttr,
+    };
 
     let abi = ABI::V3;
     let access_all = AccessFs::from_all(abi);
