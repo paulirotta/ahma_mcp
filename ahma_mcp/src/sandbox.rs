@@ -609,7 +609,7 @@ pub fn enforce_landlock_sandbox(scopes: &[PathBuf], no_temp_files: bool) -> Resu
 #[cfg(target_os = "linux")]
 fn add_landlock_system_rules(
     ruleset: &mut landlock::RulesetCreated,
-    access_read: enumflags2::BitFlags<landlock::AccessFs>,
+    access_read: landlock::BitFlags<landlock::AccessFs>,
 ) -> Result<()> {
     use landlock::{AccessFs, PathBeneath, PathFd, RulesetCreatedAttr};
     let system_paths = [
@@ -630,7 +630,7 @@ fn add_landlock_system_rules(
 #[cfg(target_os = "linux")]
 fn add_landlock_home_tool_rules(
     ruleset: &mut landlock::RulesetCreated,
-    access_read: enumflags2::BitFlags<landlock::AccessFs>,
+    access_read: landlock::BitFlags<landlock::AccessFs>,
 ) -> Result<()> {
     use landlock::{PathBeneath, PathFd, RulesetCreatedAttr};
     if let Ok(home) = std::env::var("HOME") {
@@ -651,7 +651,7 @@ fn add_landlock_home_tool_rules(
 #[cfg(target_os = "linux")]
 fn add_landlock_temp_rules(
     ruleset: &mut landlock::RulesetCreated,
-    access_all: enumflags2::BitFlags<landlock::AccessFs>,
+    access_all: landlock::BitFlags<landlock::AccessFs>,
 ) -> Result<()> {
     use landlock::{PathBeneath, PathFd, RulesetCreatedAttr};
     let tmp_path = std::path::Path::new("/tmp");
