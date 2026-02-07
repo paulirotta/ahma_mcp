@@ -630,9 +630,22 @@ jobs:
             echo "cargo-nextest already installed"
           fi
 
+      - name: Install cargo-debtmap
+        run: |
+          if ! command -v debtmap &> /dev/null; then
+             echo "cargo-debtmap not found, installing..."
+             cargo binstall cargo-debtmap --no-confirm || cargo install cargo-debtmap --locked
+          else
+             echo "cargo-debtmap is already installed"
+          fi
+
       - name: Generate coverage report
         run: |
           cargo llvm-cov nextest --profile coverage --locked --no-default-features --html --output-dir ./coverage
+
+      - name: Generate debtmap report
+        run: |
+          debtmap analyze . --format markdown > ./coverage/debtmap.md
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -641,6 +654,12 @@ jobs:
         uses: actions/upload-pages-artifact@v4
         with:
           path: ./coverage
+
+      - name: Upload debtmap markdown artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: debtmap-markdown
+          path: ./coverage/debtmap.md
 
       - name: Deploy to GitHub Pages
         id: deployment
