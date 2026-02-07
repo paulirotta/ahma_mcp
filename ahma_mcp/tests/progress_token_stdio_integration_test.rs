@@ -12,7 +12,6 @@ use rmcp::{
 };
 use serde_json::json;
 use std::borrow::Cow;
-use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -179,34 +178,14 @@ async fn test_stdio_progress_notifications_respect_client_progress_token() -> an
 
     let binary_path = ahma_mcp::test_utils::cli::get_binary_path("ahma_mcp", "ahma_mcp");
 
-    // Create a small wrapper script that tees the child's stdout to stderr so
-    // the test process can observe raw JSON-RPC lines even if the client handler
-    // misses them. This avoids changing rmcp internals.
-    let wrapper_path = temp.path().join("child_wrapper.sh");
-    std::fs::write(
-        &wrapper_path,
-        r#"#!/bin/sh
-# Run the target binary (first arg) with remaining args, teeing stdout to stderr
-"#,
-    )?;
-    // Append the execution lines in append mode so we can include the exec logic
-    use std::fs::OpenOptions;
-    {
-        use std::io::Write;
-        let mut f = OpenOptions::new().append(true).open(&wrapper_path)?;
-        writeln!(f, r#"exec "$@" | tee /dev/stderr"#)?;
-    } // `f` dropped here to ensure the writer FD is closed before we spawn the wrapper
-    // Make the wrapper executable
-    let mut perms = std::fs::metadata(&wrapper_path)?.permissions();
-    perms.set_mode(0o755);
-    std::fs::set_permissions(&wrapper_path, perms)?;
-
+    // Run the binary directly without a wrapper script.
+    // Previously used a wrapper with `tee` to capture output, but the pipeline
+    // was causing stdin to close prematurely, breaking the stdio transport.
     let service = client_impl
         .clone()
         .serve(TokioChildProcess::new(
-            Command::new(wrapper_path).configure(|cmd| {
-                cmd.arg(&binary_path)
-                    .arg("--tools-dir")
+            Command::new(&binary_path).configure(|cmd| {
+                cmd.arg("--tools-dir")
                     .arg(&tools_dir)
                     .arg("--log-to-stderr")
                     .current_dir(&wd)
