@@ -7,12 +7,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use walkdir::WalkDir;
 
-#[derive(Debug, Clone, Copy, clap::ValueEnum, PartialEq)]
-enum OutputFormat {
-    Markdown,
-    Html,
-}
-
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Analyzes Rust code metrics and generates a health report", long_about = None)]
 struct Cli {
@@ -26,10 +20,6 @@ struct Cli {
     /// Number of issues to show in the report
     #[arg(short, long, default_value_t = 10)]
     limit: usize,
-
-    /// Output format (markdown or html)
-    #[arg(short, long, value_enum, default_value_t = OutputFormat::Markdown)]
-    format: OutputFormat,
 
     /// Open the report automatically
     #[arg(long)]
@@ -190,12 +180,7 @@ fn is_cargo_workspace(dir: &Path) -> bool {
 }
 
 fn main() -> Result<()> {
-    let mut cli = Cli::parse();
-
-    // Handle shorthand
-    if cli.html {
-        cli.format = OutputFormat::Html;
-    }
+    let cli = Cli::parse();
 
     check_dependencies()?;
 
@@ -282,19 +267,25 @@ fn main() -> Result<()> {
         is_workspace,
         cli.limit,
         &directory,
-        cli.format,
+        cli.html,
         &project_name,
     )?;
 
-    let filename = match cli.format {
-        OutputFormat::Markdown => "CODE_HEALTH_REPORT.md",
-        OutputFormat::Html => "CODE_HEALTH_REPORT.html",
-    };
-    let report_path = directory.join(filename);
+    let report_path = directory.join("CODE_HEALTH_REPORT.md");
     println!("Report generated: {}", report_path.display());
 
+    if cli.html {
+        let html_path = directory.join("CODE_HEALTH_REPORT.html");
+        println!("Report generated: {}", html_path.display());
+    }
+
     if cli.open {
-        opener::open(&report_path).context("Failed to open report")?;
+        let open_path = if cli.html {
+            directory.join("CODE_HEALTH_REPORT.html")
+        } else {
+            directory.join("CODE_HEALTH_REPORT.md")
+        };
+        opener::open(&open_path).context("Failed to open report")?;
     }
 
     Ok(())
@@ -305,25 +296,23 @@ fn generate_report(
     is_workspace: bool,
     limit: usize,
     output_dir: &Path,
-    format: OutputFormat,
+    generate_html: bool,
     project_name: &str,
 ) -> Result<(), std::io::Error> {
     let md_content = create_report(files, is_workspace, limit, output_dir, project_name);
 
-    // Always write the markdown version as it's the source for everything else
+    // Always write the markdown version
     fs::write(output_dir.join("CODE_HEALTH_REPORT.md"), &md_content)?;
 
-    match format {
-        OutputFormat::Markdown => {}
-        OutputFormat::Html => {
-            let mut options = pulldown_cmark::Options::empty();
-            options.insert(pulldown_cmark::Options::ENABLE_TABLES);
-            options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
-            let parser = pulldown_cmark::Parser::new_ext(&md_content, options);
-            let mut html_output = String::new();
-            pulldown_cmark::html::push_html(&mut html_output, parser);
+    if generate_html {
+        let mut options = pulldown_cmark::Options::empty();
+        options.insert(pulldown_cmark::Options::ENABLE_TABLES);
+        options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
+        let parser = pulldown_cmark::Parser::new_ext(&md_content, options);
+        let mut html_output = String::new();
+        pulldown_cmark::html::push_html(&mut html_output, parser);
 
-            let style = "
+        let style = "
                 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #24292e; max-width: 900px; margin: 0 auto; padding: 40px 20px; background-color: #f6f8fa; }
                 h1, h2, h3 { color: #1b1f23; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; margin-top: 1.5em; }
                 pre { background-color: #f6f8fa; padding: 16px; border-radius: 6px; overflow: auto; }
@@ -338,12 +327,11 @@ fn generate_report(
                 .score-high { color: #28a745; font-weight: bold; }
             ";
 
-            let full_html = format!(
-                "<!DOCTYPE html>\n<html>\n<head>\n<meta charset='UTF-8'>\n<title>Code Health Report</title>\n<style>\n{}\n</style>\n</head>\n<body>\n{}\n</body>\n</html>",
-                style, html_output
-            );
-            fs::write(output_dir.join("CODE_HEALTH_REPORT.html"), full_html)?;
-        }
+        let full_html = format!(
+            "<!DOCTYPE html>\n<html>\n<head>\n<meta charset='UTF-8'>\n<title>Code Health Report</title>\n<style>\n{}\n</style>\n</head>\n<body>\n{}\n</body>\n</html>",
+            style, html_output
+        );
+        fs::write(output_dir.join("CODE_HEALTH_REPORT.html"), full_html)?;
     }
     Ok(())
 }
