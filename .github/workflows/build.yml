@@ -647,6 +647,15 @@ jobs:
         run: |
           debtmap analyze . --format markdown > ./coverage/debtmap.md
 
+      - name: Install rust-code-analysis-cli
+        run: |
+          if ! command -v rust-code-analysis-cli &> /dev/null; then
+            echo "rust-code-analysis-cli not found, installing..."
+            cargo binstall rust-code-analysis-cli --no-confirm || cargo install --git https://github.com/mozilla/rust-code-analysis rust-code-analysis-cli
+          else
+            echo "rust-code-analysis-cli is already installed"
+          fi
+
       - name: Generate code health report
         run: |
           cd scripts/metrics-aggregator
