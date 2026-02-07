@@ -3,7 +3,9 @@
 //! These tests cover edge cases and functions that need additional test coverage
 //! in adapter.rs including value_to_string, process_named_arg, and temp file handling.
 
-use ahma_mcp::adapter::{Adapter, AsyncExecOptions, ExecutionMode};
+use ahma_mcp::adapter::{
+    Adapter, AsyncExecOptions, ExecutionMode, escape_shell_argument, needs_file_handling,
+};
 use ahma_mcp::config::{CommandOption, SubcommandConfig};
 use ahma_mcp::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_mcp::sandbox::{Sandbox, SandboxMode};
@@ -65,67 +67,67 @@ fn test_execution_mode_enum() {
 
 #[test]
 fn test_needs_file_handling_newline() {
-    assert!(Adapter::needs_file_handling("line1\nline2"));
-    assert!(Adapter::needs_file_handling("a\nb\nc"));
+    assert!(needs_file_handling("line1\nline2"));
+    assert!(needs_file_handling("a\nb\nc"));
 }
 
 #[test]
 fn test_needs_file_handling_carriage_return() {
-    assert!(Adapter::needs_file_handling("text\rwith\rreturns"));
+    assert!(needs_file_handling("text\rwith\rreturns"));
 }
 
 #[test]
 fn test_needs_file_handling_quotes() {
-    assert!(Adapter::needs_file_handling("it's fine"));
-    assert!(Adapter::needs_file_handling("he said \"hello\""));
+    assert!(needs_file_handling("it's fine"));
+    assert!(needs_file_handling("he said \"hello\""));
 }
 
 #[test]
 fn test_needs_file_handling_special_chars() {
-    assert!(Adapter::needs_file_handling("path\\to\\file"));
-    assert!(Adapter::needs_file_handling("run `cmd`"));
-    assert!(Adapter::needs_file_handling("echo $HOME"));
+    assert!(needs_file_handling("path\\to\\file"));
+    assert!(needs_file_handling("run `cmd`"));
+    assert!(needs_file_handling("echo $HOME"));
 }
 
 #[test]
 fn test_needs_file_handling_length_boundary() {
     // Exactly at limit - should NOT need file handling
     let at_limit = "x".repeat(8192);
-    assert!(!Adapter::needs_file_handling(&at_limit));
+    assert!(!needs_file_handling(&at_limit));
 
     // One over limit - SHOULD need file handling
     let over_limit = "x".repeat(8193);
-    assert!(Adapter::needs_file_handling(&over_limit));
+    assert!(needs_file_handling(&over_limit));
 }
 
 #[test]
 fn test_needs_file_handling_safe_strings() {
-    assert!(!Adapter::needs_file_handling("hello"));
-    assert!(!Adapter::needs_file_handling("hello world"));
-    assert!(!Adapter::needs_file_handling("path/to/file"));
-    assert!(!Adapter::needs_file_handling("file-name_123.txt"));
-    assert!(!Adapter::needs_file_handling(""));
+    assert!(!needs_file_handling("hello"));
+    assert!(!needs_file_handling("hello world"));
+    assert!(!needs_file_handling("path/to/file"));
+    assert!(!needs_file_handling("file-name_123.txt"));
+    assert!(!needs_file_handling(""));
 }
 
 // === escape_shell_argument Tests ===
 
 #[test]
 fn test_escape_shell_argument_simple() {
-    assert_eq!(Adapter::escape_shell_argument("hello"), "'hello'");
-    assert_eq!(Adapter::escape_shell_argument(""), "''");
+    assert_eq!(escape_shell_argument("hello"), "'hello'");
+    assert_eq!(escape_shell_argument(""), "''");
 }
 
 #[test]
 fn test_escape_shell_argument_with_single_quote() {
     // Single quote should be escaped by ending the single-quoted string,
     // inserting an escaped quote, and starting a new single-quoted string
-    let result = Adapter::escape_shell_argument("it's");
+    let result = escape_shell_argument("it's");
     assert!(result.contains("'\"'\"'"));
 }
 
 #[test]
 fn test_escape_shell_argument_multiple_quotes() {
-    let result = Adapter::escape_shell_argument("it's 'quoted'");
+    let result = escape_shell_argument("it's 'quoted'");
     // Should escape single quotes
     assert!(result.starts_with("'"));
     assert!(result.ends_with("'"));
@@ -144,7 +146,7 @@ fn test_escape_shell_argument_multiple_quotes() {
 #[test]
 fn test_escape_shell_argument_special_chars_no_single_quote() {
     // Other special chars are safe inside single quotes
-    let result = Adapter::escape_shell_argument("$HOME \"test\" `cmd` \\path");
+    let result = escape_shell_argument("$HOME \"test\" `cmd` \\path");
     assert_eq!(result, "'$HOME \"test\" `cmd` \\path'");
 }
 
@@ -1020,7 +1022,7 @@ async fn test_sync_command_exit_code_failure() {
 #[test]
 fn test_is_shell_program_detection() {
     // These are shell programs
-    assert!(Adapter::needs_file_handling("test\nwith\nnewlines")); // Just testing it compiles
+    assert!(needs_file_handling("test\nwith\nnewlines")); // Just testing it compiles
 
     // Test the internal logic indirectly through prepare_command_and_args
     // The shell detection is tested via shell_commands_append_redirect_once above

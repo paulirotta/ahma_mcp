@@ -26,6 +26,9 @@
 // Allow dead_code - these are test utilities, and rustc can't see usage across test crates
 #![allow(dead_code)]
 
+#[macro_use]
+pub mod sse_test_helpers;
+
 use futures::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};

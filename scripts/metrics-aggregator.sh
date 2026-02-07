@@ -10,4 +10,4 @@ REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 cd "$SCRIPT_DIR/metrics-aggregator" || exit 1
 
 # Run the aggregator on the repository root
-cargo run -- "$REPO_ROOT" --limit 20
+cargo run -- "$REPO_ROOT" --limit 20 --html --open

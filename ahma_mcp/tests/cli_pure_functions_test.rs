@@ -6,7 +6,7 @@
 //! - resolve_cli_subcommand
 
 use ahma_mcp::config::{SubcommandConfig, ToolConfig};
-use ahma_mcp::shell::cli::{find_matching_tool, find_tool_config, resolve_cli_subcommand};
+use ahma_mcp::shell::resolution::{find_matching_tool, find_tool_config, resolve_cli_subcommand};
 use std::collections::HashMap;
 
 // ============= Helper Functions =============

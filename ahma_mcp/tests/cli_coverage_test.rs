@@ -1,5 +1,6 @@
 use ahma_mcp::config::{SubcommandConfig, ToolConfig};
-use ahma_mcp::shell::cli::{Cli, normalize_tools_dir, resolve_cli_subcommand};
+use ahma_mcp::shell::cli::Cli;
+use ahma_mcp::shell::resolution::{normalize_tools_dir, resolve_cli_subcommand};
 
 use clap::Parser;
 

@@ -621,41 +621,31 @@ async fn test_special_characters_in_arguments() {
 fn test_needs_file_handling_detection() {
     init_test_logging();
     // Test the static method for detecting problematic strings
-    assert!(ahma_mcp::adapter::Adapter::needs_file_handling(
-        "line1\nline2"
-    ));
-    assert!(ahma_mcp::adapter::Adapter::needs_file_handling(
+    assert!(ahma_mcp::adapter::needs_file_handling("line1\nline2"));
+    assert!(ahma_mcp::adapter::needs_file_handling(
         "text with 'single quotes'"
     ));
-    assert!(ahma_mcp::adapter::Adapter::needs_file_handling(
+    assert!(ahma_mcp::adapter::needs_file_handling(
         "text with \"double quotes\""
     ));
-    assert!(ahma_mcp::adapter::Adapter::needs_file_handling(
+    assert!(ahma_mcp::adapter::needs_file_handling(
         "text with $variables"
     ));
-    assert!(ahma_mcp::adapter::Adapter::needs_file_handling(
+    assert!(ahma_mcp::adapter::needs_file_handling(
         "text with `backticks`"
     ));
-    assert!(ahma_mcp::adapter::Adapter::needs_file_handling(
+    assert!(ahma_mcp::adapter::needs_file_handling(
         "text with \\backslashes"
     ));
 
     // Very long strings should also use file handling
     let long_string = "a".repeat(10000);
-    assert!(ahma_mcp::adapter::Adapter::needs_file_handling(
-        &long_string
-    ));
+    assert!(ahma_mcp::adapter::needs_file_handling(&long_string));
 
     // Normal strings should not need file handling
-    assert!(!ahma_mcp::adapter::Adapter::needs_file_handling(
-        "simple text"
-    ));
-    assert!(!ahma_mcp::adapter::Adapter::needs_file_handling(
-        "text with spaces"
-    ));
-    assert!(!ahma_mcp::adapter::Adapter::needs_file_handling(
-        "text-with-dashes"
-    ));
+    assert!(!ahma_mcp::adapter::needs_file_handling("simple text"));
+    assert!(!ahma_mcp::adapter::needs_file_handling("text with spaces"));
+    assert!(!ahma_mcp::adapter::needs_file_handling("text-with-dashes"));
 }
 
 #[test]
@@ -663,23 +653,23 @@ fn test_shell_argument_escaping() {
     init_test_logging();
     // Test the shell escaping functionality
     assert_eq!(
-        ahma_mcp::adapter::Adapter::escape_shell_argument("simple"),
+        ahma_mcp::adapter::escape_shell_argument("simple"),
         "'simple'"
     );
 
     assert_eq!(
-        ahma_mcp::adapter::Adapter::escape_shell_argument("text with spaces"),
+        ahma_mcp::adapter::escape_shell_argument("text with spaces"),
         "'text with spaces'"
     );
 
     // Test escaping of embedded single quotes
     assert_eq!(
-        ahma_mcp::adapter::Adapter::escape_shell_argument("don't break"),
+        ahma_mcp::adapter::escape_shell_argument("don't break"),
         "'don'\"'\"'t break'"
     );
 
     assert_eq!(
-        ahma_mcp::adapter::Adapter::escape_shell_argument("it's a 'test'"),
+        ahma_mcp::adapter::escape_shell_argument("it's a 'test'"),
         "'it'\"'\"'s a '\"'\"'test'\"'\"''"
     );
 }
