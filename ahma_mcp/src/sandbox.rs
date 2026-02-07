@@ -564,7 +564,7 @@ pub fn exit_with_sandbox_error(error: &SandboxError) -> ! {
 #[cfg(target_os = "linux")]
 pub fn enforce_landlock_sandbox(scopes: &[PathBuf], no_temp_files: bool) -> Result<()> {
     use anyhow::Context;
-    use landlock::{ABI, AccessFs, PathBeneath, PathFd, Ruleset};
+    use landlock::{ABI, AccessFs, PathBeneath, PathFd, Ruleset, RulesetCreatedAttr};
 
     let abi = ABI::V3;
     let access_all = AccessFs::from_all(abi);
@@ -611,7 +611,7 @@ fn add_landlock_system_rules(
     ruleset: &mut landlock::RulesetCreated,
     access_read: landlock::AccessFs,
 ) -> Result<()> {
-    use landlock::{AccessFs, PathBeneath, PathFd};
+    use landlock::{AccessFs, PathBeneath, PathFd, RulesetCreatedAttr};
     let system_paths = [
         "/usr", "/bin", "/sbin", "/etc", "/lib", "/lib64", "/proc", "/dev", "/sys",
     ];
@@ -632,7 +632,7 @@ fn add_landlock_home_tool_rules(
     ruleset: &mut landlock::RulesetCreated,
     access_read: landlock::AccessFs,
 ) -> Result<()> {
-    use landlock::{PathBeneath, PathFd};
+    use landlock::{PathBeneath, PathFd, RulesetCreatedAttr};
     if let Ok(home) = std::env::var("HOME") {
         let home_path = std::path::Path::new(&home);
         let tool_paths = [".cargo", ".rustup", ".nvm", ".npm", ".go", ".cache"];
@@ -653,7 +653,7 @@ fn add_landlock_temp_rules(
     ruleset: &mut landlock::RulesetCreated,
     access_all: landlock::AccessFs,
 ) -> Result<()> {
-    use landlock::{PathBeneath, PathFd};
+    use landlock::{PathBeneath, PathFd, RulesetCreatedAttr};
     let tmp_path = std::path::Path::new("/tmp");
     if tmp_path.exists() {
         if let Ok(fd) = PathFd::new(tmp_path) {
