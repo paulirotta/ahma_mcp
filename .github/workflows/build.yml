@@ -630,13 +630,13 @@ jobs:
             echo "cargo-nextest already installed"
           fi
 
-      - name: Install cargo-debtmap
+      - name: Install debtmap
         run: |
           if ! command -v debtmap &> /dev/null; then
-             echo "cargo-debtmap not found, installing..."
-             cargo binstall cargo-debtmap --no-confirm || cargo install cargo-debtmap --locked
+             echo "debtmap not found, installing..."
+             cargo binstall debtmap --no-confirm || cargo install debtmap --locked
           else
-             echo "cargo-debtmap is already installed"
+             echo "debtmap is already installed"
           fi
 
       - name: Generate coverage report
