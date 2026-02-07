@@ -170,33 +170,45 @@ impl Sandbox {
     pub fn validate_path(&self, path: &Path) -> Result<PathBuf> {
         let scopes = self.scopes();
 
-        // In Test mode, we only bypass validation if the sandbox is explicitly unrestricted (root scope or no scopes).
-        // If specific scopes are provided, we enforce them logically even in Test mode, while still bypassing
-        // the kernel-level sandboxing in create_command.
-        if self.mode == SandboxMode::Test
+        if self.should_bypass_validation(&scopes) {
+            return self.resolve_test_path(path);
+        }
+
+        let canonical = self.resolve_path(path, &scopes)?;
+
+        if self.is_path_allowed(&canonical, &scopes) {
+            self.check_security_policies(path, &canonical)?;
+            Ok(canonical)
+        } else {
+            Err(SandboxError::PathOutsideSandbox {
+                path: path.to_path_buf(),
+                scopes: scopes.to_vec(),
+            }
+            .into())
+        }
+    }
+
+    fn should_bypass_validation(&self, scopes: &[PathBuf]) -> bool {
+        self.mode == SandboxMode::Test
             && (scopes.is_empty() || scopes.iter().any(|s| s == Path::new("/")))
-        {
-            return std::fs::canonicalize(path).or_else(|_| Ok(path.to_path_buf()));
-        }
+    }
 
-        if scopes.is_empty() {
-            return Err(anyhow!("No sandbox scopes configured"));
-        }
+    fn resolve_test_path(&self, path: &Path) -> Result<PathBuf> {
+        std::fs::canonicalize(path).or_else(|_| Ok(path.to_path_buf()))
+    }
 
-        // We assume the first scope is the "primary" one for relative path resolution
-        let first_scope = scopes.first().ok_or_else(|| anyhow!("No scopes"))?;
+    fn resolve_path(&self, path: &Path, scopes: &[PathBuf]) -> Result<PathBuf> {
+        let first_scope = scopes
+            .first()
+            .ok_or_else(|| anyhow!("No sandbox scopes configured"))?;
 
-        // If path is relative, join with first sandbox scope
         let full_path = if path.is_absolute() {
             path.to_path_buf()
         } else {
             first_scope.join(path)
         };
 
-        // Try to canonicalize the path.
-        // If the path doesn't exist, try canonicalizing its parent directory
-        // to handle symlinks correctly (especially important on macOS where /var is a symlink).
-        let canonical = match std::fs::canonicalize(&full_path) {
+        Ok(match std::fs::canonicalize(&full_path) {
             Ok(p) => p,
             Err(_) => {
                 if let Some(parent) = full_path.parent() {
@@ -213,34 +225,29 @@ impl Sandbox {
                     normalize_path_lexically(&full_path)
                 }
             }
-        };
+        })
+    }
 
-        // Check if canonical path is within any scope
-        // Note: In LANDLOCK (Linux) mode, the kernel enforces this too, but we check here for helpful errors.
-        if scopes.iter().any(|scope| canonical.starts_with(scope)) {
-            // High security mode: block temp directories and /dev even if they are within scope
-            if self.no_temp_files {
-                let path_str = canonical.to_string_lossy();
-                if path_str.starts_with("/tmp")
-                    || path_str.starts_with("/var/folders")
-                    || path_str.starts_with("/private/tmp")
-                    || path_str.starts_with("/private/var/folders")
-                    || path_str.starts_with("/dev")
-                {
-                    return Err(SandboxError::HighSecurityViolation {
-                        path: path.to_path_buf(),
-                    }
-                    .into());
+    fn is_path_allowed(&self, canonical: &Path, scopes: &[PathBuf]) -> bool {
+        scopes.iter().any(|scope| canonical.starts_with(scope))
+    }
+
+    fn check_security_policies(&self, original_path: &Path, canonical: &Path) -> Result<()> {
+        if self.no_temp_files {
+            let path_str = canonical.to_string_lossy();
+            if path_str.starts_with("/tmp")
+                || path_str.starts_with("/var/folders")
+                || path_str.starts_with("/private/tmp")
+                || path_str.starts_with("/private/var/folders")
+                || path_str.starts_with("/dev")
+            {
+                return Err(SandboxError::HighSecurityViolation {
+                    path: original_path.to_path_buf(),
                 }
+                .into());
             }
-            Ok(canonical)
-        } else {
-            Err(SandboxError::PathOutsideSandbox {
-                path: path.to_path_buf(),
-                scopes: scopes.to_vec(),
-            }
-            .into())
         }
+        Ok(())
     }
 
     /// Create a sandboxed tokio process Command.
@@ -251,34 +258,46 @@ impl Sandbox {
         working_dir: &Path,
     ) -> Result<tokio::process::Command> {
         if self.mode == SandboxMode::Test {
-            let mut cmd = tokio::process::Command::new(program);
-            cmd.args(args)
-                .current_dir(working_dir)
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped());
-            return Ok(cmd);
+            return Ok(self.base_command(program, args, working_dir));
         }
 
+        self.create_platform_sandboxed_command(program, args, working_dir)
+    }
+
+    fn base_command(
+        &self,
+        program: &str,
+        args: &[String],
+        working_dir: &Path,
+    ) -> tokio::process::Command {
+        let mut cmd = tokio::process::Command::new(program);
+        cmd.args(args)
+            .current_dir(working_dir)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+
+        // Cargo can be configured (via config or env) to write its target dir outside
+        // the session sandbox. Force it back inside the working directory.
+        if std::path::Path::new(program)
+            .file_name()
+            .is_some_and(|n| n == "cargo")
+        {
+            cmd.env("CARGO_TARGET_DIR", working_dir.join("target"));
+        }
+        cmd
+    }
+
+    fn create_platform_sandboxed_command(
+        &self,
+        program: &str,
+        args: &[String],
+        working_dir: &Path,
+    ) -> Result<tokio::process::Command> {
         #[cfg(target_os = "linux")]
         {
             // On Linux, Landlock is applied at process level, so commands run directly
-            let mut cmd = tokio::process::Command::new(program);
-            cmd.args(args)
-                .current_dir(working_dir)
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped());
-
-            // Cargo can be configured (via config or env) to write its target dir outside
-            // the session sandbox. Force it back inside the working directory.
-            if std::path::Path::new(program)
-                .file_name()
-                .is_some_and(|n| n == "cargo")
-            {
-                cmd.env("CARGO_TARGET_DIR", working_dir.join("target"));
-            }
-            Ok(cmd)
+            Ok(self.base_command(program, args, working_dir))
         }
 
         #[cfg(target_os = "macos")]
@@ -287,41 +306,15 @@ impl Sandbox {
             let mut full_command = vec![program.to_string()];
             full_command.extend(args.iter().cloned());
 
-            // For macOS seatbelt, we generate a profile that allows access to all scopes
             let (sandbox_program, sandbox_args) =
                 self.build_macos_sandbox_command(&full_command, working_dir)?;
 
-            let mut cmd = tokio::process::Command::new(sandbox_program);
-            cmd.args(sandbox_args)
-                .current_dir(working_dir)
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped());
-
-            // Cargo can be configured (via config or env) to write its target dir outside
-            // the session sandbox. Force it back inside the working directory.
-            if std::path::Path::new(program)
-                .file_name()
-                .is_some_and(|n| n == "cargo")
-            {
-                cmd.env("CARGO_TARGET_DIR", working_dir.join("target"));
-            }
-            Ok(cmd)
+            Ok(self.base_command(&sandbox_program, &sandbox_args, working_dir))
         }
 
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
-            // Fallback for unsupported OS - run directly if not in strict mode, or fail?
-            // Since we have a check_sandbox_prerequisites, we assume if we are here we are allowed to run.
-            // If strict mode is enforced elsewhere, maybe fine.
-            // But for safety, let's behave like linux (no-op) but betterwarn?
-            let mut cmd = tokio::process::Command::new(program);
-            cmd.args(args)
-                .current_dir(working_dir)
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped());
-            Ok(cmd)
+            Ok(self.base_command(program, args, working_dir))
         }
     }
 
@@ -358,48 +351,9 @@ impl Sandbox {
     #[cfg(target_os = "macos")]
     fn generate_seatbelt_profile(&self, working_dir: &Path) -> String {
         let wd_str = working_dir.to_string_lossy();
-
-        // Allowed scopes strings (all scopes are read/write allowed)
-        let mut scope_rules = String::new();
-        for scope in self.scopes.read().unwrap().iter() {
-            scope_rules.push_str(&format!(
-                "(allow file-write* (subpath \"{}\"))\n",
-                scope.display()
-            ));
-        }
-
-        // Get home directory for user-specific tool paths
-        let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/Users/Shared".to_string());
-        let home_path = std::path::Path::new(&home_dir);
-
-        // Build optional user tool directory rules (only for paths that exist)
-        let mut user_tool_rules = String::new();
-        let cargo_path = home_path.join(".cargo");
-        let rustup_path = home_path.join(".rustup");
-
-        if cargo_path.exists() {
-            user_tool_rules.push_str(&format!(
-                "(allow file-read* (subpath \"{}\"))\n",
-                cargo_path.display()
-            ));
-        }
-        if rustup_path.exists() {
-            user_tool_rules.push_str(&format!(
-                "(allow file-read* (subpath \"{}\"))\n",
-                rustup_path.display()
-            ));
-        }
-
-        // Build temp directory rules
-        let temp_rules = if self.no_temp_files {
-            // No temp directory access - high security mode
-            String::new()
-        } else {
-            // Normal mode: allow temp directories for tools that need them
-            "(allow file-write* (subpath \"/private/tmp\"))\n\
-             (allow file-write* (subpath \"/private/var/folders\"))\n"
-                .to_string()
-        };
+        let scope_rules = self.get_macos_scope_rules();
+        let user_tool_rules = self.get_macos_user_tool_rules();
+        let temp_rules = self.get_macos_temp_rules();
 
         format!(
             r#"(version 1)
@@ -422,10 +376,52 @@ impl Sandbox {
             temp_rules = temp_rules,
         )
     }
+
+    #[cfg(target_os = "macos")]
+    fn get_macos_scope_rules(&self) -> String {
+        let mut rules = String::new();
+        for scope in self.scopes.read().unwrap().iter() {
+            rules.push_str(&format!(
+                "(allow file-write* (subpath \"{}\"))\n",
+                scope.display()
+            ));
+        }
+        rules
+    }
+
+    #[cfg(target_os = "macos")]
+    fn get_macos_user_tool_rules(&self) -> String {
+        let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/Users/Shared".to_string());
+        let home_path = std::path::Path::new(&home_dir);
+        let mut rules = String::new();
+
+        let tool_paths = [".cargo", ".rustup"];
+        for tool in &tool_paths {
+            let path = home_path.join(tool);
+            if path.exists() {
+                rules.push_str(&format!(
+                    "(allow file-read* (subpath \"{}\"))\n",
+                    path.display()
+                ));
+            }
+        }
+        rules
+    }
+
+    #[cfg(target_os = "macos")]
+    fn get_macos_temp_rules(&self) -> String {
+        if self.no_temp_files {
+            String::new()
+        } else {
+            "(allow file-write* (subpath \"/private/tmp\"))\n\
+             (allow file-write* (subpath \"/private/var/folders\"))\n"
+                .to_string()
+        }
+    }
 }
 
 /// Helper: Normalize a path lexically (without filesystem access).
-fn normalize_path_lexically(path: &Path) -> PathBuf {
+pub fn normalize_path_lexically(path: &Path) -> PathBuf {
     use std::path::Component;
 
     let mut stack = Vec::new();
@@ -568,9 +564,7 @@ pub fn exit_with_sandbox_error(error: &SandboxError) -> ! {
 #[cfg(target_os = "linux")]
 pub fn enforce_landlock_sandbox(scopes: &[PathBuf], no_temp_files: bool) -> Result<()> {
     use anyhow::Context;
-    use landlock::{
-        ABI, Access, AccessFs, PathBeneath, PathFd, Ruleset, RulesetAttr, RulesetCreatedAttr,
-    };
+    use landlock::{ABI, AccessFs, PathBeneath, PathFd, Ruleset};
 
     let abi = ABI::V3;
     let access_all = AccessFs::from_all(abi);
@@ -582,6 +576,7 @@ pub fn enforce_landlock_sandbox(scopes: &[PathBuf], no_temp_files: bool) -> Resu
         .create()
         .context("Failed to create Landlock ruleset instance")?;
 
+    // Add sandbox scopes
     for scope in scopes {
         ruleset = ruleset
             .add_rule(PathBeneath::new(
@@ -591,57 +586,11 @@ pub fn enforce_landlock_sandbox(scopes: &[PathBuf], no_temp_files: bool) -> Resu
             .context("Failed to add Landlock rule for sandbox scope")?;
     }
 
-    // Allow read access to system directories
-    let system_paths = [
-        "/usr", "/bin", "/sbin", "/etc", "/lib", "/lib64", "/proc", "/dev", "/sys",
-    ];
-    let access_read_execute = access_read | AccessFs::Execute;
-    for path in &system_paths {
-        let path_obj = Path::new(path);
-        if path_obj.exists() {
-            if let Ok(fd) = PathFd::new(path_obj) {
-                if let Err(e) = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read_execute)) {
-                    tracing::debug!(
-                        "Could not add Landlock rule for {}: {:?}",
-                        path_obj.display(),
-                        e
-                    );
-                }
-            }
-        }
-    }
+    add_landlock_system_rules(&mut ruleset, access_read)?;
+    add_landlock_home_tool_rules(&mut ruleset, access_read)?;
 
-    // Allow read access to toolchains in HOME directory
-    if let Ok(home) = std::env::var("HOME") {
-        let home_path = Path::new(&home);
-        let tool_paths = [".cargo", ".rustup", ".nvm", ".npm", ".go", ".cache"];
-        for tool in &tool_paths {
-            let path = home_path.join(tool);
-            if path.exists() {
-                if let Ok(fd) = PathFd::new(&path) {
-                    if let Err(e) = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read)) {
-                        tracing::debug!(
-                            "Could not add Landlock rule for {}: {:?}",
-                            path.display(),
-                            e
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    // Allow /tmp unless high security mode is on
     if !no_temp_files {
-        let tmp_path = Path::new("/tmp");
-        if tmp_path.exists() {
-            if let Ok(fd) = PathFd::new(tmp_path) {
-                // Tools need write access to /tmp
-                if let Err(e) = (&mut ruleset).add_rule(PathBeneath::new(fd, access_all)) {
-                    tracing::debug!("Could not add Landlock rule for /tmp: {:?}", e);
-                }
-            }
-        }
+        add_landlock_temp_rules(&mut ruleset, access_all)?;
     }
 
     let status = ruleset
@@ -654,6 +603,63 @@ pub fn enforce_landlock_sandbox(scopes: &[PathBuf], no_temp_files: bool) -> Resu
         status
     );
 
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn add_landlock_system_rules(
+    ruleset: &mut landlock::RulesetCreated,
+    access_read: landlock::AccessFs,
+) -> Result<()> {
+    use landlock::{AccessFs, PathBeneath, PathFd};
+    let system_paths = [
+        "/usr", "/bin", "/sbin", "/etc", "/lib", "/lib64", "/proc", "/dev", "/sys",
+    ];
+    let access_read_execute = access_read | AccessFs::Execute;
+    for path in &system_paths {
+        let path_obj = std::path::Path::new(path);
+        if path_obj.exists() {
+            if let Ok(fd) = PathFd::new(path_obj) {
+                let _ = ruleset.add_rule(PathBeneath::new(fd, access_read_execute));
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn add_landlock_home_tool_rules(
+    ruleset: &mut landlock::RulesetCreated,
+    access_read: landlock::AccessFs,
+) -> Result<()> {
+    use landlock::{PathBeneath, PathFd};
+    if let Ok(home) = std::env::var("HOME") {
+        let home_path = std::path::Path::new(&home);
+        let tool_paths = [".cargo", ".rustup", ".nvm", ".npm", ".go", ".cache"];
+        for tool in &tool_paths {
+            let path = home_path.join(tool);
+            if path.exists() {
+                if let Ok(fd) = PathFd::new(&path) {
+                    let _ = ruleset.add_rule(PathBeneath::new(fd, access_read));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn add_landlock_temp_rules(
+    ruleset: &mut landlock::RulesetCreated,
+    access_all: landlock::AccessFs,
+) -> Result<()> {
+    use landlock::{PathBeneath, PathFd};
+    let tmp_path = std::path::Path::new("/tmp");
+    if tmp_path.exists() {
+        if let Ok(fd) = PathFd::new(tmp_path) {
+            let _ = ruleset.add_rule(PathBeneath::new(fd, access_all));
+        }
+    }
     Ok(())
 }
 

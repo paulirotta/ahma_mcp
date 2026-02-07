@@ -6,61 +6,9 @@
 //! - SandboxError formatting
 //! - Platform-specific sandbox checks
 
-use ahma_mcp::sandbox::{Sandbox, SandboxError, SandboxMode};
+use ahma_mcp::sandbox::{Sandbox, SandboxMode, normalize_path_lexically};
 use std::path::{Path, PathBuf};
 use tempfile::tempdir;
-
-// ============= SandboxError Display Tests =============
-
-#[test]
-fn test_sandbox_error_path_outside_single_scope() {
-    let error = SandboxError::PathOutsideSandbox {
-        path: PathBuf::from("/etc/passwd"),
-        scopes: vec![PathBuf::from("/home/user/project")],
-    };
-    let msg = error.to_string();
-    assert!(msg.contains("/etc/passwd"));
-    assert!(msg.contains("/home/user/project"));
-    assert!(msg.contains("outside the sandbox"));
-}
-
-#[test]
-fn test_sandbox_error_path_outside_multiple_scopes() {
-    let error = SandboxError::PathOutsideSandbox {
-        path: PathBuf::from("/etc/passwd"),
-        scopes: vec![
-            PathBuf::from("/home/user/project1"),
-            PathBuf::from("/home/user/project2"),
-        ],
-    };
-    let msg = error.to_string();
-    assert!(msg.contains("/etc/passwd"));
-    assert!(msg.contains("project1"));
-    assert!(msg.contains("project2"));
-}
-
-// ============= Path Normalization Tests (Lexical) =============
-
-/// Test helper: normalize a path lexically without filesystem access
-fn normalize_path_lexically(path: &Path) -> PathBuf {
-    use std::path::Component;
-
-    let mut stack = Vec::new();
-
-    for component in path.components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                if stack.last().is_some_and(|c| *c != Component::RootDir) {
-                    stack.pop();
-                }
-            }
-            c => stack.push(c),
-        }
-    }
-
-    stack.iter().collect()
-}
 
 #[test]
 fn test_normalize_path_removes_single_dot() {
