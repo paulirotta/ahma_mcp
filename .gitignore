@@ -30,3 +30,6 @@ tmp
 
 # Coverage reports
 coverage.json
+# Rust Code Analysis Results
+analysis_results/
+CODE_HEALTH_REPORT.*

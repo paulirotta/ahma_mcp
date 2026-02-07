@@ -21,6 +21,5 @@ pub use list_tools::{
 };
 
 pub use cli::{
-    find_matching_tool, find_tool_config, parse_env_list, resolve_cli_subcommand, run,
-    run_cli_sequence, should_skip,
+    find_matching_tool, find_tool_config, resolve_cli_subcommand, run, run_cli_sequence,
 };

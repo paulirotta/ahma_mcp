@@ -164,8 +164,6 @@ impl ClientBuilder {
     ) -> Result<RunningService<RoleClient, ()>> {
         ().serve(TokioChildProcess::new(command.configure(|cmd| {
             cmd.env("AHMA_TEST_MODE", "1")
-                .env_remove("AHMA_SKIP_SEQUENCE_TOOLS")
-                .env_remove("AHMA_SKIP_SEQUENCE_SUBCOMMANDS")
                 .current_dir(working_dir)
                 .kill_on_drop(true);
 
