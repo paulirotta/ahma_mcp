@@ -58,7 +58,7 @@ use clap::Parser;
 use rmcp::ServiceExt;
 use serde_json::Value;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     env,
     io::IsTerminal,
     path::PathBuf,
@@ -685,30 +685,7 @@ pub async fn run_cli_sequence(
         .or(parent_config.step_delay_ms)
         .unwrap_or(0);
 
-    let skip_tools = parse_env_list("AHMA_SKIP_SEQUENCE_TOOLS");
-    let skip_subcommands = parse_env_list("AHMA_SKIP_SEQUENCE_SUBCOMMANDS");
-
     for (index, step) in sequence.iter().enumerate() {
-        if should_skip(&skip_tools, &step.tool) {
-            println!(
-                "Skipping sequence step {} ({} {}) due to environment override.",
-                index + 1,
-                step.tool,
-                step.subcommand
-            );
-            continue;
-        }
-
-        if should_skip(&skip_subcommands, &step.subcommand) {
-            println!(
-                "Skipping sequence step {} ({} {}) due to environment override.",
-                index + 1,
-                step.tool,
-                step.subcommand
-            );
-            continue;
-        }
-
         let (step_key, step_tool_config) = find_tool_config(configs, &step.tool)
             .ok_or_else(|| anyhow!("Sequence step tool '{}' not found", step.tool))?;
 
@@ -745,27 +722,6 @@ pub async fn run_cli_sequence(
     }
 
     Ok(())
-}
-
-/// Parse a comma-delimited environment variable into a set.
-///
-/// Returns `None` when the variable is unset or empty.
-pub fn parse_env_list(key: &str) -> Option<HashSet<String>> {
-    env::var(key).ok().map(|list| {
-        list.split(',')
-            .map(|entry| entry.trim().to_ascii_lowercase())
-            .filter(|entry| !entry.is_empty())
-            .collect()
-    })
-}
-
-/// Returns true if a value should be skipped based on a set filter.
-///
-/// When the set is `None`, no skipping is performed.
-pub fn should_skip(set: &Option<HashSet<String>>, value: &str) -> bool {
-    set.as_ref()
-        .map(|items| items.contains(&value.to_ascii_lowercase()))
-        .unwrap_or(false)
 }
 
 /// Run in list-tools mode: connect to an MCP server and list all available tools
@@ -1358,7 +1314,7 @@ async fn run_cli_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result<()> {
 mod tests {
     use super::*;
     use crate::config::{SubcommandConfig, ToolConfig, ToolHints};
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
 
     // =========================================================================
     // Helper: Create a minimal ToolConfig for testing
@@ -1599,143 +1555,10 @@ mod tests {
     // =========================================================================
     // Tests for: parse_env_list
     // =========================================================================
-    mod parse_env_list_tests {
-        use super::*;
-
-        #[test]
-        fn returns_none_when_env_var_not_set() {
-            // Use a unique env var name unlikely to exist
-            // SAFETY: Test runs in isolation, env var manipulation is safe
-            unsafe { env::remove_var("AHMA_TEST_PARSE_ENV_LIST_UNSET") };
-
-            let result = parse_env_list("AHMA_TEST_PARSE_ENV_LIST_UNSET");
-
-            assert!(result.is_none());
-        }
-
-        #[test]
-        fn parses_single_item() {
-            // SAFETY: Test runs in isolation, env var manipulation is safe
-            unsafe { env::set_var("AHMA_TEST_SINGLE", "item1") };
-
-            let result = parse_env_list("AHMA_TEST_SINGLE");
-
-            assert!(result.is_some());
-            let set = result.unwrap();
-            assert!(set.contains("item1"));
-            assert_eq!(set.len(), 1);
-
-            unsafe { env::remove_var("AHMA_TEST_SINGLE") };
-        }
-
-        #[test]
-        fn parses_multiple_comma_separated_items() {
-            // SAFETY: Test runs in isolation, env var manipulation is safe
-            unsafe { env::set_var("AHMA_TEST_MULTI", "item1,item2,item3") };
-
-            let result = parse_env_list("AHMA_TEST_MULTI");
-
-            assert!(result.is_some());
-            let set = result.unwrap();
-            assert!(set.contains("item1"));
-            assert!(set.contains("item2"));
-            assert!(set.contains("item3"));
-            assert_eq!(set.len(), 3);
-
-            unsafe { env::remove_var("AHMA_TEST_MULTI") };
-        }
-
-        #[test]
-        fn trims_whitespace_and_lowercases() {
-            // SAFETY: Test runs in isolation, env var manipulation is safe
-            unsafe { env::set_var("AHMA_TEST_WHITESPACE", " Item1 , ITEM2 , item3 ") };
-
-            let result = parse_env_list("AHMA_TEST_WHITESPACE");
-
-            assert!(result.is_some());
-            let set = result.unwrap();
-            assert!(set.contains("item1"));
-            assert!(set.contains("item2"));
-            assert!(set.contains("item3"));
-
-            unsafe { env::remove_var("AHMA_TEST_WHITESPACE") };
-        }
-
-        #[test]
-        fn filters_out_empty_entries() {
-            // SAFETY: Test runs in isolation, env var manipulation is safe
-            unsafe { env::set_var("AHMA_TEST_EMPTY", "item1,,item2, ,item3") };
-
-            let result = parse_env_list("AHMA_TEST_EMPTY");
-
-            assert!(result.is_some());
-            let set = result.unwrap();
-            assert_eq!(set.len(), 3);
-            assert!(set.contains("item1"));
-            assert!(set.contains("item2"));
-            assert!(set.contains("item3"));
-
-            unsafe { env::remove_var("AHMA_TEST_EMPTY") };
-        }
-    }
 
     // =========================================================================
     // Tests for: should_skip
     // =========================================================================
-    mod should_skip_tests {
-        use super::*;
-
-        #[test]
-        fn returns_false_when_set_is_none() {
-            let set: Option<HashSet<String>> = None;
-
-            let result = should_skip(&set, "anything");
-
-            assert!(!result);
-        }
-
-        #[test]
-        fn returns_true_when_value_in_set() {
-            let mut set = HashSet::new();
-            set.insert("skip_me".to_string());
-            let set = Some(set);
-
-            let result = should_skip(&set, "skip_me");
-
-            assert!(result);
-        }
-
-        #[test]
-        fn returns_false_when_value_not_in_set() {
-            let mut set = HashSet::new();
-            set.insert("skip_me".to_string());
-            let set = Some(set);
-
-            let result = should_skip(&set, "keep_me");
-
-            assert!(!result);
-        }
-
-        #[test]
-        fn performs_case_insensitive_check() {
-            let mut set = HashSet::new();
-            set.insert("skip_me".to_string());
-            let set = Some(set);
-
-            // should_skip lowercases the value before checking
-            assert!(should_skip(&set, "SKIP_ME"));
-            assert!(should_skip(&set, "Skip_Me"));
-        }
-
-        #[test]
-        fn returns_false_for_empty_set() {
-            let set: Option<HashSet<String>> = Some(HashSet::new());
-
-            let result = should_skip(&set, "anything");
-
-            assert!(!result);
-        }
-    }
 
     // =========================================================================
     // Tests for: resolve_cli_subcommand

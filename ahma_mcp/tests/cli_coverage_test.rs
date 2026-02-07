@@ -1,10 +1,8 @@
 use ahma_mcp::config::{SubcommandConfig, ToolConfig};
-use ahma_mcp::shell::cli::{
-    self, Cli, normalize_tools_dir, parse_env_list, resolve_cli_subcommand,
-};
+use ahma_mcp::shell::cli::{Cli, normalize_tools_dir, resolve_cli_subcommand};
 
 use clap::Parser;
-use std::collections::HashSet;
+
 use std::fs;
 
 use tempfile::TempDir;
@@ -95,44 +93,6 @@ fn test_resolve_cli_subcommand_errors() {
     // Missing subcommand
     let res = resolve_cli_subcommand("mytool", &config, "mytool_missing", None);
     assert!(res.is_err());
-}
-
-#[test]
-fn test_parse_env_list() {
-    tempfile::tempdir().unwrap(); // ensure clean state conceptually
-
-    // Set env
-    unsafe {
-        std::env::set_var("TEST_ENV_LIST", "foo, bar, BAZ ");
-    }
-
-    let set = parse_env_list("TEST_ENV_LIST").unwrap();
-    assert!(set.contains("foo"));
-    assert!(set.contains("bar"));
-    assert!(set.contains("baz")); // lowercase
-    assert!(!set.contains("qux"));
-
-    unsafe {
-        std::env::remove_var("TEST_ENV_LIST");
-    }
-    assert!(parse_env_list("TEST_ENV_LIST").is_none());
-}
-
-#[test]
-fn test_should_skip() {
-    let set: HashSet<String> = vec!["foo".to_string(), "bar".to_string()]
-        .into_iter()
-        .collect();
-    let opt = Some(set);
-
-    assert!(cli::should_skip(&opt, "foo"));
-    assert!(cli::should_skip(&opt, "FOO")); // case insensitive check usually done inside should_skip logic if implemented that way?
-    // checking cli::should_skip implementation: it does `items.contains(&value.to_ascii_lowercase())`
-    assert!(cli::should_skip(&opt, "bar"));
-    assert!(!cli::should_skip(&opt, "baz"));
-
-    let empty_opt = None;
-    assert!(!cli::should_skip(&empty_opt, "foo"));
 }
 
 #[test]
