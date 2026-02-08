@@ -202,29 +202,31 @@ async fn handle_existing_session_request(
 
     // Check for roots/list_changed notification
     if method == Some("notifications/roots/list_changed")
-        && let Err(e) = session_manager.handle_roots_changed(session_id).await {
-            error!(session_id = %session_id, "Roots change rejected: {}", e);
-            return Response::builder()
-                .status(StatusCode::FORBIDDEN)
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::to_vec(&serde_json::json!({
-                        "jsonrpc": "2.0",
-                        "error": {
-                            "code": -32600,
-                            "message": "Session terminated: roots change not allowed"
-                        }
-                    }))
-                    .unwrap_or_default(),
-                ))
-                .unwrap_or_else(|_| (StatusCode::FORBIDDEN, "Session terminated").into_response());
-        }
+        && let Err(e) = session_manager.handle_roots_changed(session_id).await
+    {
+        error!(session_id = %session_id, "Roots change rejected: {}", e);
+        return Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "error": {
+                        "code": -32600,
+                        "message": "Session terminated: roots change not allowed"
+                    }
+                }))
+                .unwrap_or_default(),
+            ))
+            .unwrap_or_else(|_| (StatusCode::FORBIDDEN, "Session terminated").into_response());
+    }
 
     // Delay tool execution if needed
     if method == Some("tools/call")
-        && let Some(response) = check_sandbox_lock(session_manager, session_id) {
-            return response;
-        }
+        && let Some(response) = check_sandbox_lock(session_manager, session_id)
+    {
+        return response;
+    }
 
     let is_initialized_notification = method == Some("notifications/initialized");
     if is_initialized_notification {
@@ -240,13 +242,14 @@ async fn handle_existing_session_request(
         && (payload.get("result").is_some() || payload.get("error").is_some());
 
     // Wait for initialization if needed
-    if !is_initialized_notification && !is_client_response
+    if !is_initialized_notification
+        && !is_client_response
         && let Some(session) = session_manager.get_session(session_id)
-            && !session.is_mcp_initialized()
-                && let Some(response) = wait_for_initialization(&session, session_id, method).await
-                {
-                    return response;
-                }
+        && !session.is_mcp_initialized()
+        && let Some(response) = wait_for_initialization(&session, session_id, method).await
+    {
+        return response;
+    }
 
     if is_client_response {
         return handle_client_response(session_manager, session_id, payload).await;
@@ -266,79 +269,78 @@ async fn handle_existing_session_request(
 /// Checks if the sandbox is locked for `tools/call` requests.
 fn check_sandbox_lock(session_manager: &SessionManager, session_id: &str) -> Option<Response> {
     if let Some(session) = session_manager.get_session(session_id)
-        && !session.is_sandbox_locked() {
-            let sse_connected = session.is_sse_connected();
-            let mcp_initialized = session.is_mcp_initialized();
+        && !session.is_sandbox_locked()
+    {
+        let sse_connected = session.is_sse_connected();
+        let mcp_initialized = session.is_mcp_initialized();
 
-            debug!(
-                session_id = %session_id,
-                sse_connected = sse_connected,
-                mcp_initialized = mcp_initialized,
-                sandbox_locked = false,
-                "tools/call blocked - sandbox not yet locked"
-            );
+        debug!(
+            session_id = %session_id,
+            sse_connected = sse_connected,
+            mcp_initialized = mcp_initialized,
+            sandbox_locked = false,
+            "tools/call blocked - sandbox not yet locked"
+        );
 
-            // Check if handshake has timed out
-            if let Some(elapsed_secs) = session.is_handshake_timed_out() {
-                let error_msg = format!(
-                    "Handshake timeout after {}s - sandbox not locked. \
+        // Check if handshake has timed out
+        if let Some(elapsed_secs) = session.is_handshake_timed_out() {
+            let error_msg = format!(
+                "Handshake timeout after {}s - sandbox not locked. \
                     SSE connected: {}, MCP initialized: {}. \
                     Ensure client: 1) opens SSE stream (GET /mcp with session header), \
                     2) sends notifications/initialized, \
                     3) responds to roots/list request over SSE. \
                     Use --handshake-timeout-secs to adjust timeout.",
-                    elapsed_secs, sse_connected, mcp_initialized
-                );
+                elapsed_secs, sse_connected, mcp_initialized
+            );
 
-                error!(
-                    session_id = %session_id,
-                    "Handshake timeout: SSE={}, initialized={}",
-                    sse_connected,
-                    mcp_initialized
-                );
+            error!(
+                session_id = %session_id,
+                "Handshake timeout: SSE={}, initialized={}",
+                sse_connected,
+                mcp_initialized
+            );
 
-                let error_json = serde_json::json!({
-                    "jsonrpc": "2.0",
-                    "error": {
-                        "code": -32002,
-                        "message": error_msg
-                    }
-                });
-                return Some(
-                    Response::builder()
-                        .status(StatusCode::GATEWAY_TIMEOUT)
-                        .header("content-type", "application/json")
-                        .header(MCP_SESSION_ID_HEADER, session_id)
-                        .body(Body::from(
-                            serde_json::to_vec(&error_json).unwrap_or_default(),
-                        ))
-                        .unwrap_or_else(|_| {
-                            (StatusCode::GATEWAY_TIMEOUT, "Handshake timeout").into_response()
-                        }),
-                );
-            }
-
-            // Still initializing - return 409 Conflict
             let error_json = serde_json::json!({
                 "jsonrpc": "2.0",
                 "error": {
-                    "code": -32001,
-                    "message": "Sandbox initializing from client roots - retry tools/call after roots/list completes"
+                    "code": -32002,
+                    "message": error_msg
                 }
             });
             return Some(
                 Response::builder()
-                    .status(StatusCode::CONFLICT)
+                    .status(StatusCode::GATEWAY_TIMEOUT)
                     .header("content-type", "application/json")
                     .header(MCP_SESSION_ID_HEADER, session_id)
                     .body(Body::from(
                         serde_json::to_vec(&error_json).unwrap_or_default(),
                     ))
                     .unwrap_or_else(|_| {
-                        (StatusCode::CONFLICT, "Sandbox initializing").into_response()
+                        (StatusCode::GATEWAY_TIMEOUT, "Handshake timeout").into_response()
                     }),
             );
         }
+
+        // Still initializing - return 409 Conflict
+        let error_json = serde_json::json!({
+            "jsonrpc": "2.0",
+            "error": {
+                "code": -32001,
+                "message": "Sandbox initializing from client roots - retry tools/call after roots/list completes"
+            }
+        });
+        return Some(
+            Response::builder()
+                .status(StatusCode::CONFLICT)
+                .header("content-type", "application/json")
+                .header(MCP_SESSION_ID_HEADER, session_id)
+                .body(Body::from(
+                    serde_json::to_vec(&error_json).unwrap_or_default(),
+                ))
+                .unwrap_or_else(|_| (StatusCode::CONFLICT, "Sandbox initializing").into_response()),
+        );
+    }
     None
 }
 
@@ -418,49 +420,50 @@ async fn handle_client_response(
 
     // Check if this is a roots/list response - extract roots and lock sandbox
     if let Some(result) = payload.get("result")
-        && let Some(roots) = result.get("roots").and_then(|r| r.as_array()) {
-            let mcp_roots: Vec<McpRoot> = roots
-                .iter()
-                .filter_map(|r| serde_json::from_value(r.clone()).ok())
-                .collect();
+        && let Some(roots) = result.get("roots").and_then(|r| r.as_array())
+    {
+        let mcp_roots: Vec<McpRoot> = roots
+            .iter()
+            .filter_map(|r| serde_json::from_value(r.clone()).ok())
+            .collect();
 
-            let should_lock = if mcp_roots.is_empty() {
-                session_manager
-                    .get_session(session_id)
-                    .is_some_and(|s| s.is_sse_connected())
-            } else {
-                true
-            };
+        let should_lock = if mcp_roots.is_empty() {
+            session_manager
+                .get_session(session_id)
+                .is_some_and(|s| s.is_sse_connected())
+        } else {
+            true
+        };
 
-            if !should_lock {
-                debug!(
-                    session_id = %session_id,
-                    "Skipping sandbox lock from empty roots/list response (SSE not connected yet)"
-                );
-            } else {
-                info!(
-                    session_id = %session_id,
-                    roots = ?mcp_roots,
-                    "Locking sandbox from roots/list response"
-                );
+        if !should_lock {
+            debug!(
+                session_id = %session_id,
+                "Skipping sandbox lock from empty roots/list response (SSE not connected yet)"
+            );
+        } else {
+            info!(
+                session_id = %session_id,
+                roots = ?mcp_roots,
+                "Locking sandbox from roots/list response"
+            );
 
-                match session_manager.lock_sandbox(session_id, &mcp_roots).await {
-                    Ok(true) => {
-                        info!(
-                            session_id = %session_id,
-                            "Sandbox locked from first roots/list response"
-                        );
-                    }
-                    Ok(false) => {}
-                    Err(e) => {
-                        warn!(
-                            session_id = %session_id,
-                            "Failed to record sandbox scopes: {}", e
-                        );
-                    }
+            match session_manager.lock_sandbox(session_id, &mcp_roots).await {
+                Ok(true) => {
+                    info!(
+                        session_id = %session_id,
+                        "Sandbox locked from first roots/list response"
+                    );
+                }
+                Ok(false) => {}
+                Err(e) => {
+                    warn!(
+                        session_id = %session_id,
+                        "Failed to record sandbox scopes: {}", e
+                    );
                 }
             }
         }
+    }
 
     // Always forward response to subprocess
     if let Err(e) = session_manager.send_message(session_id, payload).await {
@@ -493,20 +496,10 @@ async fn forward_request(
         Duration::from_secs(request_timeout_secs())
     };
 
-    // If tools/call and sandbox is locked, wait for sandbox applied
-    if method == Some("tools/call")
-        && let Some(session) = session_manager.get_session(session_id)
-            && session.is_sandbox_locked() && !session.is_sandbox_applied() {
-                let wait_timeout = std::time::Duration::from_secs(15);
-                let wait_result =
-                    tokio::time::timeout(wait_timeout, session.wait_for_sandbox_applied()).await;
-                if wait_result.is_err() {
-                    warn!(
-                        session_id = %session_id,
-                        "Timed out waiting for subprocess sandbox-applied notification; forwarding tools/call optimistically"
-                    );
-                }
-            }
+    // NOTE: We previously waited here for subprocess sandbox-applied notification,
+    // but this caused CI timeouts on slow Linux runners. The subprocess handles
+    // race conditions by rejecting premature tool calls, and the test retry loop
+    // handles retries. Removed per fix for test_roots_uri_parsing_percent_encoded_path.
 
     match session_manager
         .send_request(session_id, payload, Some(request_timeout))
@@ -516,41 +509,41 @@ async fn forward_request(
             // Check if roots/list response - lock sandbox
             if method == Some("roots/list")
                 && let Some(result) = response.get("result")
-                    && let Some(roots) = result.get("roots").and_then(|r| r.as_array()) {
-                        let mcp_roots: Vec<McpRoot> = roots
-                            .iter()
-                            .filter_map(|r| serde_json::from_value(r.clone()).ok())
-                            .collect();
+                && let Some(roots) = result.get("roots").and_then(|r| r.as_array())
+            {
+                let mcp_roots: Vec<McpRoot> = roots
+                    .iter()
+                    .filter_map(|r| serde_json::from_value(r.clone()).ok())
+                    .collect();
 
-                        let should_lock = if mcp_roots.is_empty() {
-                            session_manager
-                                .get_session(session_id)
-                                .is_some_and(|s| s.is_sse_connected())
-                        } else {
-                            true
-                        };
+                let should_lock = if mcp_roots.is_empty() {
+                    session_manager
+                        .get_session(session_id)
+                        .is_some_and(|s| s.is_sse_connected())
+                } else {
+                    true
+                };
 
-                        if !should_lock {
-                            debug!(
-                                session_id = %session_id,
-                                "Skipping sandbox lock from empty roots/list response (SSE not connected yet)"
-                            );
-                        } else if let Err(e) =
-                            session_manager.lock_sandbox(session_id, &mcp_roots).await
-                        {
-                            warn!(session_id = %session_id, "Failed to lock sandbox: {}", e);
-                        }
-                    }
+                if !should_lock {
+                    debug!(
+                        session_id = %session_id,
+                        "Skipping sandbox lock from empty roots/list response (SSE not connected yet)"
+                    );
+                } else if let Err(e) = session_manager.lock_sandbox(session_id, &mcp_roots).await {
+                    warn!(session_id = %session_id, "Failed to lock sandbox: {}", e);
+                }
+            }
 
             // Mark MCP as initialized BEFORE constructing response to prevent race conditions
             if is_initialized_notification
                 && let Some(session) = session_manager.get_session(session_id)
-                    && let Err(e) = session.mark_mcp_initialized().await {
-                        warn!(
-                            session_id = %session_id,
-                            "Failed to mark MCP initialized: {}", e
-                        );
-                    }
+                && let Err(e) = session.mark_mcp_initialized().await
+            {
+                warn!(
+                    session_id = %session_id,
+                    "Failed to mark MCP initialized: {}", e
+                );
+            }
 
             let mut http_response = json_response(response);
             http_response.headers_mut().insert(

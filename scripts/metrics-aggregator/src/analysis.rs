@@ -19,11 +19,17 @@ pub fn check_dependencies() -> Result<()> {
     Ok(())
 }
 
-pub fn run_analysis(dir: &Path, output_dir: &Path) -> Result<()> {
+pub fn run_analysis(dir: &Path, output_dir: &Path, extensions: &[String]) -> Result<()> {
     println!("Analyzing {}...", dir.display());
 
-    let status = Command::new("rust-code-analysis-cli")
-        .arg("--paths")
+    // Build include patterns for all specified extensions
+    let include_patterns: Vec<String> = extensions
+        .iter()
+        .map(|ext| format!("**/*.{}", ext.trim_start_matches('.')))
+        .collect();
+
+    let mut cmd = Command::new("rust-code-analysis-cli");
+    cmd.arg("--paths")
         .arg(dir)
         .arg("--metrics")
         .arg("--function")
@@ -31,10 +37,15 @@ pub fn run_analysis(dir: &Path, output_dir: &Path) -> Result<()> {
         .arg("toml")
         .arg("--output")
         .arg(output_dir)
-        .arg("--include")
-        .arg("**/*.rs")
         .arg("--exclude")
-        .arg("target/**")
+        .arg("target/**");
+
+    // Add all include patterns
+    for pattern in &include_patterns {
+        cmd.arg("--include").arg(pattern);
+    }
+
+    let status = cmd
         .status()
         .context("Failed to execute rust-code-analysis-cli")?;
 
@@ -45,31 +56,73 @@ pub fn run_analysis(dir: &Path, output_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn perform_analysis(directory: &Path, output: &Path, is_workspace: bool) -> Result<()> {
+pub fn perform_analysis(
+    directory: &Path,
+    output: &Path,
+    is_workspace: bool,
+    extensions: &[String],
+) -> Result<()> {
     let mut analyzed_something = false;
     if is_workspace {
-        let targets = vec![
-            "ahma_common",
-            "ahma_core",
-            "ahma_http_bridge",
-            "ahma_http_mcp_client",
-            "ahma_mcp",
-            "ahma_validate",
-        ];
+        // Dynamically detect workspace members by looking for subdirectories with Cargo.toml
+        let members = get_workspace_members(directory)?;
 
-        for target in targets {
-            let target_path = directory.join(target);
+        for member in members {
+            let target_path = directory.join(&member);
             if target_path.is_dir() {
-                run_analysis(&target_path, output)?;
+                run_analysis(&target_path, output, extensions)?;
                 analyzed_something = true;
             }
         }
     }
 
     if !analyzed_something {
-        run_analysis(directory, output)?;
+        run_analysis(directory, output, extensions)?;
     }
     Ok(())
+}
+
+/// Dynamically detect workspace members by:
+/// 1. Parsing [workspace] members from Cargo.toml if present
+/// 2. Falling back to directories containing Cargo.toml
+fn get_workspace_members(dir: &Path) -> Result<Vec<String>> {
+    let cargo_toml = dir.join("Cargo.toml");
+    if let Ok(content) = fs::read_to_string(&cargo_toml) {
+        if let Ok(value) = content.parse::<toml::Value>() {
+            // Try to get explicit members from [workspace] section
+            if let Some(members) = value
+                .get("workspace")
+                .and_then(|w| w.get("members"))
+                .and_then(|m| m.as_array())
+            {
+                let explicit: Vec<String> = members
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .collect();
+                if !explicit.is_empty() {
+                    return Ok(explicit);
+                }
+            }
+        }
+    }
+
+    // Fallback: find directories with Cargo.toml
+    let mut members = Vec::new();
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() && path.join("Cargo.toml").exists() {
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    // Skip common non-crate directories
+                    if name != "target" && name != ".git" && !name.starts_with('.') {
+                        members.push(name.to_string());
+                    }
+                }
+            }
+        }
+    }
+    Ok(members)
 }
 
 pub fn get_project_name(dir: &Path) -> String {

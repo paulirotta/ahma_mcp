@@ -1,11 +1,16 @@
 use crate::analysis::{get_package_name, get_relative_path};
-use crate::models::FileHealth;
+use crate::models::{FileHealth, Language};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
 pub struct RepoSummary {
     pub avg_score: f64,
+    pub language_summaries: HashMap<Language, LanguageSummary>,
+}
+
+pub struct LanguageSummary {
+    pub score: f64,
     pub package_scores: Vec<(String, f64)>,
 }
 
@@ -17,24 +22,47 @@ impl RepoSummary {
             files.iter().map(|f| f.score).sum::<f64>() / files.len() as f64
         };
 
-        let mut package_map: HashMap<String, Vec<f64>> = HashMap::new();
+        let mut lang_map: HashMap<Language, Vec<&FileHealth>> = HashMap::new();
         for f in files {
-            let package = get_package_name(Path::new(&f.path), base_dir);
-            package_map.entry(package).or_default().push(f.score);
+            lang_map.entry(f.language).or_default().push(f);
         }
 
-        let mut package_scores: Vec<(String, f64)> = package_map
-            .into_iter()
-            .map(|(p, scores)| {
-                let avg = scores.iter().sum::<f64>() / scores.len() as f64;
-                (p, avg)
-            })
-            .collect();
-        package_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        let mut language_summaries = HashMap::new();
+
+        for (lang, lang_files) in lang_map {
+            let lang_avg = if lang_files.is_empty() {
+                0.0
+            } else {
+                lang_files.iter().map(|f| f.score).sum::<f64>() / lang_files.len() as f64
+            };
+
+            let mut package_map: HashMap<String, Vec<f64>> = HashMap::new();
+            for f in &lang_files {
+                let package = get_package_name(Path::new(&f.path), base_dir);
+                package_map.entry(package).or_default().push(f.score);
+            }
+
+            let mut package_scores: Vec<(String, f64)> = package_map
+                .into_iter()
+                .map(|(p, scores)| {
+                    let avg = scores.iter().sum::<f64>() / scores.len() as f64;
+                    (p, avg)
+                })
+                .collect();
+            package_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
+            language_summaries.insert(
+                lang,
+                LanguageSummary {
+                    score: lang_avg,
+                    package_scores,
+                },
+            );
+        }
 
         Self {
             avg_score,
-            package_scores,
+            language_summaries,
         }
     }
 }
@@ -92,7 +120,7 @@ fn create_report_md(
 
     write_header(&mut report, project_name, summary.avg_score);
     write_executive_summary(&mut report, summary.avg_score);
-    write_package_health(&mut report, &summary.package_scores, is_workspace);
+    write_package_health(&mut report, &summary, is_workspace);
     write_emergencies(&mut report, files, limit, base_dir);
     write_glossary(&mut report);
 
@@ -124,14 +152,39 @@ fn write_executive_summary(report: &mut String, avg_score: f64) {
     report.push_str(msg);
 }
 
-fn write_package_health(report: &mut String, package_avg: &[(String, f64)], is_workspace: bool) {
-    let group_label = if is_workspace { "Crate" } else { "Package" };
-    report.push_str(&format!("## Health by {}\n\n", group_label));
+fn write_package_health(report: &mut String, summary: &RepoSummary, is_workspace: bool) {
+    // Sort languages by name for consistent output
+    let mut languages: Vec<_> = summary.language_summaries.keys().collect();
+    languages.sort_by(|a, b| a.display_name().cmp(b.display_name()));
 
-    for (i, (p, score)) in package_avg.iter().enumerate() {
-        report.push_str(&format!("{}. **{}**: {:.0}%\n", i + 1, p, score));
+    for lang in languages {
+        if let Some(lang_summary) = summary.language_summaries.get(lang) {
+            report.push_str(&format!(
+                "## {} Health (Avg: {:.0}%)\n\n",
+                lang.display_name(),
+                lang_summary.score
+            ));
+
+            let group_label = match lang {
+                Language::Rust => {
+                    if is_workspace {
+                        "Crate"
+                    } else {
+                        "Module"
+                    }
+                }
+                Language::Python | Language::JavaScript | Language::TypeScript => "Module",
+                _ => "Directory",
+            };
+
+            report.push_str(&format!("### By {}\n\n", group_label));
+
+            for (i, (p, score)) in lang_summary.package_scores.iter().enumerate() {
+                report.push_str(&format!("{}. **{}**: {:.0}%\n", i + 1, p, score));
+            }
+            report.push_str("\n");
+        }
     }
-    report.push_str("\n");
 }
 
 fn write_emergencies(report: &mut String, files: &[FileHealth], limit: usize, base_dir: &Path) {
@@ -151,9 +204,10 @@ fn write_emergencies(report: &mut String, files: &[FileHealth], limit: usize, ba
             .unwrap_or_else(|| rel_str.to_string());
 
         report.push_str(&format!(
-            "{}. **{}: {:.0}% ({})**\n\t{}\n",
+            "{}. **{} ({})**: {:.0}% ({})**\n\t{}\n",
             i + 1,
             basename,
+            f.language.display_name(),
             f.score,
             culprit,
             rel_str
@@ -196,6 +250,7 @@ mod tests {
         let files = vec![
             FileHealth {
                 path: "pkg1/file1.rs".to_string(),
+                language: Language::Rust,
                 score: 80.0,
                 cognitive: 10.0,
                 cyclomatic: 5.0,
@@ -204,6 +259,7 @@ mod tests {
             },
             FileHealth {
                 path: "pkg2/file2.rs".to_string(),
+                language: Language::Rust,
                 score: 40.0,
                 cognitive: 30.0,
                 cyclomatic: 25.0,
@@ -215,5 +271,6 @@ mod tests {
         let report = create_report_md(&files, false, 10, Path::new("."), "test_project");
         assert!(report.contains("# Code Health Metrics: test_project"));
         assert!(report.contains("## Overall Repository Health: **60%**"));
+        assert!(report.contains("## Rust Health"));
     }
 }

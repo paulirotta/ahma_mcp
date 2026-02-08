@@ -13,7 +13,7 @@ use models::{FileHealth, MetricsResults};
 use report::generate_report;
 
 #[derive(Parser, Debug)]
-#[command(author, version, about = "Analyzes Rust code metrics and generates a health report", long_about = None)]
+#[command(author, version, about = "Analyzes source code metrics and generates a health report", long_about = None)]
 struct Cli {
     /// Directory to analyze (absolute or relative)
     directory: PathBuf,
@@ -33,6 +33,16 @@ struct Cli {
     /// Shorthand for --format html
     #[arg(long)]
     html: bool,
+
+    /// File extensions to analyze as a comma-separated list (e.g. rs,py,js).
+    /// Supported: rs, py, js, ts, tsx, c, h, cpp, cc, hpp, hh, cs, java, go, css, html.
+    /// Example: --extensions rs,py,js
+    #[arg(short, long, default_value = "rs", value_delimiter = ',')]
+    extensions: Vec<String>,
+
+    /// Use raw complexity values instead of SLOC-normalized density scoring
+    #[arg(long)]
+    raw_complexity: bool,
 }
 
 fn main() -> Result<()> {
@@ -46,9 +56,9 @@ fn main() -> Result<()> {
     prepare_output_directory(&cli.output)?;
 
     let is_workspace = is_cargo_workspace(&cli.directory);
-    perform_analysis(&directory, &cli.output, is_workspace)?;
+    perform_analysis(&directory, &cli.output, is_workspace, &cli.extensions)?;
 
-    let mut files_health = load_metrics(&cli.output)?;
+    let mut files_health = load_metrics(&cli.output, !cli.raw_complexity)?;
     if files_health.is_empty() {
         println!("No analysis files found in {}.", cli.output.display());
         return Ok(());
@@ -86,7 +96,7 @@ fn prepare_output_directory(output: &Path) -> Result<()> {
     fs::create_dir_all(output).context("Failed to create output directory")
 }
 
-fn load_metrics(output: &Path) -> Result<Vec<FileHealth>> {
+fn load_metrics(output: &Path, normalized: bool) -> Result<Vec<FileHealth>> {
     let mut files_health = Vec::new();
     println!("Aggregating metrics from {}...", output.display());
 
@@ -94,7 +104,7 @@ fn load_metrics(output: &Path) -> Result<Vec<FileHealth>> {
         if entry.path().extension().is_some_and(|ext| ext == "toml") {
             let content = fs::read_to_string(entry.path())?;
             match toml::from_str::<MetricsResults>(&content) {
-                Ok(results) => files_health.push(FileHealth::calculate(&results)),
+                Ok(results) => files_health.push(FileHealth::calculate(&results, normalized)),
                 Err(e) => eprintln!("Error parsing {}: {}", entry.path().display(), e),
             }
         }
