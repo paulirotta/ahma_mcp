@@ -72,3 +72,6 @@ tracing-appender = "0.2.4"
 tracing-opentelemetry = "0.32"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 url = "2.5.8"
+
+[profile.release]
+lto = "thin"
