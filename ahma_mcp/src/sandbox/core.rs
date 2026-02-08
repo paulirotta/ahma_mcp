@@ -1,0 +1,174 @@
+use anyhow::{Result, anyhow};
+use std::path::{Path, PathBuf};
+
+use super::error::SandboxError;
+use super::scopes;
+use super::types::{SandboxMode, ScopesGuard};
+
+/// The security context for the Ahma session.
+pub struct Sandbox {
+    pub(super) scopes: std::sync::RwLock<Vec<PathBuf>>,
+    pub(super) mode: SandboxMode,
+    pub(super) no_temp_files: bool,
+}
+
+impl Clone for Sandbox {
+    fn clone(&self) -> Self {
+        Self {
+            scopes: std::sync::RwLock::new(self.scopes.read().unwrap().clone()),
+            mode: self.mode,
+            no_temp_files: self.no_temp_files,
+        }
+    }
+}
+
+impl std::fmt::Debug for Sandbox {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Sandbox")
+            .field("scopes", &self.scopes.read().unwrap())
+            .field("mode", &self.mode)
+            .field("no_temp_files", &self.no_temp_files)
+            .finish()
+    }
+}
+
+impl Sandbox {
+    /// Create a new Sandbox with the given scopes.
+    pub fn new(scopes: Vec<PathBuf>, mode: SandboxMode, no_temp_files: bool) -> Result<Self> {
+        let canonicalized = scopes::canonicalize_scopes(
+            scopes,
+            mode,
+            "Specify explicit directories with --sandbox-scope or --working-directories. \
+             Example: --sandbox-scope /home/user/project",
+        )?;
+
+        Ok(Self {
+            scopes: std::sync::RwLock::new(canonicalized),
+            mode,
+            no_temp_files,
+        })
+    }
+
+    /// Create a sandbox in Test mode (bypasses restrictions).
+    pub fn new_test() -> Self {
+        Self {
+            scopes: std::sync::RwLock::new(vec![PathBuf::from("/")]),
+            mode: SandboxMode::Test,
+            no_temp_files: false,
+        }
+    }
+
+    /// Update the sandbox scopes.
+    pub fn update_scopes(&self, scopes: Vec<PathBuf>) -> Result<()> {
+        let canonicalized = scopes::canonicalize_scopes(
+            scopes,
+            self.mode,
+            "Client must provide valid workspace roots.",
+        )?;
+
+        let mut current_scopes = self.scopes.write().unwrap();
+        *current_scopes = canonicalized;
+        Ok(())
+    }
+
+    /// Check if the sandbox is in test mode.
+    pub fn is_test_mode(&self) -> bool {
+        self.mode == SandboxMode::Test
+    }
+
+    /// Check if no-temp-files mode is enabled.
+    pub fn is_no_temp_files(&self) -> bool {
+        self.no_temp_files
+    }
+
+    /// Get the allowed scopes.
+    pub fn scopes(&self) -> ScopesGuard<'_> {
+        ScopesGuard(self.scopes.read().unwrap())
+    }
+
+    /// Check if a path is within any of the sandbox scopes.
+    pub fn validate_path(&self, path: &Path) -> Result<PathBuf> {
+        let scopes_guard = self.scopes();
+
+        if self.should_bypass_validation(&scopes_guard) {
+            return self.resolve_test_path(path);
+        }
+
+        let canonical = self.resolve_path(path, &scopes_guard)?;
+
+        if self.is_path_allowed(&canonical, &scopes_guard) {
+            self.check_security_policies(path, &canonical)?;
+            Ok(canonical)
+        } else {
+            Err(SandboxError::PathOutsideSandbox {
+                path: path.to_path_buf(),
+                scopes: scopes_guard.to_vec(),
+            }
+            .into())
+        }
+    }
+
+    fn should_bypass_validation(&self, scopes_guard: &[PathBuf]) -> bool {
+        self.mode == SandboxMode::Test
+            && (scopes_guard.is_empty() || scopes_guard.iter().any(|s| s == Path::new("/")))
+    }
+
+    fn resolve_test_path(&self, path: &Path) -> Result<PathBuf> {
+        std::fs::canonicalize(path).or_else(|_| Ok(path.to_path_buf()))
+    }
+
+    fn resolve_path(&self, path: &Path, scopes_guard: &[PathBuf]) -> Result<PathBuf> {
+        let first_scope = scopes_guard
+            .first()
+            .ok_or_else(|| anyhow!("No sandbox scopes configured"))?;
+
+        let full_path = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            first_scope.join(path)
+        };
+
+        Ok(match std::fs::canonicalize(&full_path) {
+            Ok(p) => p,
+            Err(_) => {
+                if let Some(parent) = full_path.parent() {
+                    if let Ok(parent_canonical) = std::fs::canonicalize(parent) {
+                        if let Some(name) = full_path.file_name() {
+                            parent_canonical.join(name)
+                        } else {
+                            parent_canonical
+                        }
+                    } else {
+                        scopes::normalize_path_lexically(&full_path)
+                    }
+                } else {
+                    scopes::normalize_path_lexically(&full_path)
+                }
+            }
+        })
+    }
+
+    fn is_path_allowed(&self, canonical: &Path, scopes_guard: &[PathBuf]) -> bool {
+        scopes_guard
+            .iter()
+            .any(|scope| canonical.starts_with(scope))
+    }
+
+    fn check_security_policies(&self, original_path: &Path, canonical: &Path) -> Result<()> {
+        if self.no_temp_files {
+            let path_str = canonical.to_string_lossy();
+            if path_str.starts_with("/tmp")
+                || path_str.starts_with("/var/folders")
+                || path_str.starts_with("/private/tmp")
+                || path_str.starts_with("/private/var/folders")
+                || path_str.starts_with("/dev")
+            {
+                return Err(SandboxError::HighSecurityViolation {
+                    path: original_path.to_path_buf(),
+                }
+                .into());
+            }
+        }
+        Ok(())
+    }
+}
