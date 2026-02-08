@@ -164,21 +164,22 @@ pub async fn evaluate_tool_availability(
         });
     }
 
-    // Run probes concurrently without blocking the current runtime
-    let probe_tasks: Vec<_> = plans
-        .into_iter()
-        .map(|plan| {
-            let shell_pool = shell_pool.clone();
-            tokio::spawn(async move { run_probe(shell_pool, plan).await })
-        })
-        .collect();
+    let outcomes = execute_probes(shell_pool, plans).await;
 
-    let outcomes: Vec<ProbeOutcome> = futures::future::join_all(probe_tasks)
-        .await
-        .into_iter()
-        .filter_map(|result| result.ok())
-        .collect();
+    let (disabled_tools, disabled_subcommands) =
+        process_probe_outcomes(outcomes, &mut filtered_configs);
 
+    Ok(AvailabilitySummary {
+        filtered_configs,
+        disabled_tools,
+        disabled_subcommands,
+    })
+}
+
+fn process_probe_outcomes(
+    outcomes: Vec<ProbeOutcome>,
+    filtered_configs: &mut HashMap<String, ToolConfig>,
+) -> (Vec<DisabledTool>, Vec<DisabledSubcommand>) {
     let mut disabled_tools = Vec::new();
     let mut disabled_subcommands = Vec::new();
 
@@ -222,10 +223,9 @@ pub async fn evaluate_tool_availability(
             }
             ProbeTarget::Subcommand { ref tool, ref path } => {
                 if let Some(config) = filtered_configs.get_mut(tool)
-                    && let Some(sub) = find_subcommand_mut(&mut config.subcommand, path)
-                {
-                    sub.enabled = false;
-                }
+                    && let Some(sub) = find_subcommand_mut(&mut config.subcommand, path) {
+                        sub.enabled = false;
+                    }
 
                 let joined_path = path.join("_");
                 let message = format!(
@@ -256,11 +256,26 @@ pub async fn evaluate_tool_availability(
         }
     }
 
-    Ok(AvailabilitySummary {
-        filtered_configs,
-        disabled_tools,
-        disabled_subcommands,
-    })
+    (disabled_tools, disabled_subcommands)
+}
+
+async fn execute_probes(
+    shell_pool: Arc<ShellPoolManager>,
+    plans: Vec<ProbePlan>,
+) -> Vec<ProbeOutcome> {
+    let probe_tasks: Vec<_> = plans
+        .into_iter()
+        .map(|plan| {
+            let shell_pool = shell_pool.clone();
+            tokio::spawn(async move { run_probe(shell_pool, plan).await })
+        })
+        .collect();
+
+    futures::future::join_all(probe_tasks)
+        .await
+        .into_iter()
+        .filter_map(|result| result.ok())
+        .collect()
 }
 
 fn build_probe_plans(
@@ -417,15 +432,24 @@ fn resolve_command(
 
     if let Some(check) = check {
         if let Some(codes) = &check.success_exit_codes
-            && !codes.is_empty()
-        {
-            success_codes = codes.clone();
-        }
+            && !codes.is_empty() {
+                success_codes = codes.clone();
+            }
         if let Some(dir) = &check.working_directory {
             working_dir = PathBuf::from(dir);
         }
     }
 
+    let command = construct_probe_command(config, sub_target, check);
+
+    (command, success_codes, working_dir)
+}
+
+fn construct_probe_command(
+    config: &ToolConfig,
+    sub_target: Option<(&[String], &SubcommandConfig)>,
+    check: Option<&AvailabilityCheck>,
+) -> Vec<String> {
     let mut command = match check.and_then(|c| c.command.as_ref()) {
         Some(cmd) => split_command(cmd),
         None => split_command(&config.command),
@@ -466,7 +490,7 @@ fn resolve_command(
         command = vec!["/usr/bin/env".to_string(), "which".to_string(), base];
     }
 
-    (command, success_codes, working_dir)
+    command
 }
 
 fn split_command(command: &str) -> Vec<String> {
@@ -576,10 +600,9 @@ fn find_subcommand_mut_in<'a>(
                 return Some(sub);
             }
             if let Some(children) = sub.subcommand.as_mut()
-                && let Some(found) = find_subcommand_mut_in(children.as_mut_slice(), rest)
-            {
-                return Some(found);
-            }
+                && let Some(found) = find_subcommand_mut_in(children.as_mut_slice(), rest) {
+                    return Some(found);
+                }
         }
     }
     None

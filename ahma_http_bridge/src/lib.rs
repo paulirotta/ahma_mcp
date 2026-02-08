@@ -56,3 +56,6 @@ pub use session::{
     DEFAULT_HANDSHAKE_TIMEOUT_SECS, McpRoot, Session, SessionManager, SessionManagerConfig,
     SessionTerminationReason,
 };
+
+/// Request handler for HTTP bridge.
+pub mod request_handler;
