@@ -4,11 +4,16 @@ A code health metrics aggregator that analyzes source code using [rust-code-anal
 
 ## Installation
 
-Requires `rust-code-analysis-cli`:
+Requires `rust-code-analysis-cli`. You can install it using `cargo-binstall`:
 
 ```bash
+# 1. Install cargo-binstall
+cargo install cargo-binstall
+
+# 2. Install rust-code-analysis-cli
 cargo binstall rust-code-analysis-cli
-# Or from source:
+
+# Alternatively, install from source:
 cargo install --git https://github.com/mozilla/rust-code-analysis rust-code-analysis-cli
 ```
 
@@ -35,6 +40,9 @@ cargo run -- /path/to/project --extensions rs,py,js
 
 # All supported languages example
 cargo run -- /path/to/project --extensions rs,py,js,ts,tsx,c,h,cpp,cc,hpp,hh,cs,java,go,css,html
+
+# Exclude custom paths (comma-separated list)
+cargo run -- /path/to/project --exclude "**/generated/**,**/vendor/**"
 ```
 
 ## Scoring Formula
@@ -70,14 +78,14 @@ Complexity metrics are normalized by SLOC to calculate density per 100 lines. Th
 
 ## Output
 
-### Markdown Report (`CODE_HEALTH_REPORT.md`)
+### Markdown Report (`CODE_HEALTH.md`)
 
 - Overall repository health percentage
 - Per-crate/package health breakdown
-- Top N "code health emergencies" with culprit identification
+- Top N "code health issues" with culprit identification
 - Metrics glossary
 
-### HTML Report (`CODE_HEALTH_REPORT.html`)
+### HTML Report (`CODE_HEALTH.html`)
 
 Styled HTML version of the markdown report (use `--html` flag).
 

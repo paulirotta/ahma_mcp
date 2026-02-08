@@ -73,18 +73,19 @@ impl<'a> ArgProcessor<'a> {
 
         if let Some(file_opt) = file_arg_config {
             if let Some(value_str) = value_to_string(value).await?
-                && !value_str.is_empty() {
-                    let temp_file_path = self
-                        .temp_file_manager
-                        .create_temp_file_with_content(&value_str)
-                        .await?;
-                    if let Some(flag) = &file_opt.file_flag {
-                        self.final_args.push(flag.clone());
-                    } else {
-                        self.final_args.push(format_option_flag(key));
-                    }
-                    self.final_args.push(temp_file_path);
+                && !value_str.is_empty()
+            {
+                let temp_file_path = self
+                    .temp_file_manager
+                    .create_temp_file_with_content(&value_str)
+                    .await?;
+                if let Some(flag) = &file_opt.file_flag {
+                    self.final_args.push(flag.clone());
+                } else {
+                    self.final_args.push(format_option_flag(key));
                 }
+                self.final_args.push(temp_file_path);
+            }
             Ok(true)
         } else {
             Ok(false)
@@ -176,14 +177,15 @@ impl<'a> ArgProcessor<'a> {
 
     async fn process_positional_args(&mut self, args_map: &Map<String, Value>) -> Result<()> {
         if let Some(sc) = self.subcommand_config
-            && let Some(pos_args) = &sc.positional_args {
-                for pos_arg in pos_args {
-                    if let Some(value) = args_map.get(&pos_arg.name) {
-                        self.process_arg_kv(&pos_arg.name, value).await?;
-                        self.processed_keys.insert(pos_arg.name.clone());
-                    }
+            && let Some(pos_args) = &sc.positional_args
+        {
+            for pos_arg in pos_args {
+                if let Some(value) = args_map.get(&pos_arg.name) {
+                    self.process_arg_kv(&pos_arg.name, value).await?;
+                    self.processed_keys.insert(pos_arg.name.clone());
                 }
             }
+        }
         Ok(())
     }
 

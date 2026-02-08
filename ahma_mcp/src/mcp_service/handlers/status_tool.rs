@@ -116,15 +116,17 @@ impl AhmaMcpService {
 
         for op in completed_ops {
             if let Some(end_time) = op.end_time
-                && let Ok(execution_duration) = end_time.duration_since(op.start_time) {
-                    total_execution_time += execution_duration.as_secs_f64();
+                && let Ok(execution_duration) = end_time.duration_since(op.start_time)
+            {
+                total_execution_time += execution_duration.as_secs_f64();
 
-                    if let Some(first_wait_time) = op.first_wait_time
-                        && let Ok(wait_duration) = first_wait_time.duration_since(op.start_time) {
-                            total_wait_time += wait_duration.as_secs_f64();
-                            operations_with_waits += 1;
-                        }
+                if let Some(first_wait_time) = op.first_wait_time
+                    && let Ok(wait_duration) = first_wait_time.duration_since(op.start_time)
+                {
+                    total_wait_time += wait_duration.as_secs_f64();
+                    operations_with_waits += 1;
                 }
+            }
         }
 
         if total_execution_time > 0.0 {

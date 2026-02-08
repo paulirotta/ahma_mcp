@@ -40,6 +40,11 @@ struct Cli {
     #[arg(short, long, default_value = "rs", value_delimiter = ',')]
     extensions: Vec<String>,
 
+    /// Additional paths/patterns to exclude, as a comma-separated list.
+    /// Example: --exclude "**/generated/**,**/vendor/**"
+    #[arg(short = 'x', long, value_delimiter = ',')]
+    exclude: Vec<String>,
+
     /// Use raw complexity values instead of SLOC-normalized density scoring
     #[arg(long)]
     raw_complexity: bool,
@@ -56,7 +61,13 @@ fn main() -> Result<()> {
     prepare_output_directory(&cli.output)?;
 
     let is_workspace = is_cargo_workspace(&cli.directory);
-    perform_analysis(&directory, &cli.output, is_workspace, &cli.extensions)?;
+    perform_analysis(
+        &directory,
+        &cli.output,
+        is_workspace,
+        &cli.extensions,
+        &cli.exclude,
+    )?;
 
     let mut files_health = load_metrics(&cli.output, !cli.raw_complexity)?;
     if files_health.is_empty() {
@@ -124,21 +135,21 @@ fn sort_files_by_health(files: &mut [FileHealth]) {
 fn print_report_locations(directory: &Path, html: bool) {
     println!(
         "Report generated: {}",
-        directory.join("CODE_HEALTH_REPORT.md").display()
+        directory.join("CODE_HEALTH.md").display()
     );
     if html {
         println!(
             "Report generated: {}",
-            directory.join("CODE_HEALTH_REPORT.html").display()
+            directory.join("CODE_HEALTH.html").display()
         );
     }
 }
 
 fn open_report(directory: &Path, html: bool) -> Result<()> {
     let open_path = if html {
-        directory.join("CODE_HEALTH_REPORT.html")
+        directory.join("CODE_HEALTH.html")
     } else {
-        directory.join("CODE_HEALTH_REPORT.md")
+        directory.join("CODE_HEALTH.md")
     };
     opener::open(&open_path).context("Failed to open report")
 }

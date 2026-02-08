@@ -77,7 +77,7 @@ pub fn generate_report(
 ) -> Result<(), std::io::Error> {
     let md_content = create_report_md(files, is_workspace, limit, output_dir, project_name);
 
-    fs::write(output_dir.join("CODE_HEALTH_REPORT.md"), &md_content)?;
+    fs::write(output_dir.join("CODE_HEALTH.md"), &md_content)?;
 
     if generate_html {
         let mut options = pulldown_cmark::Options::empty();
@@ -103,7 +103,7 @@ pub fn generate_report(
             "<!DOCTYPE html>\n<html>\n<head>\n<meta charset='UTF-8'>\n<title>Code Health Report</title>\n<style>\n{}\n</style>\n</head>\n<body>\n{}\n</body>\n</html>",
             style, html_output
         );
-        fs::write(output_dir.join("CODE_HEALTH_REPORT.html"), full_html)?;
+        fs::write(output_dir.join("CODE_HEALTH.html"), full_html)?;
     }
     Ok(())
 }
@@ -182,40 +182,54 @@ fn write_package_health(report: &mut String, summary: &RepoSummary, is_workspace
             for (i, (p, score)) in lang_summary.package_scores.iter().enumerate() {
                 report.push_str(&format!("{}. **{}**: {:.0}%\n", i + 1, p, score));
             }
-            report.push_str("\n");
+            report.push('\n');
         }
     }
 }
 
 fn write_emergencies(report: &mut String, files: &[FileHealth], limit: usize, base_dir: &Path) {
-    let display_limit = std::cmp::min(limit, files.len());
-    report.push_str(&format!(
-        "## Top {display_limit} Code Health Emergencies (Lowest Health Scores)\n\n",
-    ));
+    let mut lang_map: HashMap<Language, Vec<&FileHealth>> = HashMap::new();
+    for f in files {
+        lang_map.entry(f.language).or_default().push(f);
+    }
 
-    for (i, f) in files.iter().take(display_limit).enumerate() {
-        let culprit = identify_culprit(f);
-        let path = Path::new(&f.path);
-        let rel_path = get_relative_path(path, base_dir);
-        let rel_str = rel_path.to_string_lossy();
-        let basename = path
-            .file_name()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_else(|| rel_str.to_string());
+    let mut languages: Vec<_> = lang_map.keys().collect();
+    languages.sort_by(|a, b| a.display_name().cmp(b.display_name()));
+
+    for lang in languages {
+        let lang_files = lang_map.get(lang).unwrap();
+        let display_limit = std::cmp::min(limit, lang_files.len());
 
         report.push_str(&format!(
-            "{}. **{} ({})**: {:.0}% ({})**\n\t{}\n",
-            i + 1,
-            basename,
-            f.language.display_name(),
-            f.score,
-            culprit,
-            rel_str
+            "## Top {display_limit} {} Code Health Issues (Lowest Health Scores)\n\n",
+            lang.display_name()
         ));
-        report.push_str(&format!(
-            "    - Metrics: Cog: {}, Cyc: {}, SLOC: {}, MI: {:.1}\n",
-            f.cognitive, f.cyclomatic, f.sloc, f.mi
-        ));
+
+        for (i, f) in lang_files.iter().take(display_limit).enumerate() {
+            let culprit = identify_culprit(f);
+            let path = Path::new(&f.path);
+            let rel_path = get_relative_path(path, base_dir);
+            let rel_str = rel_path.to_string_lossy();
+            let basename = path
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| rel_str.to_string());
+
+            report.push_str(&format!(
+                "{}. **{} ({})**: {:.0}% ({})**\n\t{}\n",
+                i + 1,
+                basename,
+                f.language.display_name(),
+                f.score,
+                culprit,
+                rel_str
+            ));
+            report.push_str(&format!(
+                "    - Metrics: Cog: {}, Cyc: {}, SLOC: {}, MI: {:.1}\n",
+                f.cognitive, f.cyclomatic, f.sloc, f.mi
+            ));
+        }
+        report.push('\n');
     }
 }
 
@@ -272,5 +286,36 @@ mod tests {
         assert!(report.contains("# Code Health Metrics: test_project"));
         assert!(report.contains("## Overall Repository Health: **60%**"));
         assert!(report.contains("## Rust Health"));
+    }
+
+    #[test]
+    fn test_report_multi_language_emergencies() {
+        let files = vec![
+            FileHealth {
+                path: "file1.rs".to_string(),
+                language: Language::Rust,
+                score: 50.0,
+                cognitive: 20.0,
+                cyclomatic: 15.0,
+                sloc: 100.0,
+                mi: 50.0,
+            },
+            FileHealth {
+                path: "file2.py".to_string(),
+                language: Language::Python,
+                score: 40.0,
+                cognitive: 25.0,
+                cyclomatic: 20.0,
+                sloc: 150.0,
+                mi: 40.0,
+            },
+        ];
+
+        let report = create_report_md(&files, false, 10, Path::new("."), "test_multi");
+
+        assert!(report.contains("## Top 1 Rust Code Health Issues"));
+        assert!(report.contains("## Top 1 Python Code Health Issues"));
+        assert!(report.contains("file1.rs"));
+        assert!(report.contains("file2.py"));
     }
 }

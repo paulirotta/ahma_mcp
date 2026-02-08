@@ -19,7 +19,12 @@ pub fn check_dependencies() -> Result<()> {
     Ok(())
 }
 
-pub fn run_analysis(dir: &Path, output_dir: &Path, extensions: &[String]) -> Result<()> {
+pub fn run_analysis(
+    dir: &Path,
+    output_dir: &Path,
+    extensions: &[String],
+    custom_excludes: &[String],
+) -> Result<()> {
     println!("Analyzing {}...", dir.display());
 
     // Build include patterns for all specified extensions
@@ -36,9 +41,43 @@ pub fn run_analysis(dir: &Path, output_dir: &Path, extensions: &[String]) -> Res
         .arg("--output-format")
         .arg("toml")
         .arg("--output")
-        .arg(output_dir)
-        .arg("--exclude")
-        .arg("target/**");
+        .arg(output_dir);
+
+    // Default exclusions for common build environments, dependencies, and IDEs
+    let default_excludes = [
+        "**/target/**",
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/build/**",
+        "**/out/**",
+        "**/bin/**",
+        "**/obj/**",
+        "**/venv/**",
+        "**/.venv/**",
+        "**/env/**",
+        "**/.env/**",
+        "**/__pycache__/**",
+        "**/.tox/**",
+        "**/.pytest_cache/**",
+        "**/.mypy_cache/**",
+        "**/.next/**",
+        "**/.nuxt/**",
+        "**/cmake-build-*/**",
+        "**/.git/**",
+        "**/.svn/**",
+        "**/.hg/**",
+        "**/.idea/**",
+        "**/.vscode/**",
+    ];
+
+    for exclude in &default_excludes {
+        cmd.arg("--exclude").arg(exclude);
+    }
+
+    // Add custom exclusions
+    for exclude in custom_excludes {
+        cmd.arg("--exclude").arg(exclude);
+    }
 
     // Add all include patterns
     for pattern in &include_patterns {
@@ -61,6 +100,7 @@ pub fn perform_analysis(
     output: &Path,
     is_workspace: bool,
     extensions: &[String],
+    custom_excludes: &[String],
 ) -> Result<()> {
     let mut analyzed_something = false;
     if is_workspace {
@@ -70,14 +110,14 @@ pub fn perform_analysis(
         for member in members {
             let target_path = directory.join(&member);
             if target_path.is_dir() {
-                run_analysis(&target_path, output, extensions)?;
+                run_analysis(&target_path, output, extensions, custom_excludes)?;
                 analyzed_something = true;
             }
         }
     }
 
     if !analyzed_something {
-        run_analysis(directory, output, extensions)?;
+        run_analysis(directory, output, extensions, custom_excludes)?;
     }
     Ok(())
 }
@@ -87,22 +127,22 @@ pub fn perform_analysis(
 /// 2. Falling back to directories containing Cargo.toml
 fn get_workspace_members(dir: &Path) -> Result<Vec<String>> {
     let cargo_toml = dir.join("Cargo.toml");
-    if let Ok(content) = fs::read_to_string(&cargo_toml) {
-        if let Ok(value) = content.parse::<toml::Value>() {
-            // Try to get explicit members from [workspace] section
-            if let Some(members) = value
-                .get("workspace")
-                .and_then(|w| w.get("members"))
-                .and_then(|m| m.as_array())
-            {
-                let explicit: Vec<String> = members
-                    .iter()
-                    .filter_map(|v| v.as_str())
-                    .map(|s| s.to_string())
-                    .collect();
-                if !explicit.is_empty() {
-                    return Ok(explicit);
-                }
+    if let Ok(content) = fs::read_to_string(&cargo_toml)
+        && let Ok(value) = content.parse::<toml::Value>()
+    {
+        // Try to get explicit members from [workspace] section
+        if let Some(members) = value
+            .get("workspace")
+            .and_then(|w| w.get("members"))
+            .and_then(|m| m.as_array())
+        {
+            let explicit: Vec<String> = members
+                .iter()
+                .filter_map(|v| v.as_str())
+                .map(|s| s.to_string())
+                .collect();
+            if !explicit.is_empty() {
+                return Ok(explicit);
             }
         }
     }
@@ -112,12 +152,13 @@ fn get_workspace_members(dir: &Path) -> Result<Vec<String>> {
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.is_dir() && path.join("Cargo.toml").exists() {
-                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    // Skip common non-crate directories
-                    if name != "target" && name != ".git" && !name.starts_with('.') {
-                        members.push(name.to_string());
-                    }
+            if path.is_dir()
+                && path.join("Cargo.toml").exists()
+                && let Some(name) = path.file_name().and_then(|n| n.to_str())
+            {
+                // Skip common non-crate directories
+                if name != "target" && name != ".git" && !name.starts_with('.') {
+                    members.push(name.to_string());
                 }
             }
         }
@@ -127,16 +168,14 @@ fn get_workspace_members(dir: &Path) -> Result<Vec<String>> {
 
 pub fn get_project_name(dir: &Path) -> String {
     let cargo_toml = dir.join("Cargo.toml");
-    if let Ok(content) = fs::read_to_string(cargo_toml) {
-        if let Ok(value) = content.parse::<toml::Value>() {
-            if let Some(name) = value
-                .get("package")
-                .and_then(|v| v.get("name"))
-                .and_then(|v| v.as_str())
-            {
-                return name.to_string();
-            }
-        }
+    if let Ok(content) = fs::read_to_string(cargo_toml)
+        && let Ok(value) = content.parse::<toml::Value>()
+        && let Some(name) = value
+            .get("package")
+            .and_then(|v| v.get("name"))
+            .and_then(|v| v.as_str())
+    {
+        return name.to_string();
     }
     dir.file_name()
         .map(|s| s.to_string_lossy().to_string())

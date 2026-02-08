@@ -660,8 +660,8 @@ jobs:
         run: |
           cd scripts/metrics-aggregator
           cargo run -- ../.. --limit 20 --html
-          cp ../../CODE_HEALTH_REPORT.md ../../coverage/
-          cp ../../CODE_HEALTH_REPORT.html ../../coverage/
+          cp ../../CODE_HEALTH.md ../../coverage/
+          cp ../../CODE_HEALTH.html ../../coverage/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -681,7 +681,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: code-health-report
-          path: ./coverage/CODE_HEALTH_REPORT.md
+          path: ./coverage/CODE_HEALTH.md
 
       - name: Deploy to GitHub Pages
         id: deployment
