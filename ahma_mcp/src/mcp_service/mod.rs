@@ -421,9 +421,17 @@ impl ServerHandler for AhmaMcpService {
                     .await;
             }
 
+            // Delay tool execution until sandbox is initialized from roots/list.
+            // This is critical in HTTP bridge mode with deferred sandbox initialization.
+            if self.adapter.sandbox().scopes().is_empty() && !self.adapter.sandbox().is_test_mode()
+            {
+                let error_message = "Sandbox initializing from client roots - retry tools/call after roots/list completes".to_string();
+                tracing::warn!("{}", error_message);
+                return Err(McpError::internal_error(error_message, None));
+            }
+
             // Find tool configuration
             // Acquire read lock for configs, clone the config, and drop the lock immediately
-            // to avoid holding the lock across await points (which makes the future !Send)
             let config = {
                 let configs_lock = self.configs.read().unwrap();
                 match configs_lock.get(tool_name) {
@@ -503,15 +511,6 @@ impl ServerHandler for AhmaMcpService {
                         ));
                     }
                 };
-
-            // Delay tool execution until sandbox is initialized from roots/list.
-            // This is critical in HTTP bridge mode with deferred sandbox initialization.
-            if self.adapter.sandbox().scopes().is_empty() && !self.adapter.sandbox().is_test_mode()
-            {
-                let error_message = "Sandbox initializing from client roots - retry tools/call after roots/list completes".to_string();
-                tracing::warn!("{}", error_message);
-                return Err(McpError::internal_error(error_message, None));
-            }
 
             // Check if the subcommand itself is a sequence
             if subcommand_config.sequence.is_some() {

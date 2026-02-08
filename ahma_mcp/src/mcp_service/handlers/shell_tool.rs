@@ -50,6 +50,14 @@ impl AhmaMcpService {
     ) -> Result<CallToolResult, McpError> {
         let args = params.arguments.unwrap_or_default();
 
+        // Delay tool execution until sandbox is initialized from roots/list.
+        // This is critical in HTTP bridge mode with deferred sandbox initialization.
+        if self.adapter.sandbox().scopes().is_empty() && !self.adapter.sandbox().is_test_mode() {
+            let error_message = "Sandbox initializing from client roots - retry tools/call after roots/list completes".to_string();
+            tracing::warn!("{}", error_message);
+            return Err(McpError::internal_error(error_message, None));
+        }
+
         // Extract command (required)
         let command = args
             .get("command")
