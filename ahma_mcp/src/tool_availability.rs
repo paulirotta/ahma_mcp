@@ -223,9 +223,10 @@ fn process_probe_outcomes(
             }
             ProbeTarget::Subcommand { ref tool, ref path } => {
                 if let Some(config) = filtered_configs.get_mut(tool)
-                    && let Some(sub) = find_subcommand_mut(&mut config.subcommand, path) {
-                        sub.enabled = false;
-                    }
+                    && let Some(sub) = find_subcommand_mut(&mut config.subcommand, path)
+                {
+                    sub.enabled = false;
+                }
 
                 let joined_path = path.join("_");
                 let message = format!(
@@ -432,9 +433,10 @@ fn resolve_command(
 
     if let Some(check) = check {
         if let Some(codes) = &check.success_exit_codes
-            && !codes.is_empty() {
-                success_codes = codes.clone();
-            }
+            && !codes.is_empty()
+        {
+            success_codes = codes.clone();
+        }
         if let Some(dir) = &check.working_directory {
             working_dir = PathBuf::from(dir);
         }
@@ -600,9 +602,10 @@ fn find_subcommand_mut_in<'a>(
                 return Some(sub);
             }
             if let Some(children) = sub.subcommand.as_mut()
-                && let Some(found) = find_subcommand_mut_in(children.as_mut_slice(), rest) {
-                    return Some(found);
-                }
+                && let Some(found) = find_subcommand_mut_in(children.as_mut_slice(), rest)
+            {
+                return Some(found);
+            }
         }
     }
     None

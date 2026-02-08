@@ -1,11 +1,14 @@
 use ahma_http_bridge::{BridgeConfig, start_bridge};
 use clap::Parser;
 #[cfg(feature = "opentelemetry")]
-use opentelemetry::{KeyValue, trace::TracerProvider};
+use opentelemetry::trace::TracerProvider;
 #[cfg(feature = "opentelemetry")]
 use opentelemetry_otlp::WithExportConfig;
 #[cfg(feature = "opentelemetry")]
-use opentelemetry_sdk::{Resource, trace as sdktrace};
+use opentelemetry_sdk::{
+    Resource,
+    trace::{self as sdktrace, SdkTracerProvider},
+};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -117,21 +120,20 @@ where
 {
     if std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").is_ok() || std::env::var("AHMA_TRACING").is_ok()
     {
-        let exporter = opentelemetry_otlp::new_exporter()
-            .http()
-            .with_endpoint("http://localhost:4318/v1/traces");
-
-        let provider = opentelemetry_otlp::new_pipeline()
-            .tracing()
-            .with_exporter(exporter)
-            .with_trace_config(
-                sdktrace::Config::default().with_resource(Resource::new(vec![KeyValue::new(
-                    "service.name",
-                    "ahma_http_bridge",
-                )])),
-            )
-            .install_batch(opentelemetry_sdk::runtime::Tokio)
+        let exporter = opentelemetry_otlp::SpanExporter::builder()
+            .with_http()
+            .with_endpoint("http://localhost:4318/v1/traces")
+            .build()
             .ok()?;
+
+        let resource = Resource::builder()
+            .with_service_name("ahma_http_bridge")
+            .build();
+
+        let provider = SdkTracerProvider::builder()
+            .with_resource(resource)
+            .with_batch_exporter(exporter)
+            .build();
 
         let tracer = provider.tracer("ahma_http_bridge");
 
