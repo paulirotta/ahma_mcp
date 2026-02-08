@@ -751,8 +751,8 @@ fn test_sandbox_test_env_detection() {
     // In test environment, some of these are likely set
     // The important thing is the detection works
     assert!(
-        SANDBOX_BYPASS_ENV_VARS.len() == 5,
-        "Should have 5 bypass vars defined"
+        SANDBOX_BYPASS_ENV_VARS.len() == 4,
+        "Should have 4 bypass vars defined"
     );
 }
 

@@ -1,8 +1,8 @@
 //! macOS Sandbox Integration Tests
 //!
 //! These tests verify that the macOS Seatbelt sandbox profile works correctly
-//! when executed through sandbox-exec. This is critical because tests normally
-//! run with AHMA_TEST_MODE=1 which bypasses the sandbox.
+//! when executed through sandbox-exec. This is critical because tests might run
+//! with permissive settings that bypass strict sandbox enforcement.
 //!
 //! These tests MUST run WITHOUT test mode to catch sandbox profile errors.
 //!

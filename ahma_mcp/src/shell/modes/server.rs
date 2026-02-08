@@ -334,6 +334,16 @@ pub async fn run_server_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result
         }
 
         info!("🔄 Shutting down adapter and shell pools...");
+
+        // Emit sandbox terminated notification
+        if let Ok(notification) = serde_json::to_string(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/sandbox/terminated",
+            "params": { "reason": shutdown_reason }
+        })) {
+            println!("\n{}", notification);
+        }
+
         adapter_for_signal.shutdown().await;
 
         // Force process exit if service doesn't stop naturally
@@ -342,10 +352,26 @@ pub async fn run_server_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result
         std::process::exit(0);
     });
 
-    service.waiting().await?;
+    let result = service.waiting().await;
+
+    // Emit sandbox terminated notification
+    let reason = match &result {
+        Ok(_) => "session_ended".to_string(),
+        Err(e) => format!("session_error: {:#}", e),
+    };
+
+    if let Ok(notification) = serde_json::to_string(&serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/sandbox/terminated",
+        "params": { "reason": reason }
+    })) {
+        println!("\n{}", notification);
+    }
 
     // Gracefully shutdown the adapter
     adapter.shutdown().await;
+
+    result?;
 
     Ok(())
 }

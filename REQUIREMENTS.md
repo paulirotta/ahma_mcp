@@ -211,6 +211,11 @@ The sandbox scope defines the root directory boundary. AI has **full read/write 
   2. `AHMA_SANDBOX_SCOPE` environment variable
   3. Current working directory
 - **R5.4**: **Write Protection**: The system **must** block any attempt to write to files outside the sandbox scope, including via command arguments (e.g., `touch /outside/file`).
+- **R5.5**: **Explicit Scope Override**: If `--sandbox-scope` is provided via CLI, the system **must** respect it and **must not** attempt to expand or modify it via the MCP `roots/list` protocol (roots requests are skipped). This prevents potential security bypasses where a compromised client could widen the scope, and ensures stability for clients that do not support the roots protocol.
+- **R5.6**: **Lifecycle Notifications**: The system **must** emit JSON-RPC notifications for sandbox lifecycle events:
+  - `notifications/sandbox/configured`: When sandbox is successfully initialized from roots.
+  - `notifications/sandbox/failed`: When sandbox initialization fails (payload: `{"error": "message"}`).
+  - `notifications/sandbox/terminated`: When the session ends (payload: `{"reason": "reason"}`).
 
 ### R6: Platform-Specific Enforcement
 
@@ -438,6 +443,65 @@ These control execution environment but **must not** be passed as CLI arguments:
 
 - **R13.1**: Distinguish MCP protocol cancellations from process cancellations.
 - **R13.2**: Only cancel actual background operations, not synchronous MCP tool calls (`await`, `status`, `cancel`).
+
+### 9.6 Concurrency Architecture Principles
+
+#### R18: No-Wait State Transitions
+
+- **R18.1**: State transitions **must never require wait loops or polling**. If code needs to "wait for" another component, the design is fundamentally broken.
+- **R18.2**: Use state machines with explicit transitions. When a state change occurs, notify listeners immediately through channels or callbacks.
+- **R18.3**: Example anti-pattern:
+
+```rust
+// ❌ WRONG: Polling for state change
+while !session.is_sandbox_ready() {
+    sleep(Duration::from_millis(100)).await;
+}
+```
+
+- **R18.4**: Correct pattern:
+
+```rust
+// ✅ CORRECT: Explicit state transition notification
+session.wait_for_state(SandboxState::Ready).await;
+// where wait_for_state uses a channel that the setter notifies
+```
+
+#### R19: RAII for Spawned Tasks
+
+- **R19.1**: When spawning async tasks, the caller **must not** return until the spawn is confirmed live.
+- **R19.2**: Use barriers or oneshot channels to confirm task startup:
+
+```rust
+let (started_tx, started_rx) = oneshot::channel();
+tokio::spawn(async move {
+    started_tx.send(()).ok();  // Confirm we're running
+    // ... do work ...
+});
+started_rx.await.ok();  // Don't return until spawn is live
+```
+
+- **R19.3**: For tasks that manage lifecycle resources (like sandbox configuration), prefer synchronous execution over spawn unless there's a specific reason for concurrent execution.
+
+#### R20: Single Source of Truth for State
+
+- **R20.1**: Every piece of state **must** have exactly one authoritative location.
+- **R20.2**: When state needs to be observed from multiple components, use:
+  - Watch channels (`tokio::sync::watch`)
+  - Event listeners with guaranteed delivery
+  - NOT: multiple copies of state with synchronization attempts
+
+#### R21: Security Against Environment Pollution
+
+- **R21.1**: Production behavior **must not** be controllable via environment variables that an attacker or malicious process could set.
+- **R21.2**: Test-only behavior **should** be controlled via:
+  - Compile-time features (`#[cfg(test)]`)
+  - Explicit CLI parameters (e.g., `--no-sandbox`)
+  - Constructor parameters passed at initialization
+- **R21.3**: The following patterns are **FORBIDDEN**:
+  - Reading `AHMA_TEST_MODE` from environment in production code  
+  - Automatic "test mode" detection based on `NEXTEST`, `CARGO_TARGET_DIR`, etc.
+  - Any environment variable that bypasses security checks
 
 ---
 

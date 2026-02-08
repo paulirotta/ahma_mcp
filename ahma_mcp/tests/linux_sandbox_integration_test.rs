@@ -2,7 +2,7 @@
 //!
 //! These tests verify that the Linux Landlock sandbox works correctly
 //! for kernel-level file system access control. This is critical because
-//! tests normally run with AHMA_TEST_MODE=1 which bypasses the sandbox.
+//! tests might run with permissive settings that bypass strict sandbox enforcement.
 //!
 //! These tests MUST run WITHOUT test mode to catch sandbox configuration errors.
 //!

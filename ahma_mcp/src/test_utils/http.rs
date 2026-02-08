@@ -56,7 +56,6 @@ pub async fn spawn_http_bridge() -> anyhow::Result<HttpBridgeTestInstance> {
             &temp_dir.path().to_string_lossy(),
             "--log-to-stderr",
         ])
-        .env_remove("AHMA_TEST_MODE")
         .env_remove("NEXTEST")
         .env_remove("NEXTEST_EXECUTION_MODE")
         .env_remove("CARGO_TARGET_DIR")
