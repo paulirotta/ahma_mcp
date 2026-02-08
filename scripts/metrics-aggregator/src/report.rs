@@ -216,10 +216,9 @@ fn write_emergencies(report: &mut String, files: &[FileHealth], limit: usize, ba
                 .unwrap_or_else(|| rel_str.to_string());
 
             report.push_str(&format!(
-                "{}. **{} ({})**: {:.0}% ({})**\n\t{}\n",
+                "{}. **{}**: {:.0}% ({})**\n\t{}\n",
                 i + 1,
                 basename,
-                f.language.display_name(),
                 f.score,
                 culprit,
                 rel_str
@@ -317,5 +316,8 @@ mod tests {
         assert!(report.contains("## Top 1 Python Code Health Issues"));
         assert!(report.contains("file1.rs"));
         assert!(report.contains("file2.py"));
+        // Ensure the redundant (Language) label is removed from the item lines
+        assert!(!report.contains("(Rust)"));
+        assert!(!report.contains("(Python)"));
     }
 }

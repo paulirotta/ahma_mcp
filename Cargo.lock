@@ -4,12 +4,16 @@ version = 4
 
 [[package]]
 name = "ahma_common"
-version = "0.4.4"
+version = "0.4.5"
+dependencies = [
+ "tokio",
+]
 
 [[package]]
 name = "ahma_http_bridge"
-version = "0.4.4"
+version = "0.4.5"
 dependencies = [
+ "ahma_common",
  "ahma_mcp",
  "anyhow",
  "axum",
@@ -41,7 +45,7 @@ dependencies = [
 
 [[package]]
 name = "ahma_http_mcp_client"
-version = "0.4.4"
+version = "0.4.5"
 dependencies = [
  "ahma_common",
  "anyhow",
@@ -66,7 +70,7 @@ dependencies = [
 
 [[package]]
 name = "ahma_mcp"
-version = "0.4.4"
+version = "0.4.5"
 dependencies = [
  "ahma_http_bridge",
  "ahma_http_mcp_client",
@@ -104,7 +108,7 @@ dependencies = [
 
 [[package]]
 name = "ahma_validate"
-version = "0.4.4"
+version = "0.4.5"
 dependencies = [
  "ahma_mcp",
  "anyhow",
@@ -871,7 +875,7 @@ dependencies = [
 
 [[package]]
 name = "generate_tool_schema"
-version = "0.4.4"
+version = "0.4.5"
 dependencies = [
  "ahma_mcp",
  "schemars",
@@ -1427,7 +1431,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "metrics-aggregator"
-version = "0.4.4"
+version = "0.4.5"
 dependencies = [
  "anyhow",
  "chrono",

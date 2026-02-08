@@ -1,45 +1,26 @@
 # Nextest configuration for ahma_mcp
 #
-# This configuration optimizes test performance, especially for tests that spawn
-# subprocesses (like CLI binary integration tests).
+# All profiles use immediate output by default for better CI diagnostics
+# and to avoid buffering issues with subprocess-spawning tests.
 
 [profile.default]
 # Default timeout is 60s
-slow-timeout = {period = "60s", terminate-after = 2}
+slow-timeout = { period = "60s", terminate-after = 2 }
 # Use reasonable retry settings
 retries = 0
-
-# Override settings for CLI integration tests that spawn subprocesses.
-# These tests are slow with output capture due to nextest's child process handling.
-[[profile.default.overrides]]
-filter = "test(cli_binary_integration_test::)"
-# Don't capture output for subprocess-spawning tests - this is MUCH faster
-# (22s -> 0.8s improvement measured)
+# Show output immediately - improves debugging and prevents issues with subprocess tests
 failure-output = "immediate"
-success-output = "immediate"
-
-# Also apply to other tests that spawn the ahma_mcp binary
-[[profile.default.overrides]]
-failure-output = "immediate"
-filter = "test(cli_extended_integration_test::) | test(cli_mode_coverage_test::)"
 success-output = "immediate"
 
 # CI profile with similar optimizations but may have different retry settings
 [profile.ci]
-retries = 1
-slow-timeout = {period = "120s", terminate-after = 2}
+retries = 0
+slow-timeout = { period = "120s", terminate-after = 2 }
 # Limit parallelism on CI to reduce resource contention
 # GitHub Actions runners have 2 cores; use more conservative parallelism
 test-threads = "num-cpus"
-
-[[profile.ci.overrides]]
+# Show output immediately for better CI diagnostics
 failure-output = "immediate"
-filter = "test(cli_binary_integration_test::)"
-success-output = "immediate"
-
-[[profile.ci.overrides]]
-failure-output = "immediate"
-filter = "test(cli_extended_integration_test::) | test(cli_mode_coverage_test::)"
 success-output = "immediate"
 
 # Timing-sensitive handshake tests benefit from reduced parallelism
@@ -47,19 +28,12 @@ success-output = "immediate"
 [[profile.ci.overrides]]
 filter = "test(handshake_timeout_test::)"
 threads-required = 2
-retries = 2
+retries = 0
 
 # Coverage profile for cargo llvm-cov (instrumentation makes tests much slower)
 [profile.coverage]
 retries = 0
-slow-timeout = {period = "1800s", terminate-after = 2}
-
-[[profile.coverage.overrides]]
+slow-timeout = { period = "1800s", terminate-after = 2 }
+# Show output immediately - critical for coverage builds where subprocess tests can timeout
 failure-output = "immediate"
-filter = "test(cli_binary_integration_test::)"
-success-output = "immediate"
-
-[[profile.coverage.overrides]]
-failure-output = "immediate"
-filter = "test(cli_extended_integration_test::) | test(cli_mode_coverage_test::)"
 success-output = "immediate"

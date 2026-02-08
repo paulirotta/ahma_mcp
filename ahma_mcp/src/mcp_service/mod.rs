@@ -202,13 +202,19 @@ impl ServerHandler for AhmaMcpService {
             // In HTTP bridge mode with --defer-sandbox, we wait for roots/list_changed
             // notification which is sent by the bridge when SSE connects.
             if !self.defer_sandbox {
-                let peer_clone = peer.clone();
-                let service_clone = self.clone();
-                tokio::spawn(async move {
-                    service_clone
-                        .configure_sandbox_from_roots(&peer_clone)
-                        .await;
-                });
+                // IF scopes are already configured (e.g. via CLI --sandbox-scope), respect them
+                // and do not ask client for roots (which would overwrite CLI scopes).
+                // This also prevents hangs when testing with clients that don't support roots/list.
+                if !self.adapter.sandbox().scopes().is_empty() {
+                    tracing::info!(
+                        "Sandbox scopes already configured via CLI/Env ({:?}), skipping roots/list request",
+                        self.adapter.sandbox().scopes()
+                    );
+                } else {
+                    // Run synchronously per R19.3 - sandbox configuration is a lifecycle
+                    // operation that should complete before we're "ready"
+                    self.configure_sandbox_from_roots(peer).await;
+                }
             } else {
                 tracing::info!("Sandbox deferred - waiting for roots/list_changed notification");
             }
@@ -227,14 +233,10 @@ impl ServerHandler for AhmaMcpService {
             // It signals that we can now safely call roots/list.
             let peer = &context.peer;
 
-            // Spawn as background task to avoid blocking message processing
-            let peer_clone = peer.clone();
-            let service_clone = self.clone();
-            tokio::spawn(async move {
-                service_clone
-                    .configure_sandbox_from_roots(&peer_clone)
-                    .await;
-            });
+            // Run synchronously per R19.3 - sandbox configuration must complete
+            // before we can safely process tools/call requests. Initial handshake
+            // timing is not super critical, but correctness is.
+            self.configure_sandbox_from_roots(peer).await;
         }
     }
 
@@ -419,9 +421,17 @@ impl ServerHandler for AhmaMcpService {
                     .await;
             }
 
+            // Delay tool execution until sandbox is initialized from roots/list.
+            // This is critical in HTTP bridge mode with deferred sandbox initialization.
+            if self.adapter.sandbox().scopes().is_empty() && !self.adapter.sandbox().is_test_mode()
+            {
+                let error_message = "Sandbox initializing from client roots - retry tools/call after roots/list completes".to_string();
+                tracing::warn!("{}", error_message);
+                return Err(McpError::internal_error(error_message, None));
+            }
+
             // Find tool configuration
             // Acquire read lock for configs, clone the config, and drop the lock immediately
-            // to avoid holding the lock across await points (which makes the future !Send)
             let config = {
                 let configs_lock = self.configs.read().unwrap();
                 match configs_lock.get(tool_name) {
@@ -501,15 +511,6 @@ impl ServerHandler for AhmaMcpService {
                         ));
                     }
                 };
-
-            // Delay tool execution until sandbox is initialized from roots/list.
-            // This is critical in HTTP bridge mode with deferred sandbox initialization.
-            if self.adapter.sandbox().scopes().is_empty() && !self.adapter.sandbox().is_test_mode()
-            {
-                let error_message = "Sandbox initializing from client roots - retry tools/call after roots/list completes".to_string();
-                tracing::warn!("{}", error_message);
-                return Err(McpError::internal_error(error_message, None));
-            }
 
             // Check if the subcommand itself is a sequence
             if subcommand_config.sequence.is_some() {

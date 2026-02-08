@@ -31,7 +31,7 @@ async fn red_team_basic_path_traversal_blocked() {
     let client = ClientBuilder::new()
         .tools_dir(&tools_dir)
         .working_dir(temp_dir.path())
-        .env("AHMA_TEST_MODE", "0")
+        .no_sandbox(false)
         .build()
         .await
         .unwrap();
@@ -66,7 +66,7 @@ async fn red_team_deep_path_traversal_blocked() {
     let client = ClientBuilder::new()
         .tools_dir(&tools_dir)
         .working_dir(temp_dir.path())
-        .env("AHMA_TEST_MODE", "0")
+        .no_sandbox(false)
         .build()
         .await
         .unwrap();
@@ -101,7 +101,7 @@ async fn red_team_absolute_path_escape_blocked() {
     let client = ClientBuilder::new()
         .tools_dir(&tools_dir)
         .working_dir(temp_dir.path())
-        .env("AHMA_TEST_MODE", "0")
+        .no_sandbox(false)
         .build()
         .await
         .unwrap();
@@ -143,7 +143,7 @@ async fn red_team_symlink_escape_blocked() {
     let client = ClientBuilder::new()
         .tools_dir(&tools_dir)
         .working_dir(temp_dir.path())
-        .env("AHMA_TEST_MODE", "0")
+        .no_sandbox(false)
         .build()
         .await
         .unwrap();
@@ -185,7 +185,7 @@ async fn red_team_symlink_to_home_blocked() {
     let client = ClientBuilder::new()
         .tools_dir(&tools_dir)
         .working_dir(temp_dir.path())
-        .env("AHMA_TEST_MODE", "0")
+        .no_sandbox(false)
         .build()
         .await
         .unwrap();
@@ -229,7 +229,7 @@ async fn red_team_shell_metacharacters_in_path() {
     let client = ClientBuilder::new()
         .tools_dir(&tools_dir)
         .working_dir(temp_dir.path())
-        .env("AHMA_TEST_MODE", "0")
+        .no_sandbox(false)
         .build()
         .await
         .unwrap();
@@ -289,7 +289,7 @@ async fn documented_limitation_read_access_unrestricted() {
     let client = ClientBuilder::new()
         .tools_dir(&tools_dir)
         .working_dir(temp_dir.path())
-        .env("AHMA_TEST_MODE", "0")
+        .no_sandbox(false)
         .build()
         .await
         .unwrap();
@@ -330,7 +330,7 @@ async fn documented_limitation_network_unrestricted() {
     let client = ClientBuilder::new()
         .tools_dir(&tools_dir)
         .working_dir(temp_dir.path())
-        .env("AHMA_TEST_MODE", "0")
+        .no_sandbox(false)
         .build()
         .await
         .unwrap();
@@ -371,7 +371,7 @@ async fn red_team_command_write_escape_blocked() {
     let client = ClientBuilder::new()
         .tools_dir(&tools_dir)
         .working_dir(temp_dir.path())
-        .env("AHMA_TEST_MODE", "0")
+        .no_sandbox(false)
         .env("AHMA_NO_TEMP_FILES", "1")
         .build()
         .await
@@ -418,7 +418,7 @@ async fn red_team_command_read_escape_blocked_linux() {
     let client = ClientBuilder::new()
         .tools_dir(&tools_dir)
         .working_dir(temp_dir.path())
-        .env("AHMA_TEST_MODE", "0")
+        .no_sandbox(false)
         .env("AHMA_NO_TEMP_FILES", "1")
         .build()
         .await
@@ -473,7 +473,7 @@ async fn red_team_command_read_escape_blocked_linux_custom() {
     let client = ClientBuilder::new()
         .tools_dir(&tools_dir)
         .working_dir(temp_dir.path())
-        .env("AHMA_TEST_MODE", "0")
+        .no_sandbox(false)
         .env("AHMA_NO_TEMP_FILES", "1")
         .build()
         .await

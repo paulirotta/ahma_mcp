@@ -143,6 +143,13 @@ impl AhmaMcpService {
                 if !new_scopes.is_empty() {
                     if let Err(e) = self.adapter.sandbox().update_scopes(new_scopes.clone()) {
                         tracing::error!("Failed to update sandbox from roots: {}", e);
+                        if let Ok(notification) = serde_json::to_string(&serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "method": "notifications/sandbox/failed",
+                            "params": { "error": e.to_string() }
+                        })) {
+                            println!("\n{}", notification);
+                        }
                     } else {
                         tracing::info!("Sandbox scopes updated successfully");
 
@@ -163,6 +170,15 @@ impl AhmaMcpService {
                                          Exiting to prevent running without kernel-level security.",
                                         e
                                     );
+                                    if let Ok(notification) =
+                                        serde_json::to_string(&serde_json::json!({
+                                            "jsonrpc": "2.0",
+                                            "method": "notifications/sandbox/failed",
+                                            "params": { "error": e.to_string() }
+                                        }))
+                                    {
+                                        println!("\n{}", notification);
+                                    }
                                     std::process::exit(1);
                                 }
                                 tracing::info!("Landlock sandbox enforced successfully");
@@ -189,6 +205,13 @@ impl AhmaMcpService {
             }
             Err(e) => {
                 tracing::error!("Failed to request roots/list: {}", e);
+                if let Ok(notification) = serde_json::to_string(&serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "method": "notifications/sandbox/failed",
+                    "params": { "error": e.to_string() }
+                })) {
+                    println!("\n{}", notification);
+                }
             }
         }
     }

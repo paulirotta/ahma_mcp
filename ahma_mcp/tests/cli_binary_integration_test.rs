@@ -201,7 +201,7 @@ mod ahma_validate_tests {
     fn test_ahma_validate_help() {
         let binary = build_binary_cached("ahma_validate", "ahma_validate");
 
-        let output = test_command(&binary)
+        let output = Command::new(&binary)
             .arg("--help")
             .output()
             .expect("Failed to execute ahma_validate --help");
@@ -285,7 +285,7 @@ mod ahma_validate_tests {
         fs::write(&invalid_file, "{ this is not valid json }")
             .expect("Failed to write invalid file");
 
-        let output = test_command(&binary)
+        let output = Command::new(&binary)
             .current_dir(&workspace)
             .args([invalid_file.to_str().unwrap()])
             .output()
@@ -303,7 +303,7 @@ mod ahma_validate_tests {
         let binary = build_binary_cached("ahma_validate", "ahma_validate");
         let workspace = get_workspace_dir();
 
-        let output = test_command(&binary)
+        let output = Command::new(&binary)
             .current_dir(&workspace)
             .args(["/nonexistent/path/to/tools"])
             .output()

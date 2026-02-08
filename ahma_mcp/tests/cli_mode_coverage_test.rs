@@ -65,12 +65,12 @@ mod mode_flags {
         // Use a timeout to prevent blocking
         let output = std::process::Command::new(&binary)
             .current_dir(&workspace)
-            .env("AHMA_TEST_MODE", "1")
             .args([
                 "--mode",
                 "http",
                 "--http-port",
                 "0", // Use port 0 for auto-assign
+                "--no-sandbox",
                 "--tools-dir",
                 tools_dir.to_str().unwrap(),
             ])
@@ -232,9 +232,8 @@ mod no_sandbox_flag {
         }"#;
         std::fs::write(tools_dir.join("no_sandbox_test.json"), tool).unwrap();
 
-        // Run without AHMA_TEST_MODE to test actual --no-sandbox behavior
+        // Run with explicit AHMA_NO_SANDBOX env var
         let output = Command::new(&binary)
-            .env_remove("AHMA_TEST_MODE")
             .env("AHMA_NO_SANDBOX", "1") // Use env var instead
             .args([
                 "--log-to-stderr",
@@ -406,7 +405,7 @@ mod sandbox_scope {
         }"#;
         std::fs::write(tools_dir.join("scope_test.json"), tool).unwrap();
 
-        let output = test_command(&binary)
+        let output = Command::new(&binary)
             .args([
                 "--sandbox-scope",
                 custom_scope.to_str().unwrap(),
@@ -454,7 +453,6 @@ mod sandbox_scope {
         std::fs::write(tools_dir.join("env_scope_test.json"), tool).unwrap();
 
         let output = Command::new(&binary)
-            .env("AHMA_TEST_MODE", "1")
             .env("AHMA_SANDBOX_SCOPE", temp.path().to_str().unwrap())
             .args([
                 "--tools-dir",
@@ -481,7 +479,6 @@ mod sandbox_scope {
         let binary = build_binary();
 
         let output = Command::new(&binary)
-            .env_remove("AHMA_TEST_MODE") // Need real sandbox behavior
             .env_remove("AHMA_NO_SANDBOX")
             .args([
                 "--sandbox-scope",

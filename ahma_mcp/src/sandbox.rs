@@ -103,16 +103,43 @@ impl Sandbox {
     pub fn new(scopes: Vec<PathBuf>, mode: SandboxMode, no_temp_files: bool) -> Result<Self> {
         let mut canonicalized = Vec::with_capacity(scopes.len());
         for scope in scopes {
+            // Reject root filesystem - this is a security vulnerability (unless in Test mode)
+            if mode != SandboxMode::Test && (scope == Path::new("/") || scope == Path::new("")) {
+                return Err(anyhow!(
+                    "Root '/' or empty path is not a valid sandbox scope. \
+                     Specify explicit directories with --sandbox-scope or --working-directories. \
+                     Example: --sandbox-scope /home/user/project"
+                ));
+            }
+
             // Best-effort canonicalization; if it fails (e.g. doesn't exist), we might still want to track it
             // but strictly speaking, a sandbox root that doesn't exist is useless.
-            // We'll enforce existence via canonicalize.
-            let canonical = std::fs::canonicalize(&scope).map_err(|e| {
-                anyhow!(
-                    "Failed to canonicalize sandbox scope '{}': {}",
-                    scope.display(),
-                    e
-                )
-            })?;
+            // We'll enforce existence via canonicalize, unless in Test mode.
+            let canonical = match std::fs::canonicalize(&scope) {
+                Ok(c) => c,
+                Err(e) => {
+                    if mode == SandboxMode::Test {
+                        // In test mode, allow non-existent paths (use raw)
+                        scope.clone()
+                    } else {
+                        return Err(anyhow!(
+                            "Failed to canonicalize sandbox scope '{}': {}",
+                            scope.display(),
+                            e
+                        ));
+                    }
+                }
+            };
+
+            // Also check the canonical path isn't root (unless in Test mode)
+            if mode != SandboxMode::Test && canonical == Path::new("/") {
+                return Err(anyhow!(
+                    "Root '/' is not a valid sandbox scope (resolved from '{}'). \
+                     Specify explicit directories with --sandbox-scope or --working-directories.",
+                    scope.display()
+                ));
+            }
+
             canonicalized.push(canonical);
         }
 
@@ -136,13 +163,41 @@ impl Sandbox {
     pub fn update_scopes(&self, scopes: Vec<PathBuf>) -> Result<()> {
         let mut canonicalized = Vec::with_capacity(scopes.len());
         for scope in scopes {
-            let canonical = std::fs::canonicalize(&scope).map_err(|e| {
-                anyhow!(
-                    "Failed to canonicalize sandbox scope '{}': {}",
-                    scope.display(),
-                    e
-                )
-            })?;
+            // Reject root filesystem - this is a security vulnerability (unless in Test mode)
+            if self.mode != SandboxMode::Test && (scope == Path::new("/") || scope == Path::new(""))
+            {
+                return Err(anyhow!(
+                    "Root '/' or empty path is not a valid sandbox scope. \
+                     Client must provide valid workspace roots."
+                ));
+            }
+
+            // Best-effort canonicalization
+            let canonical = match std::fs::canonicalize(&scope) {
+                Ok(c) => c,
+                Err(e) => {
+                    if self.mode == SandboxMode::Test {
+                        // In test mode, allow non-existent paths (use raw)
+                        scope.clone()
+                    } else {
+                        return Err(anyhow!(
+                            "Failed to canonicalize sandbox scope '{}': {}",
+                            scope.display(),
+                            e
+                        ));
+                    }
+                }
+            };
+
+            // Also check the canonical path isn't root (unless in Test mode)
+            if self.mode != SandboxMode::Test && canonical == Path::new("/") {
+                return Err(anyhow!(
+                    "Root '/' is not a valid sandbox scope (resolved from '{}'). \
+                     Client must provide valid workspace roots.",
+                    scope.display()
+                ));
+            }
+
             canonicalized.push(canonical);
         }
 

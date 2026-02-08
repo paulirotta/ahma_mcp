@@ -54,7 +54,6 @@ use tokio::time::sleep;
 ///
 /// See AGENTS.md for the full explanation of this failure mode.
 pub const SANDBOX_BYPASS_ENV_VARS: &[&str] = &[
-    "AHMA_TEST_MODE",
     "NEXTEST",
     "NEXTEST_EXECUTION_MODE",
     "CARGO_TARGET_DIR",
@@ -367,10 +366,8 @@ pub async fn spawn_test_server_with_timeout(
     let mut cmd = Command::new(&binary);
     cmd.args(&args)
         .current_dir(&workspace_dir)
-        // SECURITY:
         // Don't enable permissive test mode for the server process.
         // Several integration tests rely on real sandbox/working_directory defaults.
-        .env_remove("AHMA_TEST_MODE")
         .env_remove("NEXTEST")
         .env_remove("NEXTEST_EXECUTION_MODE")
         .env_remove("CARGO_TARGET_DIR")

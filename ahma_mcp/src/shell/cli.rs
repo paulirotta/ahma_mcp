@@ -87,6 +87,12 @@ pub struct Cli {
     #[arg(long)]
     pub defer_sandbox: bool,
 
+    /// Working directories for sandbox scope when using --defer-sandbox.
+    /// Required when MCP client may not provide workspace roots.
+    /// Example: --working-directories "/path/to/project1,/path/to/project2"
+    #[arg(long, value_delimiter = ',')]
+    pub working_directories: Option<Vec<PathBuf>>,
+
     /// HTTP server host (for HTTP mode)
     #[arg(long, default_value = "127.0.0.1")]
     pub http_host: String,
@@ -126,13 +132,9 @@ pub async fn run() -> Result<()> {
     }
 
     // Check if sandbox should be disabled
-    // Can be set via --no-sandbox flag, AHMA_NO_SANDBOX=1, or AHMA_TEST_MODE (legacy)
+    // Can be set via --no-sandbox flag or AHMA_NO_SANDBOX=1
     #[allow(unused_mut)] // mut needed for macOS nested sandbox detection
-    let mut no_sandbox = cli.no_sandbox
-        || std::env::var("AHMA_NO_SANDBOX").is_ok()
-        || std::env::var("AHMA_TEST_MODE")
-            .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
-            .unwrap_or(false);
+    let mut no_sandbox = cli.no_sandbox || std::env::var("AHMA_NO_SANDBOX").is_ok();
 
     // Determine Sandbox Mode
     let sandbox_mode = if no_sandbox {
@@ -170,11 +172,31 @@ pub async fn run() -> Result<()> {
     // Initialize sandbox scopes unless deferred.
     // Priority:
     // 1. CLI --sandbox-scope (multiple supported)
-    // 2. AHMA_SANDBOX_SCOPE env var (legacy single path)
-    // 3. Current working directory
+    // 2. CLI --working-directories (for deferred mode)
+    // 3. AHMA_SANDBOX_SCOPE env var (legacy single path)
+    // 4. Current working directory
     let sandbox_scopes = if cli.defer_sandbox {
-        tracing::info!("Sandbox initialization deferred - will be set from client roots/list");
-        Some(Vec::new())
+        // When using --defer-sandbox, check if --working-directories was provided
+        if let Some(ref dirs) = cli.working_directories {
+            // Use provided working-directories as initial scope
+            let mut canonical_scopes = Vec::new();
+            for scope in dirs {
+                let canonical = std::fs::canonicalize(scope).with_context(|| {
+                    format!("Failed to canonicalize working directory: {:?}", scope)
+                })?;
+                canonical_scopes.push(canonical);
+            }
+            tracing::info!(
+                "Sandbox initialized from --working-directories: {:?}",
+                canonical_scopes
+            );
+            Some(canonical_scopes)
+        } else {
+            // No working-directories provided - start with empty scope
+            // Sandbox will be configured from client roots/list
+            tracing::info!("Sandbox initialization deferred - will be set from client roots/list");
+            Some(Vec::new())
+        }
     } else if !cli.sandbox_scope.is_empty() {
         // CLI override takes precedence
         let mut canonical_scopes = Vec::new();

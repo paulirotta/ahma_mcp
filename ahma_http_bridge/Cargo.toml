@@ -8,6 +8,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+ahma_common = { path = "../ahma_common" }
 anyhow.workspace = true
 axum = { version = "0.8.8", features = ["http2", "tokio"] }
 bytes = "1.11"

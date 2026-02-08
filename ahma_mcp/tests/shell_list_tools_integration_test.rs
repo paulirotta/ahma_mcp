@@ -67,13 +67,13 @@ fn test_list_tools_from_stdio_server() {
     }
 
     // Run ahma_mcp --list-tools with the stdio server
-    // Set AHMA_TEST_MODE to bypass sandbox checks in tests
+    // Use --no-sandbox to bypass sandbox checks in the server
     let output = Command::new(&ahma_binary)
-        .env("AHMA_TEST_MODE", "1")
         .args([
             "--list-tools",
             "--",
             ahma_binary.to_str().unwrap(),
+            "--no-sandbox",
             "--tools-dir",
             tools_dir.to_str().unwrap(),
         ])
@@ -119,13 +119,13 @@ fn test_list_tools_json_format() {
 
     // Run ahma_mcp --list-tools --format json
     let output = Command::new(&ahma_binary)
-        .env("AHMA_TEST_MODE", "1")
         .args([
             "--list-tools",
             "--format",
             "json",
             "--",
             ahma_binary.to_str().unwrap(),
+            "--no-sandbox",
             "--tools-dir",
             tools_dir.to_str().unwrap(),
         ])
@@ -169,13 +169,13 @@ fn test_list_tools_output_format() {
         assert!(build_output.status.success(), "Failed to build");
     }
 
-    // Set AHMA_TEST_MODE to bypass sandbox checks in tests
+    // Use --no-sandbox to bypass sandbox checks in the server
     let output = Command::new(&ahma_binary)
-        .env("AHMA_TEST_MODE", "1")
         .args([
             "--list-tools",
             "--",
             ahma_binary.to_str().unwrap(),
+            "--no-sandbox",
             "--tools-dir",
             tools_dir.to_str().unwrap(),
         ])

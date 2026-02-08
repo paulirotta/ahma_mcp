@@ -95,7 +95,6 @@ async fn start_http_bridge(
         //
         // So we *clear* those env vars for the spawned server process to ensure it behaves
         // like a real user-launched server.
-        .env_remove("AHMA_TEST_MODE")
         .env_remove("NEXTEST")
         .env_remove("NEXTEST_EXECUTION_MODE")
         .env_remove("CARGO_TARGET_DIR")

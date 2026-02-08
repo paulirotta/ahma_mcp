@@ -40,6 +40,7 @@
 //! immediately terminated to prevent sandbox escape.
 
 use crate::error::{BridgeError, Result};
+use ahma_common::sandbox_state::{SandboxState, SandboxStateMachine};
 use chrono::Local;
 use dashmap::DashMap;
 use owo_colors::OwoColorize;
@@ -146,8 +147,6 @@ pub struct Session {
     broadcast_tx: broadcast::Sender<String>,
     /// Sandbox scopes (set on first roots/list response) - supports multiple roots
     sandbox_scopes: Mutex<Option<Vec<PathBuf>>>,
-    /// Whether sandbox has been locked (cannot change after first set)
-    sandbox_locked: AtomicBool,
     /// Whether the session has been terminated
     terminated: AtomicBool,
     /// Termination reason (if terminated)
@@ -160,10 +159,10 @@ pub struct Session {
 
     /// Notify for waiting on MCP initialization
     mcp_initialized_notify: Notify,
-    /// Notify for waiting on subprocess applying sandbox scopes
-    sandbox_applied_notify: Notify,
-    /// Whether the subprocess has applied the sandbox scopes
-    sandbox_applied: AtomicBool,
+
+    /// Shared state machine for sandbox lifecycle (R18, R20)
+    sandbox_state_machine: Arc<SandboxStateMachine>,
+
     /// When the session was created (for handshake timeout tracking)
     created_at: Instant,
     /// Per-session handshake timeout duration
@@ -176,9 +175,12 @@ impl Session {
         self.terminated.load(Ordering::SeqCst)
     }
 
-    /// Check if the sandbox is locked
+    /// Check if the sandbox is locked (Configuring or Active)
     pub fn is_sandbox_locked(&self) -> bool {
-        self.sandbox_locked.load(Ordering::SeqCst)
+        !matches!(
+            self.sandbox_state_machine.current(),
+            SandboxState::AwaitingRoots
+        )
     }
 
     /// Get the current handshake state
@@ -220,9 +222,9 @@ impl Session {
         }
     }
 
-    /// Check if subprocess has applied sandbox scopes
+    /// Check if subprocess has applied sandbox scopes (Active state)
     pub fn is_sandbox_applied(&self) -> bool {
-        self.sandbox_applied.load(Ordering::SeqCst)
+        self.sandbox_state_machine.is_active()
     }
 
     /// Wait for sandbox application
@@ -230,7 +232,7 @@ impl Session {
         if self.is_sandbox_applied() {
             return;
         }
-        self.sandbox_applied_notify.notified().await;
+        let _ = self.sandbox_state_machine.wait_for_active().await;
     }
 
     /// Check if the handshake has timed out
@@ -502,7 +504,6 @@ impl SessionManager {
             // SECURITY:
             // Avoid inheriting env vars that can auto-enable permissive test mode in ahma_mcp,
             // which can mask real sandbox-scoping behavior.
-            .env_remove("AHMA_TEST_MODE")
             .env_remove("NEXTEST")
             .env_remove("NEXTEST_EXECUTION_MODE")
             .env_remove("CARGO_TARGET_DIR")
@@ -539,14 +540,12 @@ impl SessionManager {
             pending_requests: pending_requests.clone(),
             broadcast_tx: broadcast_tx.clone(),
             sandbox_scopes: Mutex::new(None),
-            sandbox_locked: AtomicBool::new(false),
             terminated: AtomicBool::new(false),
             termination_reason: Mutex::new(None),
             child_handle: Mutex::new(Some(child)),
             handshake_state: std::sync::Mutex::new(HandshakeState::AwaitingBoth),
             mcp_initialized_notify: Notify::new(),
-            sandbox_applied_notify: Notify::new(),
-            sandbox_applied: AtomicBool::new(false),
+            sandbox_state_machine: Arc::new(SandboxStateMachine::new()),
             created_at: Instant::now(),
             handshake_timeout,
         });
@@ -689,7 +688,11 @@ impl SessionManager {
             BridgeError::Communication(format!("Session not found: {}", session_id))
         })?;
 
-        if session.sandbox_locked.load(Ordering::SeqCst) {
+        // Check if already locked using state machine
+        if !matches!(
+            session.sandbox_state_machine.current(),
+            SandboxState::AwaitingRoots
+        ) {
             return Ok(false);
         }
 
@@ -721,7 +724,14 @@ impl SessionManager {
 
         // Store the sandbox scopes
         *session.sandbox_scopes.lock().await = Some(scopes.clone());
-        session.sandbox_locked.store(true, Ordering::SeqCst);
+
+        // Transition to Configuring state
+        if let Err(e) = session
+            .sandbox_state_machine
+            .transition_to_configuring(scopes.clone())
+        {
+            warn!(session_id = %session_id, error = %e, "Failed to transition sandbox state to Configuring");
+        }
 
         // Transition handshake state to Complete
         session.mark_handshake_complete();
@@ -737,7 +747,10 @@ impl SessionManager {
             BridgeError::Communication(format!("Session not found: {}", session_id))
         })?;
 
-        if session.sandbox_locked.load(Ordering::SeqCst) {
+        if !matches!(
+            session.sandbox_state_machine.current(),
+            SandboxState::AwaitingRoots
+        ) {
             // Security violation: attempt to change roots after sandbox lock
             let scopes = session.sandbox_scopes.lock().await.clone();
             error!(
@@ -789,6 +802,9 @@ impl SessionManager {
 
             // Clear pending requests
             session.pending_requests.clear();
+
+            // Transition state machine to Terminated
+            let _ = session.sandbox_state_machine.transition_to_terminated();
         }
 
         Ok(())
@@ -888,9 +904,15 @@ impl SessionManager {
                                 if let Some(method_val) = value.get("method")
                                     && let Some(method_str) = method_val.as_str()
                                         && method_str == "notifications/sandbox/configured" {
-                                            session.sandbox_applied.store(true, Ordering::SeqCst);
-                                            session.sandbox_applied_notify.notify_waiters();
-                                            debug!(session_id = %session.id, "Observed notifications/sandbox/configured from subprocess");
+                                            if let Err(e) = session.sandbox_state_machine.transition_to_active() {
+                                                warn!(
+                                                    session_id = %session.id,
+                                                    error = %e,
+                                                    "Failed to transition sandbox state to Active (received notifications/sandbox/configured)"
+                                                );
+                                            } else {
+                                                debug!(session_id = %session.id, "Observed notifications/sandbox/configured from subprocess");
+                                            }
                                         }
 
                                 // Not a response to a pending request - broadcast as SSE event

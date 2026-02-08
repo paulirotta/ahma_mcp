@@ -79,11 +79,15 @@ pub struct ClientBuilder {
     extra_args: Vec<String>,
     extra_env: Vec<(String, String)>,
     working_dir: Option<PathBuf>,
+    no_sandbox: bool,
 }
 
 impl ClientBuilder {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            no_sandbox: true, // Default to permissive for tests (legacy behavior)
+            ..Default::default()
+        }
     }
 
     pub fn tools_dir<P: AsRef<Path>>(mut self, path: P) -> Self {
@@ -94,10 +98,6 @@ impl ClientBuilder {
             // Resolve relative to workspace or working dir if set?
             // Existing logic resolved relative to workspace if not absolute.
             // Let's resolve it here to avoid ambiguity.
-            // If working_dir is set later, it might be tricky.
-            // For now, let's keep the existing logic: if relative, resolve via get_workspace_path
-            // BUT, `new_client_in_dir` resolved relative to `working_dir`.
-            // So we'll store it as is and resolve at build time.
             self.tools_dir = Some(path.to_path_buf());
         }
         self
@@ -126,6 +126,11 @@ impl ClientBuilder {
 
     pub fn working_dir<P: AsRef<Path>>(mut self, path: P) -> Self {
         self.working_dir = Some(path.as_ref().to_path_buf());
+        self
+    }
+
+    pub fn no_sandbox(mut self, enabled: bool) -> Self {
+        self.no_sandbox = enabled;
         self
     }
 
@@ -163,9 +168,12 @@ impl ClientBuilder {
         working_dir: &Path,
     ) -> Result<RunningService<RoleClient, ()>> {
         ().serve(TokioChildProcess::new(command.configure(|cmd| {
-            cmd.env("AHMA_TEST_MODE", "1")
-                .current_dir(working_dir)
-                .kill_on_drop(true);
+            if self.no_sandbox {
+                cmd.arg("--no-sandbox");
+            } else {
+                cmd.arg("--sandbox-scope").arg(working_dir);
+            }
+            cmd.current_dir(working_dir).kill_on_drop(true);
 
             for (k, v) in self.extra_env {
                 cmd.env(k, v);
@@ -176,10 +184,6 @@ impl ClientBuilder {
                     dir
                 } else {
                     // Resolve relative to working_dir
-                    // Note: Original code logic was:
-                    // new_client uses get_workspace_path(dir)
-                    // new_client_in_dir uses working_dir.join(dir)
-                    // Since default working_dir is workspace, this unifies correctly.
                     working_dir.join(dir)
                 };
                 cmd.arg("--tools-dir").arg(tools_path);
