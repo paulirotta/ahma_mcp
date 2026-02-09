@@ -52,6 +52,9 @@ use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 use tokio::task::JoinSet;
 
+const ROOTS_LIST_TIMEOUT_SECS: u64 = 10;
+const SANDBOX_CONFIG_TIMEOUT_SECS: u64 = 45;
+
 /// Command-line arguments for the stress test
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -196,9 +199,6 @@ impl StressClient {
             return Err(anyhow!("SSE connection failed: {}", sse_response.status()));
         }
 
-        // Small delay to ensure SSE is registered on server before sending initialized
-        tokio::time::sleep(Duration::from_millis(50)).await;
-
         // Step 4: Send initialized notification
         self.client
             .post(&url)
@@ -225,83 +225,120 @@ impl StressClient {
             .unwrap_or_else(|_| ".".to_string());
 
         // Read SSE events looking for roots/list request
-        let timeout = tokio::time::timeout(Duration::from_secs(10), async {
-            while let Some(chunk_result) = stream.next().await {
-                let chunk = chunk_result.context("Failed to read SSE chunk")?;
-                let chunk_str = String::from_utf8_lossy(&chunk);
-                buffer.push_str(&chunk_str);
+        let roots_deadline = Instant::now() + Duration::from_secs(ROOTS_LIST_TIMEOUT_SECS);
+        let sandbox_deadline = Instant::now() + Duration::from_secs(SANDBOX_CONFIG_TIMEOUT_SECS);
+        let mut answered_roots = false;
+        let mut saw_sandbox_configured = false;
 
-                // SSE events are separated by double newline (\n\n)
-                while let Some(event_end) = buffer.find("\n\n") {
-                    let event_block = buffer[..event_end].to_string();
-                    buffer = buffer[event_end + 2..].to_string();
+        loop {
+            if !answered_roots && Instant::now() > roots_deadline {
+                return Err(anyhow!(
+                    "Timeout waiting for roots/list request from server ({}s)",
+                    ROOTS_LIST_TIMEOUT_SECS
+                ));
+            }
 
-                    // Extract data lines from the event
-                    let mut data_parts = Vec::new();
-                    for line in event_block.lines() {
-                        let line = line.trim_end_matches('\r');
-                        // SSE data lines can be "data: <content>" or "data:<content>"
-                        if let Some(content) = line.strip_prefix("data:") {
-                            data_parts.push(content.trim_start());
-                        }
-                    }
+            if answered_roots && Instant::now() > sandbox_deadline {
+                return Err(anyhow!(
+                    "Timeout waiting for sandbox/configured notification ({}s)",
+                    SANDBOX_CONFIG_TIMEOUT_SECS
+                ));
+            }
 
-                    if data_parts.is_empty() {
-                        continue;
-                    }
-
-                    let data = data_parts.join("\n");
-
-                    if let Ok(msg) = serde_json::from_str::<Value>(&data) {
-                        // Check if this is a roots/list request
-                        if msg.get("method").and_then(|m| m.as_str()) == Some("roots/list")
-                            && let Some(req_id) = msg.get("id")
-                        {
-                            // Respond with roots using proper file:// URI
-                            let response = post_client
-                                .post(&post_url)
-                                .header("mcp-session-id", &post_session_id)
-                                .json(&json!({
-                                    "jsonrpc": "2.0",
-                                    "id": req_id,
-                                    "result": {
-                                        "roots": [{
-                                            "uri": format!("file://{}", cwd),
-                                            "name": "workspace"
-                                        }]
-                                    }
-                                }))
-                                .send()
-                                .await
-                                .context("Failed to respond to roots/list")?;
-
-                            if !response.status().is_success() {
-                                return Err(anyhow!(
-                                    "roots/list response failed: {}",
-                                    response.status()
-                                ));
-                            }
-
-                            // Handshake complete!
-                            return Ok(());
-                        }
-                    }
+            match tokio::time::timeout(Duration::from_millis(500), stream.next()).await {
+                Ok(Some(Ok(chunk))) => {
+                    let chunk_str = String::from_utf8_lossy(&chunk);
+                    buffer.push_str(&chunk_str);
+                }
+                Ok(Some(Err(e))) => {
+                    return Err(anyhow!("Failed to read SSE chunk: {}", e));
+                }
+                Ok(None) => {
+                    return Err(anyhow!("SSE stream ended without completing handshake"));
+                }
+                Err(_) => {
+                    continue;
                 }
             }
-            Err(anyhow!("SSE stream ended without receiving roots/list"))
-        })
-        .await;
 
-        match timeout {
-            Ok(Ok(())) => {
-                // Give server a moment to process the roots response and lock sandbox
-                tokio::time::sleep(Duration::from_millis(200)).await;
-                Ok(())
+            // SSE events are separated by double newline (\n\n)
+            while let Some(event_end) = buffer.find("\n\n") {
+                let event_block = buffer[..event_end].to_string();
+                buffer = buffer[event_end + 2..].to_string();
+
+                // Extract data lines from the event
+                let mut data_parts = Vec::new();
+                for line in event_block.lines() {
+                    let line = line.trim_end_matches('\r');
+                    // SSE data lines can be "data: <content>" or "data:<content>"
+                    if let Some(content) = line.strip_prefix("data:") {
+                        data_parts.push(content.trim_start());
+                    }
+                }
+
+                if data_parts.is_empty() {
+                    continue;
+                }
+
+                let data = data_parts.join("\n");
+                let Ok(msg) = serde_json::from_str::<Value>(&data) else {
+                    continue;
+                };
+
+                let method = msg.get("method").and_then(|m| m.as_str());
+
+                if method == Some("notifications/sandbox/failed") {
+                    let error = msg
+                        .get("params")
+                        .and_then(|p| p.get("error"))
+                        .and_then(|e| e.as_str())
+                        .unwrap_or("unknown");
+                    return Err(anyhow!("Sandbox configuration failed: {}", error));
+                }
+
+                if method == Some("notifications/sandbox/configured") {
+                    saw_sandbox_configured = true;
+                    if answered_roots {
+                        return Ok(());
+                    }
+                    continue;
+                }
+
+                if method != Some("roots/list") || answered_roots {
+                    continue;
+                }
+
+                let req_id = msg
+                    .get("id")
+                    .ok_or_else(|| anyhow!("roots/list request missing id"))?;
+
+                // Respond with roots using proper file:// URI
+                let response = post_client
+                    .post(&post_url)
+                    .header("mcp-session-id", &post_session_id)
+                    .json(&json!({
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "result": {
+                            "roots": [{
+                                "uri": format!("file://{}", cwd),
+                                "name": "workspace"
+                            }]
+                        }
+                    }))
+                    .send()
+                    .await
+                    .context("Failed to respond to roots/list")?;
+
+                if !response.status().is_success() {
+                    return Err(anyhow!("roots/list response failed: {}", response.status()));
+                }
+
+                answered_roots = true;
+                if saw_sandbox_configured {
+                    return Ok(());
+                }
             }
-            Ok(Err(e)) => Err(e),
-            Err(_) => Err(anyhow!(
-                "Timeout waiting for roots/list request from server (10s)"
-            )),
         }
     }
 
