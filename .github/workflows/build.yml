@@ -77,6 +77,10 @@ jobs:
           missing=0
           while IFS= read -r manifest; do
             crate_dir="$(dirname "$manifest")"
+            # Workspace root manifests may not define a package.
+            if ! grep -q "^\[package\]" "$manifest"; then
+              continue
+            fi
             if [ ! -f "$crate_dir/src/lib.rs" ] && [ ! -f "$crate_dir/src/main.rs" ]; then
               echo "Missing crate root in $crate_dir (expected src/lib.rs or src/main.rs)"
               missing=1
@@ -208,6 +212,10 @@ jobs:
           missing=0
           while IFS= read -r manifest; do
             crate_dir="$(dirname "$manifest")"
+            # Workspace root manifests may not define a package.
+            if ! grep -q "^\[package\]" "$manifest"; then
+              continue
+            fi
             if [ ! -f "$crate_dir/src/lib.rs" ] && [ ! -f "$crate_dir/src/main.rs" ]; then
               echo "Missing crate root in $crate_dir (expected src/lib.rs or src/main.rs)"
               missing=1
@@ -339,6 +347,10 @@ jobs:
           missing=0
           while IFS= read -r manifest; do
             crate_dir="$(dirname "$manifest")"
+            # Workspace root manifests may not define a package.
+            if ! grep -q "^\[package\]" "$manifest"; then
+              continue
+            fi
             if [ ! -f "$crate_dir/src/lib.rs" ] && [ ! -f "$crate_dir/src/main.rs" ]; then
               echo "Missing crate root in $crate_dir (expected src/lib.rs or src/main.rs)"
               missing=1
