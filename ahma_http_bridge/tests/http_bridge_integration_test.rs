@@ -12,6 +12,7 @@
 //! They use dynamic port allocation to avoid conflicts with other tests.
 //! The shared test server singleton (port 5721) is NOT used here.
 
+use ahma_http_bridge::session::DEFAULT_HANDSHAKE_TIMEOUT_SECS;
 use futures::StreamExt;
 use reqwest::Client;
 use serde_json::{Value, json};
@@ -207,6 +208,7 @@ async fn answer_roots_list_over_sse(
     base_url: &str,
     session_id: &str,
     roots: &[PathBuf],
+    wait_for_sandbox_configured: bool,
 ) {
     let url = format!("{}/mcp", base_url);
     let resp = client
@@ -228,11 +230,21 @@ async fn answer_roots_list_over_sse(
     let mut buffer = String::new();
 
     // Hard timeout: if session isolation is broken, we may never see roots/list.
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    let roots_deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    let sandbox_deadline = tokio::time::Instant::now()
+        + Duration::from_secs(DEFAULT_HANDSHAKE_TIMEOUT_SECS);
+    let mut answered_roots = false;
+    let mut saw_sandbox_configured = false;
 
     loop {
-        if tokio::time::Instant::now() > deadline {
+        if !answered_roots && tokio::time::Instant::now() > roots_deadline {
             panic!("Timed out waiting for roots/list over SSE (session isolation likely broken)");
+        }
+        if wait_for_sandbox_configured
+            && answered_roots
+            && tokio::time::Instant::now() > sandbox_deadline
+        {
+            panic!("Timed out waiting for sandbox/configured notification");
         }
 
         let chunk = tokio::time::timeout(Duration::from_millis(500), stream.next())
@@ -268,6 +280,24 @@ async fn answer_roots_list_over_sse(
                 };
 
                 let method = value.get("method").and_then(|m| m.as_str());
+
+                if method == Some("notifications/sandbox/failed") {
+                    let error = value
+                        .get("params")
+                        .and_then(|p| p.get("error"))
+                        .and_then(|e| e.as_str())
+                        .unwrap_or("unknown");
+                    panic!("Sandbox configuration failed: {}", error);
+                }
+
+                if method == Some("notifications/sandbox/configured") {
+                    saw_sandbox_configured = true;
+                    if wait_for_sandbox_configured && answered_roots {
+                        return;
+                    }
+                    continue;
+                }
+
                 if method != Some("roots/list") {
                     continue;
                 }
@@ -298,7 +328,14 @@ async fn answer_roots_list_over_sse(
                 let _ = send_mcp_request(client, base_url, &response, Some(session_id))
                     .await
                     .expect("Failed to send roots/list response");
-                return;
+                answered_roots = true;
+
+                if !wait_for_sandbox_configured {
+                    return;
+                }
+                if saw_sandbox_configured {
+                    return;
+                }
             }
         }
     }
@@ -337,6 +374,7 @@ async fn answer_roots_list_over_sse_with_uris(
     base_url: &str,
     session_id: &str,
     root_uris: &[String],
+    wait_for_sandbox_configured: bool,
 ) {
     let url = format!("{}/mcp", base_url);
     let resp = client
@@ -357,11 +395,21 @@ async fn answer_roots_list_over_sse_with_uris(
     let mut stream = resp.bytes_stream();
     let mut buffer = String::new();
 
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    let roots_deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    let sandbox_deadline = tokio::time::Instant::now()
+        + Duration::from_secs(DEFAULT_HANDSHAKE_TIMEOUT_SECS);
+    let mut answered_roots = false;
+    let mut saw_sandbox_configured = false;
 
     loop {
-        if tokio::time::Instant::now() > deadline {
+        if !answered_roots && tokio::time::Instant::now() > roots_deadline {
             panic!("Timed out waiting for roots/list over SSE (session isolation likely broken)");
+        }
+        if wait_for_sandbox_configured
+            && answered_roots
+            && tokio::time::Instant::now() > sandbox_deadline
+        {
+            panic!("Timed out waiting for sandbox/configured notification");
         }
 
         let chunk = tokio::time::timeout(Duration::from_millis(500), stream.next())
@@ -396,6 +444,24 @@ async fn answer_roots_list_over_sse_with_uris(
                 };
 
                 let method = value.get("method").and_then(|m| m.as_str());
+
+                if method == Some("notifications/sandbox/failed") {
+                    let error = value
+                        .get("params")
+                        .and_then(|p| p.get("error"))
+                        .and_then(|e| e.as_str())
+                        .unwrap_or("unknown");
+                    panic!("Sandbox configuration failed: {}", error);
+                }
+
+                if method == Some("notifications/sandbox/configured") {
+                    saw_sandbox_configured = true;
+                    if wait_for_sandbox_configured && answered_roots {
+                        return;
+                    }
+                    continue;
+                }
+
                 if method != Some("roots/list") {
                     continue;
                 }
@@ -426,7 +492,14 @@ async fn answer_roots_list_over_sse_with_uris(
                 let _ = send_mcp_request(client, base_url, &response, Some(session_id))
                     .await
                     .expect("Failed to send roots/list response");
-                return;
+                answered_roots = true;
+
+                if !wait_for_sandbox_configured {
+                    return;
+                }
+                if saw_sandbox_configured {
+                    return;
+                }
             }
         }
     }
@@ -540,7 +613,14 @@ async fn test_tool_call_with_different_working_directory() {
     let sse_session_id = session_id.clone();
     let sse_root = different_project_path.clone();
     let sse_task = tokio::spawn(async move {
-        answer_roots_list_over_sse(&sse_client, &sse_base_url, &sse_session_id, &[sse_root]).await;
+        answer_roots_list_over_sse(
+            &sse_client,
+            &sse_base_url,
+            &sse_session_id,
+            &[sse_root],
+            true,
+        )
+        .await;
     });
 
     send_mcp_request(
@@ -708,7 +788,14 @@ async fn test_basic_tool_call_within_sandbox() {
     let sse_session_id = session_id_for_requests.clone();
     let sse_root = sandbox_scope.clone();
     let sse_task = tokio::spawn(async move {
-        answer_roots_list_over_sse(&sse_client, &sse_base_url, &sse_session_id, &[sse_root]).await;
+        answer_roots_list_over_sse(
+            &sse_client,
+            &sse_base_url,
+            &sse_session_id,
+            &[sse_root],
+            true,
+        )
+        .await;
     });
 
     let _ = send_mcp_request(
@@ -853,6 +940,7 @@ async fn test_roots_uri_parsing_percent_encoded_path() {
             &sse_base_url,
             &sse_session_id,
             &[sse_uri],
+            true,
         )
         .await;
     });
@@ -1012,6 +1100,7 @@ async fn test_roots_uri_parsing_file_localhost() {
             &sse_base_url,
             &sse_session_id,
             &[sse_uri],
+            true,
         )
         .await;
     });
@@ -1154,7 +1243,14 @@ async fn test_rejects_working_directory_path_traversal_outside_root() {
     let sse_session_id = session_id.clone();
     let sse_root = client_root.clone();
     let sse_task = tokio::spawn(async move {
-        answer_roots_list_over_sse(&sse_client, &sse_base_url, &sse_session_id, &[sse_root]).await;
+        answer_roots_list_over_sse(
+            &sse_client,
+            &sse_base_url,
+            &sse_session_id,
+            &[sse_root],
+            true,
+        )
+        .await;
     });
 
     let initialized = json!({
@@ -1291,7 +1387,14 @@ async fn test_symlink_escape_attempt_is_blocked() {
     let sse_session_id = session_id.clone();
     let sse_root = client_root.clone();
     let sse_task = tokio::spawn(async move {
-        answer_roots_list_over_sse(&sse_client, &sse_base_url, &sse_session_id, &[sse_root]).await;
+        answer_roots_list_over_sse(
+            &sse_client,
+            &sse_base_url,
+            &sse_session_id,
+            &[sse_root],
+            true,
+        )
+        .await;
     });
 
     let initialized = json!({
