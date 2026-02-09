@@ -49,6 +49,7 @@ opentelemetry = [
 ahma_mcp = { path = "../ahma_mcp" }
 futures.workspace = true
 reqwest = { workspace = true, features = ["json", "stream"] }
+serial_test = "3.3.1"
 tempfile.workspace = true
 tower = { version = "0.5.3", features = ["util"] }
 urlencoding = "2.1"

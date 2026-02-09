@@ -7,6 +7,10 @@ license.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[lib]
+name = "ahma_code_health"
+path = "src/lib.rs"
+
 [[bin]]
 name = "ahma_code_health"
 path = "src/main.rs"
@@ -20,3 +24,6 @@ toml = { workspace = true }
 walkdir = "2.5"
 pulldown-cmark = "0.13.0"
 opener = "0.8.4"
+
+[dev-dependencies]
+tempfile = { workspace = true }

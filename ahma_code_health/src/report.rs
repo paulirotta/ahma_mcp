@@ -109,7 +109,7 @@ pub fn generate_report(
     Ok(())
 }
 
-fn create_report_md(
+pub fn create_report_md(
     files: &[FileHealth],
     is_workspace: bool,
     limit: usize,
@@ -178,12 +178,14 @@ fn write_package_health(report: &mut String, summary: &RepoSummary, is_workspace
                 _ => "Directory",
             };
 
-            report.push_str(&format!("### By {}\n\n", group_label));
+            if lang_summary.package_scores.len() > 1 {
+                report.push_str(&format!("### By {}\n\n", group_label));
 
-            for (i, (p, score)) in lang_summary.package_scores.iter().enumerate() {
-                report.push_str(&format!("{}. **{}**: {:.0}%\n", i + 1, p, score));
+                for (i, (p, score)) in lang_summary.package_scores.iter().enumerate() {
+                    report.push_str(&format!("{}. **{}**: {:.0}%\n", i + 1, p, score));
+                }
+                report.push('\n');
             }
-            report.push('\n');
         }
     }
 }

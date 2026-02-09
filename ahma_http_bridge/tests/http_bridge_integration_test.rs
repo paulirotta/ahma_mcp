@@ -16,6 +16,7 @@ use ahma_http_bridge::session::DEFAULT_HANDSHAKE_TIMEOUT_SECS;
 use futures::StreamExt;
 use reqwest::Client;
 use serde_json::{Value, json};
+use serial_test::serial;
 use std::net::TcpListener;
 use std::os::unix::fs as unix_fs;
 use std::path::PathBuf;
@@ -523,6 +524,7 @@ async fn answer_roots_list_over_sse_with_uris(
 /// - Do NOT enable AHMA_TEST_MODE for this test.
 /// - Fix scoping/session isolation if this fails.
 #[tokio::test]
+#[serial]
 async fn test_tool_call_with_different_working_directory() {
     // Create temp directories:
     // - server_scope: where the HTTP server is started (repo A)
@@ -716,6 +718,7 @@ async fn test_tool_call_with_different_working_directory() {
 
 /// Test: Basic tool call within sandbox scope works correctly
 #[tokio::test]
+#[serial]
 async fn test_basic_tool_call_within_sandbox() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let tools_dir = temp_dir.path().join("tools");
@@ -875,6 +878,7 @@ async fn test_basic_tool_call_within_sandbox() {
 /// Roots URIs may be percent-encoded (spaces/unicode) by real IDE clients.
 /// Session isolation must decode these correctly so sandbox scope matches the workspace.
 #[tokio::test]
+#[serial]
 async fn test_roots_uri_parsing_percent_encoded_path() {
     let server_scope_dir = TempDir::new().expect("Failed to create temp dir (server_scope)");
     let client_scope_dir = TempDir::new().expect("Failed to create temp dir (client_scope)");
@@ -1037,6 +1041,7 @@ async fn test_roots_uri_parsing_percent_encoded_path() {
 
 /// Some clients send file URIs in host form: file://localhost/abs/path
 #[tokio::test]
+#[serial]
 async fn test_roots_uri_parsing_file_localhost() {
     let server_scope_dir = TempDir::new().expect("Failed to create temp dir (server_scope)");
     let client_scope_dir = TempDir::new().expect("Failed to create temp dir (client_scope)");
@@ -1184,6 +1189,7 @@ async fn test_roots_uri_parsing_file_localhost() {
 
 /// Red-team: working_directory with '..' that resolves outside root must be rejected.
 #[tokio::test]
+#[serial]
 async fn test_rejects_working_directory_path_traversal_outside_root() {
     let server_scope_dir = TempDir::new().expect("Failed to create temp dir (server_scope)");
     let sandbox_parent = TempDir::new().expect("Failed to create temp dir (sandbox_parent)");
@@ -1329,6 +1335,7 @@ async fn test_rejects_working_directory_path_traversal_outside_root() {
 
 /// Red-team: symlink inside root pointing outside must not allow writes outside root.
 #[tokio::test]
+#[serial]
 async fn test_symlink_escape_attempt_is_blocked() {
     let server_scope_dir = TempDir::new().expect("Failed to create temp dir (server_scope)");
     let sandbox_parent = TempDir::new().expect("Failed to create temp dir (sandbox_parent)");
@@ -1479,6 +1486,7 @@ async fn test_symlink_escape_attempt_is_blocked() {
 /// The expected behavior: The HTTP bridge should reject requests that come
 /// before initialize, OR handle initialization automatically.
 #[tokio::test]
+#[serial]
 async fn test_tool_call_without_initialize_returns_proper_error() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let tools_dir = temp_dir.path().join("tools");
