@@ -43,17 +43,37 @@ use clap::Parser;
 use futures::StreamExt;
 use reqwest::Client;
 use serde_json::{Value, json};
+use std::collections::HashSet;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, oneshot};
 use tokio::task::JoinSet;
 
 const ROOTS_LIST_TIMEOUT_SECS: u64 = 10;
 const SANDBOX_CONFIG_TIMEOUT_SECS: u64 = 45;
+const TOOL_CALL_RETRY_WINDOW_SECS: u64 = 10;
+const TOOL_CALL_RETRY_BACKOFF_MS: u64 = 100;
+
+#[derive(Clone)]
+struct AsyncProgressState {
+    pending_tokens: Arc<Mutex<HashSet<String>>>,
+    completed_success: Arc<AtomicU64>,
+    completed_error: Arc<AtomicU64>,
+}
+
+impl AsyncProgressState {
+    fn new(completed_success: Arc<AtomicU64>, completed_error: Arc<AtomicU64>) -> Self {
+        Self {
+            pending_tokens: Arc::new(Mutex::new(HashSet::new())),
+            completed_success,
+            completed_error,
+        }
+    }
+}
 
 /// Command-line arguments for the stress test
 #[derive(Parser, Debug)]
@@ -118,6 +138,8 @@ struct StressClient {
     request_id: AtomicU64,
     success_count: Arc<AtomicU64>,
     error_count: Arc<AtomicU64>,
+    async_progress_state: Option<AsyncProgressState>,
+    sse_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl StressClient {
@@ -126,6 +148,8 @@ impl StressClient {
         is_sync: bool,
         success_count: Arc<AtomicU64>,
         error_count: Arc<AtomicU64>,
+        async_completed_success: Arc<AtomicU64>,
+        async_completed_error: Arc<AtomicU64>,
     ) -> Self {
         Self {
             client: Client::new(),
@@ -135,6 +159,9 @@ impl StressClient {
             request_id: AtomicU64::new(0),
             success_count,
             error_count,
+            async_progress_state: (!is_sync)
+                .then(|| AsyncProgressState::new(async_completed_success, async_completed_error)),
+            sse_task: None,
         }
     }
 
@@ -211,135 +238,41 @@ impl StressClient {
             .await
             .context("Failed to send initialized notification")?;
 
-        // Step 5: Wait for roots/list request on SSE and respond
+        // Step 5: Keep SSE alive in background:
+        // - respond to roots/list
+        // - wait for sandbox/configured
+        // - track async progress notifications
         let post_client = self.client.clone();
         let post_url = url.clone();
         let post_session_id = session_id.clone();
-
-        let mut stream = sse_response.bytes_stream();
-        let mut buffer = String::new();
 
         // Get the current working directory for the roots response
         let cwd = std::env::current_dir()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|_| ".".to_string());
+        let progress_state = self.async_progress_state.clone();
+        let (ready_tx, ready_rx) = oneshot::channel::<Result<()>>();
 
-        // Read SSE events looking for roots/list request
-        let roots_deadline = Instant::now() + Duration::from_secs(ROOTS_LIST_TIMEOUT_SECS);
-        let sandbox_deadline = Instant::now() + Duration::from_secs(SANDBOX_CONFIG_TIMEOUT_SECS);
-        let mut answered_roots = false;
-        let mut saw_sandbox_configured = false;
-
-        loop {
-            if !answered_roots && Instant::now() > roots_deadline {
-                return Err(anyhow!(
-                    "Timeout waiting for roots/list request from server ({}s)",
-                    ROOTS_LIST_TIMEOUT_SECS
-                ));
+        self.sse_task = Some(tokio::spawn(async move {
+            if let Err(e) = run_sse_loop(
+                &post_client,
+                &post_url,
+                &post_session_id,
+                &cwd,
+                sse_response,
+                progress_state,
+                ready_tx,
+            )
+            .await
+            {
+                eprintln!("SSE task error for session {}: {}", post_session_id, e);
             }
+        }));
 
-            if answered_roots && Instant::now() > sandbox_deadline {
-                return Err(anyhow!(
-                    "Timeout waiting for sandbox/configured notification ({}s)",
-                    SANDBOX_CONFIG_TIMEOUT_SECS
-                ));
-            }
-
-            match tokio::time::timeout(Duration::from_millis(500), stream.next()).await {
-                Ok(Some(Ok(chunk))) => {
-                    let chunk_str = String::from_utf8_lossy(&chunk);
-                    buffer.push_str(&chunk_str);
-                }
-                Ok(Some(Err(e))) => {
-                    return Err(anyhow!("Failed to read SSE chunk: {}", e));
-                }
-                Ok(None) => {
-                    return Err(anyhow!("SSE stream ended without completing handshake"));
-                }
-                Err(_) => {
-                    continue;
-                }
-            }
-
-            // SSE events are separated by double newline (\n\n)
-            while let Some(event_end) = buffer.find("\n\n") {
-                let event_block = buffer[..event_end].to_string();
-                buffer = buffer[event_end + 2..].to_string();
-
-                // Extract data lines from the event
-                let mut data_parts = Vec::new();
-                for line in event_block.lines() {
-                    let line = line.trim_end_matches('\r');
-                    // SSE data lines can be "data: <content>" or "data:<content>"
-                    if let Some(content) = line.strip_prefix("data:") {
-                        data_parts.push(content.trim_start());
-                    }
-                }
-
-                if data_parts.is_empty() {
-                    continue;
-                }
-
-                let data = data_parts.join("\n");
-                let Ok(msg) = serde_json::from_str::<Value>(&data) else {
-                    continue;
-                };
-
-                let method = msg.get("method").and_then(|m| m.as_str());
-
-                if method == Some("notifications/sandbox/failed") {
-                    let error = msg
-                        .get("params")
-                        .and_then(|p| p.get("error"))
-                        .and_then(|e| e.as_str())
-                        .unwrap_or("unknown");
-                    return Err(anyhow!("Sandbox configuration failed: {}", error));
-                }
-
-                if method == Some("notifications/sandbox/configured") {
-                    saw_sandbox_configured = true;
-                    if answered_roots {
-                        return Ok(());
-                    }
-                    continue;
-                }
-
-                if method != Some("roots/list") || answered_roots {
-                    continue;
-                }
-
-                let req_id = msg
-                    .get("id")
-                    .ok_or_else(|| anyhow!("roots/list request missing id"))?;
-
-                // Respond with roots using proper file:// URI
-                let response = post_client
-                    .post(&post_url)
-                    .header("mcp-session-id", &post_session_id)
-                    .json(&json!({
-                        "jsonrpc": "2.0",
-                        "id": req_id,
-                        "result": {
-                            "roots": [{
-                                "uri": format!("file://{}", cwd),
-                                "name": "workspace"
-                            }]
-                        }
-                    }))
-                    .send()
-                    .await
-                    .context("Failed to respond to roots/list")?;
-
-                if !response.status().is_success() {
-                    return Err(anyhow!("roots/list response failed: {}", response.status()));
-                }
-
-                answered_roots = true;
-                if saw_sandbox_configured {
-                    return Ok(());
-                }
-            }
-        }
+        ready_rx.await.map_err(|_| {
+            anyhow!("SSE setup channel closed before sandbox handshake completed")
+        })??;
+        Ok(())
     }
 
     /// Run commands in a loop until stopped
@@ -371,6 +304,10 @@ impl StressClient {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
 
+        if let Some(handle) = self.sse_task.take() {
+            handle.abort();
+        }
+
         Ok(())
     }
 
@@ -384,42 +321,300 @@ impl StressClient {
             .as_ref()
             .ok_or_else(|| anyhow!("No session ID"))?;
 
-        let response = self
-            .client
-            .post(&url)
-            .header("mcp-session-id", session_id)
-            .json(&json!({
-                "jsonrpc": "2.0",
-                "method": "tools/call",
-                "params": {
-                    "name": "sandboxed_shell",
-                    "arguments": {
-                        "command": cmd_str,
-                        "working_directory": ".",
-                        "synchronous": self.is_sync
-                    }
-                },
-                "id": id
-            }))
-            .send()
-            .await
-            .context("Failed to send request")?;
+        let progress_token = if self.is_sync {
+            None
+        } else {
+            let token = format!("stress-{}-{}", session_id, id);
+            if let Some(state) = &self.async_progress_state {
+                state.pending_tokens.lock().await.insert(token.clone());
+            }
+            Some(token)
+        };
+        let execution_mode = if self.is_sync {
+            "Synchronous"
+        } else {
+            "AsyncResultPush"
+        };
 
-        if !response.status().is_success() {
-            return Err(anyhow!("Request failed: {}", response.status()));
-        }
+        let mut attempt = 0_u32;
+        let retry_deadline = Instant::now() + Duration::from_secs(TOOL_CALL_RETRY_WINDOW_SECS);
+        let body: Value = loop {
+            attempt += 1;
+            let mut params = json!({
+                "name": "sandboxed_shell",
+                "arguments": {
+                    "command": cmd_str,
+                    "working_directory": ".",
+                    "synchronous": self.is_sync,
+                    "execution_mode": execution_mode
+                }
+            });
+            if let Some(token) = progress_token.as_deref() {
+                params["_meta"] = json!({ "progressToken": token });
+            }
 
-        let body: Value = response
-            .json()
-            .await
-            .context("Failed to parse response body")?;
+            let response = self
+                .client
+                .post(&url)
+                .header("mcp-session-id", session_id)
+                .json(&json!({
+                    "jsonrpc": "2.0",
+                    "method": "tools/call",
+                    "params": params,
+                    "id": id
+                }))
+                .send()
+                .await
+                .map_err(|e| anyhow!("Failed to send request: {}", e))?;
+
+            if response.status() == reqwest::StatusCode::CONFLICT {
+                let conflict_body = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "<unable to read body>".to_string());
+                if conflict_body.contains("Sandbox initializing from client roots")
+                    && Instant::now() < retry_deadline
+                {
+                    tokio::time::sleep(Duration::from_millis(TOOL_CALL_RETRY_BACKOFF_MS)).await;
+                    continue;
+                }
+                self.clear_pending_token(progress_token.as_deref()).await;
+                return Err(anyhow!("Request failed (409): {}", conflict_body));
+            }
+
+            if !response.status().is_success() {
+                self.clear_pending_token(progress_token.as_deref()).await;
+                return Err(anyhow!("Request failed: {}", response.status()));
+            }
+
+            let body: Value = response
+                .json()
+                .await
+                .map_err(|e| anyhow!("Failed to parse response body: {}", e))?;
+
+            if let Some(error) = body.get("error") {
+                let is_retryable_init_error = error.get("code").and_then(|c| c.as_i64())
+                    == Some(-32001)
+                    || error
+                        .get("message")
+                        .and_then(|m| m.as_str())
+                        .is_some_and(|m| m.contains("Sandbox initializing from client roots"));
+
+                if is_retryable_init_error && Instant::now() < retry_deadline {
+                    tokio::time::sleep(Duration::from_millis(TOOL_CALL_RETRY_BACKOFF_MS)).await;
+                    continue;
+                }
+            }
+
+            if attempt > 1 {
+                println!(
+                    "Recovered tools/call after {} retry attempt(s) due to sandbox initialization race",
+                    attempt - 1
+                );
+            }
+            break body;
+        };
 
         // Check for JSON-RPC error
         if let Some(error) = body.get("error") {
+            self.clear_pending_token(progress_token.as_deref()).await;
             return Err(anyhow!("JSON-RPC error: {}", error));
         }
 
         Ok(())
+    }
+
+    async fn clear_pending_token(&self, token: Option<&str>) {
+        if let Some(token) = token
+            && let Some(state) = &self.async_progress_state
+        {
+            state.pending_tokens.lock().await.remove(token);
+        }
+    }
+}
+
+async fn run_sse_loop(
+    post_client: &Client,
+    post_url: &str,
+    post_session_id: &str,
+    cwd: &str,
+    sse_response: reqwest::Response,
+    progress_state: Option<AsyncProgressState>,
+    ready_tx: oneshot::Sender<Result<()>>,
+) -> Result<()> {
+    let mut ready_tx = Some(ready_tx);
+    let mut buffer = String::new();
+    let mut stream = sse_response.bytes_stream();
+    let roots_deadline = Instant::now() + Duration::from_secs(ROOTS_LIST_TIMEOUT_SECS);
+    let sandbox_deadline = Instant::now() + Duration::from_secs(SANDBOX_CONFIG_TIMEOUT_SECS);
+    let mut answered_roots = false;
+    let mut saw_sandbox_configured = false;
+    let mut handshake_completed = false;
+
+    loop {
+        if !answered_roots && Instant::now() > roots_deadline {
+            let err = anyhow!(
+                "Timeout waiting for roots/list request from server ({}s)",
+                ROOTS_LIST_TIMEOUT_SECS
+            );
+            if let Some(tx) = ready_tx.take() {
+                let _ = tx.send(Err(anyhow!(err.to_string())));
+            }
+            return Err(err);
+        }
+
+        if !handshake_completed && answered_roots && Instant::now() > sandbox_deadline {
+            let err = anyhow!(
+                "Timeout waiting for sandbox/configured notification ({}s)",
+                SANDBOX_CONFIG_TIMEOUT_SECS
+            );
+            if let Some(tx) = ready_tx.take() {
+                let _ = tx.send(Err(anyhow!(err.to_string())));
+            }
+            return Err(err);
+        }
+
+        match tokio::time::timeout(Duration::from_millis(500), stream.next()).await {
+            Ok(Some(Ok(chunk))) => {
+                let chunk_str = String::from_utf8_lossy(&chunk);
+                buffer.push_str(&chunk_str);
+            }
+            Ok(Some(Err(e))) => {
+                let err = anyhow!("Failed to read SSE chunk: {}", e);
+                if let Some(tx) = ready_tx.take() {
+                    let _ = tx.send(Err(anyhow!(err.to_string())));
+                }
+                return Err(err);
+            }
+            Ok(None) => {
+                let err = anyhow!("SSE stream ended");
+                if let Some(tx) = ready_tx.take() {
+                    let _ = tx.send(Err(anyhow!(err.to_string())));
+                }
+                return Err(err);
+            }
+            Err(_) => continue,
+        }
+
+        while let Some(event_end) = buffer.find("\n\n") {
+            let event_block = buffer[..event_end].to_string();
+            buffer = buffer[event_end + 2..].to_string();
+
+            let mut data_parts = Vec::new();
+            for line in event_block.lines() {
+                let line = line.trim_end_matches('\r');
+                if let Some(content) = line.strip_prefix("data:") {
+                    data_parts.push(content.trim_start());
+                }
+            }
+
+            if data_parts.is_empty() {
+                continue;
+            }
+
+            let data = data_parts.join("\n");
+            let Ok(msg) = serde_json::from_str::<Value>(&data) else {
+                continue;
+            };
+            let method = msg.get("method").and_then(|m| m.as_str());
+
+            if method == Some("notifications/sandbox/failed") {
+                let error = msg
+                    .get("params")
+                    .and_then(|p| p.get("error"))
+                    .and_then(|e| e.as_str())
+                    .unwrap_or("unknown");
+                let err = anyhow!("Sandbox configuration failed: {}", error);
+                if let Some(tx) = ready_tx.take() {
+                    let _ = tx.send(Err(anyhow!(err.to_string())));
+                }
+                return Err(err);
+            }
+
+            if method == Some("notifications/sandbox/configured") {
+                saw_sandbox_configured = true;
+                if answered_roots && !handshake_completed {
+                    handshake_completed = true;
+                    if let Some(tx) = ready_tx.take() {
+                        let _ = tx.send(Ok(()));
+                    }
+                }
+                continue;
+            }
+
+            if method == Some("roots/list") && !answered_roots {
+                let req_id = msg
+                    .get("id")
+                    .ok_or_else(|| anyhow!("roots/list request missing id"))?;
+
+                let response = post_client
+                    .post(post_url)
+                    .header("mcp-session-id", post_session_id)
+                    .json(&json!({
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "result": {
+                            "roots": [{
+                                "uri": format!("file://{}", cwd),
+                                "name": "workspace"
+                            }]
+                        }
+                    }))
+                    .send()
+                    .await
+                    .context("Failed to respond to roots/list")?;
+
+                if !response.status().is_success() {
+                    let err = anyhow!("roots/list response failed: {}", response.status());
+                    if let Some(tx) = ready_tx.take() {
+                        let _ = tx.send(Err(anyhow!(err.to_string())));
+                    }
+                    return Err(err);
+                }
+
+                answered_roots = true;
+                if saw_sandbox_configured && !handshake_completed {
+                    handshake_completed = true;
+                    if let Some(tx) = ready_tx.take() {
+                        let _ = tx.send(Ok(()));
+                    }
+                }
+                continue;
+            }
+
+            if method == Some("notifications/progress")
+                && let Some(state) = &progress_state
+            {
+                let token = msg
+                    .get("params")
+                    .and_then(|p| p.get("progressToken"))
+                    .and_then(|t| t.as_str());
+                let progress = msg
+                    .get("params")
+                    .and_then(|p| p.get("progress"))
+                    .and_then(|p| p.as_f64());
+                let message = msg
+                    .get("params")
+                    .and_then(|p| p.get("message"))
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("");
+
+                if progress.unwrap_or(0.0) >= 100.0
+                    && let Some(token) = token
+                {
+                    let removed = state.pending_tokens.lock().await.remove(token);
+                    if removed {
+                        let is_failure =
+                            message.starts_with("Failed:") || message.contains("OPERATION FAILED");
+                        if is_failure {
+                            state.completed_error.fetch_add(1, Ordering::Relaxed);
+                        } else {
+                            state.completed_success.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -647,6 +842,8 @@ async fn main() -> Result<()> {
     // Shared counters
     let success_count = Arc::new(AtomicU64::new(0));
     let error_count = Arc::new(AtomicU64::new(0));
+    let async_completed_success = Arc::new(AtomicU64::new(0));
+    let async_completed_error = Arc::new(AtomicU64::new(0));
     let stop_flag = Arc::new(AtomicBool::new(false));
 
     let commands = get_command_pool();
@@ -658,10 +855,19 @@ async fn main() -> Result<()> {
         let commands = commands.clone();
         let success_count = success_count.clone();
         let error_count = error_count.clone();
+        let async_completed_success = async_completed_success.clone();
+        let async_completed_error = async_completed_error.clone();
         let stop_flag = stop_flag.clone();
 
         join_set.spawn(async move {
-            let mut client = StressClient::new(base_url, true, success_count, error_count);
+            let mut client = StressClient::new(
+                base_url,
+                true,
+                success_count,
+                error_count,
+                async_completed_success,
+                async_completed_error,
+            );
             let lcg = Lcg::new(12345);
             client.initialize().await?;
             println!("✓ Sync client initialized");
@@ -675,10 +881,19 @@ async fn main() -> Result<()> {
         let commands = commands.clone();
         let success_count = success_count.clone();
         let error_count = error_count.clone();
+        let async_completed_success = async_completed_success.clone();
+        let async_completed_error = async_completed_error.clone();
         let stop_flag = stop_flag.clone();
 
         join_set.spawn(async move {
-            let mut client = StressClient::new(base_url, false, success_count, error_count);
+            let mut client = StressClient::new(
+                base_url,
+                false,
+                success_count,
+                error_count,
+                async_completed_success,
+                async_completed_error,
+            );
             let lcg = Lcg::new(67890 + i as u64);
             client.initialize().await?;
             println!("✓ Async client {} initialized", i + 1);
@@ -796,6 +1011,8 @@ async fn main() -> Result<()> {
     // Final report
     let success = success_count.load(Ordering::Relaxed);
     let errors = error_count.load(Ordering::Relaxed);
+    let async_done_ok = async_completed_success.load(Ordering::Relaxed);
+    let async_done_err = async_completed_error.load(Ordering::Relaxed);
     let total = success + errors;
     let success_rate = if total > 0 {
         (success as f64 / total as f64) * 100.0
@@ -810,6 +1027,10 @@ async fn main() -> Result<()> {
     println!("  Total requests: {}", total);
     println!("  Successful: {} ({:.1}%)", success, success_rate);
     println!("  Errors: {}", errors);
+    println!(
+        "  Async completions observed: {} ok / {} failed",
+        async_done_ok, async_done_err
+    );
     println!("  Duration: {:.1}s", start.elapsed().as_secs_f64());
     println!(
         "  Average rate: {:.1} req/s",

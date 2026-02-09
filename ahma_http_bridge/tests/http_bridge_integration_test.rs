@@ -231,8 +231,8 @@ async fn answer_roots_list_over_sse(
 
     // Hard timeout: if session isolation is broken, we may never see roots/list.
     let roots_deadline = tokio::time::Instant::now() + Duration::from_secs(10);
-    let sandbox_deadline = tokio::time::Instant::now()
-        + Duration::from_secs(DEFAULT_HANDSHAKE_TIMEOUT_SECS);
+    let sandbox_deadline =
+        tokio::time::Instant::now() + Duration::from_secs(DEFAULT_HANDSHAKE_TIMEOUT_SECS);
     let mut answered_roots = false;
     let mut saw_sandbox_configured = false;
 
@@ -396,8 +396,8 @@ async fn answer_roots_list_over_sse_with_uris(
     let mut buffer = String::new();
 
     let roots_deadline = tokio::time::Instant::now() + Duration::from_secs(10);
-    let sandbox_deadline = tokio::time::Instant::now()
-        + Duration::from_secs(DEFAULT_HANDSHAKE_TIMEOUT_SECS);
+    let sandbox_deadline =
+        tokio::time::Instant::now() + Duration::from_secs(DEFAULT_HANDSHAKE_TIMEOUT_SECS);
     let mut answered_roots = false;
     let mut saw_sandbox_configured = false;
 
