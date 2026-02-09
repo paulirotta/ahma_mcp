@@ -1,0 +1,353 @@
+use futures::StreamExt;
+use reqwest::Client;
+use reqwest::header::HeaderMap;
+use serde_json::{Value, json};
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
+use tokio::time::sleep;
+
+use super::protocol::{JsonRpcRequest, JsonRpcResponse};
+use super::uri::encode_file_uri;
+
+/// Result of a tool call.
+#[derive(Debug)]
+pub struct ToolCallResult {
+    pub tool_name: String,
+    pub success: bool,
+    pub duration_ms: u128,
+    pub error: Option<String>,
+    pub output: Option<String>,
+}
+
+/// MCP test client that handles protocol/session details for integration tests.
+pub struct McpTestClient {
+    client: Client,
+    base_url: String,
+    session_id: Option<String>,
+}
+
+impl McpTestClient {
+    /// Create a new MCP test client for a specific server URL.
+    pub fn with_url(base_url: &str) -> Self {
+        Self {
+            client: Client::new(),
+            base_url: base_url.to_string(),
+            session_id: None,
+        }
+    }
+
+    /// Create a new MCP test client from a running test server.
+    pub fn for_server(server: &super::server::TestServerInstance) -> Self {
+        Self::with_url(&server.base_url())
+    }
+
+    fn mcp_url(&self) -> String {
+        format!("{}/mcp", self.base_url)
+    }
+
+    fn extract_session_id(headers: &HeaderMap) -> Option<String> {
+        headers
+            .get("mcp-session-id")
+            .or_else(|| headers.get("Mcp-Session-Id"))
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string())
+    }
+
+    async fn send_initialize(&mut self, client_name: &str) -> Result<JsonRpcResponse, String> {
+        let init_request = JsonRpcRequest::initialize(client_name);
+        let response = self
+            .client
+            .post(self.mcp_url())
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .json(&init_request)
+            .timeout(Duration::from_secs(10))
+            .send()
+            .await
+            .map_err(|e| format!("Initialize request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(format!("Initialize failed with HTTP {}: {}", status, text));
+        }
+
+        self.session_id = Self::extract_session_id(response.headers());
+
+        let init_response: JsonRpcResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse initialize response: {}", e))?;
+
+        if init_response.error.is_some() {
+            return Err(format!(
+                "Initialize returned error: {:?}",
+                init_response.error
+            ));
+        }
+
+        Ok(init_response)
+    }
+
+    async fn send_initialized_notification(&self, session_id: &str) {
+        let initialized_notification = JsonRpcRequest::initialized();
+        let _ = self
+            .client
+            .post(self.mcp_url())
+            .header("Content-Type", "application/json")
+            .header("Mcp-Session-Id", session_id)
+            .json(&initialized_notification)
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await;
+    }
+
+    fn pop_next_sse_event(buffer: &mut String) -> Option<String> {
+        let idx = buffer.find("\n\n")?;
+        let raw_event = buffer[..idx].to_string();
+        *buffer = buffer[idx + 2..].to_string();
+        Some(raw_event)
+    }
+
+    fn event_data_to_json(raw_event: &str) -> Option<Value> {
+        let mut data_lines: Vec<&str> = Vec::new();
+        for line in raw_event.lines() {
+            let line = line.trim_end_matches('\r');
+            if let Some(rest) = line.strip_prefix("data:") {
+                data_lines.push(rest.trim());
+            }
+        }
+        if data_lines.is_empty() {
+            return None;
+        }
+        let data = data_lines.join("\n");
+        serde_json::from_str::<Value>(&data).ok()
+    }
+
+    async fn wait_for_roots_list_id(&self, session_id: &str) -> Result<Value, String> {
+        let sse_resp = self
+            .client
+            .get(self.mcp_url())
+            .header("Accept", "text/event-stream")
+            .header("Cache-Control", "no-cache")
+            .header("Mcp-Session-Id", session_id)
+            .send()
+            .await
+            .map_err(|e| format!("SSE connection failed: {}", e))?;
+
+        if !sse_resp.status().is_success() {
+            return Err(format!("SSE stream failed with HTTP {}", sse_resp.status()));
+        }
+
+        let mut stream = sse_resp.bytes_stream();
+        let mut buffer = String::new();
+        let deadline = Instant::now() + Duration::from_secs(10);
+
+        loop {
+            if Instant::now() > deadline {
+                return Err("Timeout waiting for roots/list over SSE".to_string());
+            }
+
+            let chunk = tokio::time::timeout(Duration::from_millis(500), stream.next())
+                .await
+                .ok()
+                .flatten();
+
+            if let Some(next) = chunk {
+                let bytes = next.map_err(|e| format!("SSE read error: {}", e))?;
+                let text = String::from_utf8_lossy(&bytes);
+                buffer.push_str(&text);
+
+                while let Some(raw_event) = Self::pop_next_sse_event(&mut buffer) {
+                    let Some(value) = Self::event_data_to_json(&raw_event) else {
+                        continue;
+                    };
+
+                    let method = value.get("method").and_then(|m| m.as_str());
+                    if method != Some("roots/list") {
+                        continue;
+                    }
+
+                    return value
+                        .get("id")
+                        .cloned()
+                        .ok_or_else(|| "roots/list must include id".to_string());
+                }
+            }
+        }
+    }
+
+    async fn send_roots_response(
+        &self,
+        session_id: &str,
+        request_id: Value,
+        roots: &[PathBuf],
+    ) -> Result<(), String> {
+        let roots_json: Vec<Value> = roots
+            .iter()
+            .map(|path| {
+                json!({
+                    "uri": encode_file_uri(path),
+                    "name": path.file_name().and_then(|n| n.to_str()).unwrap_or("root")
+                })
+            })
+            .collect();
+
+        let roots_response = json!({
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "result": {
+                "roots": roots_json
+            }
+        });
+
+        let _ = self
+            .client
+            .post(self.mcp_url())
+            .header("Content-Type", "application/json")
+            .header("Mcp-Session-Id", session_id)
+            .json(&roots_response)
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await
+            .map_err(|e| format!("Failed to send roots response: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Complete the MCP handshake: initialize + initialized notification.
+    pub async fn initialize(&mut self) -> Result<JsonRpcResponse, String> {
+        self.initialize_with_name("mcp-test-client").await
+    }
+
+    /// Complete the MCP handshake with a custom client name.
+    pub async fn initialize_with_name(
+        &mut self,
+        client_name: &str,
+    ) -> Result<JsonRpcResponse, String> {
+        let init_response = self.send_initialize(client_name).await?;
+        let session_header = self.session_id.clone().unwrap_or_default();
+        self.send_initialized_notification(&session_header).await;
+        Ok(init_response)
+    }
+
+    /// Complete the MCP handshake with roots to lock sandbox scope.
+    pub async fn initialize_with_roots(
+        &mut self,
+        client_name: &str,
+        roots: &[PathBuf],
+    ) -> Result<JsonRpcResponse, String> {
+        let init_response = self.send_initialize(client_name).await?;
+        let session_id = self.session_id.clone().ok_or("No session ID received")?;
+
+        self.send_initialized_notification(&session_id).await;
+        let request_id = self.wait_for_roots_list_id(&session_id).await?;
+        self.send_roots_response(&session_id, request_id, roots)
+            .await?;
+        sleep(Duration::from_millis(100)).await;
+
+        Ok(init_response)
+    }
+
+    /// Send a raw JSON-RPC request with session handling.
+    pub async fn send_request(&self, request: &JsonRpcRequest) -> Result<JsonRpcResponse, String> {
+        let mut req_builder = self
+            .client
+            .post(self.mcp_url())
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json");
+
+        if let Some(ref session_id) = self.session_id {
+            req_builder = req_builder.header("Mcp-Session-Id", session_id);
+        }
+
+        let response = req_builder
+            .json(request)
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(format!("HTTP {}: {}", status, text));
+        }
+
+        response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))
+    }
+
+    /// Call a tool and return the result.
+    pub async fn call_tool(&self, name: &str, arguments: Value) -> ToolCallResult {
+        let start = Instant::now();
+        let request = JsonRpcRequest::call_tool(name, arguments);
+
+        match self.send_request(&request).await {
+            Ok(response) => {
+                let duration_ms = start.elapsed().as_millis();
+                if let Some(ref error) = response.error {
+                    ToolCallResult {
+                        tool_name: name.to_string(),
+                        success: false,
+                        duration_ms,
+                        error: Some(format!("[{}] {}", error.code, error.message)),
+                        output: None,
+                    }
+                } else {
+                    ToolCallResult {
+                        tool_name: name.to_string(),
+                        success: true,
+                        duration_ms,
+                        error: None,
+                        output: response.extract_tool_output(),
+                    }
+                }
+            }
+            Err(e) => ToolCallResult {
+                tool_name: name.to_string(),
+                success: false,
+                duration_ms: start.elapsed().as_millis(),
+                error: Some(e),
+                output: None,
+            },
+        }
+    }
+
+    /// List available tools.
+    pub async fn list_tools(&self) -> Result<Vec<Value>, String> {
+        let request = JsonRpcRequest::list_tools();
+        let response = self.send_request(&request).await?;
+
+        response
+            .result
+            .and_then(|r| r.get("tools").cloned())
+            .and_then(|t| t.as_array().cloned())
+            .ok_or_else(|| "No tools array in response".to_string())
+    }
+
+    /// Check if a specific tool is available.
+    pub async fn is_tool_available(&self, tool_name: &str) -> bool {
+        match self.list_tools().await {
+            Ok(tools) => tools.iter().any(|t| {
+                t.get("name")
+                    .and_then(|n| n.as_str())
+                    .map(|n| n == tool_name)
+                    .unwrap_or(false)
+            }),
+            Err(_) => false,
+        }
+    }
+
+    /// Get the current session ID (if initialized).
+    pub fn session_id(&self) -> Option<&str> {
+        self.session_id.as_deref()
+    }
+
+    /// Check if the client has been initialized.
+    pub fn is_initialized(&self) -> bool {
+        self.session_id.is_some()
+    }
+}

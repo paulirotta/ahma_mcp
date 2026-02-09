@@ -38,6 +38,61 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use tokio::sync::mpsc;
 
+const CANCELLATION_SUGGESTIONS: &str = "Suggestions: retry the command; capture server logs with `2>&1`; if this happened immediately, verify MCP roots/list handshake completed before tools/call";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CancellationKind {
+    UnknownSource,
+    McpCancellation,
+    Timeout,
+    UserInitiated,
+    Generic,
+}
+
+impl CancellationKind {
+    fn as_message(self) -> &'static str {
+        match self {
+            CancellationKind::UnknownSource => "Operation was cancelled (source: unknown)",
+            CancellationKind::McpCancellation => "MCP cancellation received",
+            CancellationKind::Timeout => "Operation timed out",
+            CancellationKind::UserInitiated => "User-initiated cancellation",
+            CancellationKind::Generic => "Operation was cancelled",
+        }
+    }
+}
+
+fn detect_cancellation_kind(raw_message: &str) -> Option<CancellationKind> {
+    let lower = raw_message.to_lowercase();
+
+    if lower.contains("canceled: canceled") || lower == "canceled" {
+        Some(CancellationKind::UnknownSource)
+    } else if lower.contains("task cancelled for reason") {
+        Some(CancellationKind::McpCancellation)
+    } else if lower.contains("timeout") {
+        Some(CancellationKind::Timeout)
+    } else if lower.contains("user") || lower.contains("request") {
+        Some(CancellationKind::UserInitiated)
+    } else if lower.contains("cancel") {
+        Some(CancellationKind::Generic)
+    } else {
+        None
+    }
+}
+
+fn format_cancellation_context(tool_name: Option<&str>, operation_id: Option<&str>) -> Vec<String> {
+    let mut parts = Vec::new();
+
+    if let Some(tool) = tool_name {
+        parts.push(format!("Tool: {tool}"));
+    }
+
+    if let Some(op_id) = operation_id {
+        parts.push(format!("Operation: {op_id}"));
+    }
+
+    parts
+}
+
 /// Represents different types of progress updates during cargo operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
@@ -286,45 +341,14 @@ pub fn format_cancellation_message(
     tool_name: Option<&str>,
     operation_id: Option<&str>,
 ) -> String {
-    let lower = raw_message.to_lowercase();
-
-    // Detect the type of cancellation
-    let cancellation_type = if lower.contains("canceled: canceled") || lower == "canceled" {
-        // IMPORTANT:
-        // We cannot reliably attribute this to the IDE/client. It may also be triggered by
-        // internal cancellation, handshake rejection, sandbox initialization gating, etc.
-        "Operation was cancelled (source: unknown)"
-    } else if lower.contains("task cancelled for reason") {
-        "MCP cancellation received"
-    } else if lower.contains("timeout") {
-        "Operation timed out"
-    } else if lower.contains("user") || lower.contains("request") {
-        "User-initiated cancellation"
-    } else if lower.contains("cancel") {
-        "Operation was cancelled"
-    } else {
-        return raw_message.to_string(); // Not a cancellation, return as-is
+    let Some(kind) = detect_cancellation_kind(raw_message) else {
+        return raw_message.to_string();
     };
 
-    // Build an informative message
-    let mut parts = vec![cancellation_type.to_string()];
-
-    if let Some(tool) = tool_name {
-        parts.push(format!("Tool: {}", tool));
-    }
-
-    if let Some(op_id) = operation_id {
-        parts.push(format!("Operation: {}", op_id));
-    }
-
-    // Preserve the original message for debugging.
-    parts.push(format!("Raw: {}", raw_message));
-
-    // Add actionable suggestions
-    parts.push(
-        "Suggestions: retry the command; capture server logs with `2>&1`; if this happened immediately, verify MCP roots/list handshake completed before tools/call"
-            .to_string(),
-    );
+    let mut parts = vec![kind.as_message().to_string()];
+    parts.extend(format_cancellation_context(tool_name, operation_id));
+    parts.push(format!("Raw: {raw_message}"));
+    parts.push(CANCELLATION_SUGGESTIONS.to_string());
 
     parts.join(". ")
 }
@@ -538,5 +562,48 @@ mod tests {
         token.cancel();
 
         assert!(callback.should_cancel().await);
+    }
+
+    #[test]
+    fn test_detect_cancellation_kind_variants() {
+        assert_eq!(
+            detect_cancellation_kind("Canceled: canceled"),
+            Some(CancellationKind::UnknownSource)
+        );
+        assert_eq!(
+            detect_cancellation_kind("task cancelled for reason: client disconnected"),
+            Some(CancellationKind::McpCancellation)
+        );
+        assert_eq!(
+            detect_cancellation_kind("operation timeout waiting for subprocess"),
+            Some(CancellationKind::Timeout)
+        );
+        assert_eq!(
+            detect_cancellation_kind("cancelled by user request"),
+            Some(CancellationKind::UserInitiated)
+        );
+        assert_eq!(
+            detect_cancellation_kind("cancelled"),
+            Some(CancellationKind::Generic)
+        );
+        assert_eq!(detect_cancellation_kind("some unrelated error"), None);
+    }
+
+    #[test]
+    fn test_format_cancellation_message_passthrough_for_non_cancellation() {
+        let raw = "failed to parse json";
+        assert_eq!(format_cancellation_message(raw, None, None), raw);
+    }
+
+    #[test]
+    fn test_format_cancellation_message_includes_context_and_suggestions() {
+        let message =
+            format_cancellation_message("Canceled: canceled", Some("cargo_build"), Some("op-123"));
+
+        assert!(message.contains("Operation was cancelled (source: unknown)"));
+        assert!(message.contains("Tool: cargo_build"));
+        assert!(message.contains("Operation: op-123"));
+        assert!(message.contains("Raw: Canceled: canceled"));
+        assert!(message.contains("Suggestions: retry the command"));
     }
 }

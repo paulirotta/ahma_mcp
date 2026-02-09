@@ -395,10 +395,12 @@ async fn test_cargo_check_dry_run() {
         .await
         .expect("Failed to create test client");
 
-    // cargo check is synchronous per config
+    // cargo check is synchronous per config.
+    // Scope this smoke test to the primary crate so unrelated workspace changes
+    // (or missing files in optional crates) don't cause false negatives.
     let args = json!({
         "subcommand": "check",
-        "workspace": true
+        "package": "ahma_mcp"
     });
 
     let result = client
