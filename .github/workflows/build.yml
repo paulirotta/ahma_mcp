@@ -71,6 +71,25 @@ jobs:
           echo "LC_ALL=C" >> $GITHUB_ENV
           echo "LANG=C" >> $GITHUB_ENV
 
+      - name: Preflight workspace crate roots
+        run: |
+          set -euo pipefail
+          missing=0
+          while IFS= read -r manifest; do
+            crate_dir="$(dirname "$manifest")"
+            if [ ! -f "$crate_dir/src/lib.rs" ] && [ ! -f "$crate_dir/src/main.rs" ]; then
+              echo "Missing crate root in $crate_dir (expected src/lib.rs or src/main.rs)"
+              missing=1
+            fi
+          done < <(find . -name Cargo.toml -not -path "./target/*")
+
+          if [ "$missing" -ne 0 ]; then
+            echo ""
+            echo "Preflight failed: one or more crates are missing source roots."
+            echo "This often happens when required files exist locally but are untracked."
+            exit 1
+          fi
+
       - name: Get current day number
         id: day-number
         run: echo "day=$(date +%j)" >> $GITHUB_OUTPUT
@@ -183,6 +202,25 @@ jobs:
           echo "LC_ALL=C" >> $GITHUB_ENV
           echo "LANG=C" >> $GITHUB_ENV
 
+      - name: Preflight workspace crate roots
+        run: |
+          set -euo pipefail
+          missing=0
+          while IFS= read -r manifest; do
+            crate_dir="$(dirname "$manifest")"
+            if [ ! -f "$crate_dir/src/lib.rs" ] && [ ! -f "$crate_dir/src/main.rs" ]; then
+              echo "Missing crate root in $crate_dir (expected src/lib.rs or src/main.rs)"
+              missing=1
+            fi
+          done < <(find . -name Cargo.toml -not -path "./target/*")
+
+          if [ "$missing" -ne 0 ]; then
+            echo ""
+            echo "Preflight failed: one or more crates are missing source roots."
+            echo "This often happens when required files exist locally but are untracked."
+            exit 1
+          fi
+
       - name: Get current day number
         id: day-number
         run: echo "day=$(date +%j)" >> $GITHUB_OUTPUT
@@ -294,6 +332,25 @@ jobs:
           echo "PAGER=cat" >> $GITHUB_ENV
           echo "LC_ALL=C" >> $GITHUB_ENV
           echo "LANG=C" >> $GITHUB_ENV
+
+      - name: Preflight workspace crate roots
+        run: |
+          set -euo pipefail
+          missing=0
+          while IFS= read -r manifest; do
+            crate_dir="$(dirname "$manifest")"
+            if [ ! -f "$crate_dir/src/lib.rs" ] && [ ! -f "$crate_dir/src/main.rs" ]; then
+              echo "Missing crate root in $crate_dir (expected src/lib.rs or src/main.rs)"
+              missing=1
+            fi
+          done < <(find . -name Cargo.toml -not -path "./target/*")
+
+          if [ "$missing" -ne 0 ]; then
+            echo ""
+            echo "Preflight failed: one or more crates are missing source roots."
+            echo "This often happens when required files exist locally but are untracked."
+            exit 1
+          fi
 
       - name: Get current day number
         id: day-number

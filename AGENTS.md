@@ -282,6 +282,11 @@ Notes:
 3. **Fix clippy warnings**: `cargo clippy --fix --allow-dirty`
 4. **Run tests**: `cargo test` must pass with ≥80% coverage
 
+Optional local guardrail before pushing:
+- Install pre-push hook: `cp scripts/pre-push.sh .git/hooks/pre-push && chmod +x .git/hooks/pre-push`
+- The hook enforces a clean working tree (including no untracked files) and runs `cargo check --workspace --locked`.
+- This catches "works locally but fails on CI checkout" cases caused by untracked required source files.
+
 Optional but recommended for faster runs:
 - `cargo nextest run` (and for ignored: `cargo nextest run --run-ignored all`)
 
