@@ -1,0 +1,22 @@
+[package]
+name = "ahma_code_health"
+description = "Code health metrics aggregator using rust-code-analysis-cli"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "ahma_code_health"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }
+serde = { version = "1.0", features = ["derive"] }
+toml = { workspace = true }
+walkdir = "2.5"
+pulldown-cmark = "0.13.0"
+opener = "0.8.4"

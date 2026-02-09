@@ -658,10 +658,9 @@ jobs:
 
       - name: Generate code health report
         run: |
-          cd scripts/metrics-aggregator
-          cargo run -- ../.. --limit 20 --html
-          cp ../../CODE_HEALTH.md ../../coverage/
-          cp ../../CODE_HEALTH.html ../../coverage/
+          cargo run -p ahma_code_health -- . --limit 20 --html
+          cp CODE_HEALTH.md coverage/
+          cp CODE_HEALTH.html coverage/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

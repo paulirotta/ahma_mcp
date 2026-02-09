@@ -74,10 +74,11 @@ pub fn generate_report(
     output_dir: &Path,
     generate_html: bool,
     project_name: &str,
+    report_output_dir: &Path,
 ) -> Result<(), std::io::Error> {
     let md_content = create_report_md(files, is_workspace, limit, output_dir, project_name);
 
-    fs::write(output_dir.join("CODE_HEALTH.md"), &md_content)?;
+    fs::write(report_output_dir.join("CODE_HEALTH.md"), &md_content)?;
 
     if generate_html {
         let mut options = pulldown_cmark::Options::empty();
@@ -103,7 +104,7 @@ pub fn generate_report(
             "<!DOCTYPE html>\n<html>\n<head>\n<meta charset='UTF-8'>\n<title>Code Health Report</title>\n<style>\n{}\n</style>\n</head>\n<body>\n{}\n</body>\n</html>",
             style, html_output
         );
-        fs::write(output_dir.join("CODE_HEALTH.html"), full_html)?;
+        fs::write(report_output_dir.join("CODE_HEALTH.html"), full_html)?;
     }
     Ok(())
 }

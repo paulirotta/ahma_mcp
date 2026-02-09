@@ -86,6 +86,8 @@ ahma_mcp/
 │   └── src/
 ├── ahma_validate/          # Tool config validator
 │   └── src/
+├── ahma_code_health/       # Code health metrics aggregator
+│   └── src/
 ├── generate_tool_schema/   # MTDF schema generator
 │   └── src/
 └── .ahma/tools/            # Tool JSON configurations

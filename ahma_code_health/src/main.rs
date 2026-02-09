@@ -48,6 +48,12 @@ struct Cli {
     /// Use raw complexity values instead of SLOC-normalized density scoring
     #[arg(long)]
     raw_complexity: bool,
+
+    /// Output path for CODE_HEALTH.md and CODE_HEALTH.html files.
+    /// Can be a directory (uses "CODE_HEALTH" as filename) or a full path with filename.
+    /// Defaults to current working directory.
+    #[arg(long)]
+    output_path: Option<PathBuf>,
 }
 
 fn main() -> Result<()> {
@@ -78,6 +84,13 @@ fn main() -> Result<()> {
     sort_files_by_health(&mut files_health);
 
     let project_name = get_project_name(&directory);
+
+    // Determine the report output paths
+    let report_output_dir = determine_report_output_dir(&cli.output_path)?;
+
+    // Create report output directory if it doesn't exist
+    fs::create_dir_all(&report_output_dir).context("Failed to create report output directory")?;
+
     generate_report(
         &files_health,
         is_workspace,
@@ -85,12 +98,13 @@ fn main() -> Result<()> {
         &directory,
         cli.html,
         &project_name,
+        &report_output_dir,
     )?;
 
-    print_report_locations(&directory, cli.html);
+    print_report_locations(&report_output_dir, cli.html);
 
     if cli.open {
-        open_report(&directory, cli.html)?;
+        open_report(&report_output_dir, cli.html)?;
     }
 
     Ok(())
@@ -105,6 +119,34 @@ fn prepare_output_directory(output: &Path) -> Result<()> {
         let _ = fs::remove_dir_all(output);
     }
     fs::create_dir_all(output).context("Failed to create output directory")
+}
+
+fn determine_report_output_dir(output_path: &Option<PathBuf>) -> Result<PathBuf> {
+    let path = if let Some(p) = output_path {
+        if p.is_absolute() {
+            p.clone()
+        } else {
+            std::env::current_dir()
+                .context("Failed to get current directory")?
+                .join(p)
+        }
+    } else {
+        std::env::current_dir().context("Failed to get current directory")?
+    };
+
+    // If path ends with a filename (has an extension or contains a dot), use its parent directory
+    // Otherwise, treat it as a directory
+    if path.extension().is_some()
+        || path
+            .file_name()
+            .is_some_and(|n| n.to_string_lossy().contains('.'))
+    {
+        path.parent().map(|p| p.to_path_buf()).ok_or_else(|| {
+            anyhow::anyhow!("Invalid output path: cannot determine parent directory")
+        })
+    } else {
+        Ok(path)
+    }
 }
 
 fn load_metrics(output: &Path, normalized: bool) -> Result<Vec<FileHealth>> {
@@ -160,9 +202,26 @@ mod tests {
 
     #[test]
     fn test_cli_parsing() {
-        let args = vec!["metrics-aggregator", ".", "--output", "results"];
+        let args = vec!["ahma_code_health", ".", "--output", "results"];
         let cli = Cli::try_parse_from(args).unwrap();
         assert_eq!(cli.directory, PathBuf::from("."));
         assert_eq!(cli.output, PathBuf::from("results"));
+        assert_eq!(cli.output_path, None);
+    }
+
+    #[test]
+    fn test_cli_parsing_with_output_path() {
+        let args = vec![
+            "ahma_code_health",
+            ".",
+            "--output",
+            "results",
+            "--output-path",
+            "/tmp",
+        ];
+        let cli = Cli::try_parse_from(args).unwrap();
+        assert_eq!(cli.directory, PathBuf::from("."));
+        assert_eq!(cli.output, PathBuf::from("results"));
+        assert_eq!(cli.output_path, Some(PathBuf::from("/tmp")));
     }
 }

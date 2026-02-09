@@ -1,6 +1,8 @@
-# Metrics Aggregator
+# ahma_code_health
 
 A code health metrics aggregator that analyzes source code using [rust-code-analysis-cli](https://github.com/mozilla/rust-code-analysis) and generates comprehensive health reports.
+
+Part of the [Ahma MCP](../README.md) workspace.
 
 ## Installation
 
@@ -21,28 +23,31 @@ cargo install --git https://github.com/mozilla/rust-code-analysis rust-code-anal
 
 ```bash
 # Analyze a single crate
-cargo run -- /path/to/crate
+cargo run -p ahma_code_health -- /path/to/crate
 
 # Analyze with HTML report
-cargo run -- /path/to/project --html
+cargo run -p ahma_code_health -- /path/to/project --html
 
 # Custom output directory
-cargo run -- /path/to/project -o my_results
+cargo run -p ahma_code_health -- /path/to/project -o my_results
 
 # Limit emergency items shown
-cargo run -- /path/to/project --limit 5
+cargo run -p ahma_code_health -- /path/to/project --limit 5
 
 # Open report automatically
-cargo run -- /path/to/project --html --open
+cargo run -p ahma_code_health -- /path/to/project --html --open
 
 # Analyze multiple languages (comma-separated list)
-cargo run -- /path/to/project --extensions rs,py,js
+cargo run -p ahma_code_health -- /path/to/project --extensions rs,py,js
 
 # All supported languages example
-cargo run -- /path/to/project --extensions rs,py,js,ts,tsx,c,h,cpp,cc,hpp,hh,cs,java,go,css,html
+cargo run -p ahma_code_health -- /path/to/project --extensions rs,py,js,ts,tsx,c,h,cpp,cc,hpp,hh,cs,java,go,css,html
 
 # Exclude custom paths (comma-separated list)
-cargo run -- /path/to/project --exclude "**/generated/**,**/vendor/**"
+cargo run -p ahma_code_health -- /path/to/project --exclude "**/generated/**,**/vendor/**"
+
+# Convenience wrapper script (analyzes the whole repo)
+./scripts/metrics-aggregator.sh
 ```
 
 ## Scoring Formula
@@ -122,15 +127,15 @@ Analyzes multiple languages using a comma-separated list of extensions via the `
 
 Example usage:
 ```bash
-cargo run -- . --extensions rs,py,js
+cargo run -p ahma_code_health -- . --extensions rs,py,js
 ```
 
 ## Development
 
 ```bash
 # Run tests
-cargo test
+cargo test -p ahma_code_health
 
 # Build
-cargo build --release
+cargo build -p ahma_code_health --release
 ```

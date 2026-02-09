@@ -49,6 +49,20 @@ impl<'a> ArgProcessor<'a> {
         }
     }
 
+    /// Helper to find an option by name in the subcommand config.
+    fn find_option(&self, name: &str) -> Option<&crate::config::CommandOption> {
+        self.subcommand_config
+            .and_then(|sc| sc.options.as_deref())
+            .and_then(|opts| opts.iter().find(|opt| opt.name == name))
+    }
+
+    /// Helper to find a positional argument by name in the subcommand config.
+    fn find_positional_arg(&self, name: &str) -> Option<&crate::config::CommandOption> {
+        self.subcommand_config
+            .and_then(|sc| sc.positional_args.as_deref())
+            .and_then(|args| args.iter().find(|arg| arg.name == name))
+    }
+
     /// Helper to process a single key-value argument.
     async fn process_arg_kv(&mut self, key: &str, value: &Value) -> Result<()> {
         if self.handle_file_arg(key, value).await? {
@@ -64,15 +78,11 @@ impl<'a> ArgProcessor<'a> {
 
     async fn handle_file_arg(&mut self, key: &str, value: &Value) -> Result<bool> {
         let file_arg_config = self
-            .subcommand_config
-            .and_then(|sc| sc.options.as_deref())
-            .and_then(|opts| {
-                opts.iter()
-                    .find(|opt| opt.name == key && opt.file_arg == Some(true))
-            });
+            .find_option(key)
+            .filter(|opt| opt.file_arg == Some(true));
 
         if let Some(file_opt) = file_arg_config {
-            if let Some(value_str) = value_to_string(value).await?
+            if let Some(value_str) = value_to_string(value)?
                 && !value_str.is_empty()
             {
                 let temp_file_path = self
@@ -93,35 +103,22 @@ impl<'a> ArgProcessor<'a> {
     }
 
     async fn handle_boolean_arg(&mut self, key: &str, value: &Value) -> Result<bool> {
-        let is_boolean_option = self
-            .subcommand_config
-            .and_then(|sc| sc.options.as_deref())
-            .map(|options| {
-                options
-                    .iter()
-                    .any(|opt| opt.name == key && opt.option_type == "boolean")
-            })
+        let option_config = self.find_option(key);
+        let is_boolean_option = option_config
+            .map(|opt| opt.option_type == "boolean")
             .unwrap_or(false);
 
-        if value.as_bool().is_some() || (is_boolean_option && value.as_str().is_some()) {
-            let bool_val = if let Some(b) = value.as_bool() {
-                b
-            } else if let Some(s) = value.as_str() {
-                s.eq_ignore_ascii_case("true")
-            } else {
-                false
-            };
+        // Check if this looks like a boolean value (native bool or string for boolean options)
+        let bool_value = if is_boolean_option {
+            resolve_bool(value)
+        } else {
+            value.as_bool()
+        };
 
+        if let Some(bool_val) = bool_value {
             if bool_val {
-                let flag = self
-                    .subcommand_config
-                    .and_then(|sc| sc.options.as_deref())
-                    .and_then(|options| {
-                        options
-                            .iter()
-                            .find(|opt| opt.name == key)
-                            .and_then(|opt| opt.alias.as_ref())
-                    })
+                let flag = option_config
+                    .and_then(|opt| opt.alias.as_ref())
                     .map(|alias| format!("-{}", alias))
                     .unwrap_or_else(|| format_option_flag(key));
                 self.final_args.push(flag);
@@ -134,25 +131,16 @@ impl<'a> ArgProcessor<'a> {
 
     async fn handle_standard_arg(&mut self, key: &str, value: &Value) -> Result<()> {
         let is_path_option = self
-            .subcommand_config
-            .and_then(|sc| sc.options.as_deref())
-            .map(|options| {
-                options
-                    .iter()
-                    .any(|opt| opt.name == key && opt.format.as_deref() == Some("path"))
-            })
+            .find_option(key)
+            .map(|opt| opt.format.as_deref() == Some("path"))
             .unwrap_or(false);
 
         let is_positional_path = self
-            .subcommand_config
-            .and_then(|sc| sc.positional_args.as_deref())
-            .map(|args| {
-                args.iter()
-                    .any(|arg| arg.name == key && arg.format.as_deref() == Some("path"))
-            })
+            .find_positional_arg(key)
+            .map(|arg| arg.format.as_deref() == Some("path"))
             .unwrap_or(false);
 
-        if let Some(value_str) = value_to_string(value).await?
+        if let Some(value_str) = value_to_string(value)?
             && !value_str.is_empty()
         {
             let final_value = if is_path_option || is_positional_path {
@@ -215,7 +203,7 @@ impl<'a> ArgProcessor<'a> {
             && let Some(positional_values) = inner_args.as_array()
         {
             for value in positional_values {
-                if let Some(s) = value_to_string(value).await? {
+                if let Some(s) = value_to_string(value)? {
                     self.final_args.push(s);
                 }
             }
@@ -389,32 +377,36 @@ fn is_shell_program(program: &str) -> bool {
     )
 }
 
-/// Converts a serde_json::Value to a string, handling recursion with boxing.
-fn value_to_string<'a>(
-    value: &'a Value,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<String>>> + Send + 'a>> {
-    Box::pin(async move {
-        match value {
-            Value::Null => Ok(None),
-            Value::String(s) => Ok(Some(s.clone())),
-            Value::Number(n) => Ok(Some(n.to_string())),
-            Value::Bool(b) => Ok(Some(b.to_string())),
-            Value::Array(arr) => {
-                let mut result = Vec::new();
-                for item in arr {
-                    if let Some(s) = value_to_string(item).await? {
-                        result.push(s);
-                    }
+/// Resolves a boolean value from a JSON value.
+/// Handles both native boolean values and string representations ("true"/"false").
+fn resolve_bool(value: &Value) -> Option<bool> {
+    value
+        .as_bool()
+        .or_else(|| value.as_str().map(|s| s.eq_ignore_ascii_case("true")))
+}
+
+/// Converts a serde_json::Value to a string, handling recursion.
+fn value_to_string(value: &Value) -> Result<Option<String>> {
+    match value {
+        Value::Null => Ok(None),
+        Value::String(s) => Ok(Some(s.clone())),
+        Value::Number(n) => Ok(Some(n.to_string())),
+        Value::Bool(b) => Ok(Some(b.to_string())),
+        Value::Array(arr) => {
+            let mut result = Vec::new();
+            for item in arr {
+                if let Some(s) = value_to_string(item)? {
+                    result.push(s);
                 }
-                if result.is_empty() {
-                    return Ok(None);
-                }
-                Ok(Some(result.join(" ")))
             }
-            // For other types like Object, we don't want to convert them to a string.
-            _ => Ok(None),
+            if result.is_empty() {
+                return Ok(None);
+            }
+            Ok(Some(result.join(" ")))
         }
-    })
+        // For other types like Object, we don't want to convert them to a string.
+        _ => Ok(None),
+    }
 }
 
 /// Checks if a string contains characters that are problematic for shell argument passing
@@ -468,11 +460,65 @@ pub fn escape_shell_argument(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{CommandOption, SubcommandConfig};
     use serde_json::json;
     use std::path::Path;
 
     fn test_temp_manager() -> TempFileManager {
         TempFileManager::new()
+    }
+
+    /// Helper to create a CommandOption with minimal boilerplate.
+    fn make_option(name: &str, option_type: &str) -> CommandOption {
+        CommandOption {
+            name: name.to_string(),
+            option_type: option_type.to_string(),
+            description: None,
+            required: None,
+            format: None,
+            items: None,
+            file_arg: None,
+            file_flag: None,
+            alias: None,
+        }
+    }
+
+    /// Helper to create a CommandOption with path format.
+    fn make_path_option(name: &str, option_type: &str) -> CommandOption {
+        CommandOption {
+            name: name.to_string(),
+            option_type: option_type.to_string(),
+            format: Some("path".to_string()),
+            description: None,
+            required: None,
+            items: None,
+            file_arg: None,
+            file_flag: None,
+            alias: None,
+        }
+    }
+
+    /// Helper to create a SubcommandConfig for the find command.
+    fn make_find_subcommand() -> SubcommandConfig {
+        SubcommandConfig {
+            name: "find".to_string(),
+            description: "Search for files".to_string(),
+            enabled: true,
+            positional_args_first: Some(true),
+            positional_args: Some(vec![make_path_option("path", "string")]),
+            options: Some(vec![
+                make_option("-name", "string"),
+                make_option("-maxdepth", "integer"),
+            ]),
+            subcommand: None,
+            timeout_seconds: None,
+            synchronous: None,
+            guidance_key: None,
+            sequence: None,
+            step_delay_ms: None,
+            availability_check: None,
+            install_instructions: None,
+        }
     }
 
     #[tokio::test]
@@ -558,60 +604,8 @@ mod tests {
 
     #[tokio::test]
     async fn find_command_args_with_dash_prefix() {
-        use crate::config::{CommandOption, SubcommandConfig};
-
         let temp_manager = test_temp_manager();
-
-        // Create a subcommand config that matches the find subcommand in file_tools.json
-        let subcommand_config = SubcommandConfig {
-            name: "find".to_string(),
-            description: "Search for files".to_string(),
-            enabled: true,
-            positional_args_first: Some(true), // find requires path before options
-            positional_args: Some(vec![CommandOption {
-                name: "path".to_string(),
-                description: None,
-                required: Some(false),
-                option_type: "string".to_string(),
-                format: Some("path".to_string()),
-                items: None,
-                file_arg: None,
-                file_flag: None,
-                alias: None,
-            }]),
-            options: Some(vec![
-                CommandOption {
-                    name: "-name".to_string(),
-                    option_type: "string".to_string(),
-                    description: Some("Search pattern".to_string()),
-                    required: None,
-                    format: None,
-                    items: None,
-                    file_arg: None,
-                    file_flag: None,
-                    alias: None,
-                },
-                CommandOption {
-                    name: "-maxdepth".to_string(),
-                    option_type: "integer".to_string(),
-                    description: Some("Max depth".to_string()),
-                    required: None,
-                    format: None,
-                    items: None,
-                    file_arg: None,
-                    file_flag: None,
-                    alias: None,
-                },
-            ]),
-            subcommand: None,
-            timeout_seconds: None,
-            synchronous: None,
-            guidance_key: None,
-            sequence: None,
-            step_delay_ms: None,
-            availability_check: None,
-            install_instructions: None,
-        };
+        let subcommand_config = make_find_subcommand();
 
         let mut args_map = Map::new();
         args_map.insert("path".to_string(), json!("."));
