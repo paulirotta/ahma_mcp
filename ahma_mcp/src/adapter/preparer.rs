@@ -9,7 +9,7 @@
 
 use anyhow::{Context, Result};
 use serde_json::{Map, Value};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::sync::Arc;
 use tempfile::NamedTempFile;
@@ -17,14 +17,92 @@ use tokio::sync::Mutex;
 
 use crate::path_security;
 
+enum ArgHandled {
+    Handled,
+    Skipped,
+}
+
+/// Fast lookup/index for option and positional argument metadata.
+struct ArgSchemaIndex<'a> {
+    options_by_name: HashMap<&'a str, &'a crate::config::CommandOption>,
+    positional_by_name: HashMap<&'a str, &'a crate::config::CommandOption>,
+    positional_order: Vec<&'a str>,
+    positional_names: HashSet<&'a str>,
+    positional_args_first: bool,
+}
+
+impl<'a> ArgSchemaIndex<'a> {
+    fn new(subcommand_config: Option<&'a crate::config::SubcommandConfig>) -> Self {
+        let mut options_by_name = HashMap::new();
+        let mut positional_by_name = HashMap::new();
+        let mut positional_order = Vec::new();
+        let mut positional_names = HashSet::new();
+        let mut positional_args_first = false;
+
+        if let Some(sc) = subcommand_config {
+            positional_args_first = sc.positional_args_first.unwrap_or(false);
+
+            if let Some(options) = sc.options.as_deref() {
+                for opt in options {
+                    options_by_name.insert(opt.name.as_str(), opt);
+                }
+            }
+
+            if let Some(positional_args) = sc.positional_args.as_deref() {
+                for arg in positional_args {
+                    positional_by_name.insert(arg.name.as_str(), arg);
+                    positional_order.push(arg.name.as_str());
+                    positional_names.insert(arg.name.as_str());
+                }
+            }
+        }
+
+        Self {
+            options_by_name,
+            positional_by_name,
+            positional_order,
+            positional_names,
+            positional_args_first,
+        }
+    }
+
+    fn option(&self, name: &str) -> Option<&'a crate::config::CommandOption> {
+        self.options_by_name.get(name).copied()
+    }
+
+    fn positional(&self, name: &str) -> Option<&'a crate::config::CommandOption> {
+        self.positional_by_name.get(name).copied()
+    }
+
+    fn is_positional(&self, name: &str) -> bool {
+        self.positional_names.contains(name)
+    }
+
+    fn positional_args_first(&self) -> bool {
+        self.positional_args_first
+    }
+
+    fn positional_names_in_order(&self) -> impl Iterator<Item = &'a str> + '_ {
+        self.positional_order.iter().copied()
+    }
+
+    fn is_path_arg(&self, name: &str) -> bool {
+        self.option(name)
+            .map(|opt| opt.format.as_deref() == Some("path"))
+            .unwrap_or(false)
+            || self
+                .positional(name)
+                .map(|arg| arg.format.as_deref() == Some("path"))
+                .unwrap_or(false)
+    }
+}
+
 /// Encapsulates the state and logic for processing command arguments.
 struct ArgProcessor<'a> {
     final_args: Vec<String>,
-    processed_keys: HashSet<String>,
     working_dir: &'a std::path::Path,
     temp_file_manager: &'a TempFileManager,
-    subcommand_config: Option<&'a crate::config::SubcommandConfig>,
-    positional_arg_names: HashSet<String>,
+    schema: ArgSchemaIndex<'a>,
 }
 
 impl<'a> ArgProcessor<'a> {
@@ -34,55 +112,44 @@ impl<'a> ArgProcessor<'a> {
         temp_file_manager: &'a TempFileManager,
         subcommand_config: Option<&'a crate::config::SubcommandConfig>,
     ) -> Self {
-        let positional_arg_names: HashSet<String> = subcommand_config
-            .and_then(|sc| sc.positional_args.as_deref())
-            .map(|args| args.iter().map(|arg| arg.name.clone()).collect())
-            .unwrap_or_default();
-
         Self {
             final_args: initial_args,
-            processed_keys: HashSet::new(),
             working_dir,
             temp_file_manager,
-            subcommand_config,
-            positional_arg_names,
+            schema: ArgSchemaIndex::new(subcommand_config),
         }
     }
 
-    /// Helper to find an option by name in the subcommand config.
-    fn find_option(&self, name: &str) -> Option<&crate::config::CommandOption> {
-        self.subcommand_config
-            .and_then(|sc| sc.options.as_deref())
-            .and_then(|opts| opts.iter().find(|opt| opt.name == name))
-    }
-
-    /// Helper to find a positional argument by name in the subcommand config.
-    fn find_positional_arg(&self, name: &str) -> Option<&crate::config::CommandOption> {
-        self.subcommand_config
-            .and_then(|sc| sc.positional_args.as_deref())
-            .and_then(|args| args.iter().find(|arg| arg.name == name))
-    }
-
-    /// Helper to process a single key-value argument.
-    async fn process_arg_kv(&mut self, key: &str, value: &Value) -> Result<()> {
-        if self.handle_file_arg(key, value).await? {
+    async fn process_named_arg(&mut self, key: &str, value: &Value) -> Result<()> {
+        if matches!(
+            self.emit_file_arg_if_configured(key, value).await?,
+            ArgHandled::Handled
+        ) {
             return Ok(());
         }
 
-        if self.handle_boolean_arg(key, value).await? {
+        if matches!(
+            self.emit_boolean_flag_if_true(key, value),
+            ArgHandled::Handled
+        ) {
             return Ok(());
         }
 
-        self.handle_standard_arg(key, value).await
+        self.emit_standard_arg(key, value).await
     }
 
-    async fn handle_file_arg(&mut self, key: &str, value: &Value) -> Result<bool> {
+    async fn emit_file_arg_if_configured(
+        &mut self,
+        key: &str,
+        value: &Value,
+    ) -> Result<ArgHandled> {
         let file_arg_config = self
-            .find_option(key)
+            .schema
+            .option(key)
             .filter(|opt| opt.file_arg == Some(true));
 
         if let Some(file_opt) = file_arg_config {
-            if let Some(value_str) = value_to_string(value)?
+            if let Some(value_str) = coerce_cli_value(value)?
                 && !value_str.is_empty()
             {
                 let temp_file_path = self
@@ -96,14 +163,14 @@ impl<'a> ArgProcessor<'a> {
                 }
                 self.final_args.push(temp_file_path);
             }
-            Ok(true)
+            Ok(ArgHandled::Handled)
         } else {
-            Ok(false)
+            Ok(ArgHandled::Skipped)
         }
     }
 
-    async fn handle_boolean_arg(&mut self, key: &str, value: &Value) -> Result<bool> {
-        let option_config = self.find_option(key);
+    fn emit_boolean_flag_if_true(&mut self, key: &str, value: &Value) -> ArgHandled {
+        let option_config = self.schema.option(key);
         let is_boolean_option = option_config
             .map(|opt| opt.option_type == "boolean")
             .unwrap_or(false);
@@ -123,37 +190,21 @@ impl<'a> ArgProcessor<'a> {
                     .unwrap_or_else(|| format_option_flag(key));
                 self.final_args.push(flag);
             }
-            Ok(true)
+            ArgHandled::Handled
         } else {
-            Ok(false)
+            ArgHandled::Skipped
         }
     }
 
-    async fn handle_standard_arg(&mut self, key: &str, value: &Value) -> Result<()> {
-        let is_path_option = self
-            .find_option(key)
-            .map(|opt| opt.format.as_deref() == Some("path"))
-            .unwrap_or(false);
-
-        let is_positional_path = self
-            .find_positional_arg(key)
-            .map(|arg| arg.format.as_deref() == Some("path"))
-            .unwrap_or(false);
-
-        if let Some(value_str) = value_to_string(value)?
+    async fn emit_standard_arg(&mut self, key: &str, value: &Value) -> Result<()> {
+        if let Some(value_str) = coerce_cli_value(value)?
             && !value_str.is_empty()
         {
-            let final_value = if is_path_option || is_positional_path {
-                let path = std::path::Path::new(&value_str);
-                path_security::validate_path(path, self.working_dir)
-                    .await?
-                    .to_string_lossy()
-                    .to_string()
-            } else {
-                value_str
-            };
+            let final_value = self
+                .resolve_validated_path_if_needed(key, value_str)
+                .await?;
 
-            if self.positional_arg_names.contains(key) {
+            if self.schema.is_positional(key) {
                 self.final_args.push(final_value);
             } else {
                 self.final_args.push(format_option_flag(key));
@@ -163,15 +214,23 @@ impl<'a> ArgProcessor<'a> {
         Ok(())
     }
 
+    async fn resolve_validated_path_if_needed(&self, key: &str, value: String) -> Result<String> {
+        if self.schema.is_path_arg(key) {
+            let path = std::path::Path::new(&value);
+            Ok(path_security::validate_path(path, self.working_dir)
+                .await?
+                .to_string_lossy()
+                .to_string())
+        } else {
+            Ok(value)
+        }
+    }
+
     async fn process_positional_args(&mut self, args_map: &Map<String, Value>) -> Result<()> {
-        if let Some(sc) = self.subcommand_config
-            && let Some(pos_args) = &sc.positional_args
-        {
-            for pos_arg in pos_args {
-                if let Some(value) = args_map.get(&pos_arg.name) {
-                    self.process_arg_kv(&pos_arg.name, value).await?;
-                    self.processed_keys.insert(pos_arg.name.clone());
-                }
+        let positional_names: Vec<&str> = self.schema.positional_names_in_order().collect();
+        for positional_name in positional_names {
+            if let Some(value) = args_map.get(positional_name) {
+                self.process_named_arg(positional_name, value).await?;
             }
         }
         Ok(())
@@ -180,20 +239,15 @@ impl<'a> ArgProcessor<'a> {
     async fn process_option_args(&mut self, args_map: &Map<String, Value>) -> Result<()> {
         for (key, value) in args_map {
             // Skip positional args - handled separately based on ordering
-            if self.positional_arg_names.contains(key) {
+            if self.schema.is_positional(key) {
                 continue;
             }
 
             // Skip meta-parameters that should not become command-line arguments
-            if key == "args"
-                || key == "working_directory"
-                || key == "execution_mode"
-                || key == "timeout_seconds"
-            {
+            if is_reserved_runtime_key(key) {
                 continue;
             }
-            self.process_arg_kv(key, value).await?;
-            self.processed_keys.insert(key.clone());
+            self.process_named_arg(key, value).await?;
         }
         Ok(())
     }
@@ -203,7 +257,7 @@ impl<'a> ArgProcessor<'a> {
             && let Some(positional_values) = inner_args.as_array()
         {
             for value in positional_values {
-                if let Some(s) = value_to_string(value)? {
+                if let Some(s) = coerce_cli_value(value)? {
                     self.final_args.push(s);
                 }
             }
@@ -213,10 +267,7 @@ impl<'a> ArgProcessor<'a> {
 
     async fn process_all(&mut self, args: Option<&Map<String, Value>>) -> Result<()> {
         if let Some(args_map) = args {
-            let positional_args_first = self
-                .subcommand_config
-                .and_then(|sc| sc.positional_args_first)
-                .unwrap_or(false);
+            let positional_args_first = self.schema.positional_args_first();
 
             if positional_args_first {
                 self.process_positional_args(args_map).await?;
@@ -386,7 +437,7 @@ fn resolve_bool(value: &Value) -> Option<bool> {
 }
 
 /// Converts a serde_json::Value to a string, handling recursion.
-fn value_to_string(value: &Value) -> Result<Option<String>> {
+fn coerce_cli_value(value: &Value) -> Result<Option<String>> {
     match value {
         Value::Null => Ok(None),
         Value::String(s) => Ok(Some(s.clone())),
@@ -395,7 +446,7 @@ fn value_to_string(value: &Value) -> Result<Option<String>> {
         Value::Array(arr) => {
             let mut result = Vec::new();
             for item in arr {
-                if let Some(s) = value_to_string(item)? {
+                if let Some(s) = coerce_cli_value(item)? {
                     result.push(s);
                 }
             }
@@ -407,6 +458,13 @@ fn value_to_string(value: &Value) -> Result<Option<String>> {
         // For other types like Object, we don't want to convert them to a string.
         _ => Ok(None),
     }
+}
+
+fn is_reserved_runtime_key(key: &str) -> bool {
+    matches!(
+        key,
+        "args" | "working_directory" | "execution_mode" | "timeout_seconds"
+    )
 }
 
 /// Checks if a string contains characters that are problematic for shell argument passing
@@ -518,6 +576,34 @@ mod tests {
             step_delay_ms: None,
             availability_check: None,
             install_instructions: None,
+        }
+    }
+
+    fn make_bool_option(name: &str, alias: &str) -> CommandOption {
+        CommandOption {
+            name: name.to_string(),
+            option_type: "boolean".to_string(),
+            description: None,
+            required: None,
+            format: None,
+            items: None,
+            file_arg: None,
+            file_flag: None,
+            alias: Some(alias.to_string()),
+        }
+    }
+
+    fn make_file_option(name: &str, flag: Option<&str>) -> CommandOption {
+        CommandOption {
+            name: name.to_string(),
+            option_type: "string".to_string(),
+            description: None,
+            required: None,
+            format: None,
+            items: None,
+            file_arg: Some(true),
+            file_flag: flag.map(str::to_string),
+            alias: None,
         }
     }
 
@@ -674,5 +760,118 @@ mod tests {
             "Should NOT contain ---name, got: {:?}",
             args_vec
         );
+    }
+
+    #[tokio::test]
+    async fn boolean_option_uses_alias_when_true() {
+        let temp_manager = test_temp_manager();
+        let subcommand_config = SubcommandConfig {
+            name: "demo".to_string(),
+            description: "demo".to_string(),
+            enabled: true,
+            positional_args_first: None,
+            positional_args: None,
+            options: Some(vec![make_bool_option("verbose", "v")]),
+            subcommand: None,
+            timeout_seconds: None,
+            synchronous: None,
+            guidance_key: None,
+            sequence: None,
+            step_delay_ms: None,
+            availability_check: None,
+            install_instructions: None,
+        };
+
+        let mut args_map = Map::new();
+        args_map.insert("verbose".to_string(), json!("true"));
+
+        let (_, args_vec) = prepare_command_and_args(
+            "mycmd",
+            Some(&args_map),
+            Some(&subcommand_config),
+            Path::new("."),
+            &temp_manager,
+        )
+        .await
+        .expect("command");
+
+        assert_eq!(args_vec, vec!["-v".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn reserved_runtime_keys_are_not_emitted_as_cli_args() {
+        let temp_manager = test_temp_manager();
+        let mut args_map = Map::new();
+        args_map.insert("working_directory".to_string(), json!("/tmp"));
+        args_map.insert("execution_mode".to_string(), json!("Synchronous"));
+        args_map.insert("timeout_seconds".to_string(), json!(5));
+        args_map.insert("args".to_string(), json!(["positional"]));
+        args_map.insert("name".to_string(), json!("value"));
+
+        let (_, args_vec) = prepare_command_and_args(
+            "mycmd",
+            Some(&args_map),
+            None,
+            Path::new("."),
+            &temp_manager,
+        )
+        .await
+        .expect("command");
+
+        assert_eq!(
+            args_vec,
+            vec![
+                "--name".to_string(),
+                "value".to_string(),
+                "positional".to_string()
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn file_arg_uses_configured_flag_and_writes_content() {
+        let temp_manager = test_temp_manager();
+        let subcommand_config = SubcommandConfig {
+            name: "demo".to_string(),
+            description: "demo".to_string(),
+            enabled: true,
+            positional_args_first: None,
+            positional_args: None,
+            options: Some(vec![make_file_option("input", Some("-f"))]),
+            subcommand: None,
+            timeout_seconds: None,
+            synchronous: None,
+            guidance_key: None,
+            sequence: None,
+            step_delay_ms: None,
+            availability_check: None,
+            install_instructions: None,
+        };
+
+        let mut args_map = Map::new();
+        args_map.insert("input".to_string(), json!("line 1\nline 2"));
+
+        let (_, args_vec) = prepare_command_and_args(
+            "mycmd",
+            Some(&args_map),
+            Some(&subcommand_config),
+            Path::new("."),
+            &temp_manager,
+        )
+        .await
+        .expect("command");
+
+        assert_eq!(args_vec.len(), 2);
+        assert_eq!(args_vec[0], "-f");
+
+        let path = std::path::PathBuf::from(&args_vec[1]);
+        assert!(
+            path.exists(),
+            "Expected temp file to exist: {}",
+            args_vec[1]
+        );
+        let contents =
+            std::fs::read_to_string(&path).expect("failed to read generated temp file content");
+        assert_eq!(contents, "line 1\nline 2");
     }
 }

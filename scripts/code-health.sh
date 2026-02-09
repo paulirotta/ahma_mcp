@@ -57,9 +57,23 @@ echo "Analyzing: $TARGET_DIR"
 echo "Running from ahma_mcp repo: $AHMA_REPO_ROOT"
 echo ""
 
+# AI-first default focus: score maintainability of production code paths first.
+# Set CODE_HEALTH_INCLUDE_NON_PROD=1 to include tests/examples/benches.
+EXTRA_EXCLUDES=()
+if [ "${CODE_HEALTH_INCLUDE_NON_PROD:-0}" != "1" ]; then
+    EXTRA_EXCLUDES=(
+        --exclude "**/examples/**"
+        --exclude "**/tests/**"
+        --exclude "**/benches/**"
+    )
+    echo "Focus mode: excluding non-production paths (examples/, tests/, benches/)."
+    echo "Set CODE_HEALTH_INCLUDE_NON_PROD=1 to include them."
+    echo ""
+fi
+
 # Change to ahma_mcp repo root to run cargo, but analyze the target directory
 cd "$AHMA_REPO_ROOT" || exit 1
 
 # Run the code health aggregator on the target directory
 # Use --output-path to write files to the original working directory
-cargo run -p ahma_code_health -- "$TARGET_DIR" --html --open --output-path "$ORIGINAL_CWD" "$@"
+cargo run -p ahma_code_health -- "$TARGET_DIR" --html --open --output-path "$ORIGINAL_CWD" "${EXTRA_EXCLUDES[@]}" "$@"

@@ -1,13 +1,6 @@
-//! File URI parsing and encoding utilities for tests.
-
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Parse a file:// URI to a filesystem path.
-///
-/// Handles:
-/// - Standard file:// URIs
-/// - URL-encoded characters (%20 for space, etc.)
-/// - Missing file:// prefix (returns None)
 pub fn parse_file_uri(uri: &str) -> Option<PathBuf> {
     if !uri.starts_with("file://") {
         return None;
@@ -16,15 +9,12 @@ pub fn parse_file_uri(uri: &str) -> Option<PathBuf> {
     if path_str.is_empty() {
         return None;
     }
-    // URL-decode the path
     let decoded = urlencoding::decode(path_str).ok()?;
     Some(PathBuf::from(decoded.into_owned()))
 }
 
 /// Encode a filesystem path as a file:// URI.
-///
-/// Properly encodes special characters like spaces, unicode, etc.
-pub fn encode_file_uri(path: &std::path::Path) -> String {
+pub fn encode_file_uri(path: &Path) -> String {
     let path_str = path.to_string_lossy();
     let mut out = String::with_capacity(path_str.len() + 7);
     out.push_str("file://");
@@ -52,24 +42,24 @@ pub fn encode_file_uri(path: &std::path::Path) -> String {
 
 /// Malformed URI test cases for edge case testing.
 pub mod malformed_uris {
-    /// URIs that should be rejected (return None from parse_file_uri)
+    /// URIs that should be rejected (return None from parse_file_uri).
     pub const INVALID: &[&str] = &[
-        "",                         // Empty
-        "file://",                  // No path (missing slash after authority)
-        "http://localhost/path",    // Wrong scheme
-        "https://example.com/file", // Wrong scheme
-        "ftp://server/file",        // Wrong scheme
-        "file:",                    // Incomplete
-        "file:/",                   // Incomplete (only one slash)
+        "",
+        "file://",
+        "http://localhost/path",
+        "https://example.com/file",
+        "ftp://server/file",
+        "file:",
+        "file:/",
     ];
 
-    /// URIs that might look valid but have edge cases
+    /// URIs that might look valid but have edge cases.
     pub const EDGE_CASES: &[(&str, Option<&str>)] = &[
-        ("file:///tmp/test", Some("/tmp/test")), // Triple slash (valid)
-        ("file:///", Some("/")),                 // Root directory (valid)
-        ("file:///tmp/test%20file", Some("/tmp/test file")), // URL-encoded space
-        ("file:///tmp/%E2%9C%93", Some("/tmp/✓")), // URL-encoded unicode
-        ("file:///tmp/a%2Fb", Some("/tmp/a/b")), // Encoded slash (debatable)
-        ("file:///C:/Windows", Some("/C:/Windows")), // Windows-style path on Unix
+        ("file:///tmp/test", Some("/tmp/test")),
+        ("file:///", Some("/")),
+        ("file:///tmp/test%20file", Some("/tmp/test file")),
+        ("file:///tmp/%E2%9C%93", Some("/tmp/✓")),
+        ("file:///tmp/a%2Fb", Some("/tmp/a/b")),
+        ("file:///C:/Windows", Some("/C:/Windows")),
     ];
 }
