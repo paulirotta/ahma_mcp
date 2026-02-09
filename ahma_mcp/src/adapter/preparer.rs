@@ -380,9 +380,9 @@ fn is_shell_program(program: &str) -> bool {
 /// Resolves a boolean value from a JSON value.
 /// Handles both native boolean values and string representations ("true"/"false").
 fn resolve_bool(value: &Value) -> Option<bool> {
-    value.as_bool().or_else(|| {
-        value.as_str().map(|s| s.eq_ignore_ascii_case("true"))
-    })
+    value
+        .as_bool()
+        .or_else(|| value.as_str().map(|s| s.eq_ignore_ascii_case("true")))
 }
 
 /// Converts a serde_json::Value to a string, handling recursion.
@@ -460,11 +460,65 @@ pub fn escape_shell_argument(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{CommandOption, SubcommandConfig};
     use serde_json::json;
     use std::path::Path;
 
     fn test_temp_manager() -> TempFileManager {
         TempFileManager::new()
+    }
+
+    /// Helper to create a CommandOption with minimal boilerplate.
+    fn make_option(name: &str, option_type: &str) -> CommandOption {
+        CommandOption {
+            name: name.to_string(),
+            option_type: option_type.to_string(),
+            description: None,
+            required: None,
+            format: None,
+            items: None,
+            file_arg: None,
+            file_flag: None,
+            alias: None,
+        }
+    }
+
+    /// Helper to create a CommandOption with path format.
+    fn make_path_option(name: &str, option_type: &str) -> CommandOption {
+        CommandOption {
+            name: name.to_string(),
+            option_type: option_type.to_string(),
+            format: Some("path".to_string()),
+            description: None,
+            required: None,
+            items: None,
+            file_arg: None,
+            file_flag: None,
+            alias: None,
+        }
+    }
+
+    /// Helper to create a SubcommandConfig for the find command.
+    fn make_find_subcommand() -> SubcommandConfig {
+        SubcommandConfig {
+            name: "find".to_string(),
+            description: "Search for files".to_string(),
+            enabled: true,
+            positional_args_first: Some(true),
+            positional_args: Some(vec![make_path_option("path", "string")]),
+            options: Some(vec![
+                make_option("-name", "string"),
+                make_option("-maxdepth", "integer"),
+            ]),
+            subcommand: None,
+            timeout_seconds: None,
+            synchronous: None,
+            guidance_key: None,
+            sequence: None,
+            step_delay_ms: None,
+            availability_check: None,
+            install_instructions: None,
+        }
     }
 
     #[tokio::test]
@@ -550,60 +604,8 @@ mod tests {
 
     #[tokio::test]
     async fn find_command_args_with_dash_prefix() {
-        use crate::config::{CommandOption, SubcommandConfig};
-
         let temp_manager = test_temp_manager();
-
-        // Create a subcommand config that matches the find subcommand in file_tools.json
-        let subcommand_config = SubcommandConfig {
-            name: "find".to_string(),
-            description: "Search for files".to_string(),
-            enabled: true,
-            positional_args_first: Some(true), // find requires path before options
-            positional_args: Some(vec![CommandOption {
-                name: "path".to_string(),
-                description: None,
-                required: Some(false),
-                option_type: "string".to_string(),
-                format: Some("path".to_string()),
-                items: None,
-                file_arg: None,
-                file_flag: None,
-                alias: None,
-            }]),
-            options: Some(vec![
-                CommandOption {
-                    name: "-name".to_string(),
-                    option_type: "string".to_string(),
-                    description: Some("Search pattern".to_string()),
-                    required: None,
-                    format: None,
-                    items: None,
-                    file_arg: None,
-                    file_flag: None,
-                    alias: None,
-                },
-                CommandOption {
-                    name: "-maxdepth".to_string(),
-                    option_type: "integer".to_string(),
-                    description: Some("Max depth".to_string()),
-                    required: None,
-                    format: None,
-                    items: None,
-                    file_arg: None,
-                    file_flag: None,
-                    alias: None,
-                },
-            ]),
-            subcommand: None,
-            timeout_seconds: None,
-            synchronous: None,
-            guidance_key: None,
-            sequence: None,
-            step_delay_ms: None,
-            availability_check: None,
-            install_instructions: None,
-        };
+        let subcommand_config = make_find_subcommand();
 
         let mut args_map = Map::new();
         args_map.insert("path".to_string(), json!("."));
