@@ -39,6 +39,13 @@ struct ProbeOutcome {
     stderr: String,
 }
 
+struct ProbeFailureContext<'a> {
+    plan: &'a ProbePlan,
+    exit_code: Option<i32>,
+    stdout: &'a str,
+    stderr: &'a str,
+}
+
 pub(super) async fn evaluate_tool_availability_impl(
     shell_pool: Arc<ShellPoolManager>,
     configs: HashMap<String, ToolConfig>,
@@ -108,24 +115,25 @@ fn process_probe_outcomes(
 
         match &outcome.plan.target {
             ProbeTarget::Tool { name } => {
-                disable_tool(
-                    name,
-                    &outcome.plan,
-                    outcome.exit_code,
+                let failure = ProbeFailureContext {
+                    plan: &outcome.plan,
+                    exit_code: outcome.exit_code,
                     stdout,
                     stderr,
-                    filtered_configs,
-                    &mut disabled_tools,
-                );
+                };
+                disable_tool(name, &failure, filtered_configs, &mut disabled_tools);
             }
             ProbeTarget::Subcommand { tool, path } => {
+                let failure = ProbeFailureContext {
+                    plan: &outcome.plan,
+                    exit_code: outcome.exit_code,
+                    stdout,
+                    stderr,
+                };
                 disable_subcommand(
                     tool,
                     path,
-                    &outcome.plan,
-                    outcome.exit_code,
-                    stdout,
-                    stderr,
+                    &failure,
                     filtered_configs,
                     &mut disabled_subcommands,
                 );
@@ -138,10 +146,7 @@ fn process_probe_outcomes(
 
 fn disable_tool(
     name: &str,
-    plan: &ProbePlan,
-    exit_code: Option<i32>,
-    stdout: &str,
-    stderr: &str,
+    failure: &ProbeFailureContext<'_>,
     filtered_configs: &mut HashMap<String, ToolConfig>,
     disabled_tools: &mut Vec<DisabledTool>,
 ) {
@@ -149,22 +154,25 @@ fn disable_tool(
         config.enabled = false;
     }
     let label = format!("Tool '{}'", name);
-    let message = build_failure_message(&label, &plan.command, exit_code, stdout, stderr);
-    log_probe_failure(name, &message, plan.install_instructions.as_deref());
+    let message = build_failure_message(
+        &label,
+        &failure.plan.command,
+        failure.exit_code,
+        failure.stdout,
+        failure.stderr,
+    );
+    log_probe_failure(name, &message, failure.plan.install_instructions.as_deref());
     disabled_tools.push(DisabledTool {
         name: name.to_string(),
         message,
-        install_instructions: plan.install_instructions.clone(),
+        install_instructions: failure.plan.install_instructions.clone(),
     });
 }
 
 fn disable_subcommand(
     tool: &str,
     path: &[String],
-    plan: &ProbePlan,
-    exit_code: Option<i32>,
-    stdout: &str,
-    stderr: &str,
+    failure: &ProbeFailureContext<'_>,
     filtered_configs: &mut HashMap<String, ToolConfig>,
     disabled_subcommands: &mut Vec<DisabledSubcommand>,
 ) {
@@ -176,18 +184,24 @@ fn disable_subcommand(
 
     let joined_path = path.join("_");
     let label = format!("Subcommand '{}::{}'", tool, joined_path);
-    let message = build_failure_message(&label, &plan.command, exit_code, stdout, stderr);
+    let message = build_failure_message(
+        &label,
+        &failure.plan.command,
+        failure.exit_code,
+        failure.stdout,
+        failure.stderr,
+    );
     let install_label = format!("{}::{}", tool, joined_path);
     log_probe_failure(
         &install_label,
         &message,
-        plan.install_instructions.as_deref(),
+        failure.plan.install_instructions.as_deref(),
     );
     disabled_subcommands.push(DisabledSubcommand {
         tool: tool.to_string(),
         subcommand_path: joined_path,
         message,
-        install_instructions: plan.install_instructions.clone(),
+        install_instructions: failure.plan.install_instructions.clone(),
     });
 }
 

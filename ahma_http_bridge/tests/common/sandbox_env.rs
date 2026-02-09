@@ -27,7 +27,11 @@ impl SandboxTestEnv {
     pub fn current_bypass_vars() -> Vec<String> {
         SANDBOX_BYPASS_ENV_VARS
             .iter()
-            .filter_map(|var| std::env::var(var).ok().map(|val| format!("{}={}", var, val)))
+            .filter_map(|var| {
+                std::env::var(var)
+                    .ok()
+                    .map(|val| format!("{}={}", var, val))
+            })
             .collect()
     }
 

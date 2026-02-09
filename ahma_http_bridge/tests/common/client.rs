@@ -242,7 +242,8 @@ impl McpTestClient {
 
         self.send_initialized_notification(&session_id).await;
         let request_id = self.wait_for_roots_list_id(&session_id).await?;
-        self.send_roots_response(&session_id, request_id, roots).await?;
+        self.send_roots_response(&session_id, request_id, roots)
+            .await?;
         sleep(Duration::from_millis(100)).await;
 
         Ok(init_response)

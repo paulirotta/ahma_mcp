@@ -160,7 +160,9 @@ async fn wait_for_health(port: u16) -> bool {
 
     for _ in 0..50 {
         sleep(Duration::from_millis(100)).await;
-        if let Ok(resp) = client.get(&health_url).send().await && resp.status().is_success() {
+        if let Ok(resp) = client.get(&health_url).send().await
+            && resp.status().is_success()
+        {
             return true;
         }
     }
