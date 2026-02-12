@@ -137,6 +137,7 @@ impl AhmaMcpService {
             input_schema,
             output_schema: None,
             annotations: None,
+            execution: None,
             meta: None,
         }
     }
@@ -158,6 +159,7 @@ impl ServerHandler for AhmaMcpService {
                 name: env!("CARGO_PKG_NAME").to_string(),
                 title: Some(env!("CARGO_PKG_NAME").to_string()),
                 version: env!("CARGO_PKG_VERSION").to_string(),
+                description: None,
                 icons: None,
                 website_url: None,
             },
@@ -342,6 +344,7 @@ impl ServerHandler for AhmaMcpService {
                 input_schema: self.generate_input_schema_for_wait(),
                 output_schema: None,
                 annotations: None,
+                execution: None,
                 meta: None,
             });
 
@@ -354,6 +357,7 @@ impl ServerHandler for AhmaMcpService {
                 input_schema: self.generate_input_schema_for_status(),
                 output_schema: None,
                 annotations: None,
+                execution: None,
                 meta: None,
             });
 
@@ -366,6 +370,7 @@ impl ServerHandler for AhmaMcpService {
                 input_schema: self.generate_input_schema_for_sandboxed_shell(),
                 output_schema: None,
                 annotations: None,
+                execution: None,
                 meta: None,
             });
 
