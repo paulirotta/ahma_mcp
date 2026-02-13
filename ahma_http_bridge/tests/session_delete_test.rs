@@ -15,6 +15,19 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tokio::time::sleep;
 
+#[cfg(target_os = "macos")]
+fn should_skip_in_nested_sandbox() -> bool {
+    matches!(
+        ahma_mcp::sandbox::test_sandbox_exec_available(),
+        Err(ahma_mcp::sandbox::SandboxError::NestedSandboxDetected)
+    )
+}
+
+#[cfg(not(target_os = "macos"))]
+fn should_skip_in_nested_sandbox() -> bool {
+    false
+}
+
 /// Find an available port for testing
 fn find_available_port() -> u16 {
     TcpListener::bind("127.0.0.1:0")
@@ -155,6 +168,11 @@ async fn send_mcp_request(
 /// Test that DELETE with valid session ID returns 204 and terminates the session (R8.4.7)
 #[tokio::test]
 async fn test_delete_session_terminates_subprocess() {
+    if should_skip_in_nested_sandbox() {
+        eprintln!("Skipping strict sandbox session deletion test in nested sandbox environment");
+        return;
+    }
+
     let port = find_available_port();
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let base_url = format!("http://127.0.0.1:{}", port);
@@ -249,6 +267,11 @@ async fn test_delete_session_terminates_subprocess() {
 /// Test that DELETE without session ID returns 400 Bad Request
 #[tokio::test]
 async fn test_delete_without_session_id_returns_400() {
+    if should_skip_in_nested_sandbox() {
+        eprintln!("Skipping strict sandbox session deletion test in nested sandbox environment");
+        return;
+    }
+
     let port = find_available_port();
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let base_url = format!("http://127.0.0.1:{}", port);
@@ -288,6 +311,11 @@ async fn test_delete_without_session_id_returns_400() {
 /// Test that DELETE with non-existent session ID returns 404 Not Found
 #[tokio::test]
 async fn test_delete_nonexistent_session_returns_404() {
+    if should_skip_in_nested_sandbox() {
+        eprintln!("Skipping strict sandbox session deletion test in nested sandbox environment");
+        return;
+    }
+
     let port = find_available_port();
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let base_url = format!("http://127.0.0.1:{}", port);
