@@ -23,6 +23,19 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tokio::time::sleep;
 
+#[cfg(target_os = "macos")]
+fn should_skip_in_nested_sandbox() -> bool {
+    matches!(
+        ahma_mcp::sandbox::test_sandbox_exec_available(),
+        Err(ahma_mcp::sandbox::SandboxError::NestedSandboxDetected)
+    )
+}
+
+#[cfg(not(target_os = "macos"))]
+fn should_skip_in_nested_sandbox() -> bool {
+    false
+}
+
 // =============================================================================
 // Test Infrastructure (Duplicated from sandbox_roots_handshake_test.rs)
 // =============================================================================
@@ -224,6 +237,11 @@ async fn answer_roots_list_with_uris(
 /// This ensures that no operations can bypass the sandbox check by racing the handshake.
 #[tokio::test]
 async fn test_tool_call_before_roots_handshake() {
+    if should_skip_in_nested_sandbox() {
+        eprintln!("Skipping strict sandbox handshake test in nested sandbox environment");
+        return;
+    }
+
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let tools_dir = temp_dir.path().join("tools");
     std::fs::create_dir_all(&tools_dir).expect("Failed to create tools dir");
@@ -360,6 +378,11 @@ async fn test_tool_call_before_roots_handshake() {
 /// The server should wait for the roots response before allowing tool calls.
 #[tokio::test]
 async fn test_slow_client_handshake() {
+    if should_skip_in_nested_sandbox() {
+        eprintln!("Skipping strict sandbox handshake test in nested sandbox environment");
+        return;
+    }
+
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let tools_dir = temp_dir.path().join("tools");
     std::fs::create_dir_all(&tools_dir).expect("Failed to create tools dir");
@@ -527,6 +550,11 @@ async fn test_slow_client_handshake() {
 /// A failed handshake should not prevent subsequent connections from working.
 #[tokio::test]
 async fn test_rapid_connect_disconnect() {
+    if should_skip_in_nested_sandbox() {
+        eprintln!("Skipping strict sandbox handshake test in nested sandbox environment");
+        return;
+    }
+
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let tools_dir = temp_dir.path().join("tools");
     std::fs::create_dir_all(&tools_dir).expect("Failed to create tools dir");

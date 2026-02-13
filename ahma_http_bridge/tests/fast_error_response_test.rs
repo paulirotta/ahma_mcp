@@ -21,6 +21,19 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 
+#[cfg(target_os = "macos")]
+fn should_skip_in_nested_sandbox() -> bool {
+    matches!(
+        ahma_mcp::sandbox::test_sandbox_exec_available(),
+        Err(ahma_mcp::sandbox::SandboxError::NestedSandboxDetected)
+    )
+}
+
+#[cfg(not(target_os = "macos"))]
+fn should_skip_in_nested_sandbox() -> bool {
+    false
+}
+
 /// Maximum allowed response time for ANY error case.
 /// If any request takes longer than this, the server has a hang bug.
 const MAX_ERROR_RESPONSE_MS: u128 = 2000;
@@ -213,6 +226,11 @@ async fn timed_request_with_session(
 
 #[tokio::test]
 async fn test_missing_session_id_returns_fast_error() {
+    if should_skip_in_nested_sandbox() {
+        eprintln!("Skipping strict sandbox fast-error test in nested sandbox environment");
+        return;
+    }
+
     let _server = spawn_test_server().await.expect("Failed to spawn server");
     CURRENT_SERVER_URL.with(|u| *u.borrow_mut() = Some(_server.base_url()));
     let client = Client::new();
@@ -259,6 +277,11 @@ async fn test_missing_session_id_returns_fast_error() {
 
 #[tokio::test]
 async fn test_invalid_tool_name_returns_fast_error() {
+    if should_skip_in_nested_sandbox() {
+        eprintln!("Skipping strict sandbox fast-error test in nested sandbox environment");
+        return;
+    }
+
     let _server = spawn_test_server().await.expect("Failed to spawn server");
     CURRENT_SERVER_URL.with(|u| *u.borrow_mut() = Some(_server.base_url()));
     let client = Client::new();
@@ -329,6 +352,11 @@ async fn test_invalid_tool_name_returns_fast_error() {
 
 #[tokio::test]
 async fn test_invalid_subcommand_returns_fast_error() {
+    if should_skip_in_nested_sandbox() {
+        eprintln!("Skipping strict sandbox fast-error test in nested sandbox environment");
+        return;
+    }
+
     let _server = spawn_test_server().await.expect("Failed to spawn server");
     CURRENT_SERVER_URL.with(|u| *u.borrow_mut() = Some(_server.base_url()));
     let client = Client::new();
@@ -393,6 +421,11 @@ async fn test_invalid_subcommand_returns_fast_error() {
 
 #[tokio::test]
 async fn test_invalid_method_returns_fast_error() {
+    if should_skip_in_nested_sandbox() {
+        eprintln!("Skipping strict sandbox fast-error test in nested sandbox environment");
+        return;
+    }
+
     let _server = spawn_test_server().await.expect("Failed to spawn server");
     CURRENT_SERVER_URL.with(|u| *u.borrow_mut() = Some(_server.base_url()));
     let client = Client::new();
@@ -452,6 +485,11 @@ async fn test_invalid_method_returns_fast_error() {
 
 #[tokio::test]
 async fn test_malformed_json_returns_fast_error() {
+    if should_skip_in_nested_sandbox() {
+        eprintln!("Skipping strict sandbox fast-error test in nested sandbox environment");
+        return;
+    }
+
     let _server = spawn_test_server().await.expect("Failed to spawn server");
     CURRENT_SERVER_URL.with(|u| *u.borrow_mut() = Some(_server.base_url()));
     let client = Client::new();
@@ -493,6 +531,11 @@ async fn test_malformed_json_returns_fast_error() {
 
 #[tokio::test]
 async fn test_missing_required_args_returns_fast_error() {
+    if should_skip_in_nested_sandbox() {
+        eprintln!("Skipping strict sandbox fast-error test in nested sandbox environment");
+        return;
+    }
+
     let _server = spawn_test_server().await.expect("Failed to spawn server");
     CURRENT_SERVER_URL.with(|u| *u.borrow_mut() = Some(_server.base_url()));
     let client = Client::new();
