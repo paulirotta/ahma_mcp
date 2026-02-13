@@ -1,6 +1,6 @@
 [package]
-name = "ahma_code_health"
-description = "Code health metrics aggregator using rust-code-analysis-cli"
+name = "ahma_code_simplicity"
+description = "Code simplicity metrics aggregator using rust-code-analysis-cli"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,11 +8,11 @@ rust-version.workspace = true
 version.workspace = true
 
 [lib]
-name = "ahma_code_health"
+name = "ahma_code_simplicity"
 path = "src/lib.rs"
 
 [[bin]]
-name = "ahma_code_health"
+name = "ahma_code_simplicity"
 path = "src/main.rs"
 
 [dependencies]

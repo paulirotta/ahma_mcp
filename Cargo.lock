@@ -3,7 +3,7 @@
 version = 4
 
 [[package]]
-name = "ahma_code_health"
+name = "ahma_code_simplicity"
 version = "0.4.5"
 dependencies = [
  "anyhow",

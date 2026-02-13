@@ -1,21 +1,21 @@
 #!/bin/bash
 
-# Code Health Metrics wrapper script
+# Code Simplicity Metrics wrapper script
 #
-# This script runs the ahma_code_health tool to analyze code health metrics
+# This script runs the ahma_code_simplicity tool to analyze code simplicity metrics
 # for any directory (not just the ahma_mcp repository).
 #
 # Usage:
-#   ./scripts/code-health.sh [TARGET_DIR] [ADDITIONAL_ARGS...]
+#   ./scripts/code-simplicity.sh [TARGET_DIR] [ADDITIONAL_ARGS...]
 #
 # Arguments:
 #   TARGET_DIR        - Directory to analyze (optional, defaults to current directory)
-#   ADDITIONAL_ARGS   - Additional arguments passed to ahma_code_health tool
+#   ADDITIONAL_ARGS   - Additional arguments passed to ahma_code_simplicity tool
 #
 # Examples:
-#   ./scripts/code-health.sh                    # Analyze current directory
-#   ./scripts/code-health.sh /path/to/project   # Analyze specific directory
-#   ./scripts/code-health.sh . --limit 10       # Analyze current dir, show top 10 issues
+#   ./scripts/code-simplicity.sh                    # Analyze current directory
+#   ./scripts/code-simplicity.sh /path/to/project   # Analyze specific directory
+#   ./scripts/code-simplicity.sh . --limit 10       # Analyze current dir, show top 10 issues
 #
 # Note: This script can be called from any directory. It will find the ahma_mcp
 # repository root (where Cargo.toml is located) to run cargo, but the analysis
@@ -50,7 +50,7 @@ TARGET_DIR="$(cd "$TARGET_DIR" && pwd)" || {
     exit 1
 }
 
-# Shift to pass remaining arguments to ahma_code_health
+# Shift to pass remaining arguments to ahma_code_simplicity
 shift || true
 
 echo "Analyzing: $TARGET_DIR"
@@ -58,22 +58,22 @@ echo "Running from ahma_mcp repo: $AHMA_REPO_ROOT"
 echo ""
 
 # AI-first default focus: score maintainability of production code paths first.
-# Set CODE_HEALTH_INCLUDE_NON_PROD=1 to include tests/examples/benches.
+# Set CODE_SIMPLICITY_INCLUDE_NON_PROD=1 to include tests/examples/benches.
 EXTRA_EXCLUDES=()
-if [ "${CODE_HEALTH_INCLUDE_NON_PROD:-0}" != "1" ]; then
+if [ "${CODE_SIMPLICITY_INCLUDE_NON_PROD:-0}" != "1" ]; then
     EXTRA_EXCLUDES=(
         --exclude "**/examples/**"
         --exclude "**/tests/**"
         --exclude "**/benches/**"
     )
     echo "Focus mode: excluding non-production paths (examples/, tests/, benches/)."
-    echo "Set CODE_HEALTH_INCLUDE_NON_PROD=1 to include them."
+    echo "Set CODE_SIMPLICITY_INCLUDE_NON_PROD=1 to include them."
     echo ""
 fi
 
 # Change to ahma_mcp repo root to run cargo, but analyze the target directory
 cd "$AHMA_REPO_ROOT" || exit 1
 
-# Run the code health aggregator on the target directory
+# Run the code simplicity aggregator on the target directory
 # Use --output-path to write files to the original working directory
-cargo run -p ahma_code_health -- "$TARGET_DIR" --html --open --output-path "$ORIGINAL_CWD" "${EXTRA_EXCLUDES[@]}" "$@"
+cargo run -p ahma_code_simplicity -- "$TARGET_DIR" --html --open --output-path "$ORIGINAL_CWD" "${EXTRA_EXCLUDES[@]}" "$@"

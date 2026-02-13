@@ -32,4 +32,4 @@ tmp
 coverage.json
 # Rust Code Analysis Results
 analysis_results/
-CODE_HEALTH.*
+CODE_SIMPLICITY.*

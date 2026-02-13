@@ -1,6 +1,6 @@
-use ahma_code_health::analysis::{check_dependencies, perform_analysis};
-use ahma_code_health::models::{FileHealth, Language, MetricsResults};
-use ahma_code_health::report::create_report_md;
+use ahma_code_simplicity::analysis::{check_dependencies, perform_analysis};
+use ahma_code_simplicity::models::{FileSimplicity, Language, MetricsResults};
+use ahma_code_simplicity::report::create_report_md;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
@@ -21,8 +21,8 @@ const LANG_EXTS: &[(&str, Language)] = &[
     ("css", Language::Css),
 ];
 
-fn file(path: &str, language: Language, score: f64) -> FileHealth {
-    FileHealth {
+fn file(path: &str, language: Language, score: f64) -> FileSimplicity {
+    FileSimplicity {
         path: path.to_string(),
         language,
         score,
@@ -396,17 +396,17 @@ fn write_fixture_project(root: &Path, modules: &[&str]) {
     }
 }
 
-fn load_metrics(output: &Path, normalized: bool) -> Vec<FileHealth> {
-    let mut files_health = Vec::new();
+fn load_metrics(output: &Path, normalized: bool) -> Vec<FileSimplicity> {
+    let mut files_simplicity = Vec::new();
     for entry in WalkDir::new(output).into_iter().filter_map(Result::ok) {
         if entry.path().extension().is_some_and(|ext| ext == "toml") {
             let content = fs::read_to_string(entry.path()).unwrap();
             if let Ok(results) = toml::from_str::<MetricsResults>(&content) {
-                files_health.push(FileHealth::calculate(&results, normalized));
+                files_simplicity.push(FileSimplicity::calculate(&results, normalized));
             }
         }
     }
-    files_health
+    files_simplicity
 }
 
 fn extension_list() -> Vec<String> {
@@ -426,9 +426,9 @@ fn test_single_module_suppresses_by_section() {
 
     let report = create_report_md(&files, false, 10, Path::new("."), "single-module");
 
-    assert!(report.contains("## Rust Health"));
-    assert!(report.contains("## Python Health"));
-    assert!(report.contains("## HTML Health"));
+    assert!(report.contains("## Rust Simplicity"));
+    assert!(report.contains("## Python Simplicity"));
+    assert!(report.contains("## HTML Simplicity"));
     assert!(!report.contains("### By Module"));
     assert!(!report.contains("### By Crate"));
     assert!(!report.contains("### By Directory"));
@@ -444,7 +444,7 @@ fn test_multi_module_shows_by_section() {
 
     let report = create_report_md(&files, false, 10, Path::new("."), "python-modules");
 
-    assert!(report.contains("## Python Health"));
+    assert!(report.contains("## Python Simplicity"));
     assert!(report.contains("### By Module"));
     assert!(report.contains("1. **mod_a**"));
     assert!(report.contains("2. **mod_c**"));
@@ -460,7 +460,7 @@ fn test_rust_workspace_uses_by_crate_label() {
 
     let report = create_report_md(&files, true, 10, Path::new("."), "rust-workspace");
 
-    assert!(report.contains("## Rust Health"));
+    assert!(report.contains("## Rust Simplicity"));
     assert!(report.contains("### By Crate"));
     assert!(!report.contains("### By Module"));
 }
@@ -507,15 +507,15 @@ fn test_multi_language_multi_module_maximalist() {
     let report = create_report_md(&files, false, 5, Path::new("."), "maximalist");
 
     for (_, lang) in LANG_EXTS {
-        assert!(report.contains(&format!("## {} Health", lang.display_name())));
+        assert!(report.contains(&format!("## {} Simplicity", lang.display_name())));
         assert!(report.contains(&format!(
-            "## Top 3 {} Code Health Issues",
+            "## Top 3 {} Code Complexity Issues",
             lang.display_name()
         )));
     }
     assert!(report.contains("### By Module"));
     assert!(report.contains("### By Directory"));
-    assert!(report.contains("## Overall Repository Health: **58%**"));
+    assert!(report.contains("## Overall Repository Simplicity: **58%**"));
 }
 
 #[test]
@@ -535,12 +535,12 @@ fn test_full_pipeline_on_generated_fixtures_single_and_multi_module() {
     let single_output = temp.path().join("single_output");
     fs::create_dir_all(&single_output).unwrap();
     perform_analysis(&single_case, &single_output, false, &extensions, &[]).unwrap();
-    let mut single_health = load_metrics(&single_output, true);
-    single_health.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
-    let single_report = create_report_md(&single_health, false, 3, &single_case, "single-case");
+    let mut single_simplicity = load_metrics(&single_output, true);
+    single_simplicity.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
+    let single_report = create_report_md(&single_simplicity, false, 3, &single_case, "single-case");
 
-    assert!(single_report.contains("## Rust Health"));
-    assert!(single_report.contains("## Python Health"));
+    assert!(single_report.contains("## Rust Simplicity"));
+    assert!(single_report.contains("## Python Simplicity"));
     assert!(!single_report.contains("### By Module"));
     assert!(!single_report.contains("### By Directory"));
 
@@ -551,11 +551,12 @@ fn test_full_pipeline_on_generated_fixtures_single_and_multi_module() {
     let multi_output = temp.path().join("multi_output");
     fs::create_dir_all(&multi_output).unwrap();
     perform_analysis(&multi_case, &multi_output, false, &extensions, &[]).unwrap();
-    let mut multi_health = load_metrics(&multi_output, true);
-    multi_health.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
-    let multi_report = create_report_md(&multi_health, false, 3, &multi_case, "multi-case");
+    let mut multi_simplicity = load_metrics(&multi_output, true);
+    multi_simplicity.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
+    let multi_report = create_report_md(&multi_simplicity, false, 3, &multi_case, "multi-case");
 
-    let detected_languages: HashSet<Language> = multi_health.iter().map(|f| f.language).collect();
+    let detected_languages: HashSet<Language> =
+        multi_simplicity.iter().map(|f| f.language).collect();
     assert!(
         detected_languages.len() >= 6,
         "expected broad multi-language coverage, got {} languages",
@@ -563,7 +564,7 @@ fn test_full_pipeline_on_generated_fixtures_single_and_multi_module() {
     );
 
     for lang in detected_languages {
-        assert!(multi_report.contains(&format!("## {} Health", lang.display_name())));
+        assert!(multi_report.contains(&format!("## {} Simplicity", lang.display_name())));
     }
     assert!(multi_report.contains("### By Module"));
     assert!(multi_report.contains("### By Directory"));

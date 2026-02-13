@@ -89,7 +89,7 @@ impl Language {
 }
 
 #[derive(Debug)]
-pub struct FileHealth {
+pub struct FileSimplicity {
     pub path: String,
     pub language: Language,
     pub score: f64,
@@ -99,8 +99,8 @@ pub struct FileHealth {
     pub mi: f64,
 }
 
-impl FileHealth {
-    /// Calculates a health score (0-100) for a file based on code metrics.
+impl FileSimplicity {
+    /// Calculates a simplicity score (0-100) for a file based on code metrics.
     ///
     /// # Scoring Formula
     ///
@@ -170,7 +170,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_file_health_calculate_perfect() {
+    fn test_file_simplicity_calculate_perfect() {
         let results = MetricsResults {
             name: "perfect.rs".to_string(),
             metrics: Metrics {
@@ -182,12 +182,12 @@ mod tests {
                 loc: Loc { sloc: 0.0 },
             },
         };
-        let health = FileHealth::calculate(&results, true);
-        assert_eq!(health.score, 100.0);
+        let simplicity = FileSimplicity::calculate(&results, true);
+        assert_eq!(simplicity.score, 100.0);
     }
 
     #[test]
-    fn test_file_health_calculate_complex_large_file() {
+    fn test_file_simplicity_calculate_complex_large_file() {
         let results = MetricsResults {
             name: "complex.rs".to_string(),
             metrics: Metrics {
@@ -199,14 +199,14 @@ mod tests {
                 loc: Loc { sloc: 500.0 },
             },
         };
-        let health = FileHealth::calculate(&results, true);
+        let simplicity = FileSimplicity::calculate(&results, true);
         // mi_score=60, cog_density=10, cyc_density=10 => cog_score=90, cyc_score=90
         // 0.6*60 + 0.2*90 + 0.2*90 = 36 + 18 + 18 = 72
-        assert_eq!(health.score, 72.0);
+        assert_eq!(simplicity.score, 72.0);
     }
 
     #[test]
-    fn test_file_health_calculate_complex_raw() {
+    fn test_file_simplicity_calculate_complex_raw() {
         let results = MetricsResults {
             name: "complex.rs".to_string(),
             metrics: Metrics {
@@ -218,14 +218,14 @@ mod tests {
                 loc: Loc { sloc: 500.0 },
             },
         };
-        let health = FileHealth::calculate(&results, false);
+        let simplicity = FileSimplicity::calculate(&results, false);
         // mi_score=60, cog_score=50, cyc_score=50
         // 0.6*60 + 0.2*50 + 0.2*50 = 36 + 10 + 10 = 56
-        assert_eq!(health.score, 56.0);
+        assert_eq!(simplicity.score, 56.0);
     }
 
     #[test]
-    fn test_file_health_calculate_high_density() {
+    fn test_file_simplicity_calculate_high_density() {
         let results = MetricsResults {
             name: "dense.rs".to_string(),
             metrics: Metrics {
@@ -237,14 +237,14 @@ mod tests {
                 loc: Loc { sloc: 50.0 },
             },
         };
-        let health = FileHealth::calculate(&results, true);
+        let simplicity = FileSimplicity::calculate(&results, true);
         // mi_score=60, cog_density=100, cyc_density=100 => cog_score=0, cyc_score=0
         // 0.6*60 + 0.2*0 + 0.2*0 = 36
-        assert_eq!(health.score, 36.0);
+        assert_eq!(simplicity.score, 36.0);
     }
 
     #[test]
-    fn test_file_health_calculate_trivial_file() {
+    fn test_file_simplicity_calculate_trivial_file() {
         let results = MetricsResults {
             name: "trivial.rs".to_string(),
             metrics: Metrics {
@@ -256,7 +256,7 @@ mod tests {
                 loc: Loc { sloc: 7.0 },
             },
         };
-        let health = FileHealth::calculate(&results, true);
-        assert!(health.score > 90.0);
+        let simplicity = FileSimplicity::calculate(&results, true);
+        assert!(simplicity.score > 90.0);
     }
 }

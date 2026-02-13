@@ -9,11 +9,11 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 use analysis::{check_dependencies, get_project_name, is_cargo_workspace, perform_analysis};
-use models::{FileHealth, MetricsResults};
+use models::{FileSimplicity, MetricsResults};
 use report::generate_report;
 
 #[derive(Parser, Debug)]
-#[command(author, version, about = "Analyzes source code metrics and generates a health report", long_about = None)]
+#[command(author, version, about = "Analyzes source code metrics and generates a simplicity report", long_about = None)]
 struct Cli {
     /// Directory to analyze (absolute or relative)
     directory: PathBuf,
@@ -49,8 +49,8 @@ struct Cli {
     #[arg(long)]
     raw_complexity: bool,
 
-    /// Output path for CODE_HEALTH.md and CODE_HEALTH.html files.
-    /// Can be a directory (uses "CODE_HEALTH" as filename) or a full path with filename.
+    /// Output path for CODE_SIMPLICITY.md and CODE_SIMPLICITY.html files.
+    /// Can be a directory (uses "CODE_SIMPLICITY" as filename) or a full path with filename.
     /// Defaults to current working directory.
     #[arg(long)]
     output_path: Option<PathBuf>,
@@ -75,13 +75,13 @@ fn main() -> Result<()> {
         &cli.exclude,
     )?;
 
-    let mut files_health = load_metrics(&cli.output, !cli.raw_complexity)?;
-    if files_health.is_empty() {
+    let mut files_simplicity = load_metrics(&cli.output, !cli.raw_complexity)?;
+    if files_simplicity.is_empty() {
         println!("No analysis files found in {}.", cli.output.display());
         return Ok(());
     }
 
-    sort_files_by_health(&mut files_health);
+    sort_files_by_simplicity(&mut files_simplicity);
 
     let project_name = get_project_name(&directory);
 
@@ -92,7 +92,7 @@ fn main() -> Result<()> {
     fs::create_dir_all(&report_output_dir).context("Failed to create report output directory")?;
 
     generate_report(
-        &files_health,
+        &files_simplicity,
         is_workspace,
         cli.limit,
         &directory,
@@ -149,23 +149,25 @@ fn determine_report_output_dir(output_path: &Option<PathBuf>) -> Result<PathBuf>
     }
 }
 
-fn load_metrics(output: &Path, normalized: bool) -> Result<Vec<FileHealth>> {
-    let mut files_health = Vec::new();
+fn load_metrics(output: &Path, normalized: bool) -> Result<Vec<FileSimplicity>> {
+    let mut files_simplicity = Vec::new();
     println!("Aggregating metrics from {}...", output.display());
 
     for entry in WalkDir::new(output).into_iter().filter_map(|e| e.ok()) {
         if entry.path().extension().is_some_and(|ext| ext == "toml") {
             let content = fs::read_to_string(entry.path())?;
             match toml::from_str::<MetricsResults>(&content) {
-                Ok(results) => files_health.push(FileHealth::calculate(&results, normalized)),
+                Ok(results) => {
+                    files_simplicity.push(FileSimplicity::calculate(&results, normalized))
+                }
                 Err(e) => eprintln!("Error parsing {}: {}", entry.path().display(), e),
             }
         }
     }
-    Ok(files_health)
+    Ok(files_simplicity)
 }
 
-fn sort_files_by_health(files: &mut [FileHealth]) {
+fn sort_files_by_simplicity(files: &mut [FileSimplicity]) {
     files.sort_by(|a, b| {
         a.score
             .partial_cmp(&b.score)
@@ -177,21 +179,21 @@ fn sort_files_by_health(files: &mut [FileHealth]) {
 fn print_report_locations(directory: &Path, html: bool) {
     println!(
         "Report generated: {}",
-        directory.join("CODE_HEALTH.md").display()
+        directory.join("CODE_SIMPLICITY.md").display()
     );
     if html {
         println!(
             "Report generated: {}",
-            directory.join("CODE_HEALTH.html").display()
+            directory.join("CODE_SIMPLICITY.html").display()
         );
     }
 }
 
 fn open_report(directory: &Path, html: bool) -> Result<()> {
     let open_path = if html {
-        directory.join("CODE_HEALTH.html")
+        directory.join("CODE_SIMPLICITY.html")
     } else {
-        directory.join("CODE_HEALTH.md")
+        directory.join("CODE_SIMPLICITY.md")
     };
     opener::open(&open_path).context("Failed to open report")
 }
@@ -202,7 +204,7 @@ mod tests {
 
     #[test]
     fn test_cli_parsing() {
-        let args = vec!["ahma_code_health", ".", "--output", "results"];
+        let args = vec!["ahma_code_simplicity", ".", "--output", "results"];
         let cli = Cli::try_parse_from(args).unwrap();
         assert_eq!(cli.directory, PathBuf::from("."));
         assert_eq!(cli.output, PathBuf::from("results"));
@@ -212,7 +214,7 @@ mod tests {
     #[test]
     fn test_cli_parsing_with_output_path() {
         let args = vec![
-            "ahma_code_health",
+            "ahma_code_simplicity",
             ".",
             "--output",
             "results",
