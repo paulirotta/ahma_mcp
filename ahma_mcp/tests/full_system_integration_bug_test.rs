@@ -35,8 +35,13 @@ mod tests {
                 .unwrap()
                 .iter()
                 .filter(|update| {
-                    update.operation_id() == operation_id
-                        && matches!(update, ProgressUpdate::Completed { .. })
+                    matches!(
+                        update,
+                        ProgressUpdate::Completed {
+                            operation_id: update_operation_id,
+                            ..
+                        } if update_operation_id == operation_id
+                    )
                 })
                 .count()
         }

@@ -39,11 +39,251 @@ struct ProbeOutcome {
     stderr: String,
 }
 
-struct ProbeFailureContext<'a> {
-    plan: &'a ProbePlan,
-    exit_code: Option<i32>,
-    stdout: &'a str,
-    stderr: &'a str,
+enum ProbeCommandTarget<'a> {
+    Tool,
+    Subcommand {
+        path: &'a [String],
+        has_own_check: bool,
+    },
+}
+
+impl ProbePlan {
+    fn for_tool(tool_name: &str, config: &ToolConfig, default_working_dir: &Path) -> Self {
+        let check = config.availability_check.as_ref();
+        let command = Self::build_probe_command(config, check, ProbeCommandTarget::Tool);
+        let success_codes = Self::resolve_success_codes(check);
+        let working_dir = Self::resolve_working_dir(check, default_working_dir);
+
+        Self {
+            target: ProbeTarget::Tool {
+                name: tool_name.to_string(),
+            },
+            command,
+            working_dir,
+            success_codes,
+            timeout_ms: config
+                .timeout_seconds
+                .map(|v| v * 1000)
+                .unwrap_or(DEFAULT_PROBE_TIMEOUT_MS),
+            install_instructions: config.install_instructions.clone(),
+        }
+    }
+
+    fn for_subcommand(
+        tool_name: &str,
+        config: &ToolConfig,
+        sub: &SubcommandConfig,
+        path: Vec<String>,
+        default_working_dir: &Path,
+    ) -> Self {
+        let check = sub
+            .availability_check
+            .as_ref()
+            .or(config.availability_check.as_ref());
+        let command = Self::build_probe_command(
+            config,
+            check,
+            ProbeCommandTarget::Subcommand {
+                path: &path,
+                has_own_check: sub.availability_check.is_some(),
+            },
+        );
+        let success_codes = Self::resolve_success_codes(check);
+        let working_dir = Self::resolve_working_dir(check, default_working_dir);
+
+        Self {
+            target: ProbeTarget::Subcommand {
+                tool: tool_name.to_string(),
+                path,
+            },
+            command,
+            working_dir,
+            success_codes,
+            timeout_ms: sub
+                .timeout_seconds
+                .or(config.timeout_seconds)
+                .map(|v| v * 1000)
+                .unwrap_or(DEFAULT_PROBE_TIMEOUT_MS),
+            install_instructions: sub
+                .install_instructions
+                .clone()
+                .or_else(|| config.install_instructions.clone()),
+        }
+    }
+
+    fn resolve_success_codes(check: Option<&AvailabilityCheck>) -> Vec<i32> {
+        check
+            .and_then(|probe| probe.success_exit_codes.clone())
+            .filter(|codes| !codes.is_empty())
+            .unwrap_or_else(|| vec![0])
+    }
+
+    fn resolve_working_dir(
+        check: Option<&AvailabilityCheck>,
+        default_working_dir: &Path,
+    ) -> PathBuf {
+        check
+            .and_then(|probe| probe.working_directory.as_deref())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| default_working_dir.to_path_buf())
+    }
+
+    fn build_probe_command(
+        config: &ToolConfig,
+        check: Option<&AvailabilityCheck>,
+        target: ProbeCommandTarget<'_>,
+    ) -> Vec<String> {
+        let mut command = Self::base_command(config, check);
+
+        match target {
+            ProbeCommandTarget::Tool => match check {
+                Some(probe) => command.extend(probe.args.clone()),
+                None => {
+                    let base = command
+                        .first()
+                        .cloned()
+                        .filter(|segment| !segment.is_empty())
+                        .unwrap_or_else(|| config.name.clone());
+                    command = vec!["/usr/bin/env".to_string(), "which".to_string(), base];
+                }
+            },
+            ProbeCommandTarget::Subcommand {
+                path,
+                has_own_check,
+            } => {
+                let skip_subcommand_args = check
+                    .map(|probe| probe.skip_subcommand_args)
+                    .unwrap_or(false);
+                if !skip_subcommand_args && !has_own_check {
+                    command.extend(path.iter().filter(|segment| !segment.is_empty()).cloned());
+                }
+
+                match check {
+                    Some(probe) => command.extend(probe.args.clone()),
+                    None => command.push("--help".to_string()),
+                }
+            }
+        }
+
+        command
+    }
+
+    fn base_command(config: &ToolConfig, check: Option<&AvailabilityCheck>) -> Vec<String> {
+        match check.and_then(|probe| probe.command.as_ref()) {
+            Some(command) => Self::split_command(command),
+            None => Self::split_command(&config.command),
+        }
+    }
+
+    fn split_command(command: &str) -> Vec<String> {
+        command
+            .split_whitespace()
+            .filter(|segment| !segment.is_empty())
+            .map(|segment| segment.to_string())
+            .collect()
+    }
+
+    async fn execute(self, shell_pool: Arc<ShellPoolManager>) -> ProbeOutcome {
+        let result = match self.try_shell(shell_pool.as_ref()).await {
+            Some(response) => response,
+            None => self.execute_direct().await,
+        };
+        let success = self.success_codes.contains(&result.exit_code);
+
+        ProbeOutcome {
+            plan: self,
+            success,
+            exit_code: Some(result.exit_code),
+            stdout: result.stdout,
+            stderr: result.stderr,
+        }
+    }
+
+    /// Attempt to execute a probe via the shell pool; returns `None` if no shell
+    /// was available or execution failed.
+    async fn try_shell(
+        &self,
+        shell_pool: &ShellPoolManager,
+    ) -> Option<crate::shell_pool::ShellResponse> {
+        let mut shell = shell_pool.get_shell(&self.working_dir).await?;
+        let shell_command = ShellCommand {
+            id: format!("availability-{:?}", self.target),
+            command: self.command.clone(),
+            working_dir: self.working_dir.to_string_lossy().to_string(),
+            timeout_ms: self.timeout_ms,
+        };
+
+        let response = shell.execute_command(shell_command).await;
+        shell_pool.return_shell(shell).await;
+
+        match response {
+            Ok(resp) => Some(resp),
+            Err(err) => {
+                warn!("Shell execution failed for {:?}: {err}", self.target);
+                None
+            }
+        }
+    }
+
+    async fn execute_direct(&self) -> crate::shell_pool::ShellResponse {
+        let mut cmd_iter = self.command.iter();
+        let program = cmd_iter
+            .next()
+            .cloned()
+            .unwrap_or_else(|| "true".to_string());
+        let args: Vec<String> = cmd_iter.cloned().collect();
+
+        let mut command = tokio::process::Command::new(&program);
+        command.args(&args).current_dir(&self.working_dir);
+
+        let timeout_duration = Duration::from_millis(self.timeout_ms);
+        let result = timeout(timeout_duration, command.output()).await;
+
+        let (exit_code, stdout, stderr) = match result {
+            Ok(Ok(output)) => (
+                output.status.code().unwrap_or(-1),
+                String::from_utf8_lossy(&output.stdout).to_string(),
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ),
+            Ok(Err(err)) => (-1, String::new(), err.to_string()),
+            Err(_) => (
+                -1,
+                String::new(),
+                format!("probe timed out after {}ms", self.timeout_ms),
+            ),
+        };
+
+        crate::shell_pool::ShellResponse {
+            id: format!("direct-availability-{:?}", self.target),
+            exit_code,
+            stdout,
+            stderr,
+            duration_ms: 0,
+        }
+    }
+}
+
+impl ProbeOutcome {
+    fn log_and_build_message(&self, label: &str, install_label: &str) -> String {
+        let stdout = self.stdout.trim();
+        let stderr = self.stderr.trim();
+        let stdout = if stdout.is_empty() { "<empty>" } else { stdout };
+        let stderr = if stderr.is_empty() { "<empty>" } else { stderr };
+
+        let message = format!(
+            "{} disabled. Probe command {:?} failed with exit {:?}. stdout: {} stderr: {}",
+            label, self.plan.command, self.exit_code, stdout, stderr
+        );
+        warn!("{message}");
+        if let Some(instructions) = self.plan.install_instructions.as_deref() {
+            info!(
+                "Install hint for '{}': {}",
+                install_label,
+                instructions.trim()
+            );
+        }
+        message
+    }
 }
 
 pub(super) async fn evaluate_tool_availability_impl(
@@ -99,110 +339,54 @@ fn process_probe_outcomes(
     let mut disabled_subcommands = Vec::new();
 
     for outcome in outcomes {
-        let stdout = outcome.stdout.trim();
-        let stderr = outcome.stderr.trim();
-
         if outcome.success {
+            let stdout = outcome.stdout.trim();
+            let stderr = outcome.stderr.trim();
+            let stdout = if stdout.is_empty() { "<empty>" } else { stdout };
+            let stderr = if stderr.is_empty() { "<empty>" } else { stderr };
             debug!(
                 "Probe success for {:?} (exit {:?}) stdout: {} stderr: {}",
-                outcome.plan.target,
-                outcome.exit_code,
-                display_output(stdout),
-                display_output(stderr),
+                outcome.plan.target, outcome.exit_code, stdout, stderr,
             );
             continue;
         }
 
-        match &outcome.plan.target {
+        match outcome.plan.target.clone() {
             ProbeTarget::Tool { name } => {
-                let failure = ProbeFailureContext {
-                    plan: &outcome.plan,
-                    exit_code: outcome.exit_code,
-                    stdout,
-                    stderr,
-                };
-                disable_tool(name, &failure, filtered_configs, &mut disabled_tools);
+                if let Some(config) = filtered_configs.get_mut(&name) {
+                    config.enabled = false;
+                }
+                let label = format!("Tool '{}'", name);
+                let message = outcome.log_and_build_message(&label, &name);
+                disabled_tools.push(DisabledTool {
+                    name,
+                    message,
+                    install_instructions: outcome.plan.install_instructions.clone(),
+                });
             }
             ProbeTarget::Subcommand { tool, path } => {
-                let failure = ProbeFailureContext {
-                    plan: &outcome.plan,
-                    exit_code: outcome.exit_code,
-                    stdout,
-                    stderr,
-                };
-                disable_subcommand(
+                if let Some(config) = filtered_configs.get_mut(&tool)
+                    && let Some(subcommands) = config.subcommand.as_mut()
+                    && let Some(sub) = find_subcommand_mut_in(subcommands.as_mut_slice(), &path)
+                {
+                    sub.enabled = false;
+                }
+
+                let joined_path = path.join("_");
+                let label = format!("Subcommand '{}::{}'", tool, joined_path);
+                let install_label = format!("{}::{}", tool, joined_path);
+                let message = outcome.log_and_build_message(&label, &install_label);
+                disabled_subcommands.push(DisabledSubcommand {
                     tool,
-                    path,
-                    &failure,
-                    filtered_configs,
-                    &mut disabled_subcommands,
-                );
+                    subcommand_path: joined_path,
+                    message,
+                    install_instructions: outcome.plan.install_instructions.clone(),
+                });
             }
         }
     }
 
     (disabled_tools, disabled_subcommands)
-}
-
-fn disable_tool(
-    name: &str,
-    failure: &ProbeFailureContext<'_>,
-    filtered_configs: &mut HashMap<String, ToolConfig>,
-    disabled_tools: &mut Vec<DisabledTool>,
-) {
-    if let Some(config) = filtered_configs.get_mut(name) {
-        config.enabled = false;
-    }
-    let label = format!("Tool '{}'", name);
-    let message = build_failure_message(
-        &label,
-        &failure.plan.command,
-        failure.exit_code,
-        failure.stdout,
-        failure.stderr,
-    );
-    log_probe_failure(name, &message, failure.plan.install_instructions.as_deref());
-    disabled_tools.push(DisabledTool {
-        name: name.to_string(),
-        message,
-        install_instructions: failure.plan.install_instructions.clone(),
-    });
-}
-
-fn disable_subcommand(
-    tool: &str,
-    path: &[String],
-    failure: &ProbeFailureContext<'_>,
-    filtered_configs: &mut HashMap<String, ToolConfig>,
-    disabled_subcommands: &mut Vec<DisabledSubcommand>,
-) {
-    if let Some(config) = filtered_configs.get_mut(tool)
-        && let Some(sub) = find_subcommand_mut(&mut config.subcommand, path)
-    {
-        sub.enabled = false;
-    }
-
-    let joined_path = path.join("_");
-    let label = format!("Subcommand '{}::{}'", tool, joined_path);
-    let message = build_failure_message(
-        &label,
-        &failure.plan.command,
-        failure.exit_code,
-        failure.stdout,
-        failure.stderr,
-    );
-    let install_label = format!("{}::{}", tool, joined_path);
-    log_probe_failure(
-        &install_label,
-        &message,
-        failure.plan.install_instructions.as_deref(),
-    );
-    disabled_subcommands.push(DisabledSubcommand {
-        tool: tool.to_string(),
-        subcommand_path: joined_path,
-        message,
-        install_instructions: failure.plan.install_instructions.clone(),
-    });
 }
 
 async fn execute_probes(
@@ -213,7 +397,7 @@ async fn execute_probes(
         .into_iter()
         .map(|plan| {
             let shell_pool = shell_pool.clone();
-            tokio::spawn(async move { run_probe(shell_pool, plan).await })
+            tokio::spawn(async move { plan.execute(shell_pool).await })
         })
         .collect();
 
@@ -222,86 +406,6 @@ async fn execute_probes(
         .into_iter()
         .filter_map(|result| result.ok())
         .collect()
-}
-
-async fn run_probe(shell_pool: Arc<ShellPoolManager>, plan: ProbePlan) -> ProbeOutcome {
-    let result = match try_shell_execution(&shell_pool, &plan).await {
-        Some(resp) => resp,
-        None => execute_direct(&plan).await,
-    };
-
-    let success = plan.success_codes.contains(&result.exit_code);
-
-    ProbeOutcome {
-        plan,
-        success,
-        exit_code: Some(result.exit_code),
-        stdout: result.stdout,
-        stderr: result.stderr,
-    }
-}
-
-/// Attempt to execute a probe via the shell pool; returns `None` if no shell
-/// was available or execution failed.
-async fn try_shell_execution(
-    shell_pool: &ShellPoolManager,
-    plan: &ProbePlan,
-) -> Option<crate::shell_pool::ShellResponse> {
-    let mut shell = shell_pool.get_shell(&plan.working_dir).await?;
-    let shell_command = ShellCommand {
-        id: format!("availability-{:?}", plan.target),
-        command: plan.command.clone(),
-        working_dir: plan.working_dir.to_string_lossy().to_string(),
-        timeout_ms: plan.timeout_ms,
-    };
-
-    let response = shell.execute_command(shell_command).await;
-    shell_pool.return_shell(shell).await;
-
-    match response {
-        Ok(resp) => Some(resp),
-        Err(err) => {
-            warn!("Shell execution failed for {:?}: {err}", plan.target);
-            None
-        }
-    }
-}
-
-async fn execute_direct(plan: &ProbePlan) -> crate::shell_pool::ShellResponse {
-    let mut cmd_iter = plan.command.iter();
-    let program = cmd_iter
-        .next()
-        .cloned()
-        .unwrap_or_else(|| "true".to_string());
-    let args: Vec<String> = cmd_iter.cloned().collect();
-
-    let mut command = tokio::process::Command::new(&program);
-    command.args(&args).current_dir(&plan.working_dir);
-
-    let timeout_duration = Duration::from_millis(plan.timeout_ms);
-    let result = timeout(timeout_duration, command.output()).await;
-
-    let (exit_code, stdout, stderr) = match result {
-        Ok(Ok(output)) => (
-            output.status.code().unwrap_or(-1),
-            String::from_utf8_lossy(&output.stdout).to_string(),
-            String::from_utf8_lossy(&output.stderr).to_string(),
-        ),
-        Ok(Err(err)) => (-1, String::new(), err.to_string()),
-        Err(_) => (
-            -1,
-            String::new(),
-            format!("probe timed out after {}ms", plan.timeout_ms),
-        ),
-    };
-
-    crate::shell_pool::ShellResponse {
-        id: format!("direct-availability-{:?}", plan.target),
-        exit_code,
-        stdout,
-        stderr,
-        duration_ms: 0,
-    }
 }
 
 fn build_probe_plans(
@@ -317,7 +421,9 @@ fn build_probe_plans(
 
         // Skip probe for project-relative commands without explicit availability_check.
         // Commands like "./gradlew" are project-specific and shouldn't be probed globally.
-        if config.availability_check.is_none() && is_relative_command(&config.command) {
+        if config.availability_check.is_none()
+            && (config.command.starts_with("./") || config.command.starts_with("../"))
+        {
             debug!(
                 "Skipping availability probe for tool '{}' with project-relative command '{}'",
                 tool_name, config.command
@@ -325,14 +431,14 @@ fn build_probe_plans(
             continue;
         }
 
-        plans.push(build_tool_plan(tool_name, config, default_working_dir));
+        plans.push(ProbePlan::for_tool(tool_name, config, default_working_dir));
 
         if let Some(subcommands) = &config.subcommand {
             collect_subcommand_plans(
+                &mut plans,
                 tool_name,
                 config,
                 subcommands,
-                &mut plans,
                 Vec::new(),
                 default_working_dir,
             );
@@ -341,17 +447,11 @@ fn build_probe_plans(
 
     plans
 }
-
-/// Returns `true` for project-relative commands (e.g. `"./gradlew"`, `"../bin/tool"`).
-fn is_relative_command(command: &str) -> bool {
-    command.starts_with("./") || command.starts_with("../")
-}
-
 fn collect_subcommand_plans(
+    plans: &mut Vec<ProbePlan>,
     tool_name: &str,
     config: &ToolConfig,
     subcommands: &[SubcommandConfig],
-    plans: &mut Vec<ProbePlan>,
     prefix: Vec<String>,
     default_working_dir: &Path,
 ) {
@@ -364,16 +464,16 @@ fn collect_subcommand_plans(
 
         if let Some(nested) = &sub.subcommand {
             collect_subcommand_plans(
+                plans,
                 tool_name,
                 config,
                 nested,
-                plans,
                 path.clone(),
                 default_working_dir,
             );
         } else if sub.availability_check.is_some() {
             // Only create probe plans for leaf subcommands with explicit availability checks.
-            plans.push(build_subcommand_plan(
+            plans.push(ProbePlan::for_subcommand(
                 tool_name,
                 config,
                 sub,
@@ -382,171 +482,6 @@ fn collect_subcommand_plans(
             ));
         }
     }
-}
-
-fn build_tool_plan(tool_name: &str, config: &ToolConfig, default_working_dir: &Path) -> ProbePlan {
-    let (command, success_codes, working_dir) = resolve_command(
-        config,
-        None,
-        config.availability_check.as_ref(),
-        default_working_dir,
-    );
-
-    ProbePlan {
-        target: ProbeTarget::Tool {
-            name: tool_name.to_string(),
-        },
-        command,
-        working_dir,
-        success_codes,
-        timeout_ms: config
-            .timeout_seconds
-            .map(|v| v * 1000)
-            .unwrap_or(DEFAULT_PROBE_TIMEOUT_MS),
-        install_instructions: config.install_instructions.clone(),
-    }
-}
-
-fn build_subcommand_plan(
-    tool_name: &str,
-    config: &ToolConfig,
-    sub: &SubcommandConfig,
-    path: Vec<String>,
-    default_working_dir: &Path,
-) -> ProbePlan {
-    let (command, success_codes, working_dir) = resolve_command(
-        config,
-        Some((&path, sub)),
-        sub.availability_check
-            .as_ref()
-            .or(config.availability_check.as_ref()),
-        default_working_dir,
-    );
-
-    ProbePlan {
-        target: ProbeTarget::Subcommand {
-            tool: tool_name.to_string(),
-            path,
-        },
-        command,
-        working_dir,
-        success_codes,
-        timeout_ms: sub
-            .timeout_seconds
-            .or(config.timeout_seconds)
-            .map(|v| v * 1000)
-            .unwrap_or(DEFAULT_PROBE_TIMEOUT_MS),
-        install_instructions: sub
-            .install_instructions
-            .clone()
-            .or_else(|| config.install_instructions.clone()),
-    }
-}
-
-fn resolve_command(
-    config: &ToolConfig,
-    sub_target: Option<(&[String], &SubcommandConfig)>,
-    check: Option<&AvailabilityCheck>,
-    default_working_dir: &Path,
-) -> (Vec<String>, Vec<i32>, PathBuf) {
-    let mut success_codes = vec![0];
-    let mut working_dir = default_working_dir.to_path_buf();
-
-    if let Some(check) = check {
-        if let Some(codes) = &check.success_exit_codes
-            && !codes.is_empty()
-        {
-            success_codes = codes.clone();
-        }
-        if let Some(dir) = &check.working_directory {
-            working_dir = PathBuf::from(dir);
-        }
-    }
-
-    let command = construct_probe_command(config, sub_target, check);
-    (command, success_codes, working_dir)
-}
-
-fn construct_probe_command(
-    config: &ToolConfig,
-    sub_target: Option<(&[String], &SubcommandConfig)>,
-    check: Option<&AvailabilityCheck>,
-) -> Vec<String> {
-    let mut command = base_probe_command(config, check);
-
-    match sub_target {
-        Some((path, sub_config)) => {
-            append_subcommand_probe_args(&mut command, path, sub_config, check);
-        }
-        None => {
-            append_tool_probe_args(&mut command, config, check);
-        }
-    }
-
-    command
-}
-
-/// Resolve the base command for a probe from the availability check or tool config.
-fn base_probe_command(config: &ToolConfig, check: Option<&AvailabilityCheck>) -> Vec<String> {
-    match check.and_then(|c| c.command.as_ref()) {
-        Some(cmd) => split_command(cmd),
-        None => split_command(&config.command),
-    }
-}
-
-/// Append subcommand path segments and probe args to the command.
-fn append_subcommand_probe_args(
-    command: &mut Vec<String>,
-    path: &[String],
-    sub_config: &SubcommandConfig,
-    check: Option<&AvailabilityCheck>,
-) {
-    let skip_sub_args = check.map(|c| c.skip_subcommand_args).unwrap_or(false);
-    let has_own_check = sub_config.availability_check.is_some();
-
-    if !skip_sub_args && !has_own_check {
-        command.extend(path.iter().filter(|s| !s.is_empty()).cloned());
-    }
-
-    match check {
-        Some(probe) => command.extend(probe.args.clone()),
-        None => command.push("--help".to_string()),
-    }
-}
-
-/// Append probe args for a tool-level (non-subcommand) probe.
-fn append_tool_probe_args(
-    command: &mut Vec<String>,
-    config: &ToolConfig,
-    check: Option<&AvailabilityCheck>,
-) {
-    match check {
-        Some(probe) => command.extend(probe.args.clone()),
-        None => {
-            let base = command
-                .first()
-                .cloned()
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| config.name.clone());
-            *command = vec!["/usr/bin/env".to_string(), "which".to_string(), base];
-        }
-    }
-}
-
-fn split_command(command: &str) -> Vec<String> {
-    command
-        .split_whitespace()
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .collect()
-}
-
-fn find_subcommand_mut<'a>(
-    subcommands: &'a mut Option<Vec<SubcommandConfig>>,
-    path: &[String],
-) -> Option<&'a mut SubcommandConfig> {
-    let list = subcommands.as_mut()?;
-    find_subcommand_mut_in(list.as_mut_slice(), path)
 }
 
 fn find_subcommand_mut_in<'a>(
@@ -571,32 +506,4 @@ fn find_subcommand_mut_in<'a>(
         }
     }
     None
-}
-
-fn display_output(s: &str) -> &str {
-    if s.is_empty() { "<empty>" } else { s }
-}
-
-fn build_failure_message(
-    label: &str,
-    command: &[String],
-    exit_code: Option<i32>,
-    stdout: &str,
-    stderr: &str,
-) -> String {
-    format!(
-        "{} disabled. Probe command {:?} failed with exit {:?}. stdout: {} stderr: {}",
-        label,
-        command,
-        exit_code,
-        display_output(stdout),
-        display_output(stderr),
-    )
-}
-
-fn log_probe_failure(label: &str, message: &str, install_instructions: Option<&str>) {
-    warn!("{message}");
-    if let Some(instructions) = install_instructions {
-        info!("Install hint for '{}': {}", label, instructions.trim());
-    }
 }
