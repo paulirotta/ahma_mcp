@@ -1,7 +1,7 @@
 use crate::session::{McpRoot, SessionManager, request_timeout_secs, tool_call_timeout_secs};
 use axum::{
     body::Body,
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
 use serde_json::Value;
@@ -13,42 +13,48 @@ const MCP_SESSION_ID_HEADER: &str = "mcp-session-id";
 
 /// Create a JSON response with appropriate headers
 fn json_response(value: Value) -> Response {
-    Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "application/json")
-        .body(Body::from(serde_json::to_vec(&value).unwrap_or_default()))
-        .unwrap_or_else(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to create response",
-            )
-                .into_response()
-        })
+    json_response_with_status(StatusCode::OK, value)
 }
 
-/// Create an error response in the appropriate format
-fn error_response(code: i32, message: &str) -> Response {
-    let error_json = serde_json::json!({
+/// Create a JSON response with the provided status.
+fn json_response_with_status(status: StatusCode, value: Value) -> Response {
+    Response::builder()
+        .status(status)
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(&value).unwrap_or_default()))
+        .unwrap_or_else(|_| (status, "Failed to create response").into_response())
+}
+
+/// Build a JSON-RPC error object.
+fn json_rpc_error_value(code: i32, message: &str) -> Value {
+    serde_json::json!({
         "jsonrpc": "2.0",
         "error": {
             "code": code,
             "message": message
         }
-    });
+    })
+}
 
-    Response::builder()
-        .status(StatusCode::INTERNAL_SERVER_ERROR)
-        .header("content-type", "application/json")
-        .body(Body::from(
-            serde_json::to_vec(&error_json).unwrap_or_default(),
-        ))
-        .unwrap_or_else(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to create response",
-            )
-                .into_response()
-        })
+/// Attach MCP session header when available.
+fn with_session_header(mut response: Response, session_id: &str) -> Response {
+    let header_value = HeaderValue::from_str(session_id)
+        .ok()
+        .unwrap_or_else(|| HeaderValue::from_static("invalid"));
+    response
+        .headers_mut()
+        .insert(MCP_SESSION_ID_HEADER, header_value);
+    response
+}
+
+/// Create an error response with the provided status and JSON-RPC code.
+fn error_response_with_status(status: StatusCode, code: i32, message: &str) -> Response {
+    json_response_with_status(status, json_rpc_error_value(code, message))
+}
+
+/// Create an error response in the appropriate format
+fn error_response(code: i32, message: &str) -> Response {
+    error_response_with_status(StatusCode::INTERNAL_SERVER_ERROR, code, message)
 }
 
 /// Handles requests in session isolation mode.
@@ -89,20 +95,11 @@ pub async fn handle_session_isolated_request(
         "Request without session ID for non-initialize method: {:?}",
         method
     );
-    Response::builder()
-        .status(StatusCode::BAD_REQUEST)
-        .header("content-type", "application/json")
-        .body(Body::from(
-            serde_json::to_vec(&serde_json::json!({
-                "jsonrpc": "2.0",
-                "error": {
-                    "code": -32600,
-                    "message": "Missing Mcp-Session-Id header. Send initialize request first."
-                }
-            }))
-            .unwrap_or_default(),
-        ))
-        .unwrap_or_else(|_| (StatusCode::BAD_REQUEST, "Missing session ID").into_response())
+    error_response_with_status(
+        StatusCode::BAD_REQUEST,
+        -32600,
+        "Missing Mcp-Session-Id header. Send initialize request first.",
+    )
 }
 
 /// Handles initialization requests by creating a new session.
@@ -137,16 +134,7 @@ async fn handle_initialize(session_manager: &SessionManager, payload: &Value) ->
                 .send_request(&new_session_id, payload, Some(init_timeout))
                 .await
             {
-                Ok(response) => {
-                    let mut http_response = json_response(response);
-                    http_response.headers_mut().insert(
-                        MCP_SESSION_ID_HEADER,
-                        new_session_id
-                            .parse()
-                            .unwrap_or_else(|_| "invalid".parse().unwrap()),
-                    );
-                    http_response
-                }
+                Ok(response) => with_session_header(json_response(response), &new_session_id),
                 Err(e) => {
                     error!(
                         session_id = %new_session_id,
@@ -182,22 +170,11 @@ async fn handle_existing_session_request(
             session_id = %session_id,
             "Request for non-existent or terminated session"
         );
-        return Response::builder()
-            .status(StatusCode::FORBIDDEN)
-            .header("content-type", "application/json")
-            .body(Body::from(
-                serde_json::to_vec(&serde_json::json!({
-                    "jsonrpc": "2.0",
-                    "error": {
-                        "code": -32600,
-                        "message": "Session not found or terminated"
-                    }
-                }))
-                .unwrap_or_default(),
-            ))
-            .unwrap_or_else(|_| {
-                (StatusCode::FORBIDDEN, "Session not found or terminated").into_response()
-            });
+        return error_response_with_status(
+            StatusCode::FORBIDDEN,
+            -32600,
+            "Session not found or terminated",
+        );
     }
 
     // Check for roots/list_changed notification
@@ -205,20 +182,11 @@ async fn handle_existing_session_request(
         && let Err(e) = session_manager.handle_roots_changed(session_id).await
     {
         error!(session_id = %session_id, "Roots change rejected: {}", e);
-        return Response::builder()
-            .status(StatusCode::FORBIDDEN)
-            .header("content-type", "application/json")
-            .body(Body::from(
-                serde_json::to_vec(&serde_json::json!({
-                    "jsonrpc": "2.0",
-                    "error": {
-                        "code": -32600,
-                        "message": "Session terminated: roots change not allowed"
-                    }
-                }))
-                .unwrap_or_default(),
-            ))
-            .unwrap_or_else(|_| (StatusCode::FORBIDDEN, "Session terminated").into_response());
+        return error_response_with_status(
+            StatusCode::FORBIDDEN,
+            -32600,
+            "Session terminated: roots change not allowed",
+        );
     }
 
     // Delay tool execution if needed
@@ -237,9 +205,7 @@ async fn handle_existing_session_request(
     }
 
     // Check if this is a CLIENT RESPONSE (has id + result/error, no method)
-    let is_client_response = method.is_none()
-        && payload.get("id").is_some()
-        && (payload.get("result").is_some() || payload.get("error").is_some());
+    let is_client_response = is_client_response(method, payload);
 
     // Wait for initialization if needed
     if !is_initialized_notification
@@ -266,82 +232,62 @@ async fn handle_existing_session_request(
     .await
 }
 
+fn is_client_response(method: Option<&str>, payload: &Value) -> bool {
+    method.is_none()
+        && payload.get("id").is_some()
+        && (payload.get("result").is_some() || payload.get("error").is_some())
+}
+
 /// Checks if the sandbox is locked for `tools/call` requests.
 fn check_sandbox_lock(session_manager: &SessionManager, session_id: &str) -> Option<Response> {
-    if let Some(session) = session_manager.get_session(session_id)
-        && !session.is_sandbox_locked()
-    {
-        let sse_connected = session.is_sse_connected();
-        let mcp_initialized = session.is_mcp_initialized();
-
-        debug!(
-            session_id = %session_id,
-            sse_connected = sse_connected,
-            mcp_initialized = mcp_initialized,
-            sandbox_locked = false,
-            "tools/call blocked - sandbox not yet locked"
-        );
-
-        // Check if handshake has timed out
-        if let Some(elapsed_secs) = session.is_handshake_timed_out() {
-            let error_msg = format!(
-                "Handshake timeout after {}s - sandbox not locked. \
-                    SSE connected: {}, MCP initialized: {}. \
-                    Ensure client: 1) opens SSE stream (GET /mcp with session header), \
-                    2) sends notifications/initialized, \
-                    3) responds to roots/list request over SSE. \
-                    Use --handshake-timeout-secs to adjust timeout.",
-                elapsed_secs, sse_connected, mcp_initialized
-            );
-
-            error!(
-                session_id = %session_id,
-                "Handshake timeout: SSE={}, initialized={}",
-                sse_connected,
-                mcp_initialized
-            );
-
-            let error_json = serde_json::json!({
-                "jsonrpc": "2.0",
-                "error": {
-                    "code": -32002,
-                    "message": error_msg
-                }
-            });
-            return Some(
-                Response::builder()
-                    .status(StatusCode::GATEWAY_TIMEOUT)
-                    .header("content-type", "application/json")
-                    .header(MCP_SESSION_ID_HEADER, session_id)
-                    .body(Body::from(
-                        serde_json::to_vec(&error_json).unwrap_or_default(),
-                    ))
-                    .unwrap_or_else(|_| {
-                        (StatusCode::GATEWAY_TIMEOUT, "Handshake timeout").into_response()
-                    }),
-            );
-        }
-
-        // Still initializing - return 409 Conflict
-        let error_json = serde_json::json!({
-            "jsonrpc": "2.0",
-            "error": {
-                "code": -32001,
-                "message": "Sandbox initializing from client roots - retry tools/call after roots/list completes"
-            }
-        });
-        return Some(
-            Response::builder()
-                .status(StatusCode::CONFLICT)
-                .header("content-type", "application/json")
-                .header(MCP_SESSION_ID_HEADER, session_id)
-                .body(Body::from(
-                    serde_json::to_vec(&error_json).unwrap_or_default(),
-                ))
-                .unwrap_or_else(|_| (StatusCode::CONFLICT, "Sandbox initializing").into_response()),
-        );
+    let session = session_manager.get_session(session_id)?;
+    if session.is_sandbox_locked() {
+        return None;
     }
-    None
+
+    let sse_connected = session.is_sse_connected();
+    let mcp_initialized = session.is_mcp_initialized();
+
+    debug!(
+        session_id = %session_id,
+        sse_connected = sse_connected,
+        mcp_initialized = mcp_initialized,
+        sandbox_locked = false,
+        "tools/call blocked - sandbox not yet locked"
+    );
+
+    if let Some(elapsed_secs) = session.is_handshake_timed_out() {
+        let error_msg = format!(
+            "Handshake timeout after {}s - sandbox not locked. \
+                SSE connected: {}, MCP initialized: {}. \
+                Ensure client: 1) opens SSE stream (GET /mcp with session header), \
+                2) sends notifications/initialized, \
+                3) responds to roots/list request over SSE. \
+                Use --handshake-timeout-secs to adjust timeout.",
+            elapsed_secs, sse_connected, mcp_initialized
+        );
+
+        error!(
+            session_id = %session_id,
+            "Handshake timeout: SSE={}, initialized={}",
+            sse_connected,
+            mcp_initialized
+        );
+
+        return Some(with_session_header(
+            error_response_with_status(StatusCode::GATEWAY_TIMEOUT, -32002, &error_msg),
+            session_id,
+        ));
+    }
+
+    Some(with_session_header(
+        error_response_with_status(
+            StatusCode::CONFLICT,
+            -32001,
+            "Sandbox initializing from client roots - retry tools/call after roots/list completes",
+        ),
+        session_id,
+    ))
 }
 
 /// Waits for MCP initialization before forwarding a request.
@@ -372,25 +318,14 @@ async fn wait_for_initialization(
             method = ?method,
             "Timeout waiting for MCP initialization"
         );
-        let error_json = serde_json::json!({
-            "jsonrpc": "2.0",
-            "error": {
-                "code": -32002,
-                "message": "Timeout waiting for MCP initialization - client must send notifications/initialized first"
-            }
-        });
-        return Some(
-            Response::builder()
-                .status(StatusCode::GATEWAY_TIMEOUT)
-                .header("content-type", "application/json")
-                .header(MCP_SESSION_ID_HEADER, session_id)
-                .body(Body::from(
-                    serde_json::to_vec(&error_json).unwrap_or_default(),
-                ))
-                .unwrap_or_else(|_| {
-                    (StatusCode::GATEWAY_TIMEOUT, "Initialization timeout").into_response()
-                }),
-        );
+        return Some(with_session_header(
+            error_response_with_status(
+                StatusCode::GATEWAY_TIMEOUT,
+                -32002,
+                "Timeout waiting for MCP initialization - client must send notifications/initialized first",
+            ),
+            session_id,
+        ));
     }
     debug!(
         session_id = %session_id,
@@ -419,50 +354,8 @@ async fn handle_client_response(
     );
 
     // Check if this is a roots/list response - extract roots and lock sandbox
-    if let Some(result) = payload.get("result")
-        && let Some(roots) = result.get("roots").and_then(|r| r.as_array())
-    {
-        let mcp_roots: Vec<McpRoot> = roots
-            .iter()
-            .filter_map(|r| serde_json::from_value(r.clone()).ok())
-            .collect();
-
-        let should_lock = if mcp_roots.is_empty() {
-            session_manager
-                .get_session(session_id)
-                .is_some_and(|s| s.is_sse_connected())
-        } else {
-            true
-        };
-
-        if !should_lock {
-            debug!(
-                session_id = %session_id,
-                "Skipping sandbox lock from empty roots/list response (SSE not connected yet)"
-            );
-        } else {
-            info!(
-                session_id = %session_id,
-                roots = ?mcp_roots,
-                "Locking sandbox from roots/list response"
-            );
-
-            match session_manager.lock_sandbox(session_id, &mcp_roots).await {
-                Ok(true) => {
-                    info!(
-                        session_id = %session_id,
-                        "Sandbox locked from first roots/list response"
-                    );
-                }
-                Ok(false) => {}
-                Err(e) => {
-                    warn!(
-                        session_id = %session_id,
-                        "Failed to record sandbox scopes: {}", e
-                    );
-                }
-            }
-        }
+    if let Some(result) = payload.get("result") {
+        try_lock_sandbox_from_roots(session_manager, session_id, result).await;
     }
 
     // Always forward response to subprocess
@@ -474,12 +367,61 @@ async fn handle_client_response(
         return error_response(-32603, &format!("Failed to forward response: {}", e));
     }
 
-    Response::builder()
-        .status(StatusCode::ACCEPTED)
-        .header("content-type", "application/json")
-        .header(MCP_SESSION_ID_HEADER, session_id)
-        .body(Body::from("{}"))
-        .unwrap_or_else(|_| StatusCode::ACCEPTED.into_response())
+    with_session_header(
+        json_response_with_status(StatusCode::ACCEPTED, serde_json::json!({})),
+        session_id,
+    )
+}
+
+/// Attempt to lock sandbox from a `roots/list` style result payload.
+async fn try_lock_sandbox_from_roots(
+    session_manager: &SessionManager,
+    session_id: &str,
+    result: &Value,
+) {
+    let Some(roots) = result.get("roots").and_then(|r| r.as_array()) else {
+        return;
+    };
+
+    let mcp_roots: Vec<McpRoot> = roots
+        .iter()
+        .filter_map(|r| serde_json::from_value(r.clone()).ok())
+        .collect();
+
+    let should_lock = !mcp_roots.is_empty()
+        || session_manager
+            .get_session(session_id)
+            .is_some_and(|s| s.is_sse_connected());
+
+    if !should_lock {
+        debug!(
+            session_id = %session_id,
+            "Skipping sandbox lock from empty roots/list response (SSE not connected yet)"
+        );
+        return;
+    }
+
+    info!(
+        session_id = %session_id,
+        roots = ?mcp_roots,
+        "Locking sandbox from roots/list response"
+    );
+
+    match session_manager.lock_sandbox(session_id, &mcp_roots).await {
+        Ok(true) => {
+            info!(
+                session_id = %session_id,
+                "Sandbox locked from first roots/list response"
+            );
+        }
+        Ok(false) => {}
+        Err(e) => {
+            warn!(
+                session_id = %session_id,
+                "Failed to record sandbox scopes: {}", e
+            );
+        }
+    }
 }
 
 /// Forwards a request to the session manager.
@@ -506,32 +448,10 @@ async fn forward_request(
         .await
     {
         Ok(response) => {
-            // Check if roots/list response - lock sandbox
             if method == Some("roots/list")
                 && let Some(result) = response.get("result")
-                && let Some(roots) = result.get("roots").and_then(|r| r.as_array())
             {
-                let mcp_roots: Vec<McpRoot> = roots
-                    .iter()
-                    .filter_map(|r| serde_json::from_value(r.clone()).ok())
-                    .collect();
-
-                let should_lock = if mcp_roots.is_empty() {
-                    session_manager
-                        .get_session(session_id)
-                        .is_some_and(|s| s.is_sse_connected())
-                } else {
-                    true
-                };
-
-                if !should_lock {
-                    debug!(
-                        session_id = %session_id,
-                        "Skipping sandbox lock from empty roots/list response (SSE not connected yet)"
-                    );
-                } else if let Err(e) = session_manager.lock_sandbox(session_id, &mcp_roots).await {
-                    warn!(session_id = %session_id, "Failed to lock sandbox: {}", e);
-                }
+                try_lock_sandbox_from_roots(session_manager, session_id, result).await;
             }
 
             // Mark MCP as initialized BEFORE constructing response to prevent race conditions
@@ -545,14 +465,7 @@ async fn forward_request(
                 );
             }
 
-            let mut http_response = json_response(response);
-            http_response.headers_mut().insert(
-                MCP_SESSION_ID_HEADER,
-                session_id
-                    .parse()
-                    .unwrap_or_else(|_| "invalid".parse().unwrap()),
-            );
-            http_response
+            with_session_header(json_response(response), session_id)
         }
         Err(e) => {
             error!(session_id = %session_id, "Failed to send request: {}", e);

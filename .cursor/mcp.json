@@ -1,6 +1,6 @@
 {
     "mcpServers": {
-        "ahma-cursor": {
+        "Ahma": {
             "type": "stdio",
             "command": "/Users/phoughton/github/ahma_mcp/target/release/ahma_mcp",
             "args": [
