@@ -725,11 +725,11 @@ jobs:
             echo "rust-code-analysis-cli is already installed"
           fi
 
-      - name: Generate code health report
+      - name: Generate code simplicity report
         run: |
-          cargo run -p ahma_code_health -- . --limit 20 --html
-          cp CODE_HEALTH.md coverage/
-          cp CODE_HEALTH.html coverage/
+          cargo run -p ahma_code_simplicity -- . --limit 20 --html
+          cp CODE_SIMPLICITY.md coverage/
+          cp CODE_SIMPLICITY.html coverage/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -745,11 +745,11 @@ jobs:
           name: debtmap-markdown
           path: ./coverage/debtmap.md
 
-      - name: Upload code health report artifact
+      - name: Upload code simplicity report artifact
         uses: actions/upload-artifact@v4
         with:
-          name: code-health-report
-          path: ./coverage/CODE_HEALTH.md
+          name: code-simplicity-report
+          path: ./coverage/CODE_SIMPLICITY.md
 
       - name: Deploy to GitHub Pages
         id: deployment

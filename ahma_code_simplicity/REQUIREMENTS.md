@@ -1,8 +1,8 @@
-# ahma_code_health — Requirements
+# ahma_code_simplicity — Requirements
 
 ## Purpose
 
-`ahma_code_health` is a code health metrics aggregator that uses [rust-code-analysis-cli](https://github.com/mozilla/rust-code-analysis) to analyze source code and generate comprehensive health reports (Markdown and HTML).
+`ahma_code_simplicity` is a code simplicity metrics aggregator that uses [rust-code-analysis-cli](https://github.com/mozilla/rust-code-analysis) to analyze source code and generate comprehensive simplicity reports (Markdown and HTML).
 
 It is a workspace member of the [Ahma MCP](../REQUIREMENTS.md) project.
 
@@ -22,9 +22,9 @@ It is a workspace member of the [Ahma MCP](../REQUIREMENTS.md) project.
 - **R2.5**: Applies default exclusion patterns (target, node_modules, build dirs, VCS, IDE configs).
 - **R2.6**: Supports additional user-defined exclusion patterns via `--exclude`.
 
-### R3: Health Scoring
+### R3: Simplicity Scoring
 
-- **R3.1**: Each file receives a composite health score (0–100%) using:
+- **R3.1**: Each file receives a composite simplicity score (0–100%) using:
   ```
   Score = 0.6 × MI + 0.2 × Cog_Score + 0.2 × Cyc_Score
   ```
@@ -34,9 +34,9 @@ It is a workspace member of the [Ahma MCP](../REQUIREMENTS.md) project.
 
 ### R4: Report Generation
 
-- **R4.1**: Always generates `CODE_HEALTH.md` in the analyzed directory.
-- **R4.2**: `--html` flag additionally generates `CODE_HEALTH.html` with styled output.
-- **R4.3**: Reports include: overall health, per-language breakdown, per-crate/package scores, top N issues, and a metrics glossary.
+- **R4.1**: Always generates `CODE_SIMPLICITY.md` in the analyzed directory.
+- **R4.2**: `--html` flag additionally generates `CODE_SIMPLICITY.html` with styled output.
+- **R4.3**: Reports include: overall simplicity, per-language breakdown, per-crate/package scores, top N issues, and a metrics glossary.
 - **R4.4**: `--limit N` controls how many issues are listed (default: 10).
 - **R4.5**: `--open` flag opens the report in the default system viewer.
 
@@ -53,4 +53,4 @@ It is a workspace member of the [Ahma MCP](../REQUIREMENTS.md) project.
 
 ## CI Integration
 
-The `job-coverage` step in `.github/workflows/build.yml` runs `ahma_code_health` and publishes `CODE_HEALTH.md` / `CODE_HEALTH.html` to GitHub Pages alongside the coverage report.
+The `job-coverage` step in `.github/workflows/build.yml` runs `ahma_code_simplicity` and publishes `CODE_SIMPLICITY.md` / `CODE_SIMPLICITY.html` to GitHub Pages alongside the coverage report.

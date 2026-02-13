@@ -1,5 +1,5 @@
 use crate::analysis::{get_package_name, get_relative_path};
-use crate::models::{FileHealth, Language};
+use crate::models::{FileSimplicity, Language};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -15,14 +15,14 @@ pub struct LanguageSummary {
 }
 
 impl RepoSummary {
-    pub fn from_files(files: &[FileHealth], base_dir: &Path) -> Self {
+    pub fn from_files(files: &[FileSimplicity], base_dir: &Path) -> Self {
         let avg_score = if files.is_empty() {
             0.0
         } else {
             files.iter().map(|f| f.score).sum::<f64>() / files.len() as f64
         };
 
-        let mut lang_map: HashMap<Language, Vec<&FileHealth>> = HashMap::new();
+        let mut lang_map: HashMap<Language, Vec<&FileSimplicity>> = HashMap::new();
         for f in files {
             lang_map.entry(f.language).or_default().push(f);
         }
@@ -68,7 +68,7 @@ impl RepoSummary {
 }
 
 pub fn generate_report(
-    files: &[FileHealth],
+    files: &[FileSimplicity],
     is_workspace: bool,
     limit: usize,
     output_dir: &Path,
@@ -78,7 +78,7 @@ pub fn generate_report(
 ) -> Result<(), std::io::Error> {
     let md_content = create_report_md(files, is_workspace, limit, output_dir, project_name);
 
-    fs::write(report_output_dir.join("CODE_HEALTH.md"), &md_content)?;
+    fs::write(report_output_dir.join("CODE_SIMPLICITY.md"), &md_content)?;
 
     if generate_html {
         let mut options = pulldown_cmark::Options::empty();
@@ -101,16 +101,16 @@ pub fn generate_report(
             ";
 
         let full_html = format!(
-            "<!DOCTYPE html>\n<html>\n<head>\n<meta charset='UTF-8'>\n<title>Code Health Report</title>\n<style>\n{}\n</style>\n</head>\n<body>\n{}\n</body>\n</html>",
+            "<!DOCTYPE html>\n<html>\n<head>\n<meta charset='UTF-8'>\n<title>Code Simplicity Report</title>\n<style>\n{}\n</style>\n</head>\n<body>\n{}\n</body>\n</html>",
             style, html_output
         );
-        fs::write(report_output_dir.join("CODE_HEALTH.html"), full_html)?;
+        fs::write(report_output_dir.join("CODE_SIMPLICITY.html"), full_html)?;
     }
     Ok(())
 }
 
 pub fn create_report_md(
-    files: &[FileHealth],
+    files: &[FileSimplicity],
     is_workspace: bool,
     limit: usize,
     base_dir: &Path,
@@ -121,7 +121,7 @@ pub fn create_report_md(
 
     write_header(&mut report, project_name, summary.avg_score);
     write_executive_summary(&mut report, summary.avg_score);
-    write_package_health(&mut report, &summary, is_workspace);
+    write_package_simplicity(&mut report, &summary, is_workspace);
     write_emergencies(&mut report, files, limit, base_dir);
     write_glossary(&mut report);
 
@@ -129,9 +129,9 @@ pub fn create_report_md(
 }
 
 fn write_header(report: &mut String, project_name: &str, avg_score: f64) {
-    report.push_str(&format!("# Code Health Metrics: {}\n\n", project_name));
+    report.push_str(&format!("# Code Simplicity Metrics: {}\n\n", project_name));
     report.push_str(&format!(
-        "## Overall Repository Health: **{:.0}%**\n\n",
+        "## Overall Repository Simplicity: **{:.0}%**\n\n",
         avg_score
     ));
     let now = chrono::Local::now();
@@ -144,16 +144,16 @@ fn write_header(report: &mut String, project_name: &str, avg_score: f64) {
 fn write_executive_summary(report: &mut String, avg_score: f64) {
     report.push_str("### Executive Summary\n");
     let msg = if avg_score > 80.0 {
-        "The repository is in good health overall. Focus on isolated high-complexity files.\n\n"
+        "The repository has good simplicity overall. Focus on isolated high-complexity files.\n\n"
     } else if avg_score > 60.0 {
-        "The repository has moderate technical debt. Consider refactoring the top medical emergencies.\n\n"
+        "The repository has moderate technical debt. Consider refactoring the top complexity issues.\n\n"
     } else {
-        "The repository requires significant architectural review. Multiple areas show high risk.\n\n"
+        "The repository requires significant architectural review. Multiple areas show high complexity.\n\n"
     };
     report.push_str(msg);
 }
 
-fn write_package_health(report: &mut String, summary: &RepoSummary, is_workspace: bool) {
+fn write_package_simplicity(report: &mut String, summary: &RepoSummary, is_workspace: bool) {
     // Sort languages by name for consistent output
     let mut languages: Vec<_> = summary.language_summaries.keys().collect();
     languages.sort_by(|a, b| a.display_name().cmp(b.display_name()));
@@ -161,7 +161,7 @@ fn write_package_health(report: &mut String, summary: &RepoSummary, is_workspace
     for lang in languages {
         if let Some(lang_summary) = summary.language_summaries.get(lang) {
             report.push_str(&format!(
-                "## {} Health (Avg: {:.0}%)\n\n",
+                "## {} Simplicity (Avg: {:.0}%)\n\n",
                 lang.display_name(),
                 lang_summary.score
             ));
@@ -190,8 +190,8 @@ fn write_package_health(report: &mut String, summary: &RepoSummary, is_workspace
     }
 }
 
-fn write_emergencies(report: &mut String, files: &[FileHealth], limit: usize, base_dir: &Path) {
-    let mut lang_map: HashMap<Language, Vec<&FileHealth>> = HashMap::new();
+fn write_emergencies(report: &mut String, files: &[FileSimplicity], limit: usize, base_dir: &Path) {
+    let mut lang_map: HashMap<Language, Vec<&FileSimplicity>> = HashMap::new();
     for f in files {
         lang_map.entry(f.language).or_default().push(f);
     }
@@ -204,7 +204,7 @@ fn write_emergencies(report: &mut String, files: &[FileHealth], limit: usize, ba
         let display_limit = std::cmp::min(limit, lang_files.len());
 
         report.push_str(&format!(
-            "## Top {display_limit} {} Code Health Issues (Lowest Health Scores)\n\n",
+            "## Top {display_limit} {} Code Complexity Issues (Lowest Simplicity)\n\n",
             lang.display_name()
         ));
 
@@ -235,7 +235,7 @@ fn write_emergencies(report: &mut String, files: &[FileHealth], limit: usize, ba
     }
 }
 
-fn identify_culprit(f: &FileHealth) -> &'static str {
+fn identify_culprit(f: &FileSimplicity) -> &'static str {
     if f.cognitive > 20.0 {
         "High Cognitive Complexity"
     } else if f.cyclomatic > 20.0 {
@@ -264,7 +264,7 @@ mod tests {
     #[test]
     fn test_create_report_structure() {
         let files = vec![
-            FileHealth {
+            FileSimplicity {
                 path: "pkg1/file1.rs".to_string(),
                 language: Language::Rust,
                 score: 80.0,
@@ -273,7 +273,7 @@ mod tests {
                 sloc: 100.0,
                 mi: 100.0,
             },
-            FileHealth {
+            FileSimplicity {
                 path: "pkg2/file2.rs".to_string(),
                 language: Language::Rust,
                 score: 40.0,
@@ -285,15 +285,15 @@ mod tests {
         ];
 
         let report = create_report_md(&files, false, 10, Path::new("."), "test_project");
-        assert!(report.contains("# Code Health Metrics: test_project"));
-        assert!(report.contains("## Overall Repository Health: **60%**"));
-        assert!(report.contains("## Rust Health"));
+        assert!(report.contains("# Code Simplicity Metrics: test_project"));
+        assert!(report.contains("## Overall Repository Simplicity: **60%**"));
+        assert!(report.contains("## Rust Simplicity"));
     }
 
     #[test]
     fn test_report_multi_language_emergencies() {
         let files = vec![
-            FileHealth {
+            FileSimplicity {
                 path: "file1.rs".to_string(),
                 language: Language::Rust,
                 score: 50.0,
@@ -302,7 +302,7 @@ mod tests {
                 sloc: 100.0,
                 mi: 50.0,
             },
-            FileHealth {
+            FileSimplicity {
                 path: "file2.py".to_string(),
                 language: Language::Python,
                 score: 40.0,
@@ -315,8 +315,8 @@ mod tests {
 
         let report = create_report_md(&files, false, 10, Path::new("."), "test_multi");
 
-        assert!(report.contains("## Top 1 Rust Code Health Issues"));
-        assert!(report.contains("## Top 1 Python Code Health Issues"));
+        assert!(report.contains("## Top 1 Rust Code Complexity Issues"));
+        assert!(report.contains("## Top 1 Python Code Complexity Issues"));
         assert!(report.contains("file1.rs"));
         assert!(report.contains("file2.py"));
         // Ensure the redundant (Language) label is removed from the item lines
