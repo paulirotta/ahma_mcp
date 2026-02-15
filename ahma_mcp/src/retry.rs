@@ -23,7 +23,7 @@
 //! }).await;
 //! ```
 
-use rand::Rng;
+use rand::RngExt;
 use std::future::Future;
 use std::time::Duration;
 
