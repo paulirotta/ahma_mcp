@@ -161,20 +161,33 @@ This modular architecture ensures clean separation of concerns and enables futur
 
    In your global `mcp.json` file add the following (e.g., Mac: `~/Library/Application Support/Code/User/mcp.json` or `~/Library/Application Support/Cursor/User/mcp.json`, or Linux: `~/.config/Code/User/mcp.json` or `~/.config/Cursor/User/mcp.json`).
 
-   Update paths as needed. Use `--sync` flag if you want synchronous execution by default.
+  Update paths as needed. Use absolute paths (do not rely on `~` expansion). Use `--sync` if you want synchronous execution by default.
 
    ```json
    {
      "servers": {
        "Ahma": {
          "type": "stdio",
-         "cwd": "~/github/ahma_mcp/",
-         "command": "~/github/ahma_mcp/target/release/ahma_mcp",
-         "args": ["--tools-dir", "~/github/ahma_mcp/.ahma/tools"]
+         "cwd": "/Users/yourname/workspace/project",
+         "command": "/Users/yourname/github/ahma_mcp/target/release/ahma_mcp",
+         "args": ["--tools-dir", "/Users/yourname/github/ahma_mcp/.ahma/tools"]
+       },
+       "chrome-devtools": {
+         "type": "stdio",
+         "command": "npx",
+         "args": [
+           "-y",
+           "chrome-devtools-mcp@latest",
+           "--no-performance-crux",
+           "--no-usage-statistics"
+         ]
        }
      }
    }
    ```
+
+  Note: each server must be nested under its own key in `servers`.
+  Also use the binary path directly for `command` (do not wrap it with `bash` unless you intentionally run a shell script).
 
 3. **Run tests to verify installation**:
 
@@ -202,11 +215,10 @@ HTTP server that proxies requests to the stdio MCP server:
 
 ```bash
 # Start HTTP bridge on default port (3000)
-# Sandbox scope defaults to current working directory
-cd /path/to/your/project
+# Clients that provide roots/list can lock sandbox from roots
 ahma_mcp --mode http
 
-# Explicit sandbox scope (recommended for scripts)
+# Explicit sandbox scope (required for clients that do not send roots/list)
 ahma_mcp --mode http --sandbox-scope /path/to/your/project
 
 # Or via environment variable
@@ -218,7 +230,7 @@ ahma_mcp --mode http --http-port 8080 --http-host 127.0.0.1
 ```
 
 **Important**: In HTTP mode, sandbox scope is bound **per client session** via the MCP `roots/list` protocol.
-`--sandbox-scope` (or `AHMA_SANDBOX_SCOPE`) is used only as a fallback if the client provides no roots.
+If a client does not provide roots/list, you **must** configure an explicit scope via `--sandbox-scope` or `AHMA_SANDBOX_SCOPE`.
 
 **Security Note**: HTTP mode is for local development only. Do not expose to untrusted networks.
 

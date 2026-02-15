@@ -257,14 +257,20 @@ fn check_sandbox_lock(session_manager: &SessionManager, session_id: &str) -> Opt
     );
 
     if let Some(elapsed_secs) = session.is_handshake_timed_out() {
+        let roots_requirement = if session_manager.requires_client_roots() {
+            "No explicit server sandbox scope is configured; client roots/list is required."
+        } else {
+            "Server has explicit fallback sandbox scope configured for no-roots clients."
+        };
+
         let error_msg = format!(
             "Handshake timeout after {}s - sandbox not locked. \
                 SSE connected: {}, MCP initialized: {}. \
                 Ensure client: 1) opens SSE stream (GET /mcp with session header), \
                 2) sends notifications/initialized, \
-                3) responds to roots/list request over SSE. \
+                3) responds to roots/list request over SSE. {} \
                 Use --handshake-timeout-secs to adjust timeout.",
-            elapsed_secs, sse_connected, mcp_initialized
+            elapsed_secs, sse_connected, mcp_initialized, roots_requirement
         );
 
         error!(
@@ -280,12 +286,14 @@ fn check_sandbox_lock(session_manager: &SessionManager, session_id: &str) -> Opt
         ));
     }
 
+    let conflict_message = if session_manager.requires_client_roots() {
+        "Sandbox initializing from client roots. This server requires roots/list from client; configure --sandbox-scope for clients without roots support."
+    } else {
+        "Sandbox initializing from client roots or explicit fallback scope - retry tools/call after handshake completes"
+    };
+
     Some(with_session_header(
-        error_response_with_status(
-            StatusCode::CONFLICT,
-            -32001,
-            "Sandbox initializing from client roots - retry tools/call after roots/list completes",
-        ),
+        error_response_with_status(StatusCode::CONFLICT, -32001, conflict_message),
         session_id,
     ))
 }

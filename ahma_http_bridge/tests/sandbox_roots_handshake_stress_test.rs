@@ -12,7 +12,7 @@ async fn test_handshake_state_machine_transitions() {
     let config = SessionManagerConfig {
         server_command: "true".to_string(), // No-op command
         server_args: vec![],
-        default_scope: std::path::PathBuf::from("."),
+        default_scope: Some(std::path::PathBuf::from(".")),
         enable_colored_output: false,
         handshake_timeout_secs: 5,
     };
@@ -56,7 +56,7 @@ async fn test_handshake_state_machine_race_condition_stress() {
     let config = SessionManagerConfig {
         server_command: "sh".to_string(), // Use sh to ignore extra args
         server_args: vec!["-c".to_string(), "sleep 10".to_string()],
-        default_scope: std::path::PathBuf::from("."),
+        default_scope: Some(std::path::PathBuf::from(".")),
         enable_colored_output: false,
         handshake_timeout_secs: 5,
     };

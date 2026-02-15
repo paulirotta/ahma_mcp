@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use tempfile::tempdir;
 
 /// Helper to create a test session manager with echo as subprocess
-fn create_test_session_manager(default_scope: PathBuf) -> SessionManager {
+fn create_test_session_manager(default_scope: Option<PathBuf>) -> SessionManager {
     let config = SessionManagerConfig {
         server_command: "echo".to_string(),
         server_args: vec!["test".to_string()],
@@ -35,7 +35,7 @@ fn create_test_session_manager(default_scope: PathBuf) -> SessionManager {
 #[tokio::test]
 async fn test_uri_percent_encoding_decoding() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     let session_id = session_manager
         .create_session()
@@ -73,7 +73,7 @@ async fn test_uri_percent_encoding_decoding() {
 #[tokio::test]
 async fn test_uri_localhost_form() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     let session_id = session_manager
         .create_session()
@@ -111,7 +111,7 @@ async fn test_uri_localhost_form() {
 #[tokio::test]
 async fn test_uri_query_and_fragment_stripped() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     let session_id = session_manager
         .create_session()
@@ -149,7 +149,7 @@ async fn test_uri_query_and_fragment_stripped() {
 #[tokio::test]
 async fn test_non_file_uri_rejected() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     let session_id = session_manager
         .create_session()
@@ -171,7 +171,7 @@ async fn test_non_file_uri_rejected() {
 
     let err_msg = result.unwrap_err().to_string();
     assert!(
-        err_msg.contains("No valid sandbox roots"),
+        err_msg.contains("No valid file:// sandbox roots"),
         "Error should mention no valid roots: {}",
         err_msg
     );
@@ -181,7 +181,7 @@ async fn test_non_file_uri_rejected() {
 #[tokio::test]
 async fn test_relative_path_rejected() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     let session_id = session_manager
         .create_session()
@@ -203,7 +203,7 @@ async fn test_relative_path_rejected() {
 #[tokio::test]
 async fn test_malformed_percent_encoding_rejected() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     let session_id = session_manager
         .create_session()
@@ -230,7 +230,7 @@ async fn test_malformed_percent_encoding_rejected() {
 #[tokio::test]
 async fn test_mixed_valid_invalid_roots() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     let session_id = session_manager
         .create_session()
@@ -291,7 +291,7 @@ async fn test_mixed_valid_invalid_roots() {
 #[tokio::test]
 async fn test_handshake_timeout_returns_none_when_locked() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     let session_id = session_manager
         .create_session()
@@ -323,7 +323,7 @@ async fn test_handshake_timeout_returns_none_when_locked() {
 #[tokio::test]
 async fn test_handshake_not_timed_out_initially() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     let session_id = session_manager
         .create_session()
@@ -350,7 +350,7 @@ async fn test_handshake_not_timed_out_initially() {
 #[tokio::test]
 async fn test_get_sandbox_scope_returns_first() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     let session_id = session_manager
         .create_session()
@@ -399,7 +399,7 @@ async fn test_get_sandbox_scope_returns_first() {
 #[tokio::test]
 async fn test_session_count_tracking() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     assert_eq!(session_manager.session_count(), 0, "Initially no sessions");
 
@@ -438,7 +438,7 @@ async fn test_session_count_tracking() {
 #[tokio::test]
 async fn test_send_message_nonexistent_session() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     let fake_session_id = "nonexistent-session-id";
     let message = serde_json::json!({"test": "message"});
@@ -461,7 +461,7 @@ async fn test_send_message_nonexistent_session() {
 #[tokio::test]
 async fn test_send_request_nonexistent_session() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     let fake_session_id = "nonexistent-session-id";
     let request = serde_json::json!({
@@ -488,7 +488,7 @@ async fn test_send_request_nonexistent_session() {
 #[tokio::test]
 async fn test_send_message_terminated_session() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     let session_id = session_manager.create_session().await.unwrap();
 
@@ -510,7 +510,7 @@ async fn test_send_message_terminated_session() {
 #[tokio::test]
 async fn test_roots_changed_before_lock_allowed() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     let session_id = session_manager.create_session().await.unwrap();
 
@@ -537,7 +537,7 @@ async fn test_roots_changed_before_lock_allowed() {
 #[tokio::test]
 async fn test_termination_reasons() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     // Test each termination reason
     let reasons = [
@@ -569,7 +569,7 @@ async fn test_termination_reasons() {
 #[tokio::test]
 async fn test_terminate_nonexistent_session_noop() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     let result = session_manager
         .terminate_session("nonexistent", SessionTerminationReason::ClientRequested)
@@ -589,7 +589,7 @@ async fn test_terminate_nonexistent_session_noop() {
 #[tokio::test]
 async fn test_session_handshake_state_queries() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     let session_id = session_manager.create_session().await.unwrap();
     let session = session_manager.get_session(&session_id).unwrap();
@@ -616,7 +616,7 @@ async fn test_session_handshake_state_queries() {
 #[tokio::test]
 async fn test_session_subscribe() {
     let temp = tempdir().expect("Failed to create temp dir");
-    let session_manager = create_test_session_manager(temp.path().to_path_buf());
+    let session_manager = create_test_session_manager(Some(temp.path().to_path_buf()));
 
     let session_id = session_manager.create_session().await.unwrap();
     let session = session_manager.get_session(&session_id).unwrap();

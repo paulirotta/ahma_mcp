@@ -25,10 +25,10 @@ struct Args {
     #[arg(long, default_value = "127.0.0.1:3000")]
     bind_addr: SocketAddr,
 
-    /// Default sandbox scope if client provides no workspace roots.
-    /// Only used in session isolation mode.
-    #[arg(long, default_value = ".")]
-    default_sandbox_scope: PathBuf,
+    /// Explicit fallback sandbox scope if client provides no workspace roots.
+    /// If omitted, clients must provide roots/list.
+    #[arg(long)]
+    default_sandbox_scope: Option<PathBuf>,
 
     /// Command to run the MCP server subprocess.
     /// If not specified, auto-detects local debug binary or uses 'ahma_mcp'.

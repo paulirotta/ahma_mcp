@@ -13,7 +13,7 @@ use ahma_http_bridge::session::{McpRoot, SessionManager, SessionManagerConfig};
 use std::path::PathBuf;
 
 /// Helper to create a SessionManager with test configuration
-fn create_test_session_manager(default_scope: PathBuf) -> SessionManager {
+fn create_test_session_manager(default_scope: Option<PathBuf>) -> SessionManager {
     let config = SessionManagerConfig {
         server_command: "echo".to_string(), // Use echo as a safe subprocess
         server_args: vec!["test".to_string()],
@@ -42,7 +42,7 @@ async fn test_sandbox_scope_should_use_client_roots_not_server_cwd() {
     // Client's workspace is a different project
     let client_workspace = PathBuf::from("/Users/paul/github/nb_lifeline3/android_lifeline");
 
-    let session_manager = create_test_session_manager(server_default_scope.clone());
+    let session_manager = create_test_session_manager(Some(server_default_scope.clone()));
 
     // Create a session
     let session_id = session_manager
@@ -87,8 +87,7 @@ async fn test_sandbox_scope_should_use_client_roots_not_server_cwd() {
 /// valid file:// URI.
 #[tokio::test]
 async fn test_sandbox_scope_rejects_empty_roots() {
-    let server_default_scope = PathBuf::from("/tmp/server_workspace");
-    let session_manager = create_test_session_manager(server_default_scope.clone());
+    let session_manager = create_test_session_manager(None);
 
     let session_id = session_manager
         .create_session()
@@ -123,7 +122,7 @@ async fn test_sandbox_scope_rejects_empty_roots() {
 #[tokio::test]
 async fn test_sandbox_scope_immutable_after_lock() {
     let server_default_scope = PathBuf::from("/tmp/server");
-    let session_manager = create_test_session_manager(server_default_scope);
+    let session_manager = create_test_session_manager(Some(server_default_scope));
 
     let session_id = session_manager
         .create_session()
@@ -166,7 +165,7 @@ async fn test_sandbox_scope_immutable_after_lock() {
 #[tokio::test]
 async fn test_roots_change_terminates_session_after_lock() {
     let server_default_scope = PathBuf::from("/tmp/server");
-    let session_manager = create_test_session_manager(server_default_scope);
+    let session_manager = create_test_session_manager(Some(server_default_scope));
 
     let session_id = session_manager
         .create_session()
@@ -203,7 +202,7 @@ async fn test_roots_change_terminates_session_after_lock() {
 #[tokio::test]
 async fn test_multiple_sessions_have_independent_sandbox_scopes() {
     let server_default_scope = PathBuf::from("/tmp/server");
-    let session_manager = create_test_session_manager(server_default_scope);
+    let session_manager = create_test_session_manager(Some(server_default_scope));
 
     // Create two sessions (simulating two VS Code windows)
     let session1_id = session_manager
@@ -267,7 +266,7 @@ async fn test_multiple_sessions_have_independent_sandbox_scopes() {
 #[tokio::test]
 async fn test_file_uri_prefix_correctly_stripped() {
     let server_default_scope = PathBuf::from("/tmp/server");
-    let session_manager = create_test_session_manager(server_default_scope);
+    let session_manager = create_test_session_manager(Some(server_default_scope));
 
     let session_id = session_manager
         .create_session()
@@ -306,7 +305,7 @@ async fn test_file_uri_prefix_correctly_stripped() {
 #[tokio::test]
 async fn test_session_termination_removes_session() {
     let server_default_scope = PathBuf::from("/tmp/server");
-    let session_manager = create_test_session_manager(server_default_scope);
+    let session_manager = create_test_session_manager(Some(server_default_scope));
 
     let session_id = session_manager
         .create_session()

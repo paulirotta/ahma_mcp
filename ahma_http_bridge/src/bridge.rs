@@ -33,8 +33,8 @@ use tracing::{debug, error, info, warn};
 ///     bind_addr: "0.0.0.0:8080".parse().unwrap(),
 ///     server_command: "/usr/local/bin/my-mcp-server".into(),
 ///     server_args: vec!["--verbose".into()],
-///     // Security: Always set a restrictive default scope!
-///     default_sandbox_scope: PathBuf::from("/tmp/sandbox"),
+///     // Optional explicit fallback scope for clients without roots support
+///     default_sandbox_scope: Some(PathBuf::from("/tmp/sandbox")),
 ///     ..Default::default()
 /// };
 /// ```
@@ -55,12 +55,10 @@ pub struct BridgeConfig {
     /// If false, colors are stripped or disabled depending on the subprocess behavior.
     pub enable_colored_output: bool,
 
-    /// Fallback sandbox directory used if the client does not provide workspace roots.
+    /// Explicit fallback sandbox directory for clients that do not provide workspace roots.
     ///
-    /// In session isolation mode, each session gets a unique subprocess. If the client
-    /// handshake doesn't specify roots (e.g. empty `roots/list` response), this path
-    /// limits the subprocess's file access.
-    pub default_sandbox_scope: PathBuf,
+    /// If `None`, clients must provide roots/list to complete handshake and unlock tools.
+    pub default_sandbox_scope: Option<PathBuf>,
 
     /// Timeout in seconds for the MCP handshake to complete.
     /// If the handshake (SSE connection + roots/list response) doesn't complete
@@ -76,7 +74,7 @@ impl Default for BridgeConfig {
             server_command: "ahma_mcp".to_string(),
             server_args: vec![],
             enable_colored_output: false,
-            default_sandbox_scope: PathBuf::from("."),
+            default_sandbox_scope: None,
             handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
         }
     }
@@ -379,7 +377,7 @@ mod tests {
             server_command: "custom_server".to_string(),
             server_args: vec!["--arg1".to_string(), "value1".to_string()],
             enable_colored_output: false,
-            default_sandbox_scope: PathBuf::from("/tmp"),
+            default_sandbox_scope: Some(PathBuf::from("/tmp")),
             handshake_timeout_secs: 10,
         };
         assert_eq!(config.bind_addr.to_string(), "0.0.0.0:8080");
@@ -492,7 +490,7 @@ for line in sys.stdin:
         let session_manager = Arc::new(SessionManager::new(SessionManagerConfig {
             server_command: "python3".to_string(),
             server_args: vec![script_path.to_string_lossy().to_string()],
-            default_scope: temp_dir.path().to_path_buf(),
+            default_scope: Some(temp_dir.path().to_path_buf()),
             enable_colored_output: false,
             handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
         }));
@@ -643,7 +641,7 @@ for line in sys.stdin:
         let session_manager = Arc::new(SessionManager::new(SessionManagerConfig {
             server_command: "python3".to_string(),
             server_args: vec![script_path.to_string_lossy().to_string()],
-            default_scope: temp_dir.path().to_path_buf(),
+            default_scope: Some(temp_dir.path().to_path_buf()),
             enable_colored_output: false,
             handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
         }));
