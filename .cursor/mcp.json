@@ -2,9 +2,10 @@
     "mcpServers": {
         "Ahma": {
             "type": "stdio",
-            "command": "/Users/phoughton/github/ahma_mcp/target/release/ahma_mcp",
+            "command": "bash",
             "args": [
-                "--log-to-stderr"
+                "-c",
+                "\"$HOME/github/ahma_mcp/target/release/ahma_mcp\" --log-to-stderr"
             ]
         }
     }

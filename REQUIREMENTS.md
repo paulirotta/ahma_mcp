@@ -45,7 +45,7 @@ _"Create agents from your command line tools with one JSON file, then watch them
 
 | Tech | Version | Purpose |
 |------|---------|---------|
-| Rust | 2024 Edition (1.90+) | Core language |
+| Rust | 2024 Edition (1.93+) | Core language |
 | rmcp | 0.13.0 | MCP protocol implementation |
 | Tokio | 1.x | Async runtime |
 | Landlock | 0.4.4 | Linux kernel sandboxing |
@@ -795,7 +795,7 @@ fn test_file_processing() {
 ### 13.1 Prerequisites
 
 ```bash
-# Rust 1.90+ required
+# Rust 1.93+ required
 rustup update stable
 
 # Build

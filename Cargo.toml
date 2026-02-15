@@ -23,7 +23,7 @@ authors = ["Paul Houghton <paulirotta@gmail.com>"]
 edition = "2024"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-rust-version = "1.90.0"
+rust-version = "1.93.1"
 version = "0.4.5"
 
 [workspace.dependencies]
