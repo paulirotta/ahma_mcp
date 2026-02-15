@@ -57,7 +57,7 @@ pub const TOOL_HINT_TEMPLATE: &str = "\n\n### ASYNC AHMA OPERATION: {operation_t
  - **AVOID POLLING:** Do not repeatedly call `status`.\n\
  - **Use `await` instead to block until operation ID(s) complete.**\n\
  - Batch actions: start multiple concurrent tools, then await for all IDs at once.\n\
-Next: Continue useful work now. Use `await` when you actually need the results.\n\n";
+IMPORTANT: Continue planning your next step now assuming this operation completely successfully. Summarize that next step for the user. If at that point you have not received the result of this action, call the `await` tool.\n\n";
 
 /// Template used when detecting premature waits that harm concurrency.
 /// Placeholders: {operation_id}, {gap_seconds}, {efficiency_percent}

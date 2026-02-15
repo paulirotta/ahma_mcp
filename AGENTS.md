@@ -14,7 +14,7 @@ This file provides AI-specific development guidance for the `ahma_mcp` project. 
 ## Setup Commands
 
 ### Prerequisites
-- Rust 1.90+ (install via [rustup](https://rustup.rs/))
+- Rust 1.93+ (install via [rustup](https://rustup.rs/))
 - Platform-specific sandbox requirements:
   - **Linux**: Kernel 5.13+ (Landlock support)
   - **macOS**: Any modern version (`sandbox-exec` is built-in)

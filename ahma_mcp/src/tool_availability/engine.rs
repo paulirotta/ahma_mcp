@@ -133,45 +133,56 @@ impl ProbePlan {
         check: Option<&AvailabilityCheck>,
         target: ProbeCommandTarget<'_>,
     ) -> Vec<String> {
-        let mut command = Self::base_command(config, check);
+        let mut command = match check.and_then(|probe| probe.command.as_ref()) {
+            Some(cmd) => Self::split_command(cmd),
+            None => Self::split_command(&config.command),
+        };
 
         match target {
-            ProbeCommandTarget::Tool => match check {
-                Some(probe) => command.extend(probe.args.clone()),
-                None => {
-                    let base = command
-                        .first()
-                        .cloned()
-                        .filter(|segment| !segment.is_empty())
-                        .unwrap_or_else(|| config.name.clone());
-                    command = vec!["/usr/bin/env".to_string(), "which".to_string(), base];
-                }
-            },
+            ProbeCommandTarget::Tool => Self::apply_tool_probe_logic(&mut command, config, check),
             ProbeCommandTarget::Subcommand {
                 path,
                 has_own_check,
-            } => {
-                let skip_subcommand_args = check
-                    .map(|probe| probe.skip_subcommand_args)
-                    .unwrap_or(false);
-                if !skip_subcommand_args && !has_own_check {
-                    command.extend(path.iter().filter(|segment| !segment.is_empty()).cloned());
-                }
-
-                match check {
-                    Some(probe) => command.extend(probe.args.clone()),
-                    None => command.push("--help".to_string()),
-                }
-            }
+            } => Self::apply_subcommand_probe_logic(&mut command, check, path, has_own_check),
         }
 
         command
     }
 
-    fn base_command(config: &ToolConfig, check: Option<&AvailabilityCheck>) -> Vec<String> {
-        match check.and_then(|probe| probe.command.as_ref()) {
-            Some(command) => Self::split_command(command),
-            None => Self::split_command(&config.command),
+    fn apply_tool_probe_logic(
+        command: &mut Vec<String>,
+        config: &ToolConfig,
+        check: Option<&AvailabilityCheck>,
+    ) {
+        match check {
+            Some(probe) => command.extend(probe.args.clone()),
+            None => {
+                let base = command
+                    .first()
+                    .cloned()
+                    .filter(|segment| !segment.is_empty())
+                    .unwrap_or_else(|| config.name.clone());
+                *command = vec!["/usr/bin/env".to_string(), "which".to_string(), base];
+            }
+        }
+    }
+
+    fn apply_subcommand_probe_logic(
+        command: &mut Vec<String>,
+        check: Option<&AvailabilityCheck>,
+        path: &[String],
+        has_own_check: bool,
+    ) {
+        let skip_subcommand_args = check
+            .map(|probe| probe.skip_subcommand_args)
+            .unwrap_or(false);
+        if !skip_subcommand_args && !has_own_check {
+            command.extend(path.iter().filter(|segment| !segment.is_empty()).cloned());
+        }
+
+        match check {
+            Some(probe) => command.extend(probe.args.clone()),
+            None => command.push("--help".to_string()),
         }
     }
 
@@ -226,12 +237,7 @@ impl ProbePlan {
     }
 
     async fn execute_direct(&self) -> crate::shell_pool::ShellResponse {
-        let mut cmd_iter = self.command.iter();
-        let program = cmd_iter
-            .next()
-            .cloned()
-            .unwrap_or_else(|| "true".to_string());
-        let args: Vec<String> = cmd_iter.cloned().collect();
+        let (program, args) = self.prepare_direct_command();
 
         let mut command = tokio::process::Command::new(&program);
         command.args(&args).current_dir(&self.working_dir);
@@ -239,7 +245,35 @@ impl ProbePlan {
         let timeout_duration = Duration::from_millis(self.timeout_ms);
         let result = timeout(timeout_duration, command.output()).await;
 
-        let (exit_code, stdout, stderr) = match result {
+        let (exit_code, stdout, stderr) = self.process_direct_output(result);
+
+        crate::shell_pool::ShellResponse {
+            id: format!("direct-availability-{:?}", self.target),
+            exit_code,
+            stdout,
+            stderr,
+            duration_ms: 0,
+        }
+    }
+
+    fn prepare_direct_command(&self) -> (String, Vec<String>) {
+        let mut cmd_iter = self.command.iter();
+        let program = cmd_iter
+            .next()
+            .cloned()
+            .unwrap_or_else(|| "true".to_string());
+        let args: Vec<String> = cmd_iter.cloned().collect();
+        (program, args)
+    }
+
+    fn process_direct_output(
+        &self,
+        result: Result<
+            std::result::Result<std::process::Output, std::io::Error>,
+            tokio::time::error::Elapsed,
+        >,
+    ) -> (i32, String, String) {
+        match result {
             Ok(Ok(output)) => (
                 output.status.code().unwrap_or(-1),
                 String::from_utf8_lossy(&output.stdout).to_string(),
@@ -251,19 +285,69 @@ impl ProbePlan {
                 String::new(),
                 format!("probe timed out after {}ms", self.timeout_ms),
             ),
-        };
-
-        crate::shell_pool::ShellResponse {
-            id: format!("direct-availability-{:?}", self.target),
-            exit_code,
-            stdout,
-            stderr,
-            duration_ms: 0,
         }
     }
 }
 
 impl ProbeOutcome {
+    fn update_config(&self, configs: &mut HashMap<String, ToolConfig>) {
+        if self.success {
+            return;
+        }
+
+        match &self.plan.target {
+            ProbeTarget::Tool { name } => {
+                if let Some(config) = configs.get_mut(name) {
+                    config.enabled = false;
+                }
+            }
+            ProbeTarget::Subcommand { tool, path } => {
+                if let Some(config) = configs.get_mut(tool)
+                    && let Some(subcommands) = config.subcommand.as_mut()
+                    && let Some(sub) = find_subcommand_mut_in(subcommands.as_mut_slice(), path)
+                {
+                    sub.enabled = false;
+                }
+            }
+        }
+    }
+
+    fn to_disabled_items(&self) -> (Option<DisabledTool>, Option<DisabledSubcommand>) {
+        if self.success {
+            return (None, None);
+        }
+
+        match &self.plan.target {
+            ProbeTarget::Tool { name } => {
+                let label = format!("Tool '{}'", name);
+                let message = self.log_and_build_message(&label, name);
+                (
+                    Some(DisabledTool {
+                        name: name.clone(),
+                        message,
+                        install_instructions: self.plan.install_instructions.clone(),
+                    }),
+                    None,
+                )
+            }
+            ProbeTarget::Subcommand { tool, path } => {
+                let joined_path = path.join("_");
+                let label = format!("Subcommand '{}::{}'", tool, joined_path);
+                let install_label = format!("{}::{}", tool, joined_path);
+                let message = self.log_and_build_message(&label, &install_label);
+                (
+                    None,
+                    Some(DisabledSubcommand {
+                        tool: tool.clone(),
+                        subcommand_path: joined_path,
+                        message,
+                        install_instructions: self.plan.install_instructions.clone(),
+                    }),
+                )
+            }
+        }
+    }
+
     fn log_and_build_message(&self, label: &str, install_label: &str) -> String {
         let stdout = self.stdout.trim();
         let stderr = self.stderr.trim();
@@ -351,38 +435,14 @@ fn process_probe_outcomes(
             continue;
         }
 
-        match outcome.plan.target.clone() {
-            ProbeTarget::Tool { name } => {
-                if let Some(config) = filtered_configs.get_mut(&name) {
-                    config.enabled = false;
-                }
-                let label = format!("Tool '{}'", name);
-                let message = outcome.log_and_build_message(&label, &name);
-                disabled_tools.push(DisabledTool {
-                    name,
-                    message,
-                    install_instructions: outcome.plan.install_instructions.clone(),
-                });
-            }
-            ProbeTarget::Subcommand { tool, path } => {
-                if let Some(config) = filtered_configs.get_mut(&tool)
-                    && let Some(subcommands) = config.subcommand.as_mut()
-                    && let Some(sub) = find_subcommand_mut_in(subcommands.as_mut_slice(), &path)
-                {
-                    sub.enabled = false;
-                }
+        outcome.update_config(filtered_configs);
+        let (tool, sub) = outcome.to_disabled_items();
 
-                let joined_path = path.join("_");
-                let label = format!("Subcommand '{}::{}'", tool, joined_path);
-                let install_label = format!("{}::{}", tool, joined_path);
-                let message = outcome.log_and_build_message(&label, &install_label);
-                disabled_subcommands.push(DisabledSubcommand {
-                    tool,
-                    subcommand_path: joined_path,
-                    message,
-                    install_instructions: outcome.plan.install_instructions.clone(),
-                });
-            }
+        if let Some(t) = tool {
+            disabled_tools.push(t);
+        }
+        if let Some(s) = sub {
+            disabled_subcommands.push(s);
         }
     }
 
@@ -488,22 +548,13 @@ fn find_subcommand_mut_in<'a>(
     subcommands: &'a mut [SubcommandConfig],
     path: &[String],
 ) -> Option<&'a mut SubcommandConfig> {
-    if path.is_empty() {
-        return None;
+    let (segment, rest) = path.split_first()?;
+    let sub = subcommands.iter_mut().find(|s| s.name == *segment)?;
+
+    if rest.is_empty() {
+        return Some(sub);
     }
 
-    let (segment, rest) = path.split_first()?;
-    for sub in subcommands.iter_mut() {
-        if sub.name == *segment {
-            if rest.is_empty() {
-                return Some(sub);
-            }
-            if let Some(children) = sub.subcommand.as_mut()
-                && let Some(found) = find_subcommand_mut_in(children.as_mut_slice(), rest)
-            {
-                return Some(found);
-            }
-        }
-    }
-    None
+    let children = sub.subcommand.as_mut()?;
+    find_subcommand_mut_in(children.as_mut_slice(), rest)
 }
