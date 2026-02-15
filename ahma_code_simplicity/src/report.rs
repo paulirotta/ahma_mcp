@@ -219,7 +219,7 @@ fn write_emergencies(report: &mut String, files: &[FileSimplicity], limit: usize
                 .unwrap_or_else(|| rel_str.to_string());
 
             report.push_str(&format!(
-                "{}. **{}**: {:.0}% ({})**\n\t{}\n",
+                "{}. **{}**: Simplicity: {:.0}% ({})**\n\t{}\n",
                 i + 1,
                 basename,
                 f.score,
