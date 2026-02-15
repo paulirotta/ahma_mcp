@@ -237,6 +237,21 @@ async fn http_roots_handshake_then_tool_call_defaults_to_root() {
 
     assert!(roots_resp.status().is_success() || roots_resp.status().as_u16() == 202);
 
+    // Wait until the server confirms sandbox lock before issuing tools/call.
+    // This avoids a race where the fallback scope is still active briefly.
+    timeout(Duration::from_secs(10), async {
+        loop {
+            if let Some(msg) = rx.recv().await
+                && msg.get("method").and_then(|m| m.as_str())
+                    == Some("notifications/sandbox/configured")
+            {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("timed out waiting for notifications/sandbox/configured");
+
     // 6) Call sandboxed_shell with pwd, retrying if the bridge still says initializing.
     // sandboxed_shell is always available (built-in), so this tests core handshake functionality.
     let tool_call = json!({
