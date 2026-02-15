@@ -289,22 +289,50 @@ impl ProbePlan {
     }
 }
 
+impl ProbeTarget {
+    fn tool_name(&self) -> &str {
+        match self {
+            ProbeTarget::Tool { name } => name,
+            ProbeTarget::Subcommand { tool, .. } => tool,
+        }
+    }
+
+    fn label(&self) -> String {
+        match self {
+            ProbeTarget::Tool { name } => format!("Tool '{}'", name),
+            ProbeTarget::Subcommand { tool, path } => {
+                format!("Subcommand '{}::{}'", tool, path.join("_"))
+            }
+        }
+    }
+
+    fn install_label(&self) -> String {
+        match self {
+            ProbeTarget::Tool { name } => name.clone(),
+            ProbeTarget::Subcommand { tool, path } => format!("{}::{}", tool, path.join("_")),
+        }
+    }
+}
+
 impl ProbeOutcome {
     fn update_config(&self, configs: &mut HashMap<String, ToolConfig>) {
         if self.success {
             return;
         }
 
+        let tool_name = self.plan.target.tool_name();
+        let config = match configs.get_mut(tool_name) {
+            Some(c) => c,
+            None => return,
+        };
+
         match &self.plan.target {
-            ProbeTarget::Tool { name } => {
-                if let Some(config) = configs.get_mut(name) {
-                    config.enabled = false;
-                }
+            ProbeTarget::Tool { .. } => {
+                config.enabled = false;
             }
-            ProbeTarget::Subcommand { tool, path } => {
-                if let Some(config) = configs.get_mut(tool)
-                    && let Some(subcommands) = config.subcommand.as_mut()
-                    && let Some(sub) = find_subcommand_mut_in(subcommands.as_mut_slice(), path)
+            ProbeTarget::Subcommand { path, .. } => {
+                if let Some(subcommands) = config.subcommand.as_mut()
+                    && let Some(sub) = find_subcommand_mut_in(subcommands, path)
                 {
                     sub.enabled = false;
                 }
@@ -317,42 +345,49 @@ impl ProbeOutcome {
             return (None, None);
         }
 
+        let label = self.plan.target.label();
+        let install_label = self.plan.target.install_label();
+        let message = self.log_and_build_message(&label, &install_label);
+        let instructions = self.plan.install_instructions.clone();
+
         match &self.plan.target {
-            ProbeTarget::Tool { name } => {
-                let label = format!("Tool '{}'", name);
-                let message = self.log_and_build_message(&label, name);
-                (
-                    Some(DisabledTool {
-                        name: name.clone(),
-                        message,
-                        install_instructions: self.plan.install_instructions.clone(),
-                    }),
-                    None,
-                )
-            }
-            ProbeTarget::Subcommand { tool, path } => {
-                let joined_path = path.join("_");
-                let label = format!("Subcommand '{}::{}'", tool, joined_path);
-                let install_label = format!("{}::{}", tool, joined_path);
-                let message = self.log_and_build_message(&label, &install_label);
-                (
-                    None,
-                    Some(DisabledSubcommand {
-                        tool: tool.clone(),
-                        subcommand_path: joined_path,
-                        message,
-                        install_instructions: self.plan.install_instructions.clone(),
-                    }),
-                )
-            }
+            ProbeTarget::Tool { name } => (
+                Some(DisabledTool {
+                    name: name.clone(),
+                    message,
+                    install_instructions: instructions,
+                }),
+                None,
+            ),
+            ProbeTarget::Subcommand {
+                tool,
+                path: _path, // path is unused here as we use helpers for labels
+            } => (
+                None,
+                Some(DisabledSubcommand {
+                    tool: tool.clone(),
+                    subcommand_path: install_label
+                        .strip_prefix(&format!("{}::", tool))
+                        .unwrap_or(&install_label)
+                        .to_string(),
+                    message,
+                    install_instructions: instructions,
+                }),
+            ),
         }
     }
 
     fn log_and_build_message(&self, label: &str, install_label: &str) -> String {
-        let stdout = self.stdout.trim();
-        let stderr = self.stderr.trim();
-        let stdout = if stdout.is_empty() { "<empty>" } else { stdout };
-        let stderr = if stderr.is_empty() { "<empty>" } else { stderr };
+        let stdout = if self.stdout.trim().is_empty() {
+            "<empty>"
+        } else {
+            self.stdout.trim()
+        };
+        let stderr = if self.stderr.trim().is_empty() {
+            "<empty>"
+        } else {
+            self.stderr.trim()
+        };
 
         let message = format!(
             "{} disabled. Probe command {:?} failed with exit {:?}. stdout: {} stderr: {}",
@@ -367,6 +402,20 @@ impl ProbeOutcome {
             );
         }
         message
+    }
+
+    fn log_success(&self) {
+        if !self.success {
+            return;
+        }
+        let stdout = self.stdout.trim();
+        let stderr = self.stderr.trim();
+        let stdout = if stdout.is_empty() { "<empty>" } else { stdout };
+        let stderr = if stderr.is_empty() { "<empty>" } else { stderr };
+        debug!(
+            "Probe success for {:?} (exit {:?}) stdout: {} stderr: {}",
+            self.plan.target, self.exit_code, stdout, stderr,
+        );
     }
 }
 
@@ -419,34 +468,40 @@ fn process_probe_outcomes(
     outcomes: Vec<ProbeOutcome>,
     filtered_configs: &mut HashMap<String, ToolConfig>,
 ) -> (Vec<DisabledTool>, Vec<DisabledSubcommand>) {
-    let mut disabled_tools = Vec::new();
-    let mut disabled_subcommands = Vec::new();
+    // 1. Log successes and filter for failures
+    let failures: Vec<_> = outcomes
+        .into_iter()
+        .filter(|outcome| {
+            if outcome.success {
+                outcome.log_success();
+                false
+            } else {
+                true
+            }
+        })
+        .collect();
 
-    for outcome in outcomes {
-        if outcome.success {
-            let stdout = outcome.stdout.trim();
-            let stderr = outcome.stderr.trim();
-            let stdout = if stdout.is_empty() { "<empty>" } else { stdout };
-            let stderr = if stderr.is_empty() { "<empty>" } else { stderr };
-            debug!(
-                "Probe success for {:?} (exit {:?}) stdout: {} stderr: {}",
-                outcome.plan.target, outcome.exit_code, stdout, stderr,
-            );
-            continue;
-        }
-
-        outcome.update_config(filtered_configs);
-        let (tool, sub) = outcome.to_disabled_items();
-
-        if let Some(t) = tool {
-            disabled_tools.push(t);
-        }
-        if let Some(s) = sub {
-            disabled_subcommands.push(s);
-        }
+    // 2. Update configs for failures
+    for failure in &failures {
+        failure.update_config(filtered_configs);
     }
 
-    (disabled_tools, disabled_subcommands)
+    // 3. Map failures to disabled items
+    failures
+        .into_iter()
+        .map(|failure| failure.to_disabled_items())
+        .fold(
+            (Vec::new(), Vec::new()),
+            |(mut tools, mut subs), (tool, sub)| {
+                if let Some(t) = tool {
+                    tools.push(t);
+                }
+                if let Some(s) = sub {
+                    subs.push(s);
+                }
+                (tools, subs)
+            },
+        )
 }
 
 async fn execute_probes(
@@ -475,19 +530,7 @@ fn build_probe_plans(
     let mut plans = Vec::new();
 
     for (tool_name, config) in configs {
-        if !config.enabled || config.command == "sequence" {
-            continue;
-        }
-
-        // Skip probe for project-relative commands without explicit availability_check.
-        // Commands like "./gradlew" are project-specific and shouldn't be probed globally.
-        if config.availability_check.is_none()
-            && (config.command.starts_with("./") || config.command.starts_with("../"))
-        {
-            debug!(
-                "Skipping availability probe for tool '{}' with project-relative command '{}'",
-                tool_name, config.command
-            );
+        if !should_probe_tool(tool_name, config) {
             continue;
         }
 
@@ -506,6 +549,26 @@ fn build_probe_plans(
     }
 
     plans
+}
+
+fn should_probe_tool(tool_name: &str, config: &ToolConfig) -> bool {
+    if !config.enabled || config.command == "sequence" {
+        return false;
+    }
+
+    // Skip probe for project-relative commands without explicit availability_check.
+    // Commands like "./gradlew" are project-specific and shouldn't be probed globally.
+    if config.availability_check.is_none()
+        && (config.command.starts_with("./") || config.command.starts_with("../"))
+    {
+        debug!(
+            "Skipping availability probe for tool '{}' with project-relative command '{}'",
+            tool_name, config.command
+        );
+        return false;
+    }
+
+    true
 }
 fn collect_subcommand_plans(
     plans: &mut Vec<ProbePlan>,
