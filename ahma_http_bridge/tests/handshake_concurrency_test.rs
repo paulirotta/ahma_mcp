@@ -82,8 +82,8 @@ async fn start_deferred_sandbox_server(
     let client = Client::new();
     let health_url = format!("http://127.0.0.1:{}/health", port);
 
-    for _ in 0..30 {
-        sleep(Duration::from_millis(200)).await;
+    for _ in 0..50 {
+        sleep(Duration::from_millis(300)).await;
         if let Ok(resp) = client.get(&health_url).send().await
             && resp.status().is_success()
         {

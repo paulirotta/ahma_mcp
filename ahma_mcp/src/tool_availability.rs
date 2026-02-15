@@ -111,7 +111,9 @@ pub fn format_install_guidance(summary: &AvailabilitySummary) -> String {
     output.trim_end().to_string()
 }
 
+mod builder;
 mod engine;
+mod types;
 
 /// Evaluate tool availability in parallel using the shell pool. Tools or subcommands whose
 /// probes fail will be disabled and recorded in the returned summary.

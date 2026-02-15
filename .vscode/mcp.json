@@ -1,24 +1,6 @@
 {
 	"servers": {
-		"ahma-debug": {
-			"type": "stdio",
-			"cwd": "${workspaceFolder}",
-			"command": "cargo",
-			"args": [
-				"run",
-				"--features",
-				"opentelemetry",
-				"--bin",
-				"ahma_mcp",
-				"--",
-				"--log-to-stderr"
-			],
-			"env": {
-				"AHMA_TRACING": "1",
-				"RUST_LOG": "debug"
-			}
-		},
-		"ahma-release": {
+		"Ahma-release": {
 			"type": "stdio",
 			"command": "${workspaceFolder}/target/release/ahma_mcp",
 			"args": [
