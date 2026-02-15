@@ -59,6 +59,8 @@ fn main() -> Result<()> {
     ahma_mcp::utils::logging::init_logging(log_level, false)?;
 
     if run_validation_mode(&cli)? {
+        // Always emit a human-readable success summary even if logging output is filtered.
+        println!("All configurations are valid.");
         info!("All configurations are valid.");
         Ok(())
     } else {

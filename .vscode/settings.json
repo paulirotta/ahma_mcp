@@ -30,5 +30,9 @@
         "ahma_mcp/.vscode/mcp.json: ahma-stdio-debug-vscode": {
             "allowedModels": []
         }
+    },
+    "chat.tools.terminal.autoApprove": {
+        "check-guardrails.sh": true,
+        "cargo nextest": true
     }
 }

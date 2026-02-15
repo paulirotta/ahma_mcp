@@ -979,8 +979,8 @@ async fn test_roots_uri_parsing_file_localhost() {
         .await
         .expect("Failed to create client root");
 
-    let port = find_available_port();
-    let mut server = start_http_bridge(port, &tools_dir, server_scope_dir.path()).await;
+    // Start server on dynamic port to avoid conflicts/flakiness
+    let (mut server, port, _stderr) = start_http_bridge_dynamic(&tools_dir, server_scope_dir.path()).await;
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -1371,4 +1371,88 @@ async fn test_tool_call_without_initialize_returns_proper_error() {
         "BUG: HTTP response contains 'expect initialized request': {}",
         response_error_msg
     );
+}
+
+/// Start HTTP bridge on random port (0) and parse the bound port from stderr.
+/// Returns (child_process, port, stderr_receiver).
+/// Stderr is forwarded to test stderr and captured.
+async fn start_http_bridge_dynamic(
+    tools_dir: &std::path::Path,
+    sandbox_scope: &std::path::Path,
+) -> (std::process::Child, u16, std::sync::Arc<std::sync::Mutex<String>>) {
+    let binary = get_ahma_mcp_binary();
+    let mut child = Command::new(&binary)
+        .args([
+            "--mode", "http",
+            "--http-port", "0",
+            "--sync",
+            "--tools-dir", &tools_dir.to_string_lossy(),
+            "--sandbox-scope", &sandbox_scope.to_string_lossy(),
+            "--log-to-stderr",
+        ])
+        .env_remove("NEXTEST")
+        .env_remove("NEXTEST_EXECUTION_MODE")
+        .env_remove("CARGO_TARGET_DIR")
+        .env_remove("RUST_TEST_THREADS")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Failed to start HTTP bridge");
+
+    let stderr = child.stderr.take().expect("Failed to capture stderr");
+    let stderr_buffer = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let buffer_clone = stderr_buffer.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+
+    std::thread::spawn(move || {
+        use std::io::{BufRead, BufReader};
+        let reader = BufReader::new(stderr);
+        let mut port_found = false;
+        for line in reader.lines() {
+            let line = line.unwrap_or_default();
+            {
+                let mut buf = buffer_clone.lock().unwrap();
+                buf.push_str(&line);
+                buf.push('\n');
+            }
+            eprintln!("[server] {}", line); // Forward to test output
+
+            if !port_found
+                && let Some(port_str) = line.trim().strip_prefix("AHMA_BOUND_PORT=")
+                    && let Ok(port) = port_str.parse::<u16>() {
+                        let _ = tx.send(port);
+                        port_found = true;
+                    }
+        }
+    });
+
+    // Wait for port with timeout
+    let port = match rx.recv_timeout(Duration::from_secs(10)) {
+        Ok(p) => p,
+        Err(_) => {
+            let _ = child.kill();
+            let buf = stderr_buffer.lock().unwrap();
+            panic!("Failed to start server (timeout waiting for port). Stderr:\n{}", *buf);
+        }
+    };
+
+    // Wait for health check using the discovered port
+    let client = Client::new();
+    let health_url = format!("http://127.0.0.1:{}/health", port);
+    
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        if Instant::now() > deadline {
+            let _ = child.kill();
+             let buf = stderr_buffer.lock().unwrap();
+             panic!("Server started on port {} but health check failed. Stderr:\n{}", port, *buf);
+        }
+        if let Ok(resp) = client.get(&health_url).send().await
+            && resp.status().is_success() {
+                break;
+            }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    (child, port, stderr_buffer)
 }
