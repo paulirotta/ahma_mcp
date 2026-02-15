@@ -195,6 +195,7 @@ pub async fn run_server_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result
     // Create and start the MCP service
     // With async-by-default, we pass force_synchronous=true when --sync flag is used
     let force_synchronous = cli.sync;
+    let loaded_tools_count = configs.len();
     let service_handler = AhmaMcpService::new(
         adapter.clone(),
         operation_monitor.clone(),
@@ -209,6 +210,40 @@ pub async fn run_server_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result
     if let Some(tools_dir) = cli.tools_dir.clone() {
         service_handler.start_config_watcher(tools_dir);
     }
+
+    let sandbox_mode_label = if sandbox.is_test_mode() {
+        "DISABLED/TEST"
+    } else {
+        #[cfg(target_os = "linux")]
+        {
+            "LANDLOCK"
+        }
+        #[cfg(target_os = "macos")]
+        {
+            "SEATBELT"
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            "ACTIVE"
+        }
+    };
+
+    let sandbox_scopes = sandbox
+        .scopes()
+        .iter()
+        .map(|scope| scope.display().to_string())
+        .collect::<Vec<_>>();
+
+    tracing::info!(
+        "Startup summary: sandbox_mode={}, sandbox_scopes={:?}, no_temp_files={}, tools_dir={}, loaded_tools={}",
+        sandbox_mode_label,
+        sandbox_scopes,
+        sandbox.is_no_temp_files(),
+        cli.tools_dir
+            .as_ref()
+            .map_or_else(|| "<none>".to_string(), |dir| dir.display().to_string()),
+        loaded_tools_count,
+    );
 
     // Use PatchedStdioTransport to fix rmcp 0.13.0 deserialization issues with VS Code
     use crate::transport_patch::PatchedStdioTransport;

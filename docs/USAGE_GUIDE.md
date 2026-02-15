@@ -454,19 +454,18 @@ cargo audit &
 When running AHMA MCP in HTTP mode, the sandbox scope is bound **per client session** via the MCP `roots/list` protocol.
 Each IDE connection (session) gets its own subprocess and its own immutable sandbox scope.
 
-#### Default Scope Priority (fallback only)
+#### Explicit Fallback Scope Priority (for no-roots clients)
 
 1. **Command-line argument** (highest priority): `--sandbox-scope /path/to/project`
 2. **Environment variable**: `AHMA_SANDBOX_SCOPE=/path/to/project`
-3. **Current working directory** (default): Where you run the server from
+3. **No fallback configured**: client must provide `roots/list`
 
 #### Starting the HTTP Server
 
 **Using the script (recommended):**
 
 ```bash
-# From your project directory - sandbox is set to current directory
-cd /path/to/your/project
+# For clients that support roots/list
 /path/to/ahma_mcp/scripts/ahma-http-server.sh
 
 # Or specify the project directory explicitly
@@ -480,15 +479,14 @@ export AHMA_SANDBOX_SCOPE=/path/to/your/project
 **Using the binary directly:**
 
 ```bash
-# Explicit sandbox scope (recommended for scripts)
+# Explicit sandbox scope (required for clients that do not send roots/list)
 ahma_mcp --mode http --sandbox-scope /path/to/your/project
 
 # Via environment variable
 export AHMA_SANDBOX_SCOPE=/path/to/your/project
 ahma_mcp --mode http
 
-# From project directory (uses $PWD as sandbox)
-cd /path/to/your/project
+# Strict mode (no fallback): client must send roots/list
 ahma_mcp --mode http
 ```
 

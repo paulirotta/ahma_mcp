@@ -35,18 +35,17 @@ pub async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         .to_string_lossy()
         .to_string();
 
-    // Determine default scope
-    // We can re-use the logic or just use CWD as fallback if not provided.
-    // Since we don't have globals, we can't call get_sandbox_scopes.
-    // Let's implement local logic:
-    let default_scope = if !cli.sandbox_scope.is_empty() {
-        // Use first CLI scope
-        std::fs::canonicalize(&cli.sandbox_scope[0])
-            .unwrap_or_else(|_| cli.sandbox_scope[0].clone())
+    // Determine explicit fallback scope for no-roots clients.
+    // SECURITY: only treat CLI/env as explicit fallback; do not silently use CWD.
+    let explicit_fallback_scope = if !cli.sandbox_scope.is_empty() {
+        Some(
+            std::fs::canonicalize(&cli.sandbox_scope[0])
+                .unwrap_or_else(|_| cli.sandbox_scope[0].clone()),
+        )
     } else if let Ok(env_scope) = std::env::var("AHMA_SANDBOX_SCOPE") {
-        PathBuf::from(env_scope)
+        Some(PathBuf::from(env_scope))
     } else {
-        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        None
     };
 
     // Session isolation is always enabled in HTTP mode.
@@ -69,22 +68,32 @@ pub async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         server_args.push("--sync".to_string());
     }
 
+    if let Some(scope) = &explicit_fallback_scope {
+        server_args.push("--working-directories".to_string());
+        server_args.push(scope.to_string_lossy().to_string());
+    }
+
     let enable_colored_output = true;
     tracing::info!(
         "HTTP bridge mode - colored terminal output enabled (v{})",
         env!("CARGO_PKG_VERSION")
     );
-    tracing::info!(
-        "HTTP default sandbox scope (used only if client provides no roots): {}",
-        default_scope.display()
-    );
+    match &explicit_fallback_scope {
+        Some(scope) => tracing::info!(
+            "HTTP explicit fallback sandbox scope configured for no-roots clients: {}",
+            scope.display()
+        ),
+        None => tracing::info!(
+            "HTTP strict roots mode: no fallback scope configured; clients must provide roots/list"
+        ),
+    }
 
     let config = BridgeConfig {
         bind_addr,
         server_command,
         server_args,
         enable_colored_output,
-        default_sandbox_scope: default_scope,
+        default_sandbox_scope: explicit_fallback_scope,
         handshake_timeout_secs: cli.handshake_timeout_secs,
     };
 

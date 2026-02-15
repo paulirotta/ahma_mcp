@@ -27,7 +27,7 @@ fn test_no_temp_files_flag_in_server_args() {
     let config = SessionManagerConfig {
         server_command: "ahma_mcp".to_string(),
         server_args: server_args.clone(),
-        default_scope: PathBuf::from("/tmp/test"),
+        default_scope: Some(PathBuf::from("/tmp/test")),
         enable_colored_output: false,
         handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
     };
@@ -75,13 +75,14 @@ fn test_session_manager_config_default_scope() {
     let config = SessionManagerConfig {
         server_command: "ahma_mcp".to_string(),
         server_args: vec![],
-        default_scope: default_scope.clone(),
+        default_scope: Some(default_scope.clone()),
         enable_colored_output: false,
         handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
     };
 
     assert_eq!(
-        config.default_scope, default_scope,
+        config.default_scope,
+        Some(default_scope),
         "Config should preserve default scope"
     );
 }
@@ -92,7 +93,7 @@ async fn test_session_isolation_creates_separate_sessions() {
     let config = SessionManagerConfig {
         server_command: "echo".to_string(), // Use echo as safe subprocess
         server_args: vec!["test".to_string()],
-        default_scope: PathBuf::from("/tmp/isolation_test"),
+        default_scope: Some(PathBuf::from("/tmp/isolation_test")),
         enable_colored_output: false,
         handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
     };
@@ -128,7 +129,7 @@ async fn test_sandbox_lock_immutability() {
     let config = SessionManagerConfig {
         server_command: "echo".to_string(),
         server_args: vec![],
-        default_scope: PathBuf::from("/tmp/lock_test"),
+        default_scope: Some(PathBuf::from("/tmp/lock_test")),
         enable_colored_output: false,
         handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
     };
@@ -215,7 +216,7 @@ async fn test_multi_root_workspace_sandbox() {
     let config = SessionManagerConfig {
         server_command: "echo".to_string(),
         server_args: vec![],
-        default_scope: PathBuf::from("/tmp/multi_root_test"),
+        default_scope: Some(PathBuf::from("/tmp/multi_root_test")),
         enable_colored_output: false,
         handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
     };
@@ -256,19 +257,13 @@ async fn test_multi_root_workspace_sandbox() {
     }
 }
 
-/// Test empty roots are rejected (security feature)
-///
-/// Empty roots should NOT fall back to a default scope because this could
-/// lead to over-permissive behavior. Instead, the client must provide at
-/// least one valid file:// URI.
+/// Test empty roots are rejected when no explicit fallback scope is configured.
 #[tokio::test]
 async fn test_empty_roots_rejected() {
-    let default_scope = PathBuf::from("/tmp/default_scope_test");
-
     let config = SessionManagerConfig {
         server_command: "echo".to_string(),
         server_args: vec![],
-        default_scope: default_scope.clone(),
+        default_scope: None,
         enable_colored_output: false,
         handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
     };
@@ -290,4 +285,33 @@ async fn test_empty_roots_rejected() {
         !session.is_sandbox_locked(),
         "Sandbox should not be locked after empty roots rejection"
     );
+}
+
+/// Test empty roots use explicit fallback scope when configured.
+#[tokio::test]
+async fn test_empty_roots_use_explicit_fallback_scope() {
+    let fallback_scope = PathBuf::from("/tmp/default_scope_test");
+
+    let config = SessionManagerConfig {
+        server_command: "echo".to_string(),
+        server_args: vec![],
+        default_scope: Some(fallback_scope.clone()),
+        enable_colored_output: false,
+        handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
+    };
+
+    let manager = SessionManager::new(config);
+    let session_id = manager.create_session().await.unwrap();
+
+    let empty_roots: Vec<McpRoot> = vec![];
+    let lock_result = manager.lock_sandbox(&session_id, &empty_roots).await;
+
+    assert!(
+        lock_result.is_ok() && lock_result.unwrap(),
+        "Empty roots should lock with explicit fallback scope"
+    );
+
+    let session = manager.get_session(&session_id).unwrap();
+    let scope = session.get_sandbox_scope().await;
+    assert_eq!(scope, Some(fallback_scope));
 }

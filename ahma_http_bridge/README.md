@@ -99,7 +99,11 @@ The bridge is integrated into the `ahma_shell` binary:
 
 ```bash
 # Start HTTP bridge on default port (3000)
+# Clients must provide roots/list unless explicit fallback scope is configured
 ahma_mcp --mode http
+
+# Explicit fallback scope for clients without roots/list support
+ahma_mcp --mode http --sandbox-scope /path/to/project
 
 # Start on custom port
 ahma_mcp --mode http --http-port 8080

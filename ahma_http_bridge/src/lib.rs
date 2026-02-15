@@ -17,7 +17,7 @@
 //! ## Key Features
 //!
 //! *   **Streamable HTTP Transport**: Implements the MCP HTTP transport specification (2025-06-18), supporting POST for requests and SSE (Server-Sent Events) for server-to-client notifications.
-//! *   **Zero-Config Security**: No pre-configured allow-lists required; the bridge learns allowed paths from the client.
+//! *   **Strict by Default**: Clients must provide roots/list unless an explicit fallback scope is configured.
 //! *   **Robust Error Handling**: Cleanly handles subprocess crashes and protocol violations.
 //!
 //! ## Example
@@ -32,8 +32,8 @@
 //!     let config = BridgeConfig {
 //!         bind_addr: "127.0.0.1:3000".parse().unwrap(),
 //!         server_command: "ahma_mcp".to_string(), // Path to your MCP server binary
-//!         // Ensure strict security by defaulting to current directory if no roots provided
-//!         default_sandbox_scope: PathBuf::from("."),
+//!         // Optional fallback for clients that do not support roots/list
+//!         default_sandbox_scope: Some(PathBuf::from("/path/to/project")),
 //!         ..BridgeConfig::default()
 //!     };
 //!     

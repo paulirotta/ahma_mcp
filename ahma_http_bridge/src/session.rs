@@ -366,8 +366,11 @@ pub struct SessionManagerConfig {
     pub server_command: String,
     /// Arguments to pass to the server executable.
     pub server_args: Vec<String>,
-    /// The fallback directory to use for the sandbox if the client doesn't provide roots.
-    pub default_scope: PathBuf,
+    /// Explicit fallback directory for clients that do not provide roots.
+    ///
+    /// If `None`, clients must provide at least one valid `file://` root during
+    /// handshake before tool calls are allowed.
+    pub default_scope: Option<PathBuf>,
     /// Whether to preserve ANSI colors in the server's output streams.
     pub enable_colored_output: bool,
     /// Timeout in seconds for the MCP handshake to complete.
@@ -429,7 +432,7 @@ impl SessionManager {
 
     fn percent_decode_utf8(input: &str) -> Option<String> {
         // Decode %XX sequences into bytes, then UTF-8.
-        // If decoding fails, return None so we fall back to default scope.
+        // If decoding fails, return None so the roots entry is treated as invalid.
         let bytes = input.as_bytes();
         let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
         let mut i = 0;
@@ -469,6 +472,11 @@ impl SessionManager {
             sessions: DashMap::new(),
             config,
         }
+    }
+
+    /// Returns true when this server requires client roots to complete sandbox lock.
+    pub fn requires_client_roots(&self) -> bool {
+        self.config.default_scope.is_none()
     }
 
     /// Initializes a new session and spawns a specific `ahma_mcp` subprocess for it.
@@ -682,7 +690,11 @@ impl SessionManager {
     /// roots changes after lock) and for debugging.
     ///
     /// Returns `true` if the sandbox was newly locked by this call.
-    /// Returns an error if no valid roots are provided (empty roots or all malformed URIs).
+    /// Returns an error if no valid lock source is available.
+    ///
+    /// Lock source priority:
+    /// 1) Client-provided valid file:// roots
+    /// 2) Explicit server fallback scope (if configured)
     pub async fn lock_sandbox(&self, session_id: &str, roots: &[McpRoot]) -> Result<bool> {
         let session = self.sessions.get(session_id).ok_or_else(|| {
             BridgeError::Communication(format!("Session not found: {}", session_id))
@@ -697,24 +709,43 @@ impl SessionManager {
         }
 
         // Extract all roots as sandbox scopes
-        let scopes: Vec<PathBuf> = roots
+        let parsed_scopes: Vec<PathBuf> = roots
             .iter()
             .filter_map(|r| Self::parse_file_uri_to_path(&r.uri))
             .collect();
 
-        // SECURITY: Reject empty roots or roots where all URIs are malformed.
-        // This prevents accidental over-permissive behavior by ensuring the sandbox
-        // is bound to an explicit client-provided scope, not a server default.
-        if scopes.is_empty() {
+        let scopes = if !parsed_scopes.is_empty() {
+            parsed_scopes
+        } else if roots.is_empty() {
+            match &self.config.default_scope {
+                Some(scope) => {
+                    info!(
+                        session_id = %session_id,
+                        fallback_scope = %scope.display(),
+                        "Client provided no roots; using explicit fallback sandbox scope"
+                    );
+                    vec![scope.clone()]
+                }
+                None => {
+                    warn!(
+                        session_id = %session_id,
+                        "Rejecting sandbox lock: client provided no roots and no explicit fallback scope is configured"
+                    );
+                    return Err(BridgeError::Communication(
+                        "Client did not provide roots/list entries. Configure explicit sandbox scope on server startup (e.g. --sandbox-scope /path/to/project) or use a client that supports roots/list.".to_string()
+                    ));
+                }
+            }
+        } else {
             warn!(
                 session_id = %session_id,
                 provided_roots = roots.len(),
-                "Rejecting sandbox lock: no valid file:// URIs in roots/list response"
+                "Rejecting sandbox lock: roots/list contained no valid file:// URIs"
             );
             return Err(BridgeError::Communication(
-                "No valid sandbox roots provided. Client must provide at least one valid file:// URI in roots/list response.".to_string()
+                "No valid file:// sandbox roots were provided in roots/list response.".to_string(),
             ));
-        }
+        };
 
         info!(
             session_id = %session_id,

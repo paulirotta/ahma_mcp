@@ -17,7 +17,7 @@ use std::time::Duration;
 use tokio::time::timeout;
 
 /// Helper to create a SessionManager with test configuration
-fn create_test_session_manager(default_scope: PathBuf) -> SessionManager {
+fn create_test_session_manager(default_scope: Option<PathBuf>) -> SessionManager {
     let config = SessionManagerConfig {
         server_command: "echo".to_string(),
         server_args: vec!["test".to_string()],
@@ -36,7 +36,7 @@ fn create_test_session_manager(default_scope: PathBuf) -> SessionManager {
 #[tokio::test]
 async fn test_concurrent_session_creation() {
     let default_scope = PathBuf::from("/tmp/stress_test");
-    let session_manager = Arc::new(create_test_session_manager(default_scope));
+    let session_manager = Arc::new(create_test_session_manager(Some(default_scope)));
 
     let num_sessions = 50;
     let mut handles = Vec::new();
@@ -105,7 +105,7 @@ async fn test_concurrent_session_creation() {
 #[tokio::test]
 async fn test_concurrent_creation_and_termination() {
     let default_scope = PathBuf::from("/tmp/race_test");
-    let session_manager = Arc::new(create_test_session_manager(default_scope));
+    let session_manager = Arc::new(create_test_session_manager(Some(default_scope)));
 
     let num_iterations = 20;
 
@@ -145,7 +145,7 @@ async fn test_concurrent_creation_and_termination() {
 #[tokio::test]
 async fn test_concurrent_sandbox_lock_attempts() {
     let default_scope = PathBuf::from("/tmp/lock_race_test");
-    let session_manager = Arc::new(create_test_session_manager(default_scope));
+    let session_manager = Arc::new(create_test_session_manager(Some(default_scope)));
 
     // Create a single session
     let session_id = session_manager.create_session().await.unwrap();
@@ -199,7 +199,7 @@ async fn test_concurrent_sandbox_lock_attempts() {
 #[tokio::test]
 async fn test_many_independent_sandbox_scopes() {
     let default_scope = PathBuf::from("/tmp/multi_scope_test");
-    let session_manager = Arc::new(create_test_session_manager(default_scope.clone()));
+    let session_manager = Arc::new(create_test_session_manager(Some(default_scope.clone())));
 
     let num_sessions = 20;
     let mut session_ids = Vec::new();
@@ -269,7 +269,7 @@ async fn test_many_independent_sandbox_scopes() {
 #[tokio::test]
 async fn test_termination_reasons() {
     let default_scope = PathBuf::from("/tmp/term_reasons_test");
-    let session_manager = create_test_session_manager(default_scope);
+    let session_manager = create_test_session_manager(Some(default_scope));
 
     let reasons = vec![
         SessionTerminationReason::ClientRequested,
@@ -301,7 +301,7 @@ async fn test_termination_reasons() {
 #[tokio::test]
 async fn test_rapid_session_lifecycle() {
     let default_scope = PathBuf::from("/tmp/rapid_lifecycle_test");
-    let session_manager = create_test_session_manager(default_scope);
+    let session_manager = create_test_session_manager(Some(default_scope));
 
     let num_cycles = 100;
 
@@ -339,7 +339,7 @@ async fn test_rapid_session_lifecycle() {
 #[tokio::test]
 async fn test_roots_changed_before_lock() {
     let default_scope = PathBuf::from("/tmp/roots_changed_test");
-    let session_manager = create_test_session_manager(default_scope);
+    let session_manager = create_test_session_manager(Some(default_scope));
 
     let session_id = session_manager.create_session().await.unwrap();
 
@@ -356,7 +356,7 @@ async fn test_roots_changed_before_lock() {
 #[tokio::test]
 async fn test_get_nonexistent_session() {
     let default_scope = PathBuf::from("/tmp/nonexistent_test");
-    let session_manager = create_test_session_manager(default_scope);
+    let session_manager = create_test_session_manager(Some(default_scope));
 
     let result = session_manager.get_session("nonexistent-session-id");
     assert!(
@@ -369,7 +369,7 @@ async fn test_get_nonexistent_session() {
 #[tokio::test]
 async fn test_session_exists_scenarios() {
     let default_scope = PathBuf::from("/tmp/exists_test");
-    let session_manager = create_test_session_manager(default_scope);
+    let session_manager = create_test_session_manager(Some(default_scope));
 
     // Non-existent session
     assert!(!session_manager.session_exists("does-not-exist"));
@@ -390,7 +390,7 @@ async fn test_session_exists_scenarios() {
 #[tokio::test]
 async fn test_duplicate_termination() {
     let default_scope = PathBuf::from("/tmp/dup_term_test");
-    let session_manager = create_test_session_manager(default_scope);
+    let session_manager = create_test_session_manager(Some(default_scope));
 
     let session_id = session_manager.create_session().await.unwrap();
 
@@ -412,7 +412,7 @@ async fn test_duplicate_termination() {
 #[tokio::test]
 async fn test_uri_parsing_edge_cases() {
     let default_scope = PathBuf::from("/tmp/uri_test");
-    let session_manager = create_test_session_manager(default_scope.clone());
+    let session_manager = create_test_session_manager(Some(default_scope.clone()));
 
     let test_cases = vec![
         // Standard file URI
@@ -461,7 +461,7 @@ async fn test_uri_parsing_edge_cases() {
 #[tokio::test]
 async fn test_session_operations_with_timeout() {
     let default_scope = PathBuf::from("/tmp/timeout_test");
-    let session_manager = Arc::new(create_test_session_manager(default_scope));
+    let session_manager = Arc::new(create_test_session_manager(Some(default_scope)));
 
     let session_id = session_manager.create_session().await.unwrap();
 
@@ -489,12 +489,10 @@ async fn test_session_operations_with_timeout() {
 
 /// Test session manager rejects empty roots (security feature)
 ///
-/// Empty roots should NOT fall back to a default scope. This prevents
-/// over-permissive behavior by requiring explicit client-provided roots.
+/// Empty roots should be rejected when no explicit fallback scope is configured.
 #[tokio::test]
 async fn test_empty_roots_rejected() {
-    let default_scope = PathBuf::from("/custom/default/scope");
-    let session_manager = create_test_session_manager(default_scope.clone());
+    let session_manager = create_test_session_manager(None);
 
     let session_id = session_manager.create_session().await.unwrap();
 
@@ -524,7 +522,7 @@ async fn test_empty_roots_rejected() {
 #[tokio::test]
 async fn test_multiple_roots_uses_first() {
     let default_scope = PathBuf::from("/tmp/multi_roots_test");
-    let session_manager = create_test_session_manager(default_scope);
+    let session_manager = create_test_session_manager(Some(default_scope));
 
     let session_id = session_manager.create_session().await.unwrap();
 
