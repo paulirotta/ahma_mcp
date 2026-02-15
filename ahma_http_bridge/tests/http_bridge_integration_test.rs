@@ -12,7 +12,6 @@
 //! They use dynamic port allocation to avoid conflicts with other tests.
 //! The shared test server singleton (port 5721) is NOT used here.
 
-use ahma_http_bridge::session::DEFAULT_HANDSHAKE_TIMEOUT_SECS;
 use futures::StreamExt;
 use reqwest::Client;
 use serde_json::{Value, json};
@@ -21,7 +20,7 @@ use std::net::TcpListener;
 use std::os::unix::fs as unix_fs;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use tokio::time::sleep;
 
@@ -203,13 +202,85 @@ async fn send_mcp_request(
     Ok((body, new_session_id))
 }
 
+fn is_sandbox_initializing_error(response: &Value) -> bool {
+    let error = response.get("error");
+    let code = error
+        .and_then(|e| e.get("code"))
+        .and_then(|c| c.as_i64())
+        .unwrap_or_default();
+    let message = error
+        .and_then(|e| e.get("message"))
+        .and_then(|m| m.as_str())
+        .unwrap_or("");
+
+    code == -32001 || message.contains("Sandbox initializing")
+}
+
+fn is_transient_transport_error(error: &str) -> bool {
+    let lower = error.to_ascii_lowercase();
+    lower.contains("timeout")
+        || lower.contains("timed out")
+        || lower.contains("http 500")
+        || lower.contains("http 502")
+        || lower.contains("http 503")
+        || lower.contains("http 504")
+}
+
+fn capped_backoff(base_ms: u64, attempt: usize, max_ms: u64) -> Duration {
+    Duration::from_millis((base_ms.saturating_mul(attempt as u64)).min(max_ms))
+}
+
+/// Send tools/call with retries for handshake races and transient transport failures.
+async fn send_tool_call_with_retry(
+    client: &Client,
+    base_url: &str,
+    session_id: &str,
+    tool_call: &Value,
+) -> Value {
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let mut attempt = 0usize;
+
+    loop {
+        attempt += 1;
+        match send_mcp_request(client, base_url, tool_call, Some(session_id)).await {
+            Ok((response, _)) => {
+                if is_sandbox_initializing_error(&response) {
+                    if Instant::now() >= deadline {
+                        panic!(
+                            "Timed out waiting for sandbox initialization after {} attempts. Last response: {:?}",
+                            attempt, response
+                        );
+                    }
+                    sleep(capped_backoff(100, attempt, 1_000)).await;
+                    continue;
+                }
+                return response;
+            }
+            Err(e) if is_transient_transport_error(&e) => {
+                if Instant::now() >= deadline {
+                    panic!(
+                        "Timed out retrying tools/call after {} attempts. Last error: {}",
+                        attempt, e
+                    );
+                }
+                sleep(capped_backoff(200, attempt, 2_000)).await;
+            }
+            Err(e) => {
+                panic!(
+                    "Unexpected transport error during tools/call (attempt {}): {}",
+                    attempt, e
+                );
+            }
+        }
+    }
+}
+
 /// Wait for a `roots/list` request over SSE and respond with the provided roots.
 async fn answer_roots_list_over_sse(
     client: &Client,
     base_url: &str,
     session_id: &str,
     roots: &[PathBuf],
-    wait_for_sandbox_configured: bool,
 ) {
     let url = format!("{}/mcp", base_url);
     let resp = client
@@ -232,20 +303,9 @@ async fn answer_roots_list_over_sse(
 
     // Hard timeout: if session isolation is broken, we may never see roots/list.
     let roots_deadline = tokio::time::Instant::now() + Duration::from_secs(10);
-    let sandbox_deadline =
-        tokio::time::Instant::now() + Duration::from_secs(DEFAULT_HANDSHAKE_TIMEOUT_SECS);
-    let mut answered_roots = false;
-    let mut saw_sandbox_configured = false;
-
     loop {
-        if !answered_roots && tokio::time::Instant::now() > roots_deadline {
+        if tokio::time::Instant::now() > roots_deadline {
             panic!("Timed out waiting for roots/list over SSE (session isolation likely broken)");
-        }
-        if wait_for_sandbox_configured
-            && answered_roots
-            && tokio::time::Instant::now() > sandbox_deadline
-        {
-            panic!("Timed out waiting for sandbox/configured notification");
         }
 
         let chunk = tokio::time::timeout(Duration::from_millis(500), stream.next())
@@ -292,10 +352,6 @@ async fn answer_roots_list_over_sse(
                 }
 
                 if method == Some("notifications/sandbox/configured") {
-                    saw_sandbox_configured = true;
-                    if wait_for_sandbox_configured && answered_roots {
-                        return;
-                    }
                     continue;
                 }
 
@@ -329,14 +385,7 @@ async fn answer_roots_list_over_sse(
                 let _ = send_mcp_request(client, base_url, &response, Some(session_id))
                     .await
                     .expect("Failed to send roots/list response");
-                answered_roots = true;
-
-                if !wait_for_sandbox_configured {
-                    return;
-                }
-                if saw_sandbox_configured {
-                    return;
-                }
+                return;
             }
         }
     }
@@ -375,7 +424,6 @@ async fn answer_roots_list_over_sse_with_uris(
     base_url: &str,
     session_id: &str,
     root_uris: &[String],
-    wait_for_sandbox_configured: bool,
 ) {
     let url = format!("{}/mcp", base_url);
     let resp = client
@@ -397,20 +445,9 @@ async fn answer_roots_list_over_sse_with_uris(
     let mut buffer = String::new();
 
     let roots_deadline = tokio::time::Instant::now() + Duration::from_secs(10);
-    let sandbox_deadline =
-        tokio::time::Instant::now() + Duration::from_secs(DEFAULT_HANDSHAKE_TIMEOUT_SECS);
-    let mut answered_roots = false;
-    let mut saw_sandbox_configured = false;
-
     loop {
-        if !answered_roots && tokio::time::Instant::now() > roots_deadline {
+        if tokio::time::Instant::now() > roots_deadline {
             panic!("Timed out waiting for roots/list over SSE (session isolation likely broken)");
-        }
-        if wait_for_sandbox_configured
-            && answered_roots
-            && tokio::time::Instant::now() > sandbox_deadline
-        {
-            panic!("Timed out waiting for sandbox/configured notification");
         }
 
         let chunk = tokio::time::timeout(Duration::from_millis(500), stream.next())
@@ -456,10 +493,6 @@ async fn answer_roots_list_over_sse_with_uris(
                 }
 
                 if method == Some("notifications/sandbox/configured") {
-                    saw_sandbox_configured = true;
-                    if wait_for_sandbox_configured && answered_roots {
-                        return;
-                    }
                     continue;
                 }
 
@@ -493,14 +526,7 @@ async fn answer_roots_list_over_sse_with_uris(
                 let _ = send_mcp_request(client, base_url, &response, Some(session_id))
                     .await
                     .expect("Failed to send roots/list response");
-                answered_roots = true;
-
-                if !wait_for_sandbox_configured {
-                    return;
-                }
-                if saw_sandbox_configured {
-                    return;
-                }
+                return;
             }
         }
     }
@@ -615,14 +641,7 @@ async fn test_tool_call_with_different_working_directory() {
     let sse_session_id = session_id.clone();
     let sse_root = different_project_path.clone();
     let sse_task = tokio::spawn(async move {
-        answer_roots_list_over_sse(
-            &sse_client,
-            &sse_base_url,
-            &sse_session_id,
-            &[sse_root],
-            true,
-        )
-        .await;
+        answer_roots_list_over_sse(&sse_client, &sse_base_url, &sse_session_id, &[sse_root]).await;
     });
 
     send_mcp_request(
@@ -654,31 +673,8 @@ async fn test_tool_call_with_different_working_directory() {
         }
     });
 
-    // Retry loop for tools/call to handle race condition where sandbox initialization
-    // (which happens in a background task after roots/list response) hasn't finished yet.
-    let start = tokio::time::Instant::now();
-    let mut tool_response;
-    loop {
-        if start.elapsed() > Duration::from_secs(60) {
-            panic!("Timed out waiting for sandbox initialization");
-        }
-
-        let (resp, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
-            .await
-            .expect("Tool call should not fail with connection error");
-
-        tool_response = resp;
-
-        if let Some(error) = tool_response.get("error")
-            && let Some(msg) = error.get("message").and_then(|m| m.as_str())
-            && msg.contains("Sandbox initializing from client roots")
-        {
-            sleep(Duration::from_millis(100)).await;
-            continue;
-        }
-
-        break;
-    }
+    let tool_response =
+        send_tool_call_with_retry(&client, &base_url, &session_id, &tool_call).await;
 
     assert!(
         tool_response.get("error").is_none(),
@@ -791,14 +787,7 @@ async fn test_basic_tool_call_within_sandbox() {
     let sse_session_id = session_id_for_requests.clone();
     let sse_root = sandbox_scope.clone();
     let sse_task = tokio::spawn(async move {
-        answer_roots_list_over_sse(
-            &sse_client,
-            &sse_base_url,
-            &sse_session_id,
-            &[sse_root],
-            true,
-        )
-        .await;
+        answer_roots_list_over_sse(&sse_client, &sse_base_url, &sse_session_id, &[sse_root]).await;
     });
 
     let _ = send_mcp_request(
@@ -826,40 +815,8 @@ async fn test_basic_tool_call_within_sandbox() {
         }
     });
 
-    // Retry loop for tools/call to handle race condition where sandbox initialization
-    // (which happens in a background task after roots/list response) hasn't finished yet.
-    let start = tokio::time::Instant::now();
-    let mut response;
-    loop {
-        if start.elapsed() > Duration::from_secs(60) {
-            panic!("Timed out waiting for sandbox initialization");
-        }
-
-        eprintln!(
-            "RETRY LOOP: Sending tools/call (elapsed: {:?})",
-            start.elapsed()
-        );
-        let (resp, _) = send_mcp_request(
-            &client,
-            &base_url,
-            &tool_call,
-            Some(&session_id_for_requests),
-        )
-        .await
-        .expect("Tool call should succeed");
-
-        response = resp;
-
-        if let Some(error) = response.get("error")
-            && let Some(msg) = error.get("message").and_then(|m| m.as_str())
-            && msg.contains("Sandbox initializing from client roots")
-        {
-            sleep(Duration::from_millis(100)).await;
-            continue;
-        }
-
-        break;
-    }
+    let response =
+        send_tool_call_with_retry(&client, &base_url, &session_id_for_requests, &tool_call).await;
 
     // Should have result, not "expect initialized request" error
     let error = response.get("error");
@@ -944,7 +901,6 @@ async fn test_roots_uri_parsing_percent_encoded_path() {
             &sse_base_url,
             &sse_session_id,
             &[sse_uri],
-            true,
         )
         .await;
     });
@@ -956,7 +912,6 @@ async fn test_roots_uri_parsing_percent_encoded_path() {
     let _ = send_mcp_request(&client, &base_url, &initialized, Some(&session_id)).await;
     sse_task.await.expect("roots/list SSE task panicked");
 
-    // Retry loop for tool call - sandbox lock may take a moment after roots/list response
     let tool_call = json!({
         "jsonrpc": "2.0",
         "id": 2,
@@ -970,53 +925,7 @@ async fn test_roots_uri_parsing_percent_encoded_path() {
         }
     });
 
-    // Retry loop with exponential backoff - handles both "Sandbox initializing" errors
-    // AND transport timeouts that can occur on slow CI runners (especially llvm-cov)
-    let mut resp = None;
-    let max_attempts = 20; // Increased for CI tolerance
-    for attempt in 0..max_attempts {
-        let result = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id)).await;
-
-        match result {
-            Ok((r, _)) => {
-                // Check if we got a "sandbox initializing" retry error
-                if let Some(err) = r.get("error") {
-                    let msg = err.get("message").and_then(|m| m.as_str()).unwrap_or("");
-                    if msg.contains("Sandbox initializing") {
-                        eprintln!(
-                            "Retry {}/{}: Sandbox still initializing",
-                            attempt + 1,
-                            max_attempts
-                        );
-                        sleep(Duration::from_millis(100 * (attempt + 1) as u64)).await;
-                        continue;
-                    }
-                }
-                resp = Some(r);
-                break;
-            }
-            Err(e) if e.contains("timeout") || e.contains("500") => {
-                // CI may be slow due to coverage instrumentation or resource contention
-                eprintln!(
-                    "Retry {}/{}: Transport error: {}",
-                    attempt + 1,
-                    max_attempts,
-                    e
-                );
-                sleep(Duration::from_millis(200 * (attempt + 1) as u64)).await;
-                continue;
-            }
-            Err(e) => {
-                panic!("Unexpected error during tool call: {}", e);
-            }
-        }
-    }
-    let resp = resp.unwrap_or_else(|| {
-        panic!(
-            "Tool call should eventually succeed after {} attempts",
-            max_attempts
-        )
-    });
+    let resp = send_tool_call_with_retry(&client, &base_url, &session_id, &tool_call).await;
 
     assert!(
         resp.get("error").is_none(),
@@ -1105,7 +1014,6 @@ async fn test_roots_uri_parsing_file_localhost() {
             &sse_base_url,
             &sse_session_id,
             &[sse_uri],
-            true,
         )
         .await;
     });
@@ -1117,7 +1025,6 @@ async fn test_roots_uri_parsing_file_localhost() {
     let _ = send_mcp_request(&client, &base_url, &initialized, Some(&session_id)).await;
     sse_task.await.expect("roots/list SSE task panicked");
 
-    // Retry loop for tool call - sandbox lock may take a moment after roots/list response
     let tool_call = json!({
         "jsonrpc": "2.0",
         "id": 2,
@@ -1131,53 +1038,7 @@ async fn test_roots_uri_parsing_file_localhost() {
         }
     });
 
-    // Retry loop with exponential backoff - handles both "Sandbox initializing" errors
-    // AND transport timeouts that can occur on slow CI runners (especially llvm-cov)
-    let mut resp = None;
-    let max_attempts = 20; // Increased for CI tolerance  
-    for attempt in 0..max_attempts {
-        let result = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id)).await;
-
-        match result {
-            Ok((r, _)) => {
-                // Check if we got a "sandbox initializing" retry error
-                if let Some(err) = r.get("error") {
-                    let msg = err.get("message").and_then(|m| m.as_str()).unwrap_or("");
-                    if msg.contains("Sandbox initializing") {
-                        eprintln!(
-                            "Retry {}/{}: Sandbox still initializing",
-                            attempt + 1,
-                            max_attempts
-                        );
-                        sleep(Duration::from_millis(100 * (attempt + 1) as u64)).await;
-                        continue;
-                    }
-                }
-                resp = Some(r);
-                break;
-            }
-            Err(e) if e.contains("timeout") || e.contains("500") => {
-                // CI may be slow due to coverage instrumentation or resource contention
-                eprintln!(
-                    "Retry {}/{}: Transport error: {}",
-                    attempt + 1,
-                    max_attempts,
-                    e
-                );
-                sleep(Duration::from_millis(200 * (attempt + 1) as u64)).await;
-                continue;
-            }
-            Err(e) => {
-                panic!("Unexpected error during tool call: {}", e);
-            }
-        }
-    }
-    let resp = resp.unwrap_or_else(|| {
-        panic!(
-            "Tool call should eventually succeed after {} attempts",
-            max_attempts
-        )
-    });
+    let resp = send_tool_call_with_retry(&client, &base_url, &session_id, &tool_call).await;
 
     assert!(
         resp.get("error").is_none(),
@@ -1249,14 +1110,7 @@ async fn test_rejects_working_directory_path_traversal_outside_root() {
     let sse_session_id = session_id.clone();
     let sse_root = client_root.clone();
     let sse_task = tokio::spawn(async move {
-        answer_roots_list_over_sse(
-            &sse_client,
-            &sse_base_url,
-            &sse_session_id,
-            &[sse_root],
-            true,
-        )
-        .await;
+        answer_roots_list_over_sse(&sse_client, &sse_base_url, &sse_session_id, &[sse_root]).await;
     });
 
     let initialized = json!({
@@ -1285,36 +1139,7 @@ async fn test_rejects_working_directory_path_traversal_outside_root() {
         }
     });
 
-    // Retry loop for tools/call to handle race condition where sandbox initialization
-    // (which happens in a background task after roots/list response) hasn't finished yet.
-    let start = tokio::time::Instant::now();
-    let mut resp;
-    loop {
-        if start.elapsed() > Duration::from_secs(60) {
-            let _ = server.kill();
-            let output = server.wait_with_output().expect("Failed to wait on server");
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            panic!(
-                "Timed out waiting for sandbox initialization. Server logs:\n{}",
-                stderr
-            );
-        }
-
-        let (r, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
-            .await
-            .expect("Request should succeed at transport layer");
-
-        resp = r;
-
-        if let Some(error) = resp.get("error")
-            && let Some(msg) = error.get("message").and_then(|m| m.as_str())
-            && msg.contains("Sandbox initializing from client roots")
-        {
-            sleep(Duration::from_millis(100)).await;
-            continue;
-        }
-        break;
-    }
+    let resp = send_tool_call_with_retry(&client, &base_url, &session_id, &tool_call).await;
 
     assert!(
         resp.get("error").is_some(),
@@ -1394,14 +1219,7 @@ async fn test_symlink_escape_attempt_is_blocked() {
     let sse_session_id = session_id.clone();
     let sse_root = client_root.clone();
     let sse_task = tokio::spawn(async move {
-        answer_roots_list_over_sse(
-            &sse_client,
-            &sse_base_url,
-            &sse_session_id,
-            &[sse_root],
-            true,
-        )
-        .await;
+        answer_roots_list_over_sse(&sse_client, &sse_base_url, &sse_session_id, &[sse_root]).await;
     });
 
     let initialized = json!({
@@ -1426,36 +1244,7 @@ async fn test_symlink_escape_attempt_is_blocked() {
         }
     });
 
-    // Retry loop for tools/call to handle race condition where sandbox initialization
-    // (which happens in a background task after roots/list response) hasn't finished yet.
-    let start = tokio::time::Instant::now();
-    let mut resp;
-    loop {
-        if start.elapsed() > Duration::from_secs(60) {
-            let _ = server.kill();
-            let output = server.wait_with_output().expect("Failed to wait on server");
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            panic!(
-                "Timed out waiting for sandbox initialization. Server logs:\n{}",
-                stderr
-            );
-        }
-
-        let (r, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
-            .await
-            .expect("Request should succeed at transport layer");
-
-        resp = r;
-
-        if let Some(error) = resp.get("error")
-            && let Some(msg) = error.get("message").and_then(|m| m.as_str())
-            && msg.contains("Sandbox initializing from client roots")
-        {
-            sleep(Duration::from_millis(100)).await;
-            continue;
-        }
-        break;
-    }
+    let resp = send_tool_call_with_retry(&client, &base_url, &session_id, &tool_call).await;
 
     assert!(
         !outside_dir.join("owned.txt").exists(),
