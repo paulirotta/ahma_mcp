@@ -1,0 +1,90 @@
+{
+    "name": "simplify",
+    "description": "Analyze source code complexity and get AI fix instructions for the most complex files. This tool runs ahma_code_simplicity to identify files with high cognitive/cyclomatic complexity, low maintainability, or excessive size, then returns a detailed report with actionable refactoring instructions. Always pass ai_fix set to the issue number you want to fix (1 = most complex file). The output includes the full simplicity report followed by a structured prompt that you should execute immediately: read the target file, plan briefly, implement all simplifications, and verify with tests.",
+    "command": "ahma_code_simplicity",
+    "enabled": true,
+    "timeout_seconds": 600,
+    "synchronous": true,
+    "subcommand": [
+        {
+            "name": "default",
+            "description": "Run code simplicity analysis and return fix instructions for the Nth most complex file. Set ai_fix to the issue number (1 = worst file).",
+            "positional_args": [
+                {
+                    "name": "directory",
+                    "type": "string",
+                    "description": "Directory to analyze (absolute or relative path to the project root)",
+                    "format": "path",
+                    "required": true
+                }
+            ],
+            "options": [
+                {
+                    "name": "working_directory",
+                    "type": "string",
+                    "description": "Working directory for command execution",
+                    "format": "path"
+                },
+                {
+                    "name": "ai-fix",
+                    "type": "integer",
+                    "description": "Issue number to generate AI fix instructions for (1 = most complex file, 2 = second most complex, etc.). When set, outputs the full report plus a structured prompt to simplify that file."
+                },
+                {
+                    "name": "limit",
+                    "alias": "l",
+                    "type": "integer",
+                    "description": "Number of top complexity issues to include in the report (default: 10)"
+                },
+                {
+                    "name": "extensions",
+                    "alias": "e",
+                    "type": "array",
+                    "description": "File extensions to analyze as comma-separated values (e.g. rs,py,js). Supported: rs, py, js, ts, tsx, c, h, cpp, cc, hpp, hh, cs, java, go, css, html. Default: rs",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                {
+                    "name": "exclude",
+                    "alias": "x",
+                    "type": "array",
+                    "description": "Additional paths/patterns to exclude, comma-separated (e.g. **/generated/**,**/vendor/**)",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                {
+                    "name": "output-path",
+                    "type": "string",
+                    "description": "Output path for CODE_SIMPLICITY.md and CODE_SIMPLICITY.html report files. Defaults to current working directory.",
+                    "format": "path"
+                },
+                {
+                    "name": "output",
+                    "alias": "o",
+                    "type": "string",
+                    "description": "Output directory for raw analysis results (default: analysis_results)",
+                    "format": "path"
+                },
+                {
+                    "name": "html",
+                    "type": "boolean",
+                    "description": "Also generate an HTML version of the report"
+                },
+                {
+                    "name": "raw-complexity",
+                    "type": "boolean",
+                    "description": "Use raw complexity values instead of SLOC-normalized density scoring"
+                }
+            ],
+            "synchronous": true
+        }
+    ],
+    "availability_check": {
+        "command": "ahma_code_simplicity",
+        "args": ["--version"],
+        "skip_subcommand_args": true
+    },
+    "install_instructions": "Build with: cargo build -p ahma_code_simplicity --release && cargo install --path ahma_code_simplicity"
+}

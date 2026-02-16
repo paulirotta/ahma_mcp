@@ -2,7 +2,7 @@ use crate::analysis::{get_package_name, get_relative_path};
 use crate::models::{FileSimplicity, Language};
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub struct RepoSummary {
     pub avg_score: f64,
@@ -190,6 +190,72 @@ fn write_package_simplicity(report: &mut String, summary: &RepoSummary, is_works
     }
 }
 
+/// Compute display names for a list of files, disambiguating entries that share
+/// a basename by adding the minimal parent directory context needed for uniqueness.
+fn disambiguate_display_names(files: &[&FileSimplicity], base_dir: &Path) -> Vec<String> {
+    let entries: Vec<(PathBuf, String)> = files
+        .iter()
+        .map(|f| {
+            let path = Path::new(&f.path);
+            let rel_path = get_relative_path(path, base_dir);
+            let basename = path
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| rel_path.to_string_lossy().to_string());
+            (rel_path, basename)
+        })
+        .collect();
+
+    let mut basename_counts: HashMap<&str, usize> = HashMap::new();
+    for (_, basename) in &entries {
+        *basename_counts.entry(basename.as_str()).or_insert(0) += 1;
+    }
+
+    entries
+        .iter()
+        .enumerate()
+        .map(|(i, (rel_path, basename))| {
+            if basename_counts.get(basename.as_str()).copied().unwrap_or(0) <= 1 {
+                return basename.clone();
+            }
+
+            let components: Vec<String> = rel_path
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy().to_string())
+                .collect();
+            let n = components.len();
+
+            let siblings: Vec<Vec<String>> = entries
+                .iter()
+                .enumerate()
+                .filter(|(j, (_, b))| *j != i && b == basename)
+                .map(|(_, (rp, _))| {
+                    rp.components()
+                        .map(|c| c.as_os_str().to_string_lossy().to_string())
+                        .collect()
+                })
+                .collect();
+
+            for depth in 2..=n {
+                let candidate = components[n - depth..].join("/");
+                let is_unique = siblings.iter().all(|other_comps| {
+                    let on = other_comps.len();
+                    if depth > on {
+                        true
+                    } else {
+                        other_comps[on - depth..].join("/") != candidate
+                    }
+                });
+                if is_unique {
+                    return candidate;
+                }
+            }
+
+            rel_path.to_string_lossy().to_string()
+        })
+        .collect()
+}
+
 fn write_emergencies(report: &mut String, files: &[FileSimplicity], limit: usize, base_dir: &Path) {
     let mut lang_map: HashMap<Language, Vec<&FileSimplicity>> = HashMap::new();
     for f in files {
@@ -202,26 +268,25 @@ fn write_emergencies(report: &mut String, files: &[FileSimplicity], limit: usize
     for lang in languages {
         let lang_files = lang_map.get(lang).unwrap();
         let display_limit = std::cmp::min(limit, lang_files.len());
+        let displayed: Vec<&FileSimplicity> =
+            lang_files.iter().take(display_limit).copied().collect();
+        let display_names = disambiguate_display_names(&displayed, base_dir);
 
         report.push_str(&format!(
             "## Top {display_limit} {} Code Complexity Issues (Lowest Simplicity)\n\n",
             lang.display_name()
         ));
 
-        for (i, f) in lang_files.iter().take(display_limit).enumerate() {
+        for (i, f) in displayed.iter().enumerate() {
             let culprit = identify_culprit(f);
             let path = Path::new(&f.path);
             let rel_path = get_relative_path(path, base_dir);
             let rel_str = rel_path.to_string_lossy();
-            let basename = path
-                .file_name()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_else(|| rel_str.to_string());
 
             report.push_str(&format!(
                 "{}. **{}**: Simplicity: {:.0}% ({})**\n\t{}\n",
                 i + 1,
-                basename,
+                display_names[i],
                 f.score,
                 culprit,
                 rel_str
@@ -247,6 +312,99 @@ fn identify_culprit(f: &FileSimplicity) -> &'static str {
     } else {
         "General Complexity"
     }
+}
+
+/// Returns culprit-specific refactoring guidance for AI prompts.
+fn culprit_guidance(culprit: &str) -> &'static str {
+    match culprit {
+        "High Cognitive Complexity" => {
+            "\
+   - Focus on reducing nesting depth, breaking apart complex control flow,
+     and extracting deeply nested blocks into named functions"
+        }
+        "High Cyclomatic Complexity" => {
+            "\
+   - Focus on reducing branching paths; replace long if/else or match chains
+     with dispatch tables, lookup maps, or polymorphism"
+        }
+        "Mega-file" => {
+            "\
+   - Focus on splitting this oversized file into smaller modules; group
+     related functions by responsibility and extract them"
+        }
+        "Low Maintainability Index" => {
+            "\
+   - Focus on reducing function length, improving naming, and adding doc
+     comments to complex logic"
+        }
+        _ => {
+            "\
+   - Apply general readability improvements: better names, simpler data flow,
+     smaller functions"
+        }
+    }
+}
+
+/// Generates a structured AI prompt instructing the parent AI to simplify a
+/// specific issue from the complexity report.
+///
+/// `files` must already be sorted by score ascending (worst first).
+/// `issue_number` is 1-indexed (1 = most complex file).
+///
+/// Returns `None` if `issue_number` is out of bounds or files is empty.
+pub fn generate_ai_fix_prompt(
+    files: &[FileSimplicity],
+    issue_number: usize,
+    base_dir: &Path,
+) -> Option<String> {
+    if issue_number == 0 || files.is_empty() {
+        return None;
+    }
+    let index = issue_number - 1;
+    let file = files.get(index)?;
+
+    let rel_path = get_relative_path(Path::new(&file.path), base_dir);
+    let rel_str = rel_path.to_string_lossy();
+    let culprit = identify_culprit(file);
+    let guidance = culprit_guidance(culprit);
+
+    Some(format!(
+        "\
+=== SIMPLIFY CODE: ISSUE #{issue_number} ===
+
+TARGET: {rel_str}
+SIMPLICITY: {score:.0}% | ISSUE: {culprit}
+METRICS: Cognitive={cog}, Cyclomatic={cyc}, SLOC={sloc}, MI={mi:.1}
+
+You are an expert at writing simple, clear code. Your task: reduce the
+complexity of `{rel_str}` so an AI can understand it without thinking hard.
+
+STEP 1 - READ the target file and understand its structure.
+
+STEP 2 - PLAN (briefly, 2-3 sentences): What are the main complexity
+drivers? What refactoring strategies will you use?
+
+STEP 3 - IMPLEMENT all simplifications now:
+{guidance}
+   - Extract repeated patterns into well-named helper functions
+   - Replace deep nesting with early returns and guard clauses
+   - Break functions longer than ~40 lines into focused, single-purpose units
+   - Simplify complex boolean expressions using named predicates
+   - Remove dead code and unnecessary abstractions
+
+STEP 4 - VERIFY by running the project's test suite.
+
+Execute all steps now. Do not stop at planning.",
+        issue_number = issue_number,
+        rel_str = rel_str,
+        score = file.score,
+        culprit = culprit,
+        cog = file.cognitive,
+        cyc = file.cyclomatic,
+        sloc = file.sloc,
+        mi = file.mi,
+        guidance = guidance,
+    ))
 }
 
 fn write_glossary(report: &mut String) {
@@ -322,5 +480,331 @@ mod tests {
         // Ensure the redundant (Language) label is removed from the item lines
         assert!(!report.contains("(Rust)"));
         assert!(!report.contains("(Python)"));
+    }
+
+    #[test]
+    fn test_disambiguate_unique_basenames_unchanged() {
+        let files = [
+            FileSimplicity {
+                path: "src/foo.rs".to_string(),
+                language: Language::Rust,
+                score: 50.0,
+                cognitive: 20.0,
+                cyclomatic: 15.0,
+                sloc: 100.0,
+                mi: 50.0,
+            },
+            FileSimplicity {
+                path: "src/bar.rs".to_string(),
+                language: Language::Rust,
+                score: 40.0,
+                cognitive: 25.0,
+                cyclomatic: 20.0,
+                sloc: 150.0,
+                mi: 40.0,
+            },
+        ];
+        let refs: Vec<&FileSimplicity> = files.iter().collect();
+        let names = disambiguate_display_names(&refs, Path::new("."));
+        assert_eq!(names, vec!["foo.rs", "bar.rs"]);
+    }
+
+    #[test]
+    fn test_disambiguate_duplicate_basenames_adds_parent_dir() {
+        let files = [
+            FileSimplicity {
+                path: "project/src/analysis/translation.rs".to_string(),
+                language: Language::Rust,
+                score: 36.0,
+                cognitive: 92.0,
+                cyclomatic: 174.0,
+                sloc: 1191.0,
+                mi: 0.0,
+            },
+            FileSimplicity {
+                path: "project/src/views/translation.rs".to_string(),
+                language: Language::Rust,
+                score: 36.0,
+                cognitive: 88.0,
+                cyclomatic: 68.0,
+                sloc: 786.0,
+                mi: 0.0,
+            },
+        ];
+        let refs: Vec<&FileSimplicity> = files.iter().collect();
+        let names = disambiguate_display_names(&refs, Path::new("."));
+        assert_eq!(
+            names,
+            vec!["analysis/translation.rs", "views/translation.rs"]
+        );
+    }
+
+    #[test]
+    fn test_disambiguate_three_files_same_basename() {
+        let files = [
+            FileSimplicity {
+                path: "crate_a/src/lib.rs".to_string(),
+                language: Language::Rust,
+                score: 50.0,
+                cognitive: 10.0,
+                cyclomatic: 5.0,
+                sloc: 100.0,
+                mi: 50.0,
+            },
+            FileSimplicity {
+                path: "crate_b/src/lib.rs".to_string(),
+                language: Language::Rust,
+                score: 40.0,
+                cognitive: 20.0,
+                cyclomatic: 10.0,
+                sloc: 200.0,
+                mi: 40.0,
+            },
+            FileSimplicity {
+                path: "crate_c/src/lib.rs".to_string(),
+                language: Language::Rust,
+                score: 30.0,
+                cognitive: 30.0,
+                cyclomatic: 15.0,
+                sloc: 300.0,
+                mi: 30.0,
+            },
+        ];
+        let refs: Vec<&FileSimplicity> = files.iter().collect();
+        let names = disambiguate_display_names(&refs, Path::new("."));
+        // "src/lib.rs" is still ambiguous for all three, so needs crate_*/src/lib.rs
+        assert_eq!(
+            names,
+            vec![
+                "crate_a/src/lib.rs",
+                "crate_b/src/lib.rs",
+                "crate_c/src/lib.rs"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_disambiguate_mixed_unique_and_duplicate() {
+        let files = [
+            FileSimplicity {
+                path: "src/analysis/translation.rs".to_string(),
+                language: Language::Rust,
+                score: 36.0,
+                cognitive: 92.0,
+                cyclomatic: 174.0,
+                sloc: 1191.0,
+                mi: 0.0,
+            },
+            FileSimplicity {
+                path: "src/unique_file.rs".to_string(),
+                language: Language::Rust,
+                score: 50.0,
+                cognitive: 10.0,
+                cyclomatic: 5.0,
+                sloc: 100.0,
+                mi: 50.0,
+            },
+            FileSimplicity {
+                path: "src/views/translation.rs".to_string(),
+                language: Language::Rust,
+                score: 36.0,
+                cognitive: 88.0,
+                cyclomatic: 68.0,
+                sloc: 786.0,
+                mi: 0.0,
+            },
+        ];
+        let refs: Vec<&FileSimplicity> = files.iter().collect();
+        let names = disambiguate_display_names(&refs, Path::new("."));
+        assert_eq!(
+            names,
+            vec![
+                "analysis/translation.rs",
+                "unique_file.rs",
+                "views/translation.rs"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_report_disambiguates_same_basename_files() {
+        let files = vec![
+            FileSimplicity {
+                path: "project/src/analysis/translation.rs".to_string(),
+                language: Language::Rust,
+                score: 36.0,
+                cognitive: 92.0,
+                cyclomatic: 174.0,
+                sloc: 1191.0,
+                mi: 0.0,
+            },
+            FileSimplicity {
+                path: "project/src/views/translation.rs".to_string(),
+                language: Language::Rust,
+                score: 36.0,
+                cognitive: 88.0,
+                cyclomatic: 68.0,
+                sloc: 786.0,
+                mi: 0.0,
+            },
+        ];
+
+        let report = create_report_md(&files, false, 10, Path::new("."), "test_disambig");
+
+        // The bold display names should include the parent directory
+        assert!(report.contains("**analysis/translation.rs**"));
+        assert!(report.contains("**views/translation.rs**"));
+        // Should NOT show bare **translation.rs** as a bold label
+        assert!(!report.contains("**translation.rs**"));
+    }
+
+    #[test]
+    fn test_generate_ai_fix_prompt_issue_1() {
+        let files = vec![
+            FileSimplicity {
+                path: "src/complex.rs".to_string(),
+                language: Language::Rust,
+                score: 25.0,
+                cognitive: 45.0,
+                cyclomatic: 30.0,
+                sloc: 800.0,
+                mi: 35.0,
+            },
+            FileSimplicity {
+                path: "src/moderate.rs".to_string(),
+                language: Language::Rust,
+                score: 65.0,
+                cognitive: 12.0,
+                cyclomatic: 8.0,
+                sloc: 200.0,
+                mi: 70.0,
+            },
+        ];
+
+        let prompt = generate_ai_fix_prompt(&files, 1, Path::new(".")).unwrap();
+
+        assert!(prompt.contains("ISSUE #1"));
+        assert!(prompt.contains("src/complex.rs"));
+        assert!(prompt.contains("25%"));
+        assert!(prompt.contains("High Cognitive Complexity"));
+        assert!(prompt.contains("Cognitive=45"));
+        assert!(prompt.contains("Cyclomatic=30"));
+        assert!(prompt.contains("SLOC=800"));
+        assert!(prompt.contains("MI=35.0"));
+        assert!(prompt.contains("STEP 1"));
+        assert!(prompt.contains("STEP 4"));
+        assert!(prompt.contains("Execute all steps now"));
+        assert!(prompt.contains("reducing nesting depth"));
+    }
+
+    #[test]
+    fn test_generate_ai_fix_prompt_issue_2() {
+        let files = vec![
+            FileSimplicity {
+                path: "src/worst.rs".to_string(),
+                language: Language::Rust,
+                score: 20.0,
+                cognitive: 50.0,
+                cyclomatic: 40.0,
+                sloc: 900.0,
+                mi: 30.0,
+            },
+            FileSimplicity {
+                path: "src/second.rs".to_string(),
+                language: Language::Rust,
+                score: 40.0,
+                cognitive: 10.0,
+                cyclomatic: 25.0,
+                sloc: 300.0,
+                mi: 45.0,
+            },
+        ];
+
+        let prompt = generate_ai_fix_prompt(&files, 2, Path::new(".")).unwrap();
+
+        assert!(prompt.contains("ISSUE #2"));
+        assert!(prompt.contains("src/second.rs"));
+        assert!(prompt.contains("High Cyclomatic Complexity"));
+        assert!(prompt.contains("reducing branching paths"));
+    }
+
+    #[test]
+    fn test_generate_ai_fix_prompt_out_of_bounds() {
+        let files = vec![FileSimplicity {
+            path: "src/only.rs".to_string(),
+            language: Language::Rust,
+            score: 50.0,
+            cognitive: 15.0,
+            cyclomatic: 10.0,
+            sloc: 100.0,
+            mi: 60.0,
+        }];
+
+        assert!(generate_ai_fix_prompt(&files, 2, Path::new(".")).is_none());
+    }
+
+    #[test]
+    fn test_generate_ai_fix_prompt_zero_issue() {
+        let files = vec![FileSimplicity {
+            path: "src/file.rs".to_string(),
+            language: Language::Rust,
+            score: 50.0,
+            cognitive: 15.0,
+            cyclomatic: 10.0,
+            sloc: 100.0,
+            mi: 60.0,
+        }];
+
+        assert!(generate_ai_fix_prompt(&files, 0, Path::new(".")).is_none());
+    }
+
+    #[test]
+    fn test_generate_ai_fix_prompt_empty_files() {
+        let files: Vec<FileSimplicity> = vec![];
+        assert!(generate_ai_fix_prompt(&files, 1, Path::new(".")).is_none());
+    }
+
+    #[test]
+    fn test_generate_ai_fix_prompt_mega_file() {
+        let files = vec![FileSimplicity {
+            path: "src/huge.rs".to_string(),
+            language: Language::Rust,
+            score: 45.0,
+            cognitive: 15.0,
+            cyclomatic: 15.0,
+            sloc: 800.0,
+            mi: 55.0,
+        }];
+
+        let prompt = generate_ai_fix_prompt(&files, 1, Path::new(".")).unwrap();
+        assert!(prompt.contains("Mega-file"));
+        assert!(prompt.contains("splitting this oversized file"));
+    }
+
+    #[test]
+    fn test_generate_ai_fix_prompt_low_mi() {
+        let files = vec![FileSimplicity {
+            path: "src/unmaintainable.rs".to_string(),
+            language: Language::Rust,
+            score: 35.0,
+            cognitive: 10.0,
+            cyclomatic: 10.0,
+            sloc: 200.0,
+            mi: 40.0,
+        }];
+
+        let prompt = generate_ai_fix_prompt(&files, 1, Path::new(".")).unwrap();
+        assert!(prompt.contains("Low Maintainability Index"));
+        assert!(prompt.contains("reducing function length"));
+    }
+
+    #[test]
+    fn test_culprit_guidance_all_variants() {
+        assert!(culprit_guidance("High Cognitive Complexity").contains("nesting depth"));
+        assert!(culprit_guidance("High Cyclomatic Complexity").contains("branching paths"));
+        assert!(culprit_guidance("Mega-file").contains("splitting"));
+        assert!(culprit_guidance("Low Maintainability Index").contains("function length"));
+        assert!(culprit_guidance("General Complexity").contains("readability"));
+        assert!(culprit_guidance("Unknown").contains("readability"));
     }
 }

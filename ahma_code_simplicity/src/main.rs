@@ -10,7 +10,7 @@ use walkdir::WalkDir;
 
 use analysis::{check_dependencies, get_project_name, is_cargo_workspace, perform_analysis};
 use models::{FileSimplicity, MetricsResults};
-use report::generate_report;
+use report::{generate_ai_fix_prompt, generate_report};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Analyzes source code metrics and generates a simplicity report", long_about = None)]
@@ -54,6 +54,12 @@ struct Cli {
     /// Defaults to current working directory.
     #[arg(long)]
     output_path: Option<PathBuf>,
+
+    /// Generate an AI fix prompt for the Nth most complex file (1-indexed).
+    /// When set, outputs the full simplicity report and a structured prompt
+    /// instructing the AI to plan and implement a fix for that issue.
+    #[arg(long)]
+    ai_fix: Option<usize>,
 }
 
 fn main() -> Result<()> {
@@ -102,6 +108,22 @@ fn main() -> Result<()> {
     )?;
 
     print_report_locations(&report_output_dir, cli.html);
+
+    if let Some(issue_number) = cli.ai_fix {
+        let md_path = report_output_dir.join("CODE_SIMPLICITY.md");
+        let report_content =
+            fs::read_to_string(&md_path).context("Failed to read generated report")?;
+        println!("{}", report_content);
+
+        match generate_ai_fix_prompt(&files_simplicity, issue_number, &directory) {
+            Some(prompt) => println!("\n{}", prompt),
+            None => eprintln!(
+                "Warning: Issue #{} is out of range (only {} files analyzed).",
+                issue_number,
+                files_simplicity.len()
+            ),
+        }
+    }
 
     if cli.open {
         open_report(&report_output_dir, cli.html)?;
@@ -225,5 +247,19 @@ mod tests {
         assert_eq!(cli.directory, PathBuf::from("."));
         assert_eq!(cli.output, PathBuf::from("results"));
         assert_eq!(cli.output_path, Some(PathBuf::from("/tmp")));
+    }
+
+    #[test]
+    fn test_cli_parsing_with_ai_fix() {
+        let args = vec!["ahma_code_simplicity", ".", "--ai-fix", "1"];
+        let cli = Cli::try_parse_from(args).unwrap();
+        assert_eq!(cli.ai_fix, Some(1));
+    }
+
+    #[test]
+    fn test_cli_parsing_without_ai_fix() {
+        let args = vec!["ahma_code_simplicity", "."];
+        let cli = Cli::try_parse_from(args).unwrap();
+        assert_eq!(cli.ai_fix, None);
     }
 }
