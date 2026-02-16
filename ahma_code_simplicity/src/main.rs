@@ -45,10 +45,6 @@ struct Cli {
     #[arg(short = 'x', long, value_delimiter = ',')]
     exclude: Vec<String>,
 
-    /// Use raw complexity values instead of SLOC-normalized density scoring
-    #[arg(long)]
-    raw_complexity: bool,
-
     /// Output path for CODE_SIMPLICITY.md and CODE_SIMPLICITY.html files.
     /// Can be a directory (uses "CODE_SIMPLICITY" as filename) or a full path with filename.
     /// Defaults to current working directory.
@@ -81,7 +77,7 @@ fn main() -> Result<()> {
         &cli.exclude,
     )?;
 
-    let mut files_simplicity = load_metrics(&cli.output, !cli.raw_complexity)?;
+    let mut files_simplicity = load_metrics(&cli.output, true)?;
     if files_simplicity.is_empty() {
         println!("No analysis files found in {}.", cli.output.display());
         return Ok(());

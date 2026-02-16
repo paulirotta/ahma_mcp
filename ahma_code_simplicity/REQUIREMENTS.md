@@ -28,9 +28,8 @@ It is a workspace member of the [Ahma MCP](../REQUIREMENTS.md) project.
   ```
   Score = 0.6 × MI + 0.2 × Cog_Score + 0.2 × Cyc_Score
   ```
-- **R3.2**: By default, cognitive and cyclomatic complexity are SLOC-normalized (density per 100 lines).
-- **R3.3**: `--raw-complexity` flag disables normalization and uses absolute values.
-- **R3.4**: Trivial/empty files (MI=0, cognitive=0, cyclomatic≤1) receive a perfect 100% score.
+- **R3.2**: Cognitive and cyclomatic complexity are SLOC-normalized (density per 100 lines).
+- **R3.3**: Trivial/empty files (MI=0, cognitive=0, cyclomatic≤1) receive a perfect 100% score.
 
 ### R4: Report Generation
 

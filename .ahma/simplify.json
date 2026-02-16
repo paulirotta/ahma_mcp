@@ -71,11 +71,6 @@
                     "name": "html",
                     "type": "boolean",
                     "description": "Also generate an HTML version of the report"
-                },
-                {
-                    "name": "raw-complexity",
-                    "type": "boolean",
-                    "description": "Use raw complexity values instead of SLOC-normalized density scoring"
                 }
             ],
             "synchronous": true
