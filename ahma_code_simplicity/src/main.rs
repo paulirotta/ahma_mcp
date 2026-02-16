@@ -36,8 +36,13 @@ struct Cli {
 
     /// File extensions to analyze as a comma-separated list (e.g. rs,py,js).
     /// Supported: rs, py, js, ts, tsx, c, h, cpp, cc, hpp, hh, cs, java, go, css, html.
-    /// Example: --extensions rs,py,js
-    #[arg(short, long, default_value = "rs", value_delimiter = ',')]
+    /// Default: all supported extensions.
+    #[arg(
+        short,
+        long,
+        default_value = "rs,py,js,ts,tsx,c,h,cpp,cc,hpp,hh,cs,java,go,css,html",
+        value_delimiter = ','
+    )]
     extensions: Vec<String>,
 
     /// Additional paths/patterns to exclude, as a comma-separated list.

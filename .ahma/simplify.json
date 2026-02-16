@@ -40,7 +40,7 @@
                     "name": "extensions",
                     "alias": "e",
                     "type": "array",
-                    "description": "File extensions to analyze as comma-separated values (e.g. rs,py,js). Supported: rs, py, js, ts, tsx, c, h, cpp, cc, hpp, hh, cs, java, go, css, html. Default: rs",
+                    "description": "File extensions to analyze as comma-separated values (e.g. rs,py,js). Supported: rs, py, js, ts, tsx, c, h, cpp, cc, hpp, hh, cs, java, go, css, html. Default: all supported extensions",
                     "items": {
                         "type": "string"
                     }
@@ -53,24 +53,6 @@
                     "items": {
                         "type": "string"
                     }
-                },
-                {
-                    "name": "output-path",
-                    "type": "string",
-                    "description": "Output path for CODE_SIMPLICITY.md and CODE_SIMPLICITY.html report files. Defaults to current working directory.",
-                    "format": "path"
-                },
-                {
-                    "name": "output",
-                    "alias": "o",
-                    "type": "string",
-                    "description": "Output directory for raw analysis results (default: analysis_results)",
-                    "format": "path"
-                },
-                {
-                    "name": "html",
-                    "type": "boolean",
-                    "description": "Also generate an HTML version of the report"
                 }
             ],
             "synchronous": true

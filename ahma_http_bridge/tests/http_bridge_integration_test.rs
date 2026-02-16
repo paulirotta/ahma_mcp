@@ -980,7 +980,8 @@ async fn test_roots_uri_parsing_file_localhost() {
         .expect("Failed to create client root");
 
     // Start server on dynamic port to avoid conflicts/flakiness
-    let (mut server, port, _stderr) = start_http_bridge_dynamic(&tools_dir, server_scope_dir.path()).await;
+    let (mut server, port, _stderr) =
+        start_http_bridge_dynamic(&tools_dir, server_scope_dir.path()).await;
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -1379,15 +1380,23 @@ async fn test_tool_call_without_initialize_returns_proper_error() {
 async fn start_http_bridge_dynamic(
     tools_dir: &std::path::Path,
     sandbox_scope: &std::path::Path,
-) -> (std::process::Child, u16, std::sync::Arc<std::sync::Mutex<String>>) {
+) -> (
+    std::process::Child,
+    u16,
+    std::sync::Arc<std::sync::Mutex<String>>,
+) {
     let binary = get_ahma_mcp_binary();
     let mut child = Command::new(&binary)
         .args([
-            "--mode", "http",
-            "--http-port", "0",
+            "--mode",
+            "http",
+            "--http-port",
+            "0",
             "--sync",
-            "--tools-dir", &tools_dir.to_string_lossy(),
-            "--sandbox-scope", &sandbox_scope.to_string_lossy(),
+            "--tools-dir",
+            &tools_dir.to_string_lossy(),
+            "--sandbox-scope",
+            &sandbox_scope.to_string_lossy(),
             "--log-to-stderr",
         ])
         .env_remove("NEXTEST")
@@ -1419,10 +1428,11 @@ async fn start_http_bridge_dynamic(
 
             if !port_found
                 && let Some(port_str) = line.trim().strip_prefix("AHMA_BOUND_PORT=")
-                    && let Ok(port) = port_str.parse::<u16>() {
-                        let _ = tx.send(port);
-                        port_found = true;
-                    }
+                && let Ok(port) = port_str.parse::<u16>()
+            {
+                let _ = tx.send(port);
+                port_found = true;
+            }
         }
     });
 
@@ -1432,25 +1442,32 @@ async fn start_http_bridge_dynamic(
         Err(_) => {
             let _ = child.kill();
             let buf = stderr_buffer.lock().unwrap();
-            panic!("Failed to start server (timeout waiting for port). Stderr:\n{}", *buf);
+            panic!(
+                "Failed to start server (timeout waiting for port). Stderr:\n{}",
+                *buf
+            );
         }
     };
 
     // Wait for health check using the discovered port
     let client = Client::new();
     let health_url = format!("http://127.0.0.1:{}/health", port);
-    
+
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         if Instant::now() > deadline {
             let _ = child.kill();
-             let buf = stderr_buffer.lock().unwrap();
-             panic!("Server started on port {} but health check failed. Stderr:\n{}", port, *buf);
+            let buf = stderr_buffer.lock().unwrap();
+            panic!(
+                "Server started on port {} but health check failed. Stderr:\n{}",
+                port, *buf
+            );
         }
         if let Ok(resp) = client.get(&health_url).send().await
-            && resp.status().is_success() {
-                break;
-            }
+            && resp.status().is_success()
+        {
+            break;
+        }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 

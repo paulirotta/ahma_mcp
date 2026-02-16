@@ -18,7 +18,7 @@ It is a workspace member of the [Ahma MCP](../REQUIREMENTS.md) project.
 - **R2.1**: Accepts a directory path as the primary argument.
 - **R2.2**: Detects Cargo workspaces and analyzes each member crate individually.
 - **R2.3**: Falls back to single-directory analysis when no workspace is detected.
-- **R2.4**: Supports multi-language analysis via `--extensions` flag (default: `rs`).
+- **R2.4**: Supports multi-language analysis via `--extensions` flag (default: all supported extensions).
 - **R2.5**: Applies default exclusion patterns (target, node_modules, build dirs, VCS, IDE configs).
 - **R2.6**: Supports additional user-defined exclusion patterns via `--exclude`.
 
