@@ -18,6 +18,44 @@ use serde_json::json;
 use std::borrow::Cow;
 
 // ============================================================================
+// Test Helpers - Reduce boilerplate and improve readability
+// ============================================================================
+
+/// Creates CallToolRequestParams with the given tool name and optional arguments
+fn make_params(name: &'static str, args: Option<serde_json::Value>) -> CallToolRequestParams {
+    CallToolRequestParams {
+        name: Cow::Borrowed(name),
+        arguments: args.map(|v| v.as_object().unwrap().clone()),
+        task: None,
+        meta: None,
+    }
+}
+
+/// Extracts text content from a tool call result, returning None if not available
+fn get_result_text(result: &rmcp::model::CallToolResult) -> Option<&str> {
+    result
+        .content
+        .first()
+        .and_then(|c| c.as_text())
+        .map(|t| t.text.as_str())
+}
+
+/// Asserts that the result text contains at least one of the expected substrings
+fn assert_text_contains_any(
+    result: &rmcp::model::CallToolResult,
+    expected: &[&str],
+    context: &str,
+) {
+    let text = get_result_text(result).expect("Result should contain text content");
+    let found = expected.iter().any(|s| text.contains(s));
+    assert!(
+        found,
+        "{context}. Expected one of {:?}, got: {text}",
+        expected
+    );
+}
+
+// ============================================================================
 // Status Tool Coverage Tests
 // ============================================================================
 
@@ -27,30 +65,16 @@ async fn test_status_tool_no_filters() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
-    // Call status with no arguments
-    let params = CallToolRequestParams {
-        name: Cow::Borrowed("status"),
-        arguments: Some(json!({}).as_object().unwrap().clone()),
-        task: None,
-        meta: None,
-    };
+    let result = client
+        .call_tool(make_params("status", Some(json!({}))))
+        .await?;
 
-    let result = client.call_tool(params).await?;
-
-    // Should return status information
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first()
-        && let Some(text_content) = content.as_text()
-    {
-        // Should contain operations status summary
-        assert!(
-            text_content.text.contains("Operations status")
-                || text_content.text.contains("active")
-                || text_content.text.contains("completed"),
-            "Status should show operations summary, got: {}",
-            text_content.text
-        );
-    }
+    assert_text_contains_any(
+        &result,
+        &["Operations status", "active", "completed"],
+        "Status should show operations summary",
+    );
 
     client.cancel().await?;
     Ok(())
@@ -64,41 +88,26 @@ async fn test_status_tool_with_tool_filter() -> Result<()> {
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // First start an async operation to have something to query
-    let shell_params = CallToolRequestParams {
-        name: Cow::Borrowed("sandboxed_shell"),
-        arguments: Some(json!({"command": "echo test"}).as_object().unwrap().clone()),
-        task: None,
-        meta: None,
-    };
-    let _ = client.call_tool(shell_params).await?;
+    let _ = client
+        .call_tool(make_params(
+            "sandboxed_shell",
+            Some(json!({"command": "echo test"})),
+        ))
+        .await?;
 
-    // Now query status with a tools filter
-    let params = CallToolRequestParams {
-        name: Cow::Borrowed("status"),
-        arguments: Some(
-            json!({"tools": "sandboxed_shell"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        ),
-        task: None,
-        meta: None,
-    };
-
-    let result = client.call_tool(params).await?;
+    let result = client
+        .call_tool(make_params(
+            "status",
+            Some(json!({"tools": "sandboxed_shell"})),
+        ))
+        .await?;
 
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first()
-        && let Some(text_content) = content.as_text()
-    {
-        // Should mention the filtered tool
-        assert!(
-            text_content.text.contains("sandboxed_shell")
-                || text_content.text.contains("Operations status"),
-            "Status should reference filter, got: {}",
-            text_content.text
-        );
-    }
+    assert_text_contains_any(
+        &result,
+        &["sandboxed_shell", "Operations status"],
+        "Status should reference filter",
+    );
 
     client.cancel().await?;
     Ok(())
@@ -110,34 +119,19 @@ async fn test_status_tool_with_operation_id_filter() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
-    // Query status with a non-existent operation_id
-    let params = CallToolRequestParams {
-        name: Cow::Borrowed("status"),
-        arguments: Some(
-            json!({"operation_id": "nonexistent_op_12345"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        ),
-        task: None,
-        meta: None,
-    };
-
-    let result = client.call_tool(params).await?;
+    let result = client
+        .call_tool(make_params(
+            "status",
+            Some(json!({"operation_id": "nonexistent_op_12345"})),
+        ))
+        .await?;
 
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first()
-        && let Some(text_content) = content.as_text()
-    {
-        // Should indicate operation not found
-        assert!(
-            text_content.text.contains("not found")
-                || text_content.text.contains("total: 0")
-                || text_content.text.contains("nonexistent_op_12345"),
-            "Status should indicate operation not found, got: {}",
-            text_content.text
-        );
-    }
+    assert_text_contains_any(
+        &result,
+        &["not found", "total: 0", "nonexistent_op_12345"],
+        "Status should indicate operation not found",
+    );
 
     client.cancel().await?;
     Ok(())
@@ -153,28 +147,16 @@ async fn test_await_tool_no_pending_operations() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
-    let params = CallToolRequestParams {
-        name: Cow::Borrowed("await"),
-        arguments: Some(json!({}).as_object().unwrap().clone()),
-        task: None,
-        meta: None,
-    };
-
-    let result = client.call_tool(params).await?;
+    let result = client
+        .call_tool(make_params("await", Some(json!({}))))
+        .await?;
 
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first()
-        && let Some(text_content) = content.as_text()
-    {
-        // Should indicate no pending operations
-        assert!(
-            text_content.text.contains("No pending operations")
-                || text_content.text.contains("Completed")
-                || text_content.text.contains("operations"),
-            "Await should handle no pending ops, got: {}",
-            text_content.text
-        );
-    }
+    assert_text_contains_any(
+        &result,
+        &["No pending operations", "Completed", "operations"],
+        "Await should handle no pending ops",
+    );
 
     client.cancel().await?;
     Ok(())
@@ -186,32 +168,19 @@ async fn test_await_tool_nonexistent_operation_id() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
-    let params = CallToolRequestParams {
-        name: Cow::Borrowed("await"),
-        arguments: Some(
-            json!({"operation_id": "fake_operation_xyz"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        ),
-        task: None,
-        meta: None,
-    };
-
-    let result = client.call_tool(params).await?;
+    let result = client
+        .call_tool(make_params(
+            "await",
+            Some(json!({"operation_id": "fake_operation_xyz"})),
+        ))
+        .await?;
 
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first()
-        && let Some(text_content) = content.as_text()
-    {
-        // Should indicate operation not found
-        assert!(
-            text_content.text.contains("not found")
-                || text_content.text.contains("fake_operation_xyz"),
-            "Await should handle non-existent operation, got: {}",
-            text_content.text
-        );
-    }
+    assert_text_contains_any(
+        &result,
+        &["not found", "fake_operation_xyz"],
+        "Await should handle non-existent operation",
+    );
 
     client.cancel().await?;
     Ok(())
@@ -223,33 +192,19 @@ async fn test_await_tool_with_tool_filter() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
-    // Request await for a specific tool prefix that has no pending operations
-    let params = CallToolRequestParams {
-        name: Cow::Borrowed("await"),
-        arguments: Some(
-            json!({"tools": "nonexistent_tool"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        ),
-        task: None,
-        meta: None,
-    };
-
-    let result = client.call_tool(params).await?;
+    let result = client
+        .call_tool(make_params(
+            "await",
+            Some(json!({"tools": "nonexistent_tool"})),
+        ))
+        .await?;
 
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first()
-        && let Some(text_content) = content.as_text()
-    {
-        // Should indicate no pending operations for this filter
-        assert!(
-            text_content.text.contains("No pending operations")
-                || text_content.text.contains("nonexistent_tool"),
-            "Await should handle empty filter results, got: {}",
-            text_content.text
-        );
-    }
+    assert_text_contains_any(
+        &result,
+        &["No pending operations", "nonexistent_tool"],
+        "Await should handle empty filter results",
+    );
 
     client.cancel().await?;
     Ok(())
@@ -263,59 +218,41 @@ async fn test_await_for_completed_async_operation() -> Result<()> {
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Start a fast async shell command
-    let shell_params = CallToolRequestParams {
-        name: Cow::Borrowed("sandboxed_shell"),
-        arguments: Some(
-            json!({"command": "echo 'quick test'"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        ),
-        task: None,
-        meta: None,
-    };
-    let start_result = client.call_tool(shell_params).await?;
+    let start_result = client
+        .call_tool(make_params(
+            "sandboxed_shell",
+            Some(json!({"command": "echo 'quick test'"})),
+        ))
+        .await?;
 
     // Extract operation ID if available
-    let mut operation_id = None;
-    if let Some(content) = start_result.content.first()
-        && let Some(text_content) = content.as_text()
-    {
-        // Try to extract operation ID from the response
-        if let Some(idx) = text_content.text.find("operation_id") {
-            let rest = &text_content.text[idx..];
-            // Look for patterns like "operation_id": "op_123" or operation_id: op_123
-            for word in rest.split_whitespace().take(5) {
-                if word.starts_with("op_") || word.starts_with("\"op_") {
-                    operation_id = Some(word.trim_matches(|c| c == '"' || c == ',').to_string());
-                    break;
-                }
-            }
-        }
-    }
+    let operation_id = extract_operation_id(&start_result);
 
-    // Now await for it - should find it completed
-    let await_params = CallToolRequestParams {
-        name: Cow::Borrowed("await"),
-        arguments: if let Some(ref id) = operation_id {
-            Some(json!({"operation_id": id}).as_object().unwrap().clone())
-        } else {
-            Some(
-                json!({"tools": "sandboxed_shell"})
-                    .as_object()
-                    .unwrap()
-                    .clone(),
-            )
-        },
-        task: None,
-        meta: None,
+    // Build await args - use operation_id if found, otherwise filter by tool
+    let await_args = match operation_id {
+        Some(id) => json!({"operation_id": id}),
+        None => json!({"tools": "sandboxed_shell"}),
     };
 
-    let result = client.call_tool(await_params).await?;
+    let result = client
+        .call_tool(make_params("await", Some(await_args)))
+        .await?;
     assert!(!result.content.is_empty());
 
     client.cancel().await?;
     Ok(())
+}
+
+/// Extracts operation_id from a tool result if present
+fn extract_operation_id(result: &rmcp::model::CallToolResult) -> Option<String> {
+    let text = get_result_text(result)?;
+    let idx = text.find("operation_id")?;
+    let rest = &text[idx..];
+
+    rest.split_whitespace()
+        .take(5)
+        .find(|word| word.starts_with("op_") || word.starts_with("\"op_"))
+        .map(|word| word.trim_matches(|c| c == '"' || c == ',').to_string())
 }
 
 // ============================================================================
@@ -328,30 +265,30 @@ async fn test_cancel_tool_missing_operation_id() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
-    // The cancel tool isn't in the default tool list, need to check if it exists
-    // If it does, call it without operation_id to trigger validation error
-    let tools = client.list_all_tools().await?;
-    let has_cancel = tools.iter().any(|t| t.name.as_ref() == "cancel");
-
-    if has_cancel {
-        let params = CallToolRequestParams {
-            name: Cow::Borrowed("cancel"),
-            arguments: Some(json!({}).as_object().unwrap().clone()),
-            task: None,
-            meta: None,
-        };
-
-        let result = client.call_tool(params).await;
-
-        // Should return an error for missing parameter
-        assert!(
-            result.is_err(),
-            "Cancel without operation_id should fail with error"
-        );
+    if !client_has_tool(&client, "cancel").await? {
+        client.cancel().await?;
+        return Ok(());
     }
+
+    let result = client
+        .call_tool(make_params("cancel", Some(json!({}))))
+        .await;
+    assert!(
+        result.is_err(),
+        "Cancel without operation_id should fail with error"
+    );
 
     client.cancel().await?;
     Ok(())
+}
+
+/// Checks if a tool exists in the client's tool list
+async fn client_has_tool(
+    client: &rmcp::service::RunningService<rmcp::RoleClient, ()>,
+    name: &str,
+) -> Result<bool> {
+    let tools: Vec<rmcp::model::Tool> = client.list_all_tools().await?;
+    Ok(tools.iter().any(|t| t.name.as_ref() == name))
 }
 
 /// Test cancel tool with non-existent operation_id
@@ -360,37 +297,23 @@ async fn test_cancel_tool_nonexistent_operation() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
-    let tools = client.list_all_tools().await?;
-    let has_cancel = tools.iter().any(|t| t.name.as_ref() == "cancel");
-
-    if has_cancel {
-        let params = CallToolRequestParams {
-            name: Cow::Borrowed("cancel"),
-            arguments: Some(
-                json!({"operation_id": "nonexistent_op_999"})
-                    .as_object()
-                    .unwrap()
-                    .clone(),
-            ),
-            task: None,
-            meta: None,
-        };
-
-        let result = client.call_tool(params).await?;
-
-        // Should indicate operation not found
-        if let Some(content) = result.content.first()
-            && let Some(text_content) = content.as_text()
-        {
-            assert!(
-                text_content.text.contains("not found")
-                    || text_content.text.contains("❌")
-                    || text_content.text.contains("never existed"),
-                "Cancel should report operation not found, got: {}",
-                text_content.text
-            );
-        }
+    if !client_has_tool(&client, "cancel").await? {
+        client.cancel().await?;
+        return Ok(());
     }
+
+    let result = client
+        .call_tool(make_params(
+            "cancel",
+            Some(json!({"operation_id": "nonexistent_op_999"})),
+        ))
+        .await?;
+
+    assert_text_contains_any(
+        &result,
+        &["not found", "❌", "never existed"],
+        "Cancel should report operation not found",
+    );
 
     client.cancel().await?;
     Ok(())
@@ -406,16 +329,13 @@ async fn test_call_nonexistent_tool() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
-    let params = CallToolRequestParams {
-        name: Cow::Borrowed("this_tool_definitely_does_not_exist_xyz123"),
-        arguments: Some(json!({}).as_object().unwrap().clone()),
-        task: None,
-        meta: None,
-    };
+    let result = client
+        .call_tool(make_params(
+            "this_tool_definitely_does_not_exist_xyz123",
+            Some(json!({})),
+        ))
+        .await;
 
-    let result = client.call_tool(params).await;
-
-    // Should return an error
     assert!(result.is_err(), "Non-existent tool should return error");
 
     client.cancel().await?;
@@ -428,33 +348,31 @@ async fn test_call_tool_invalid_subcommand() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
-    // Assume there's a file_tools tool available
-    let tools = client.list_all_tools().await?;
-    let has_file_tools = tools
-        .iter()
-        .any(|t| t.name.as_ref().starts_with("file_tools"));
-
-    if has_file_tools {
-        let params = CallToolRequestParams {
-            name: Cow::Borrowed("file_tools"),
-            arguments: Some(
-                json!({"subcommand": "nonexistent_subcommand"})
-                    .as_object()
-                    .unwrap()
-                    .clone(),
-            ),
-            task: None,
-            meta: None,
-        };
-
-        let result = client.call_tool(params).await;
-
-        // Should return an error for invalid subcommand
-        assert!(result.is_err(), "Invalid subcommand should return error");
+    if !client_has_tool_prefix(&client, "file_tools").await? {
+        client.cancel().await?;
+        return Ok(());
     }
+
+    let result = client
+        .call_tool(make_params(
+            "file_tools",
+            Some(json!({"subcommand": "nonexistent_subcommand"})),
+        ))
+        .await;
+
+    assert!(result.is_err(), "Invalid subcommand should return error");
 
     client.cancel().await?;
     Ok(())
+}
+
+/// Checks if any tool with the given prefix exists
+async fn client_has_tool_prefix(
+    client: &rmcp::service::RunningService<rmcp::RoleClient, ()>,
+    prefix: &str,
+) -> Result<bool> {
+    let tools: Vec<rmcp::model::Tool> = client.list_all_tools().await?;
+    Ok(tools.iter().any(|t| t.name.as_ref().starts_with(prefix)))
 }
 
 // ============================================================================
@@ -468,19 +386,15 @@ async fn test_list_tools_includes_builtin_tools() -> Result<()> {
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let tools = client.list_all_tools().await?;
-
-    // Should include await and status built-in tools
     let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_ref()).collect();
 
     assert!(
         tool_names.contains(&"await"),
-        "Tools should include 'await'. Got: {:?}",
-        tool_names
+        "Tools should include 'await'. Got: {tool_names:?}"
     );
     assert!(
         tool_names.contains(&"status"),
-        "Tools should include 'status'. Got: {:?}",
-        tool_names
+        "Tools should include 'status'. Got: {tool_names:?}"
     );
 
     client.cancel().await?;
@@ -494,19 +408,17 @@ async fn test_list_tools_await_schema() -> Result<()> {
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let tools = client.list_all_tools().await?;
+    let await_tool = tools
+        .iter()
+        .find(|t| t.name.as_ref() == "await")
+        .expect("Should find await tool");
 
-    let await_tool = tools.iter().find(|t| t.name.as_ref() == "await");
-    assert!(await_tool.is_some(), "Should find await tool");
-
-    let await_tool = await_tool.unwrap();
     assert!(
         await_tool.description.is_some(),
         "Await tool should have description"
     );
 
-    // Check input schema has expected properties
-    let schema = &await_tool.input_schema;
-    let schema_str = serde_json::to_string(&schema)?;
+    let schema_str = serde_json::to_string(&await_tool.input_schema)?;
     assert!(
         schema_str.contains("tools") || schema_str.contains("operation_id"),
         "Await schema should have tools or operation_id properties"
@@ -523,17 +435,16 @@ async fn test_list_tools_status_schema() -> Result<()> {
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let tools = client.list_all_tools().await?;
+    let status_tool = tools
+        .iter()
+        .find(|t| t.name.as_ref() == "status")
+        .expect("Should find status tool");
 
-    let status_tool = tools.iter().find(|t| t.name.as_ref() == "status");
-    assert!(status_tool.is_some(), "Should find status tool");
-
-    let status_tool = status_tool.unwrap();
     assert!(
         status_tool.description.is_some(),
         "Status tool should have description"
     );
 
-    // Verify it mentions polling anti-pattern in description
     if let Some(desc) = &status_tool.description {
         assert!(
             desc.contains("poll")
@@ -559,43 +470,27 @@ async fn test_async_operation_full_lifecycle() -> Result<()> {
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Start an async shell command
-    let shell_params = CallToolRequestParams {
-        name: Cow::Borrowed("sandboxed_shell"),
-        arguments: Some(
-            json!({"command": "sleep 0.1 && echo lifecycle_test"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        ),
-        task: None,
-        meta: None,
-    };
-    let start_result = client.call_tool(shell_params).await?;
+    let start_result = client
+        .call_tool(make_params(
+            "sandboxed_shell",
+            Some(json!({"command": "sleep 0.1 && echo lifecycle_test"})),
+        ))
+        .await?;
     assert!(!start_result.content.is_empty());
 
     // Check status immediately
-    let status_params = CallToolRequestParams {
-        name: Cow::Borrowed("status"),
-        arguments: Some(json!({}).as_object().unwrap().clone()),
-        task: None,
-        meta: None,
-    };
-    let status_result = client.call_tool(status_params).await?;
+    let status_result = client
+        .call_tool(make_params("status", Some(json!({}))))
+        .await?;
     assert!(!status_result.content.is_empty());
 
     // Await should find completed operations
-    let await_params = CallToolRequestParams {
-        name: Cow::Borrowed("await"),
-        arguments: Some(
-            json!({"tools": "sandboxed_shell"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        ),
-        task: None,
-        meta: None,
-    };
-    let await_result = client.call_tool(await_params).await?;
+    let await_result = client
+        .call_tool(make_params(
+            "await",
+            Some(json!({"tools": "sandboxed_shell"})),
+        ))
+        .await?;
     assert!(!await_result.content.is_empty());
 
     client.cancel().await?;
@@ -611,7 +506,6 @@ async fn test_async_operation_full_lifecycle() -> Result<()> {
 async fn test_file_tools_in_temp_directory() -> Result<()> {
     init_test_logging();
 
-    // Create a temp project with text files
     let temp_dir = create_rust_project(TestProjectOptions {
         prefix: Some("mcp_coverage_".to_string()),
         with_cargo: false,
@@ -626,35 +520,20 @@ async fn test_file_tools_in_temp_directory() -> Result<()> {
         .build()
         .await?;
 
-    // List files in the temp directory
-    let tools = client.list_all_tools().await?;
-    let has_file_tools = tools
-        .iter()
-        .any(|t| t.name.as_ref().starts_with("file_tools"));
-
-    if has_file_tools {
-        let params = CallToolRequestParams {
-            name: Cow::Borrowed("file_tools"),
-            arguments: Some(json!({"subcommand": "ls"}).as_object().unwrap().clone()),
-            task: None,
-            meta: None,
-        };
-
-        let result = client.call_tool(params).await?;
-
-        if let Some(content) = result.content.first()
-            && let Some(text_content) = content.as_text()
-        {
-            // Should see the test files we created
-            assert!(
-                text_content.text.contains("test1.txt")
-                    || text_content.text.contains("test2.txt")
-                    || text_content.text.contains(".ahma"),
-                "Should see files in temp dir, got: {}",
-                text_content.text
-            );
-        }
+    if !client_has_tool_prefix(&client, "file_tools").await? {
+        client.cancel().await?;
+        return Ok(());
     }
+
+    let result = client
+        .call_tool(make_params("file_tools", Some(json!({"subcommand": "ls"}))))
+        .await?;
+
+    assert_text_contains_any(
+        &result,
+        &["test1.txt", "test2.txt", ".ahma"],
+        "Should see files in temp dir",
+    );
 
     client.cancel().await?;
     Ok(())
@@ -670,36 +549,25 @@ async fn test_status_with_multiple_tool_filters() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
-    // Query with multiple tool prefixes
-    let params = CallToolRequestParams {
-        name: Cow::Borrowed("status"),
-        arguments: Some(
-            json!({"tools": "cargo,git,sandboxed_shell"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        ),
-        task: None,
-        meta: None,
-    };
-
-    let result = client.call_tool(params).await?;
+    let result = client
+        .call_tool(make_params(
+            "status",
+            Some(json!({"tools": "cargo,git,sandboxed_shell"})),
+        ))
+        .await?;
 
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first()
-        && let Some(text_content) = content.as_text()
-    {
-        // Should process the comma-separated list
-        assert!(
-            text_content.text.contains("Operations status")
-                || text_content.text.contains("cargo")
-                || text_content.text.contains("git")
-                || text_content.text.contains("sandboxed_shell")
-                || text_content.text.contains("total"),
-            "Status should handle multiple filters, got: {}",
-            text_content.text
-        );
-    }
+    assert_text_contains_any(
+        &result,
+        &[
+            "Operations status",
+            "cargo",
+            "git",
+            "sandboxed_shell",
+            "total",
+        ],
+        "Status should handle multiple filters",
+    );
 
     client.cancel().await?;
     Ok(())
@@ -711,30 +579,16 @@ async fn test_await_with_multiple_tool_filters() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
-    // Await with multiple tool prefixes
-    let params = CallToolRequestParams {
-        name: Cow::Borrowed("await"),
-        arguments: Some(json!({"tools": "cargo,git"}).as_object().unwrap().clone()),
-        task: None,
-        meta: None,
-    };
-
-    let result = client.call_tool(params).await?;
+    let result = client
+        .call_tool(make_params("await", Some(json!({"tools": "cargo,git"}))))
+        .await?;
 
     assert!(!result.content.is_empty());
-    if let Some(content) = result.content.first()
-        && let Some(text_content) = content.as_text()
-    {
-        // Should indicate no pending operations for these tools
-        assert!(
-            text_content.text.contains("No pending operations")
-                || text_content.text.contains("cargo")
-                || text_content.text.contains("git")
-                || text_content.text.contains("Completed"),
-            "Await should handle multiple filters, got: {}",
-            text_content.text
-        );
-    }
+    assert_text_contains_any(
+        &result,
+        &["No pending operations", "cargo", "git", "Completed"],
+        "Await should handle multiple filters",
+    );
 
     client.cancel().await?;
     Ok(())

@@ -143,6 +143,51 @@ impl MonitorConfig {
     }
 }
 
+/// Check if an operation's tool name matches any of the given filter prefixes.
+/// Returns true if no filters are provided (i.e., all operations match).
+fn matches_tool_filter(op: &Operation, filters: &Option<Vec<String>>) -> bool {
+    filters.as_ref().is_none_or(|f| {
+        let name = op.tool_name.to_lowercase();
+        f.iter().any(|filter| name.starts_with(filter))
+    })
+}
+
+/// Build a structured JSON cancellation result for debugging/LLM visibility.
+fn build_cancellation_result(reason: Option<String>) -> Value {
+    let reason_str = reason.unwrap_or_else(|| "Cancelled by user".to_string());
+    serde_json::json!({
+        "cancelled": true,
+        "reason": reason_str
+    })
+}
+
+/// Parse a comma-separated tool filter string into lowercase prefixes.
+fn parse_tool_filters(tool_filter: Option<&str>) -> Option<Vec<String>> {
+    tool_filter.map(|filters| {
+        filters
+            .split(',')
+            .map(|s| s.trim().to_lowercase())
+            .collect()
+    })
+}
+
+/// Log progressive timeout warnings at 50%, 75%, and 90% thresholds.
+fn log_progress_warnings(progress_percent: u8, remaining_secs: i64, warnings_sent: &mut [bool; 3]) {
+    const THRESHOLDS: [u8; 3] = [50, 75, 90];
+    const MESSAGES: [&str; 3] = [
+        "Wait operation 50% complete. Current active operations being monitored.",
+        "Wait operation 75% complete. Consider checking operation status.",
+        "Wait operation 90% complete. Operations may timeout soon!",
+    ];
+
+    for (i, &threshold) in THRESHOLDS.iter().enumerate() {
+        if progress_percent >= threshold && !warnings_sent[i] {
+            warnings_sent[i] = true;
+            tracing::warn!("{} - {}s remaining", MESSAGES[i], remaining_secs.max(0));
+        }
+    }
+}
+
 /// Operation monitor that tracks and manages cargo operations
 #[derive(Debug, Clone)]
 pub struct OperationMonitor {
@@ -174,14 +219,11 @@ impl OperationMonitor {
     }
 
     pub async fn get_operation(&self, operation_id: &str) -> Option<Operation> {
-        // Simplified: No polling detection - just return the operation
         let ops = self.operations.read().await;
         ops.get(operation_id).cloned()
     }
 
     /// Starts a background task that periodically checks for timed-out operations.
-    /// This ensures that operations that exceed their timeout are cancelled even if
-    /// the executor fails to handle them.
     pub fn start_background_monitor(monitor: Arc<Self>) {
         let weak_monitor = Arc::downgrade(&monitor);
         tokio::spawn(async move {
@@ -201,23 +243,17 @@ impl OperationMonitor {
     /// Checks all active operations for timeouts and cancels them if necessary.
     pub async fn check_timeouts(&self) {
         let now = SystemTime::now();
-        let mut timed_out_ops = Vec::new();
-
-        {
+        let timed_out_ops = {
             let ops = self.operations.read().await;
-            for op in ops.values() {
-                if op.state.is_terminal() {
-                    continue;
-                }
-
-                let timeout = op.timeout_duration.unwrap_or(self.config.default_timeout);
-                if let Ok(elapsed) = now.duration_since(op.start_time)
-                    && elapsed > timeout
-                {
-                    timed_out_ops.push((op.id.clone(), elapsed, timeout));
-                }
-            }
-        }
+            ops.values()
+                .filter(|op| !op.state.is_terminal())
+                .filter_map(|op| {
+                    let timeout = op.timeout_duration.unwrap_or(self.config.default_timeout);
+                    let elapsed = now.duration_since(op.start_time).ok()?;
+                    (elapsed > timeout).then_some((op.id.clone(), elapsed, timeout))
+                })
+                .collect::<Vec<_>>()
+        };
 
         for (op_id, elapsed, timeout) in timed_out_ops {
             let reason = format!(
@@ -231,45 +267,45 @@ impl OperationMonitor {
 
     async fn timeout_operation(&self, operation_id: &str, reason: String) {
         let mut ops = self.operations.write().await;
-        if let Some(op) = ops.get_mut(operation_id)
-            && !op.state.is_terminal()
-        {
-            tracing::warn!("Timing out operation: {} - {}", operation_id, reason);
-
-            op.state = OperationStatus::TimedOut;
-            op.end_time = Some(SystemTime::now());
-            op.cancellation_token.cancel();
-
-            op.result = Some(serde_json::json!({
-                "timed_out": true,
-                "reason": reason
-            }));
-
-            // Remove from active operations
-            let timed_out_op = ops.remove(operation_id);
-            drop(ops); // Release lock
-
-            // Move to history BEFORE notifying to avoid race condition
-            if let Some(op) = timed_out_op {
-                let mut history = self.completion_history.write().await;
-                history.insert(operation_id.to_string(), op.clone());
-                drop(history);
-
-                // NOW notify waiters
-                op.completion_notifier.notify_waiters();
-            }
+        let Some(op) = ops.get_mut(operation_id) else {
+            return;
+        };
+        if op.state.is_terminal() {
+            return;
         }
+
+        tracing::warn!("Timing out operation: {} - {}", operation_id, reason);
+
+        op.state = OperationStatus::TimedOut;
+        op.end_time = Some(SystemTime::now());
+        op.cancellation_token.cancel();
+        op.result = Some(serde_json::json!({
+            "timed_out": true,
+            "reason": reason
+        }));
+
+        let timed_out_op = ops.remove(operation_id);
+        drop(ops);
+
+        self.move_to_history_and_notify(operation_id, timed_out_op)
+            .await;
+    }
+
+    /// Move a completed operation to history and notify waiters.
+    /// Must be called after releasing the operations write lock.
+    async fn move_to_history_and_notify(&self, operation_id: &str, operation: Option<Operation>) {
+        let Some(op) = operation else { return };
+        let mut history = self.completion_history.write().await;
+        history.insert(operation_id.to_string(), op.clone());
+        drop(history);
+        op.completion_notifier.notify_waiters();
     }
 
     /// Returns all currently active (non-terminal) operations.
     ///
     /// Note: Completed operations are accessible via `get_completed_operations`.
     pub async fn get_all_active_operations(&self) -> Vec<Operation> {
-        let ops = self.operations.read().await;
-        ops.values()
-            .filter(|op| !op.state.is_terminal())
-            .cloned()
-            .collect()
+        self.get_active_operations().await
     }
 
     pub async fn update_status(
@@ -291,100 +327,74 @@ impl OperationMonitor {
             op.state = status;
             op.result = result;
 
-            // Set end time when operation reaches terminal state
             if status.is_terminal() {
                 op.end_time = Some(SystemTime::now());
-
-                // Remove from active operations now (before notifying)
                 operation_to_move = ops.remove(operation_id);
             }
         }
 
-        // Drop operations lock before acquiring history lock
         drop(ops);
 
-        // If we removed a terminal operation, move it to completion history
-        // BEFORE notifying waiters to avoid race condition
         if let Some(op) = operation_to_move {
             let mut history = self.completion_history.write().await;
             history.insert(operation_id.to_string(), op.clone());
             tracing::debug!("Moved operation {} to completion history.", operation_id);
             drop(history);
 
-            // NOW notify anyone waiting on this operation
-            // The operation is guaranteed to be in completion_history at this point
             op.completion_notifier.notify_waiters();
         }
     }
 
     /// Cancel an operation by ID with an optional reason string.
-    /// Returns true if the operation was found and cancelled, false if not found
+    /// Returns true if the operation was found and cancelled, false if not found.
     pub async fn cancel_operation_with_reason(
         &self,
         operation_id: &str,
         reason: Option<String>,
     ) -> bool {
         let mut ops = self.operations.write().await;
-        if let Some(op) = ops.get_mut(operation_id) {
-            // Only cancel if the operation is not already terminal
-            if !op.state.is_terminal() {
-                tracing::info!("Cancelling operation: {}", operation_id);
-                tracing::debug!(
-                    "CANCEL_OPERATION_WITH_REASON: operation_id='{}', reason={:?}, current_state={:?}",
-                    operation_id,
-                    reason,
-                    op.state
-                );
 
-                op.state = OperationStatus::Cancelled;
-                op.end_time = Some(SystemTime::now());
-                op.cancellation_token.cancel();
-
-                // Store structured cancellation info in result for debugging/LLM visibility
-                let mut data = serde_json::Map::new();
-                data.insert("cancelled".to_string(), serde_json::Value::Bool(true));
-                if let Some(r) = reason.clone() {
-                    tracing::debug!("Storing cancellation reason: '{}'", r);
-                    data.insert("reason".to_string(), serde_json::Value::String(r));
-                } else {
-                    tracing::debug!("No specific cancellation reason provided, using default");
-                    data.insert(
-                        "reason".to_string(),
-                        serde_json::Value::String("Cancelled by user".to_string()),
-                    );
-                }
-                op.result = Some(serde_json::Value::Object(data));
-
-                // Move to completion history
-                let cancelled_op = op.clone();
-                drop(ops); // Release the write lock early
-
-                let mut history = self.completion_history.write().await;
-                history.insert(operation_id.to_string(), cancelled_op);
-                tracing::debug!(
-                    "Moved cancelled operation {} to completion history.",
-                    operation_id
-                );
-
-                // Remove from active operations
-                let mut ops = self.operations.write().await;
-                ops.remove(operation_id);
-
-                true
-            } else {
-                tracing::warn!(
-                    "Attempted to cancel already terminal operation: {}",
-                    operation_id
-                );
-                false
-            }
-        } else {
+        let Some(op) = ops.get_mut(operation_id) else {
             tracing::warn!(
                 "Attempted to cancel non-existent operation: {}",
                 operation_id
             );
-            false
+            return false;
+        };
+
+        if op.state.is_terminal() {
+            tracing::warn!(
+                "Attempted to cancel already terminal operation: {}",
+                operation_id
+            );
+            return false;
         }
+
+        tracing::info!("Cancelling operation: {}", operation_id);
+        tracing::debug!(
+            "CANCEL_OPERATION_WITH_REASON: operation_id='{}', reason={:?}, current_state={:?}",
+            operation_id,
+            reason,
+            op.state
+        );
+
+        op.state = OperationStatus::Cancelled;
+        op.end_time = Some(SystemTime::now());
+        op.cancellation_token.cancel();
+        op.result = Some(build_cancellation_result(reason));
+
+        let cancelled_op = op.clone();
+        ops.remove(operation_id);
+        drop(ops);
+
+        let mut history = self.completion_history.write().await;
+        history.insert(operation_id.to_string(), cancelled_op);
+        tracing::debug!(
+            "Moved cancelled operation {} to completion history.",
+            operation_id
+        );
+
+        true
     }
 
     /// Backward-compatible helper without explicit reason
@@ -406,117 +416,129 @@ impl OperationMonitor {
     }
 
     pub async fn get_shutdown_summary(&self) -> ShutdownSummary {
-        let ops = self.operations.read().await;
-        let operations: Vec<Operation> = ops
-            .values()
-            .filter(|op| !op.state.is_terminal())
-            .cloned()
-            .collect();
+        let operations = self.get_active_operations().await;
         let total_active = operations.len();
-
         ShutdownSummary {
             total_active,
             operations,
         }
     }
 
+    /// Look up an operation in the completion history.
+    async fn check_completion_history(&self, operation_id: &str) -> Option<Operation> {
+        let history = self.completion_history.read().await;
+        history.get(operation_id).cloned()
+    }
+
+    /// Get the notifier for an active operation, setting first_wait_time if needed.
+    /// Returns `Some(notifier)` if the operation is active, `None` if it doesn't exist.
+    /// Returns the operation directly via `Err(op)` if it's already terminal.
+    async fn get_notifier_or_terminal(
+        &self,
+        operation_id: &str,
+    ) -> Result<Option<Arc<Notify>>, Operation> {
+        let mut ops = self.operations.write().await;
+        let Some(op) = ops.get_mut(operation_id) else {
+            return Ok(None);
+        };
+
+        if op.first_wait_time.is_none() {
+            op.first_wait_time = Some(SystemTime::now());
+        }
+
+        if op.state.is_terminal() {
+            return Err(op.clone());
+        }
+
+        Ok(Some(op.completion_notifier.clone()))
+    }
+
+    /// Retry checking completion history after notification, handling the small
+    /// race window where the notifier fires before history is updated.
+    async fn wait_for_history_propagation(&self, operation_id: &str) -> Option<Operation> {
+        for attempt in 0..10 {
+            if let Some(op) = self.check_completion_history(operation_id).await {
+                return Some(op);
+            }
+            if attempt < 9 {
+                tracing::debug!(
+                    "Operation {} not yet in completion history, retrying (attempt {}/10)",
+                    operation_id,
+                    attempt + 1
+                );
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }
+
+        tracing::warn!(
+            "Operation {} completed but not found in history after 10 retries",
+            operation_id
+        );
+        None
+    }
+
     pub async fn wait_for_operation(&self, operation_id: &str) -> Option<Operation> {
-        // Use a generous timeout (5 minutes) to handle long-running operations like cargo clippy
-        // The caller can apply their own timeout if they want stricter limits
         let timeout = Duration::from_secs(300);
 
-        // First, check if the operation has already completed.
-        {
-            let history = self.completion_history.read().await;
-            if let Some(op) = history.get(operation_id) {
-                return Some(op.clone());
-            }
-        } // Drop history lock immediately
+        if let Some(op) = self.check_completion_history(operation_id).await {
+            return Some(op);
+        }
 
-        // Check if the operation exists in active operations and is already terminal
-        // This handles the case where an operation is added in a terminal state
-        {
-            let mut ops = self.operations.write().await;
-            if let Some(op) = ops.get_mut(operation_id)
-                && op.state.is_terminal()
-            {
-                // Operation is already terminal, but we still need to set first_wait_time
-                if op.first_wait_time.is_none() {
-                    op.first_wait_time = Some(SystemTime::now());
-                }
-                return Some(op.clone());
-            }
-        } // Drop write lock immediately
+        let notifier = match self.get_notifier_or_terminal(operation_id).await {
+            Err(terminal_op) => return Some(terminal_op),
+            Ok(None) => return None,
+            Ok(Some(n)) => n,
+        };
 
-        // Get the notifier and check/set first_wait_time atomically
-        let notifier = {
-            let mut ops = self.operations.write().await;
-            if let Some(op) = ops.get_mut(operation_id) {
-                // Double-check if it became terminal while we were waiting for the write lock
-                if op.state.is_terminal() {
-                    // Set first_wait_time if it hasn't been set yet
-                    if op.first_wait_time.is_none() {
-                        op.first_wait_time = Some(SystemTime::now());
-                    }
-                    return Some(op.clone());
-                }
-
-                // Set first_wait_time if it hasn't been set yet (atomic operation)
-                if op.first_wait_time.is_none() {
-                    op.first_wait_time = Some(SystemTime::now());
-                }
-                Some(op.completion_notifier.clone())
-            } else {
-                // Operation doesn't exist in active operations.
+        match tokio::time::timeout(timeout, notifier.notified()).await {
+            Ok(_) => self.wait_for_history_propagation(operation_id).await,
+            Err(_) => {
+                tracing::warn!("Wait for operation {} timed out.", operation_id);
                 None
             }
-        }; // Drop write lock immediately
-
-        if let Some(notifier) = notifier {
-            // Wait for the notification or timeout.
-            match tokio::time::timeout(timeout, notifier.notified()).await {
-                Ok(_) => {
-                    // Notification received, the operation should be in the completion history now.
-                    // There's a small race window where the notifier fires before the operation
-                    // is moved to completion_history. Retry a few times with a small delay.
-                    for attempt in 0..10 {
-                        let history = self.completion_history.read().await;
-                        if let Some(op) = history.get(operation_id) {
-                            return Some(op.clone());
-                        }
-                        drop(history);
-
-                        if attempt < 9 {
-                            tracing::debug!(
-                                "Operation {} not yet in completion history, retrying (attempt {}/10)",
-                                operation_id,
-                                attempt + 1
-                            );
-                            tokio::time::sleep(Duration::from_millis(10)).await;
-                        }
-                    }
-
-                    tracing::warn!(
-                        "Operation {} completed but not found in history after 10 retries",
-                        operation_id
-                    );
-                    None
-                }
-                Err(_) => {
-                    // Timeout elapsed.
-                    tracing::warn!("Wait for operation {} timed out.", operation_id);
-                    None
-                }
-            }
-        } else {
-            // Operation doesn't exist
-            None
         }
     }
 
+    /// Get active operations that match the given tool filter.
+    async fn get_filtered_active_operations(
+        &self,
+        filters: &Option<Vec<String>>,
+    ) -> Vec<Operation> {
+        let ops = self.operations.read().await;
+        ops.values()
+            .filter(|op| !op.state.is_terminal())
+            .filter(|op| matches_tool_filter(op, filters))
+            .cloned()
+            .collect()
+    }
+
+    /// Collect completed operations from history that match the filter and finished
+    /// after the given start time.
+    async fn collect_completed_since(
+        &self,
+        filters: &Option<Vec<String>>,
+        since: SystemTime,
+    ) -> Vec<Operation> {
+        let history = self.completion_history.read().await;
+        history
+            .values()
+            .filter(|op| matches_tool_filter(op, filters))
+            .filter(|op| op.end_time.is_some_and(|t| t >= since))
+            .cloned()
+            .collect()
+    }
+
+    /// Collect all completed operations from history that match the filter.
+    async fn collect_all_completed(&self, filters: &Option<Vec<String>>) -> Vec<Operation> {
+        let history = self.completion_history.read().await;
+        history
+            .values()
+            .filter(|op| matches_tool_filter(op, filters))
+            .cloned()
+            .collect()
+    }
+
     /// Advanced await functionality that waits for multiple operations with progressive timeout warnings.
-    /// This method implements the enhanced await functionality with timeout validation, tool filtering,
-    /// and progressive user feedback.
     ///
     /// # Arguments
     /// * `tool_filter` - Optional comma-separated list of tool prefixes to await for
@@ -529,18 +551,10 @@ impl OperationMonitor {
         tool_filter: Option<&str>,
         timeout_seconds: Option<u32>,
     ) -> Vec<Operation> {
-        // Validate and set timeout (1-1800 seconds, default 240)
         let timeout_secs = timeout_seconds.unwrap_or(240).clamp(1, 1800);
         let timeout = Duration::from_secs(timeout_secs as u64);
         let start_time = Instant::now();
-
-        // Parse tool filter
-        let tool_filters: Option<Vec<String>> = tool_filter.map(|filters| {
-            filters
-                .split(',')
-                .map(|s| s.trim().to_lowercase())
-                .collect()
-        });
+        let tool_filters = parse_tool_filters(tool_filter);
 
         tracing::info!(
             "Starting advanced await operation: timeout={}s, tool_filter={:?}",
@@ -548,81 +562,25 @@ impl OperationMonitor {
             tool_filters
         );
 
-        // Progressive warning thresholds (50%, 75%, 90%)
-        const WARNING_THRESHOLDS: [u8; 3] = [50, 75, 90];
         let mut warnings_sent = [false; 3];
-
         let mut completed_operations = Vec::new();
 
         loop {
             let elapsed = start_time.elapsed();
-            let progress_percent = (elapsed.as_secs_f64() / timeout.as_secs_f64() * 100.0) as u8;
 
-            // Check for timeout
             if elapsed >= timeout {
                 tracing::warn!("Advanced await operation timed out after {}s", timeout_secs);
                 break;
             }
 
-            // Send progressive warnings
-            for (i, &threshold) in WARNING_THRESHOLDS.iter().enumerate() {
-                if progress_percent >= threshold && !warnings_sent[i] {
-                    warnings_sent[i] = true;
-                    let remaining_secs = timeout_secs as i64 - elapsed.as_secs() as i64;
+            let progress_percent = (elapsed.as_secs_f64() / timeout.as_secs_f64() * 100.0) as u8;
+            let remaining_secs = timeout_secs as i64 - elapsed.as_secs() as i64;
+            log_progress_warnings(progress_percent, remaining_secs, &mut warnings_sent);
 
-                    match threshold {
-                        50 => tracing::warn!(
-                            "⏰ Wait operation 50% complete - {}s remaining. Current active operations being monitored.",
-                            remaining_secs.max(0)
-                        ),
-                        75 => tracing::warn!(
-                            "⚠️ Wait operation 75% complete - {}s remaining. Consider checking operation status.",
-                            remaining_secs.max(0)
-                        ),
-                        90 => tracing::warn!(
-                            "🚨 Wait operation 90% complete - {}s remaining. Operations may timeout soon!",
-                            remaining_secs.max(0)
-                        ),
-                        _ => {}
-                    }
-                }
-            }
+            let active_ops = self.get_filtered_active_operations(&tool_filters).await;
 
-            // Get currently active operations that match our filter
-            let active_ops = {
-                let ops = self.operations.read().await;
-                ops.values()
-                    .filter(|op| !op.state.is_terminal())
-                    .filter(|op| {
-                        if let Some(ref filters) = tool_filters {
-                            filters
-                                .iter()
-                                .any(|filter| op.tool_name.to_lowercase().starts_with(filter))
-                        } else {
-                            true
-                        }
-                    })
-                    .cloned()
-                    .collect::<Vec<_>>()
-            };
-
-            // If no active operations match our criteria, collect completed ones and exit
             if active_ops.is_empty() {
-                let history = self.completion_history.read().await;
-                completed_operations = history
-                    .values()
-                    .filter(|op| {
-                        if let Some(ref filters) = tool_filters {
-                            filters
-                                .iter()
-                                .any(|filter| op.tool_name.to_lowercase().starts_with(filter))
-                        } else {
-                            true
-                        }
-                    })
-                    .cloned()
-                    .collect();
-
+                completed_operations = self.collect_all_completed(&tool_filters).await;
                 tracing::info!(
                     "Advanced await completed: {} operations finished, no active operations remaining",
                     completed_operations.len()
@@ -630,48 +588,12 @@ impl OperationMonitor {
                 break;
             }
 
-            // If there are active operations but none match the filter, avoid scanning history repeatedly
-            if let Some(ref filters) = tool_filters {
-                let any_match = active_ops.iter().any(|op| {
-                    let name = op.tool_name.to_lowercase();
-                    filters.iter().any(|f| name.starts_with(f))
-                });
-                if !any_match {
-                    // No matching active operations; short sleep and continue
-                    tokio::time::sleep(Duration::from_millis(50)).await;
-                    continue;
-                }
-            }
-
-            // Check if any operations completed and moved to history
-            let history = self.completion_history.read().await;
-            let newly_completed: Vec<_> = history
-                .values()
-                .filter(|op| {
-                    if let Some(ref filters) = tool_filters {
-                        filters
-                            .iter()
-                            .any(|filter| op.tool_name.to_lowercase().starts_with(filter))
-                    } else {
-                        true
-                    }
-                })
-                .filter(|op| {
-                    // Only include operations completed since we started waiting
-                    if let Some(end_time) = op.end_time {
-                        let wait_start_system_time = SystemTime::now() - elapsed;
-                        end_time >= wait_start_system_time
-                    } else {
-                        false
-                    }
-                })
-                .cloned()
-                .collect();
-
+            let wait_start_system_time = SystemTime::now() - elapsed;
+            let newly_completed = self
+                .collect_completed_since(&tool_filters, wait_start_system_time)
+                .await;
             completed_operations.extend(newly_completed);
-            drop(history);
 
-            // Sleep before next check
             tokio::time::sleep(Duration::from_millis(
                 crate::constants::SEQUENCE_STEP_DELAY_MS,
             ))
