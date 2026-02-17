@@ -1,7 +1,7 @@
 # Ahma MCP Comprehensive Compliance Report
 
 **Generated:** 2025-01-01  
-**Scope:** Full codebase audit against `REQUIREMENTS.md` (R0-R19) and module-specific requirements  
+**Scope:** Full codebase audit against `SPEC.md` (R0-R19) and module-specific requirements  
 **Status:** **Partial compliance** — Most requirements implemented with 2 notable mismatches requiring action
 
 ---
@@ -240,7 +240,7 @@ members = ["ahma_mcp", "ahma_validate", "generate_tool_schema", "ahma_http_bridg
 
 **Recommended Fix:** Either:
 
-1. Update REQUIREMENTS.md to reflect current architecture (binary in ahma_mcp), or
+1. Update SPEC.md to reflect current architecture (binary in ahma_mcp), or
 2. Create `ahma_shell` crate and set `default-members = ["ahma_shell"]`
 
 ---
@@ -435,7 +435,7 @@ async fn test_delete_session_terminates_subprocess() {
 |----------|-------|----------|-----------------|
 | **HIGH** | R7.6 Nested sandbox should exit | `main_logic.rs:231-254` | Change to `exit_with_sandbox_error()` |
 | **MEDIUM** | R8.4.7 Missing DELETE endpoint | `bridge.rs:81-83` | Add `.delete(handle_session_delete)` |
-| **LOW** | R6.9 Workspace default-members | `Cargo.toml:1-8` | Update REQUIREMENTS.md or restructure |
+| **LOW** | R6.9 Workspace default-members | `Cargo.toml:1-8` | Update SPEC.md or restructure |
 
 ---
 

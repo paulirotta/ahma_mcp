@@ -61,11 +61,21 @@ struct Cli {
     /// instructing the AI to plan and implement a fix for that issue.
     #[arg(long)]
     ai_fix: Option<usize>,
+
+    /// Verify improvement by re-analyzing a specific file and comparing
+    /// against the baseline from the previous analysis run. Shows before/after
+    /// metrics with relative improvement percentages.
+    #[arg(long)]
+    verify: Option<PathBuf>,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     check_dependencies()?;
+
+    if let Some(ref verify_path) = cli.verify {
+        return run_verify(verify_path, &cli.output, &cli.directory, &cli.extensions);
+    }
 
     let directory = cli
         .directory
@@ -144,49 +154,58 @@ fn prepare_output_directory(output: &Path) -> Result<()> {
     fs::create_dir_all(output).context("Failed to create output directory")
 }
 
-fn determine_report_output_dir(output_path: &Option<PathBuf>) -> Result<PathBuf> {
-    let path = if let Some(p) = output_path {
-        if p.is_absolute() {
-            p.clone()
-        } else {
-            std::env::current_dir()
-                .context("Failed to get current directory")?
-                .join(p)
-        }
-    } else {
-        std::env::current_dir().context("Failed to get current directory")?
-    };
+fn resolve_path(path: &Path) -> Result<PathBuf> {
+    if path.is_absolute() {
+        return Ok(path.to_path_buf());
+    }
+    Ok(std::env::current_dir()
+        .context("Failed to get current directory")?
+        .join(path))
+}
 
-    // If path ends with a filename (has an extension or contains a dot), use its parent directory
-    // Otherwise, treat it as a directory
-    if path.extension().is_some()
+fn is_file_path(path: &Path) -> bool {
+    path.extension().is_some()
         || path
             .file_name()
             .is_some_and(|n| n.to_string_lossy().contains('.'))
-    {
-        path.parent().map(|p| p.to_path_buf()).ok_or_else(|| {
-            anyhow::anyhow!("Invalid output path: cannot determine parent directory")
-        })
-    } else {
-        Ok(path)
+}
+
+fn determine_report_output_dir(output_path: &Option<PathBuf>) -> Result<PathBuf> {
+    let path = match output_path {
+        Some(p) => resolve_path(p)?,
+        None => std::env::current_dir().context("Failed to get current directory")?,
+    };
+
+    if !is_file_path(&path) {
+        return Ok(path);
+    }
+
+    path.parent()
+        .map(|p| p.to_path_buf())
+        .ok_or_else(|| anyhow::anyhow!("Invalid output path: cannot determine parent directory"))
+}
+
+fn try_parse_metrics_file(path: &Path, normalized: bool) -> Option<FileSimplicity> {
+    let content = fs::read_to_string(path).ok()?;
+    match toml::from_str::<MetricsResults>(&content) {
+        Ok(results) => Some(FileSimplicity::calculate(&results, normalized)),
+        Err(e) => {
+            eprintln!("Error parsing {}: {}", path.display(), e);
+            None
+        }
     }
 }
 
 fn load_metrics(output: &Path, normalized: bool) -> Result<Vec<FileSimplicity>> {
-    let mut files_simplicity = Vec::new();
     println!("Aggregating metrics from {}...", output.display());
 
-    for entry in WalkDir::new(output).into_iter().filter_map(|e| e.ok()) {
-        if entry.path().extension().is_some_and(|ext| ext == "toml") {
-            let content = fs::read_to_string(entry.path())?;
-            match toml::from_str::<MetricsResults>(&content) {
-                Ok(results) => {
-                    files_simplicity.push(FileSimplicity::calculate(&results, normalized))
-                }
-                Err(e) => eprintln!("Error parsing {}: {}", entry.path().display(), e),
-            }
-        }
-    }
+    let files_simplicity = WalkDir::new(output)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "toml"))
+        .filter_map(|e| try_parse_metrics_file(e.path(), normalized))
+        .collect();
+
     Ok(files_simplicity)
 }
 
@@ -219,6 +238,120 @@ fn open_report(directory: &Path, html: bool) -> Result<()> {
         directory.join("CODE_SIMPLICITY.md")
     };
     opener::open(&open_path).context("Failed to open report")
+}
+
+fn run_verify(
+    verify_path: &Path,
+    output_dir: &Path,
+    base_dir: &Path,
+    extensions: &[String],
+) -> Result<()> {
+    let abs_verify = if verify_path.is_absolute() {
+        verify_path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(verify_path)
+    };
+    let canonical_verify = abs_verify
+        .canonicalize()
+        .with_context(|| format!("File not found: {}", verify_path.display()))?;
+
+    let baseline = find_baseline_metrics(output_dir, &canonical_verify)?;
+    let baseline_simplicity = FileSimplicity::calculate(&baseline, true);
+
+    let temp_output = tempfile::tempdir().context("Failed to create temp directory")?;
+    let parent_dir = canonical_verify
+        .parent()
+        .context("Cannot determine parent directory")?;
+    analysis::run_analysis(parent_dir, temp_output.path(), extensions, &[])?;
+
+    let current = find_baseline_metrics(temp_output.path(), &canonical_verify)?;
+    let current_simplicity = FileSimplicity::calculate(&current, true);
+
+    let rel_path = analysis::get_relative_path(
+        &canonical_verify,
+        &base_dir.canonicalize().unwrap_or(base_dir.to_path_buf()),
+    );
+    print_verification(
+        &rel_path.to_string_lossy(),
+        &baseline_simplicity,
+        &current_simplicity,
+    );
+
+    Ok(())
+}
+
+fn find_baseline_metrics(output_dir: &Path, target_path: &Path) -> Result<MetricsResults> {
+    let target_str = target_path.to_string_lossy();
+
+    WalkDir::new(output_dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "toml"))
+        .find_map(|entry| {
+            let content = fs::read_to_string(entry.path()).ok()?;
+            let results: MetricsResults = toml::from_str(&content).ok()?;
+            (results.name == target_str).then_some(results)
+        })
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "No baseline metrics found for {} in {}. Run a full analysis first.",
+                target_str,
+                output_dir.display()
+            )
+        })
+}
+
+fn print_verification(path: &str, before: &FileSimplicity, after: &FileSimplicity) {
+    println!("=== VERIFICATION: {} ===\n", path);
+    println!("BEFORE -> AFTER (CHANGE)");
+
+    print_metric_row("Simplicity", before.score, after.score, "%", true);
+    print_metric_row("Cognitive", before.cognitive, after.cognitive, "", false);
+    print_metric_row("Cyclomatic", before.cyclomatic, after.cyclomatic, "", false);
+    print_metric_row("SLOC", before.sloc, after.sloc, "", false);
+    print_metric_row("MI", before.mi, after.mi, "", true);
+
+    println!();
+    let improvement = after.score - before.score;
+    if improvement > 5.0 {
+        println!("VERDICT: Significant improvement achieved.");
+    } else if improvement > 0.0 {
+        println!("VERDICT: Modest improvement. Consider further refactoring.");
+    } else if improvement == 0.0 {
+        println!("VERDICT: No change detected.");
+    } else {
+        println!("VERDICT: Regression detected - complexity increased.");
+    }
+}
+
+fn get_direction_label(pct: f64, higher_is_better: bool) -> &'static str {
+    let is_positive = pct > 0.0;
+    match (higher_is_better, is_positive) {
+        (true, true) => "improvement",
+        (true, false) => "regression",
+        (false, true) => "increase",
+        (false, false) => "reduction",
+    }
+}
+
+fn format_metric_change(before: f64, after: f64, suffix: &str, higher_is_better: bool) -> String {
+    if before == 0.0 && after == 0.0 {
+        return "unchanged".to_string();
+    }
+    if before == 0.0 {
+        return format!("+{:.0}{}", after, suffix);
+    }
+
+    let pct = ((after - before) / before) * 100.0;
+    format!("{:+.0}% {}", pct, get_direction_label(pct, higher_is_better))
+}
+
+fn print_metric_row(label: &str, before: f64, after: f64, suffix: &str, higher_is_better: bool) {
+    let change = format_metric_change(before, after, suffix, higher_is_better);
+    println!(
+        "  {:12} {:>6.0}{} -> {:>6.0}{} ({})",
+        label, before, suffix, after, suffix, change
+    );
 }
 
 #[cfg(test)]
@@ -262,5 +395,19 @@ mod tests {
         let args = vec!["ahma_code_simplicity", "."];
         let cli = Cli::try_parse_from(args).unwrap();
         assert_eq!(cli.ai_fix, None);
+    }
+
+    #[test]
+    fn test_cli_parsing_with_verify() {
+        let args = vec!["ahma_code_simplicity", ".", "--verify", "src/main.rs"];
+        let cli = Cli::try_parse_from(args).unwrap();
+        assert_eq!(cli.verify, Some(PathBuf::from("src/main.rs")));
+    }
+
+    #[test]
+    fn test_cli_parsing_without_verify() {
+        let args = vec!["ahma_code_simplicity", "."];
+        let cli = Cli::try_parse_from(args).unwrap();
+        assert_eq!(cli.verify, None);
     }
 }

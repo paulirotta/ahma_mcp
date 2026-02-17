@@ -295,6 +295,20 @@ fn write_emergencies(report: &mut String, files: &[FileSimplicity], limit: usize
                 "    - Metrics: Cog: {}, Cyc: {}, SLOC: {}, MI: {:.1}\n",
                 f.cognitive, f.cyclomatic, f.sloc, f.mi
             ));
+            if !f.hotspots.is_empty() {
+                report.push_str("    - **Hotspots**:\n");
+                for h in &f.hotspots {
+                    report.push_str(&format!(
+                        "      - `{}()` lines {}-{}: Cog={}, Cyc={}, SLOC={}\n",
+                        h.name,
+                        h.start_line,
+                        h.end_line,
+                        h.cognitive as u32,
+                        h.cyclomatic as u32,
+                        h.sloc as u32
+                    ));
+                }
+            }
         }
         report.push('\n');
     }
@@ -311,37 +325,6 @@ fn identify_culprit(f: &FileSimplicity) -> &'static str {
         "Low Maintainability Index"
     } else {
         "General Complexity"
-    }
-}
-
-/// Returns culprit-specific refactoring guidance for AI prompts.
-fn culprit_guidance(culprit: &str) -> &'static str {
-    match culprit {
-        "High Cognitive Complexity" => {
-            "\
-   - Focus on reducing nesting depth, breaking apart complex control flow,
-     and extracting deeply nested blocks into named functions"
-        }
-        "High Cyclomatic Complexity" => {
-            "\
-   - Focus on reducing branching paths; replace long if/else or match chains
-     with dispatch tables, lookup maps, or polymorphism"
-        }
-        "Mega-file" => {
-            "\
-   - Focus on splitting this oversized file into smaller modules; group
-     related functions by responsibility and extract them"
-        }
-        "Low Maintainability Index" => {
-            "\
-   - Focus on reducing function length, improving naming, and adding doc
-     comments to complex logic"
-        }
-        _ => {
-            "\
-   - Apply general readability improvements: better names, simpler data flow,
-     smaller functions"
-        }
     }
 }
 
@@ -366,7 +349,6 @@ pub fn generate_ai_fix_prompt(
     let rel_path = get_relative_path(Path::new(&file.path), base_dir);
     let rel_str = rel_path.to_string_lossy();
     let culprit = identify_culprit(file);
-    let guidance = culprit_guidance(culprit);
 
     Some(format!(
         "\
@@ -376,21 +358,17 @@ TARGET: {rel_str}
 SIMPLICITY: {score:.0}% | ISSUE: {culprit}
 METRICS: Cognitive={cog}, Cyclomatic={cyc}, SLOC={sloc}, MI={mi:.1}
 
-You are an expert at writing simple, clear code. Your task: reduce the
-complexity of `{rel_str}` so an AI can understand it without thinking hard.
+STEP 1 - READ the simplicity report above and the target file. The report
+         identifies specific hotspot functions causing complexity.
 
-STEP 1 - READ the target file and understand its structure.
+STEP 2 - PLAN (briefly): Which hotspot functions will you refactor, and how?
 
-STEP 2 - PLAN (briefly, 2-3 sentences): What are the main complexity
-drivers? What refactoring strategies will you use?
-
-STEP 3 - IMPLEMENT all simplifications now:
-{guidance}
-   - Extract repeated patterns into well-named helper functions
-   - Replace deep nesting with early returns and guard clauses
-   - Break functions longer than ~40 lines into focused, single-purpose units
-   - Simplify complex boolean expressions using named predicates
-   - Remove dead code and unnecessary abstractions
+STEP 3 - IMPLEMENT focused changes:
+   - Target ONLY the hotspot functions listed in the report
+   - Make minimal changes to achieve measurable improvement
+   - Do NOT refactor surrounding code unless directly needed
+   - Prefer early returns, guard clauses, and extracting helpers
+   - Break functions longer than ~40 lines into focused units
 
 STEP 4 - VERIFY by running the project's test suite.
 
@@ -403,7 +381,6 @@ Execute all steps now. Do not stop at planning.",
         cyc = file.cyclomatic,
         sloc = file.sloc,
         mi = file.mi,
-        guidance = guidance,
     ))
 }
 
@@ -418,28 +395,75 @@ fn write_glossary(report: &mut String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::FunctionHotspot;
+
+    /// Helper to construct a FileSimplicity for tests without hotspots.
+    fn test_file(
+        path: &str,
+        lang: Language,
+        score: f64,
+        cog: f64,
+        cyc: f64,
+        sloc: f64,
+        mi: f64,
+    ) -> FileSimplicity {
+        FileSimplicity {
+            path: path.to_string(),
+            language: lang,
+            score,
+            cognitive: cog,
+            cyclomatic: cyc,
+            sloc,
+            mi,
+            hotspots: vec![],
+        }
+    }
+
+    /// Helper to construct a FileSimplicity with hotspots for testing report output.
+    #[allow(clippy::too_many_arguments)]
+    fn test_file_with_hotspots(
+        path: &str,
+        lang: Language,
+        score: f64,
+        cog: f64,
+        cyc: f64,
+        sloc: f64,
+        mi: f64,
+        hotspots: Vec<FunctionHotspot>,
+    ) -> FileSimplicity {
+        FileSimplicity {
+            path: path.to_string(),
+            language: lang,
+            score,
+            cognitive: cog,
+            cyclomatic: cyc,
+            sloc,
+            mi,
+            hotspots,
+        }
+    }
 
     #[test]
     fn test_create_report_structure() {
         let files = vec![
-            FileSimplicity {
-                path: "pkg1/file1.rs".to_string(),
-                language: Language::Rust,
-                score: 80.0,
-                cognitive: 10.0,
-                cyclomatic: 5.0,
-                sloc: 100.0,
-                mi: 100.0,
-            },
-            FileSimplicity {
-                path: "pkg2/file2.rs".to_string(),
-                language: Language::Rust,
-                score: 40.0,
-                cognitive: 30.0,
-                cyclomatic: 25.0,
-                sloc: 600.0,
-                mi: 40.0,
-            },
+            test_file(
+                "pkg1/file1.rs",
+                Language::Rust,
+                80.0,
+                10.0,
+                5.0,
+                100.0,
+                100.0,
+            ),
+            test_file(
+                "pkg2/file2.rs",
+                Language::Rust,
+                40.0,
+                30.0,
+                25.0,
+                600.0,
+                40.0,
+            ),
         ];
 
         let report = create_report_md(&files, false, 10, Path::new("."), "test_project");
@@ -451,24 +475,8 @@ mod tests {
     #[test]
     fn test_report_multi_language_emergencies() {
         let files = vec![
-            FileSimplicity {
-                path: "file1.rs".to_string(),
-                language: Language::Rust,
-                score: 50.0,
-                cognitive: 20.0,
-                cyclomatic: 15.0,
-                sloc: 100.0,
-                mi: 50.0,
-            },
-            FileSimplicity {
-                path: "file2.py".to_string(),
-                language: Language::Python,
-                score: 40.0,
-                cognitive: 25.0,
-                cyclomatic: 20.0,
-                sloc: 150.0,
-                mi: 40.0,
-            },
+            test_file("file1.rs", Language::Rust, 50.0, 20.0, 15.0, 100.0, 50.0),
+            test_file("file2.py", Language::Python, 40.0, 25.0, 20.0, 150.0, 40.0),
         ];
 
         let report = create_report_md(&files, false, 10, Path::new("."), "test_multi");
@@ -477,7 +485,6 @@ mod tests {
         assert!(report.contains("## Top 1 Python Code Complexity Issues"));
         assert!(report.contains("file1.rs"));
         assert!(report.contains("file2.py"));
-        // Ensure the redundant (Language) label is removed from the item lines
         assert!(!report.contains("(Rust)"));
         assert!(!report.contains("(Python)"));
     }
@@ -485,24 +492,8 @@ mod tests {
     #[test]
     fn test_disambiguate_unique_basenames_unchanged() {
         let files = [
-            FileSimplicity {
-                path: "src/foo.rs".to_string(),
-                language: Language::Rust,
-                score: 50.0,
-                cognitive: 20.0,
-                cyclomatic: 15.0,
-                sloc: 100.0,
-                mi: 50.0,
-            },
-            FileSimplicity {
-                path: "src/bar.rs".to_string(),
-                language: Language::Rust,
-                score: 40.0,
-                cognitive: 25.0,
-                cyclomatic: 20.0,
-                sloc: 150.0,
-                mi: 40.0,
-            },
+            test_file("src/foo.rs", Language::Rust, 50.0, 20.0, 15.0, 100.0, 50.0),
+            test_file("src/bar.rs", Language::Rust, 40.0, 25.0, 20.0, 150.0, 40.0),
         ];
         let refs: Vec<&FileSimplicity> = files.iter().collect();
         let names = disambiguate_display_names(&refs, Path::new("."));
@@ -512,24 +503,24 @@ mod tests {
     #[test]
     fn test_disambiguate_duplicate_basenames_adds_parent_dir() {
         let files = [
-            FileSimplicity {
-                path: "project/src/analysis/translation.rs".to_string(),
-                language: Language::Rust,
-                score: 36.0,
-                cognitive: 92.0,
-                cyclomatic: 174.0,
-                sloc: 1191.0,
-                mi: 0.0,
-            },
-            FileSimplicity {
-                path: "project/src/views/translation.rs".to_string(),
-                language: Language::Rust,
-                score: 36.0,
-                cognitive: 88.0,
-                cyclomatic: 68.0,
-                sloc: 786.0,
-                mi: 0.0,
-            },
+            test_file(
+                "project/src/analysis/translation.rs",
+                Language::Rust,
+                36.0,
+                92.0,
+                174.0,
+                1191.0,
+                0.0,
+            ),
+            test_file(
+                "project/src/views/translation.rs",
+                Language::Rust,
+                36.0,
+                88.0,
+                68.0,
+                786.0,
+                0.0,
+            ),
         ];
         let refs: Vec<&FileSimplicity> = files.iter().collect();
         let names = disambiguate_display_names(&refs, Path::new("."));
@@ -542,37 +533,36 @@ mod tests {
     #[test]
     fn test_disambiguate_three_files_same_basename() {
         let files = [
-            FileSimplicity {
-                path: "crate_a/src/lib.rs".to_string(),
-                language: Language::Rust,
-                score: 50.0,
-                cognitive: 10.0,
-                cyclomatic: 5.0,
-                sloc: 100.0,
-                mi: 50.0,
-            },
-            FileSimplicity {
-                path: "crate_b/src/lib.rs".to_string(),
-                language: Language::Rust,
-                score: 40.0,
-                cognitive: 20.0,
-                cyclomatic: 10.0,
-                sloc: 200.0,
-                mi: 40.0,
-            },
-            FileSimplicity {
-                path: "crate_c/src/lib.rs".to_string(),
-                language: Language::Rust,
-                score: 30.0,
-                cognitive: 30.0,
-                cyclomatic: 15.0,
-                sloc: 300.0,
-                mi: 30.0,
-            },
+            test_file(
+                "crate_a/src/lib.rs",
+                Language::Rust,
+                50.0,
+                10.0,
+                5.0,
+                100.0,
+                50.0,
+            ),
+            test_file(
+                "crate_b/src/lib.rs",
+                Language::Rust,
+                40.0,
+                20.0,
+                10.0,
+                200.0,
+                40.0,
+            ),
+            test_file(
+                "crate_c/src/lib.rs",
+                Language::Rust,
+                30.0,
+                30.0,
+                15.0,
+                300.0,
+                30.0,
+            ),
         ];
         let refs: Vec<&FileSimplicity> = files.iter().collect();
         let names = disambiguate_display_names(&refs, Path::new("."));
-        // "src/lib.rs" is still ambiguous for all three, so needs crate_*/src/lib.rs
         assert_eq!(
             names,
             vec![
@@ -586,33 +576,33 @@ mod tests {
     #[test]
     fn test_disambiguate_mixed_unique_and_duplicate() {
         let files = [
-            FileSimplicity {
-                path: "src/analysis/translation.rs".to_string(),
-                language: Language::Rust,
-                score: 36.0,
-                cognitive: 92.0,
-                cyclomatic: 174.0,
-                sloc: 1191.0,
-                mi: 0.0,
-            },
-            FileSimplicity {
-                path: "src/unique_file.rs".to_string(),
-                language: Language::Rust,
-                score: 50.0,
-                cognitive: 10.0,
-                cyclomatic: 5.0,
-                sloc: 100.0,
-                mi: 50.0,
-            },
-            FileSimplicity {
-                path: "src/views/translation.rs".to_string(),
-                language: Language::Rust,
-                score: 36.0,
-                cognitive: 88.0,
-                cyclomatic: 68.0,
-                sloc: 786.0,
-                mi: 0.0,
-            },
+            test_file(
+                "src/analysis/translation.rs",
+                Language::Rust,
+                36.0,
+                92.0,
+                174.0,
+                1191.0,
+                0.0,
+            ),
+            test_file(
+                "src/unique_file.rs",
+                Language::Rust,
+                50.0,
+                10.0,
+                5.0,
+                100.0,
+                50.0,
+            ),
+            test_file(
+                "src/views/translation.rs",
+                Language::Rust,
+                36.0,
+                88.0,
+                68.0,
+                786.0,
+                0.0,
+            ),
         ];
         let refs: Vec<&FileSimplicity> = files.iter().collect();
         let names = disambiguate_display_names(&refs, Path::new("."));
@@ -629,56 +619,108 @@ mod tests {
     #[test]
     fn test_report_disambiguates_same_basename_files() {
         let files = vec![
-            FileSimplicity {
-                path: "project/src/analysis/translation.rs".to_string(),
-                language: Language::Rust,
-                score: 36.0,
-                cognitive: 92.0,
-                cyclomatic: 174.0,
-                sloc: 1191.0,
-                mi: 0.0,
-            },
-            FileSimplicity {
-                path: "project/src/views/translation.rs".to_string(),
-                language: Language::Rust,
-                score: 36.0,
-                cognitive: 88.0,
-                cyclomatic: 68.0,
-                sloc: 786.0,
-                mi: 0.0,
-            },
+            test_file(
+                "project/src/analysis/translation.rs",
+                Language::Rust,
+                36.0,
+                92.0,
+                174.0,
+                1191.0,
+                0.0,
+            ),
+            test_file(
+                "project/src/views/translation.rs",
+                Language::Rust,
+                36.0,
+                88.0,
+                68.0,
+                786.0,
+                0.0,
+            ),
         ];
 
         let report = create_report_md(&files, false, 10, Path::new("."), "test_disambig");
 
-        // The bold display names should include the parent directory
         assert!(report.contains("**analysis/translation.rs**"));
         assert!(report.contains("**views/translation.rs**"));
-        // Should NOT show bare **translation.rs** as a bold label
         assert!(!report.contains("**translation.rs**"));
+    }
+
+    #[test]
+    fn test_report_includes_hotspots() {
+        let files = vec![test_file_with_hotspots(
+            "src/complex.rs",
+            Language::Rust,
+            35.0,
+            45.0,
+            30.0,
+            800.0,
+            0.0,
+            vec![
+                FunctionHotspot {
+                    name: "handle_request".to_string(),
+                    start_line: 145,
+                    end_line: 210,
+                    cognitive: 28.0,
+                    cyclomatic: 15.0,
+                    sloc: 65.0,
+                },
+                FunctionHotspot {
+                    name: "process_message".to_string(),
+                    start_line: 312,
+                    end_line: 350,
+                    cognitive: 10.0,
+                    cyclomatic: 8.0,
+                    sloc: 38.0,
+                },
+            ],
+        )];
+
+        let report = create_report_md(&files, false, 10, Path::new("."), "test_hotspots");
+
+        assert!(report.contains("**Hotspots**:"));
+        assert!(report.contains("`handle_request()` lines 145-210: Cog=28, Cyc=15"));
+        assert!(report.contains("`process_message()` lines 312-350: Cog=10, Cyc=8"));
+    }
+
+    #[test]
+    fn test_report_no_hotspots_section_when_empty() {
+        let files = vec![test_file(
+            "src/simple.rs",
+            Language::Rust,
+            80.0,
+            5.0,
+            3.0,
+            50.0,
+            90.0,
+        )];
+
+        let report = create_report_md(&files, false, 10, Path::new("."), "test_no_hotspots");
+
+        assert!(!report.contains("**Hotspots**"));
     }
 
     #[test]
     fn test_generate_ai_fix_prompt_issue_1() {
         let files = vec![
-            FileSimplicity {
-                path: "src/complex.rs".to_string(),
-                language: Language::Rust,
-                score: 25.0,
-                cognitive: 45.0,
-                cyclomatic: 30.0,
-                sloc: 800.0,
-                mi: 35.0,
-            },
-            FileSimplicity {
-                path: "src/moderate.rs".to_string(),
-                language: Language::Rust,
-                score: 65.0,
-                cognitive: 12.0,
-                cyclomatic: 8.0,
-                sloc: 200.0,
-                mi: 70.0,
-            },
+            test_file(
+                "src/complex.rs",
+                Language::Rust,
+                25.0,
+                45.0,
+                30.0,
+                800.0,
+                35.0,
+            ),
+            test_file(
+                "src/moderate.rs",
+                Language::Rust,
+                65.0,
+                12.0,
+                8.0,
+                200.0,
+                70.0,
+            ),
         ];
 
         let prompt = generate_ai_fix_prompt(&files, 1, Path::new(".")).unwrap();
@@ -693,31 +735,31 @@ mod tests {
         assert!(prompt.contains("MI=35.0"));
         assert!(prompt.contains("STEP 1"));
         assert!(prompt.contains("STEP 4"));
-        assert!(prompt.contains("Execute all steps now"));
-        assert!(prompt.contains("reducing nesting depth"));
+        assert!(prompt.contains("hotspot functions"));
+        assert!(prompt.contains("Target ONLY"));
     }
 
     #[test]
     fn test_generate_ai_fix_prompt_issue_2() {
         let files = vec![
-            FileSimplicity {
-                path: "src/worst.rs".to_string(),
-                language: Language::Rust,
-                score: 20.0,
-                cognitive: 50.0,
-                cyclomatic: 40.0,
-                sloc: 900.0,
-                mi: 30.0,
-            },
-            FileSimplicity {
-                path: "src/second.rs".to_string(),
-                language: Language::Rust,
-                score: 40.0,
-                cognitive: 10.0,
-                cyclomatic: 25.0,
-                sloc: 300.0,
-                mi: 45.0,
-            },
+            test_file(
+                "src/worst.rs",
+                Language::Rust,
+                20.0,
+                50.0,
+                40.0,
+                900.0,
+                30.0,
+            ),
+            test_file(
+                "src/second.rs",
+                Language::Rust,
+                40.0,
+                10.0,
+                25.0,
+                300.0,
+                45.0,
+            ),
         ];
 
         let prompt = generate_ai_fix_prompt(&files, 2, Path::new(".")).unwrap();
@@ -725,36 +767,33 @@ mod tests {
         assert!(prompt.contains("ISSUE #2"));
         assert!(prompt.contains("src/second.rs"));
         assert!(prompt.contains("High Cyclomatic Complexity"));
-        assert!(prompt.contains("reducing branching paths"));
     }
 
     #[test]
     fn test_generate_ai_fix_prompt_out_of_bounds() {
-        let files = vec![FileSimplicity {
-            path: "src/only.rs".to_string(),
-            language: Language::Rust,
-            score: 50.0,
-            cognitive: 15.0,
-            cyclomatic: 10.0,
-            sloc: 100.0,
-            mi: 60.0,
-        }];
-
+        let files = vec![test_file(
+            "src/only.rs",
+            Language::Rust,
+            50.0,
+            15.0,
+            10.0,
+            100.0,
+            60.0,
+        )];
         assert!(generate_ai_fix_prompt(&files, 2, Path::new(".")).is_none());
     }
 
     #[test]
     fn test_generate_ai_fix_prompt_zero_issue() {
-        let files = vec![FileSimplicity {
-            path: "src/file.rs".to_string(),
-            language: Language::Rust,
-            score: 50.0,
-            cognitive: 15.0,
-            cyclomatic: 10.0,
-            sloc: 100.0,
-            mi: 60.0,
-        }];
-
+        let files = vec![test_file(
+            "src/file.rs",
+            Language::Rust,
+            50.0,
+            15.0,
+            10.0,
+            100.0,
+            60.0,
+        )];
         assert!(generate_ai_fix_prompt(&files, 0, Path::new(".")).is_none());
     }
 
@@ -766,45 +805,51 @@ mod tests {
 
     #[test]
     fn test_generate_ai_fix_prompt_mega_file() {
-        let files = vec![FileSimplicity {
-            path: "src/huge.rs".to_string(),
-            language: Language::Rust,
-            score: 45.0,
-            cognitive: 15.0,
-            cyclomatic: 15.0,
-            sloc: 800.0,
-            mi: 55.0,
-        }];
+        let files = vec![test_file(
+            "src/huge.rs",
+            Language::Rust,
+            45.0,
+            15.0,
+            15.0,
+            800.0,
+            55.0,
+        )];
 
         let prompt = generate_ai_fix_prompt(&files, 1, Path::new(".")).unwrap();
         assert!(prompt.contains("Mega-file"));
-        assert!(prompt.contains("splitting this oversized file"));
     }
 
     #[test]
     fn test_generate_ai_fix_prompt_low_mi() {
-        let files = vec![FileSimplicity {
-            path: "src/unmaintainable.rs".to_string(),
-            language: Language::Rust,
-            score: 35.0,
-            cognitive: 10.0,
-            cyclomatic: 10.0,
-            sloc: 200.0,
-            mi: 40.0,
-        }];
+        let files = vec![test_file(
+            "src/unmaintainable.rs",
+            Language::Rust,
+            35.0,
+            10.0,
+            10.0,
+            200.0,
+            40.0,
+        )];
 
         let prompt = generate_ai_fix_prompt(&files, 1, Path::new(".")).unwrap();
         assert!(prompt.contains("Low Maintainability Index"));
-        assert!(prompt.contains("reducing function length"));
     }
 
     #[test]
-    fn test_culprit_guidance_all_variants() {
-        assert!(culprit_guidance("High Cognitive Complexity").contains("nesting depth"));
-        assert!(culprit_guidance("High Cyclomatic Complexity").contains("branching paths"));
-        assert!(culprit_guidance("Mega-file").contains("splitting"));
-        assert!(culprit_guidance("Low Maintainability Index").contains("function length"));
-        assert!(culprit_guidance("General Complexity").contains("readability"));
-        assert!(culprit_guidance("Unknown").contains("readability"));
+    fn test_identify_culprit_all_variants() {
+        let high_cog = test_file("a.rs", Language::Rust, 30.0, 25.0, 10.0, 100.0, 50.0);
+        assert_eq!(identify_culprit(&high_cog), "High Cognitive Complexity");
+
+        let high_cyc = test_file("b.rs", Language::Rust, 30.0, 10.0, 25.0, 100.0, 50.0);
+        assert_eq!(identify_culprit(&high_cyc), "High Cyclomatic Complexity");
+
+        let mega = test_file("c.rs", Language::Rust, 30.0, 10.0, 10.0, 600.0, 50.0);
+        assert_eq!(identify_culprit(&mega), "Mega-file");
+
+        let low_mi = test_file("d.rs", Language::Rust, 30.0, 10.0, 10.0, 100.0, 40.0);
+        assert_eq!(identify_culprit(&low_mi), "Low Maintainability Index");
+
+        let general = test_file("e.rs", Language::Rust, 30.0, 10.0, 10.0, 100.0, 60.0);
+        assert_eq!(identify_culprit(&general), "General Complexity");
     }
 }

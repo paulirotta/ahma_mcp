@@ -2,7 +2,7 @@
 	"servers": {
 		"Ahma-release": {
 			"type": "stdio",
-			"command": "${workspaceFolder}/target/release/ahma_mcp",
+			"command": "ahma_mcp",
 			"args": [
 				"--log-to-stderr",
 			],

@@ -1,12 +1,1 @@
-{
-    "mcpServers": {
-        "Ahma": {
-            "type": "stdio",
-            "command": "bash",
-            "args": [
-                "-c",
-                "\"$HOME/github/ahma_mcp/target/release/ahma_mcp\" --log-to-stderr"
-            ]
-        }
-    }
-}
+{"mcpServers":{"Ahma":{"type":"stdio","command":"ahma_mcp","args":["--log-to-stderr"]}}}

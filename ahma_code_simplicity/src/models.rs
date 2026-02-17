@@ -4,6 +4,8 @@ use serde::Deserialize;
 pub struct MetricsResults {
     pub name: String,
     pub metrics: Metrics,
+    #[serde(default)]
+    pub spaces: Vec<SpaceEntry>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -32,6 +34,69 @@ pub struct Mi {
 #[derive(Debug, Deserialize)]
 pub struct Loc {
     pub sloc: f64,
+}
+
+/// A parsed entry from the `spaces` array in rust-code-analysis TOML output.
+/// Represents a code "space" (function, impl block, closure, etc.) with its metrics.
+#[derive(Debug, Deserialize)]
+pub struct SpaceEntry {
+    pub name: String,
+    pub start_line: u32,
+    pub end_line: u32,
+    pub kind: String,
+    pub metrics: Metrics,
+    #[serde(default)]
+    pub spaces: Vec<SpaceEntry>,
+}
+
+/// A function or method identified as a complexity hotspot within a file.
+#[derive(Debug, Clone)]
+pub struct FunctionHotspot {
+    pub name: String,
+    pub start_line: u32,
+    pub end_line: u32,
+    pub cognitive: f64,
+    pub cyclomatic: f64,
+    pub sloc: f64,
+}
+
+impl FunctionHotspot {
+    const MAX_HOTSPOTS: usize = 5;
+
+    /// Recursively collects function hotspots from the spaces tree,
+    /// sorted by cognitive complexity descending, limited to MAX_HOTSPOTS.
+    pub fn extract_from_spaces(spaces: &[SpaceEntry]) -> Vec<FunctionHotspot> {
+        let mut hotspots = Vec::new();
+        Self::collect_functions(spaces, &mut hotspots);
+        hotspots.sort_by(|a, b| {
+            b.cognitive
+                .partial_cmp(&a.cognitive)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        hotspots.truncate(Self::MAX_HOTSPOTS);
+        hotspots
+    }
+
+    fn collect_functions(spaces: &[SpaceEntry], hotspots: &mut Vec<FunctionHotspot>) {
+        for entry in spaces {
+            if entry.kind == "function" && entry.name != "<anonymous>" {
+                let cognitive = entry.metrics.cognitive.sum;
+                let cyclomatic = entry.metrics.cyclomatic.sum;
+                let sloc = entry.metrics.loc.sloc;
+                if cognitive > 0.0 || cyclomatic > 1.0 {
+                    hotspots.push(FunctionHotspot {
+                        name: entry.name.clone(),
+                        start_line: entry.start_line,
+                        end_line: entry.end_line,
+                        cognitive,
+                        cyclomatic,
+                        sloc,
+                    });
+                }
+            }
+            Self::collect_functions(&entry.spaces, hotspots);
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -97,6 +162,7 @@ pub struct FileSimplicity {
     pub cyclomatic: f64,
     pub sloc: f64,
     pub mi: f64,
+    pub hotspots: Vec<FunctionHotspot>,
 }
 
 impl FileSimplicity {
@@ -124,10 +190,20 @@ impl FileSimplicity {
     /// Complexity is normalized by SLOC to calculate "complexity density" per 100 lines.
     /// A file with 1 complexity point per line (density = 100 per 100 lines) receives a 0 component score.
     pub fn calculate(results: &MetricsResults, normalized: bool) -> Self {
-        let mi = results.metrics.mi.mi_visual_studio;
+        let file_mi = results.metrics.mi.mi_visual_studio;
         let cognitive = results.metrics.cognitive.sum;
         let cyclomatic = results.metrics.cyclomatic.sum;
         let sloc = results.metrics.loc.sloc;
+
+        // File-level MI from rust-code-analysis is often 0 because the raw
+        // mi_original goes negative for large files and the Visual Studio
+        // variant clamps to 0. Individual functions have accurate MI values,
+        // so compute a SLOC-weighted average of function-level MIs as fallback.
+        let mi = if file_mi == 0.0 && !results.spaces.is_empty() {
+            Self::weighted_function_mi(&results.spaces).unwrap_or(file_mi)
+        } else {
+            file_mi
+        };
 
         let score = if mi == 0.0 && cognitive == 0.0 && cyclomatic <= 1.0 {
             // Trivial/empty files get perfect score
@@ -152,6 +228,7 @@ impl FileSimplicity {
             0.6 * mi_score + 0.2 * cog_score + 0.2 * cyc_score
         };
 
+        let hotspots = FunctionHotspot::extract_from_spaces(&results.spaces);
         let path_obj = std::path::Path::new(&results.name);
         Self {
             path: results.name.clone(),
@@ -161,6 +238,38 @@ impl FileSimplicity {
             cyclomatic,
             sloc,
             mi,
+            hotspots,
+        }
+    }
+
+    /// Computes a SLOC-weighted average MI from function-level spaces.
+    /// Returns None if no functions with positive SLOC are found.
+    fn weighted_function_mi(spaces: &[SpaceEntry]) -> Option<f64> {
+        let mut total_weight = 0.0_f64;
+        let mut weighted_sum = 0.0_f64;
+        Self::accumulate_function_mi(spaces, &mut weighted_sum, &mut total_weight);
+        if total_weight > 0.0 {
+            Some((weighted_sum / total_weight).clamp(0.0, 100.0))
+        } else {
+            None
+        }
+    }
+
+    fn accumulate_function_mi(
+        spaces: &[SpaceEntry],
+        weighted_sum: &mut f64,
+        total_weight: &mut f64,
+    ) {
+        for entry in spaces {
+            if entry.kind == "function" && entry.name != "<anonymous>" {
+                let fn_sloc = entry.metrics.loc.sloc;
+                let fn_mi = entry.metrics.mi.mi_visual_studio;
+                if fn_sloc > 0.0 {
+                    *weighted_sum += fn_mi * fn_sloc;
+                    *total_weight += fn_sloc;
+                }
+            }
+            Self::accumulate_function_mi(&entry.spaces, weighted_sum, total_weight);
         }
     }
 }
@@ -168,6 +277,102 @@ impl FileSimplicity {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn make_space_entry(
+        name: &str,
+        start_line: u32,
+        end_line: u32,
+        cognitive: f64,
+        cyclomatic: f64,
+        sloc: f64,
+    ) -> SpaceEntry {
+        SpaceEntry {
+            name: name.to_string(),
+            start_line,
+            end_line,
+            kind: "function".to_string(),
+            metrics: Metrics {
+                cognitive: Cognitive { sum: cognitive },
+                cyclomatic: Cyclomatic { sum: cyclomatic },
+                mi: Mi {
+                    mi_visual_studio: 50.0,
+                },
+                loc: Loc { sloc },
+            },
+            spaces: vec![],
+        }
+    }
+
+    #[test]
+    fn test_hotspot_extraction_sorts_by_cognitive() {
+        let spaces = vec![
+            make_space_entry("low_complexity", 1, 10, 2.0, 3.0, 10.0),
+            make_space_entry("high_complexity", 20, 50, 25.0, 15.0, 30.0),
+            make_space_entry("medium_complexity", 60, 80, 10.0, 8.0, 20.0),
+        ];
+        let hotspots = FunctionHotspot::extract_from_spaces(&spaces);
+        assert_eq!(hotspots.len(), 3);
+        assert_eq!(hotspots[0].name, "high_complexity");
+        assert_eq!(hotspots[1].name, "medium_complexity");
+        assert_eq!(hotspots[2].name, "low_complexity");
+    }
+
+    #[test]
+    fn test_hotspot_extraction_skips_anonymous_and_trivial() {
+        let spaces = vec![
+            make_space_entry("<anonymous>", 1, 5, 3.0, 2.0, 5.0),
+            make_space_entry("trivial_fn", 10, 12, 0.0, 1.0, 3.0),
+            make_space_entry("real_fn", 20, 40, 8.0, 6.0, 20.0),
+        ];
+        let hotspots = FunctionHotspot::extract_from_spaces(&spaces);
+        assert_eq!(hotspots.len(), 1);
+        assert_eq!(hotspots[0].name, "real_fn");
+    }
+
+    #[test]
+    fn test_hotspot_extraction_limits_to_max() {
+        let spaces: Vec<SpaceEntry> = (0..10)
+            .map(|i| {
+                make_space_entry(
+                    &format!("fn_{}", i),
+                    i * 10,
+                    i * 10 + 9,
+                    (i + 1) as f64,
+                    5.0,
+                    10.0,
+                )
+            })
+            .collect();
+        let hotspots = FunctionHotspot::extract_from_spaces(&spaces);
+        assert_eq!(hotspots.len(), FunctionHotspot::MAX_HOTSPOTS);
+        assert_eq!(hotspots[0].name, "fn_9");
+    }
+
+    #[test]
+    fn test_hotspot_extraction_recurses_into_impl_blocks() {
+        let impl_block = SpaceEntry {
+            name: "MyStruct".to_string(),
+            start_line: 1,
+            end_line: 100,
+            kind: "impl".to_string(),
+            metrics: Metrics {
+                cognitive: Cognitive { sum: 20.0 },
+                cyclomatic: Cyclomatic { sum: 15.0 },
+                mi: Mi {
+                    mi_visual_studio: 50.0,
+                },
+                loc: Loc { sloc: 100.0 },
+            },
+            spaces: vec![
+                make_space_entry("method_a", 10, 30, 12.0, 8.0, 20.0),
+                make_space_entry("method_b", 40, 90, 8.0, 7.0, 50.0),
+            ],
+        };
+        let hotspots = FunctionHotspot::extract_from_spaces(&[impl_block]);
+        assert_eq!(hotspots.len(), 2);
+        assert_eq!(hotspots[0].name, "method_a");
+        assert_eq!(hotspots[1].name, "method_b");
+    }
 
     #[test]
     fn test_file_simplicity_calculate_perfect() {
@@ -181,6 +386,7 @@ mod tests {
                 },
                 loc: Loc { sloc: 0.0 },
             },
+            spaces: vec![],
         };
         let simplicity = FileSimplicity::calculate(&results, true);
         assert_eq!(simplicity.score, 100.0);
@@ -198,6 +404,7 @@ mod tests {
                 },
                 loc: Loc { sloc: 500.0 },
             },
+            spaces: vec![],
         };
         let simplicity = FileSimplicity::calculate(&results, true);
         // mi_score=60, cog_density=10, cyc_density=10 => cog_score=90, cyc_score=90
@@ -217,6 +424,7 @@ mod tests {
                 },
                 loc: Loc { sloc: 500.0 },
             },
+            spaces: vec![],
         };
         let simplicity = FileSimplicity::calculate(&results, false);
         // mi_score=60, cog_score=50, cyc_score=50
@@ -236,6 +444,7 @@ mod tests {
                 },
                 loc: Loc { sloc: 50.0 },
             },
+            spaces: vec![],
         };
         let simplicity = FileSimplicity::calculate(&results, true);
         // mi_score=60, cog_density=100, cyc_density=100 => cog_score=0, cyc_score=0
@@ -255,8 +464,80 @@ mod tests {
                 },
                 loc: Loc { sloc: 7.0 },
             },
+            spaces: vec![],
         };
         let simplicity = FileSimplicity::calculate(&results, true);
         assert!(simplicity.score > 90.0);
+    }
+
+    #[test]
+    fn test_mi_fallback_uses_function_level_mi_when_file_level_is_zero() {
+        let results = MetricsResults {
+            name: "complex_file.rs".to_string(),
+            metrics: Metrics {
+                cognitive: Cognitive { sum: 10.0 },
+                cyclomatic: Cyclomatic { sum: 10.0 },
+                mi: Mi {
+                    mi_visual_studio: 0.0,
+                },
+                loc: Loc { sloc: 200.0 },
+            },
+            spaces: vec![
+                SpaceEntry {
+                    name: "fn_a".to_string(),
+                    start_line: 1,
+                    end_line: 100,
+                    kind: "function".to_string(),
+                    metrics: Metrics {
+                        cognitive: Cognitive { sum: 5.0 },
+                        cyclomatic: Cyclomatic { sum: 5.0 },
+                        mi: Mi {
+                            mi_visual_studio: 70.0,
+                        },
+                        loc: Loc { sloc: 100.0 },
+                    },
+                    spaces: vec![],
+                },
+                SpaceEntry {
+                    name: "fn_b".to_string(),
+                    start_line: 101,
+                    end_line: 200,
+                    kind: "function".to_string(),
+                    metrics: Metrics {
+                        cognitive: Cognitive { sum: 5.0 },
+                        cyclomatic: Cyclomatic { sum: 5.0 },
+                        mi: Mi {
+                            mi_visual_studio: 80.0,
+                        },
+                        loc: Loc { sloc: 100.0 },
+                    },
+                    spaces: vec![],
+                },
+            ],
+        };
+        let simplicity = FileSimplicity::calculate(&results, true);
+        // Weighted MI: (70*100 + 80*100) / 200 = 75.0
+        assert_eq!(simplicity.mi, 75.0);
+        // Score: 0.6*75 + 0.2*(100-5) + 0.2*(100-5) = 45 + 19 + 19 = 83
+        assert!(simplicity.score > 80.0);
+    }
+
+    #[test]
+    fn test_mi_fallback_not_used_when_file_level_mi_is_positive() {
+        let results = MetricsResults {
+            name: "good_file.rs".to_string(),
+            metrics: Metrics {
+                cognitive: Cognitive { sum: 5.0 },
+                cyclomatic: Cyclomatic { sum: 5.0 },
+                mi: Mi {
+                    mi_visual_studio: 60.0,
+                },
+                loc: Loc { sloc: 100.0 },
+            },
+            spaces: vec![make_space_entry("fn_a", 1, 50, 3.0, 3.0, 50.0)],
+        };
+        let simplicity = FileSimplicity::calculate(&results, true);
+        // Should use file-level MI=60, not function-level
+        assert_eq!(simplicity.mi, 60.0);
     }
 }

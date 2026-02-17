@@ -121,11 +121,11 @@ Here's an example of Claude Sonnet 4.5's workflow. Notice both the tool and the 
 >
 > While the tests run, let me continue with updating the requirements document:
 >
-> _Read REQUIREMENTS.md_
+> _Read SPEC.md_
 >
 > Let me add the JSON schema requirements to the product requirements:
 >
-> _REQUIREMENTS.md+21-6_
+> _SPEC.md+21-6_
 >
 > Now let me check on the test results:
 >
@@ -301,10 +301,10 @@ To use `ahma_mcp` with GitHub Copilot in VS Code:
 
 This project is guided by a clear set of principles and requirements.
 
-- **`REQUIREMENTS.md`**: This is the **single source of truth** for the project. It details the core mission, architecture, and the workflow an AI maintainer must follow. All new tasks and changes are driven by this document.
+- **`SPEC.md`**: This is the **single source of truth** for the project. It details the core mission, architecture, and the workflow an AI maintainer must follow. All new tasks and changes are driven by this document.
 - **`docs/CONSTITUTION.md`**: This document outlines the core development principles for human contributors, ensuring consistency and quality.
 
-For a list of available tools and instructions on how to add your own, please refer to the `REQUIREMENTS.md` file and the examples in the `tools/` directory.
+For a list of available tools and instructions on how to add your own, please refer to the `SPEC.md` file and the examples in the `tools/` directory.
 
 ## Developer Scripts
 

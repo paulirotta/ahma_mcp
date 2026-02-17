@@ -4,7 +4,7 @@
 
 `ahma_code_simplicity` is a code simplicity metrics aggregator that uses [rust-code-analysis-cli](https://github.com/mozilla/rust-code-analysis) to analyze source code and generate comprehensive simplicity reports (Markdown and HTML).
 
-It is a workspace member of the [Ahma MCP](../REQUIREMENTS.md) project.
+It is a workspace member of the [Ahma MCP](../SPEC.md) project.
 
 ## Functional Requirements
 
@@ -30,6 +30,7 @@ It is a workspace member of the [Ahma MCP](../REQUIREMENTS.md) project.
   ```
 - **R3.2**: Cognitive and cyclomatic complexity are SLOC-normalized (density per 100 lines).
 - **R3.3**: Trivial/empty files (MI=0, cognitive=0, cyclomatic≤1) receive a perfect 100% score.
+- **R3.4**: When the file-level Maintainability Index is 0 (common for large files where `mi_original` goes negative), the score uses a SLOC-weighted average of function-level MI values as a fallback.
 
 ### R4: Report Generation
 
@@ -38,11 +39,25 @@ It is a workspace member of the [Ahma MCP](../REQUIREMENTS.md) project.
 - **R4.3**: Reports include: overall simplicity, per-language breakdown, per-crate/package scores, top N issues, and a metrics glossary.
 - **R4.4**: `--limit N` controls how many issues are listed (default: 10).
 - **R4.5**: `--open` flag opens the report in the default system viewer.
+- **R4.6**: Each file in the complexity issues section includes **function-level hotspots** — the top 5 functions by cognitive complexity with their line ranges, cognitive, cyclomatic, and SLOC metrics.
+- **R4.7**: Test files (`*_test.rs`, `**/tests/**`) are intentionally included in complexity reports. Complex tests are a maintenance burden: they obscure debugging, discourage adding new test cases, and often indicate overly complex production APIs.
 
 ### R5: Output Directory
 
 - **R5.1**: Intermediate `rust-code-analysis-cli` output is stored in a configurable directory (`--output`, default: `analysis_results`).
 - **R5.2**: The output directory is cleared before each run.
+
+### R6: AI Fix Prompt
+
+- **R6.1**: `--ai-fix N` generates a structured prompt for the Nth most complex file.
+- **R6.2**: The prompt references the report for hotspot details rather than duplicating them.
+- **R6.3**: The prompt constrains the AI to focus only on hotspot functions, making minimal changes.
+
+### R7: Verification
+
+- **R7.1**: `--verify <file>` re-analyzes a specific file and compares against the previous baseline.
+- **R7.2**: Displays before/after metrics with relative improvement percentages for simplicity, cognitive, cyclomatic, SLOC, and MI.
+- **R7.3**: Reports a verdict: significant improvement, modest improvement, no change, or regression.
 
 ## Non-Functional Requirements
 

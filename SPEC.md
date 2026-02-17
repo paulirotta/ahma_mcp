@@ -60,7 +60,7 @@ _"Create agents from your command line tools with one JSON file, then watch them
 ```bash
 ahma_mcp/
 ├── Cargo.toml              # Workspace definition
-├── REQUIREMENTS.md         # THIS FILE - single source of truth
+├── SPEC.md                 # THIS FILE - single source of truth
 ├── AGENTS.md               # Guardrails for AI contributors
 ├── README.md               # User-facing documentation
 ├── docs/

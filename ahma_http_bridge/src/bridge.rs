@@ -601,13 +601,31 @@ for line in sys.stdin:
         let session = session_manager
             .get_session(&session_id)
             .expect("Session should exist");
-        assert!(session.is_sandbox_locked());
 
         let sandbox_scope = session
             .get_sandbox_scope()
             .await
             .expect("Sandbox scope should be set after roots lock");
         assert_eq!(sandbox_scope, temp_dir.path().to_path_buf());
+
+        // Trigger roots/list_changed to subprocess by marking SSE connected.
+        // The mock subprocess responds with notifications/sandbox/configured,
+        // which transitions the sandbox state machine from Configuring to Active.
+        session
+            .mark_sse_connected()
+            .await
+            .expect("SSE mark should succeed");
+
+        // Wait for the subprocess to confirm sandbox configuration (Active state).
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            session.wait_for_sandbox_active(),
+        )
+        .await
+        .expect("Timeout waiting for sandbox Active state")
+        .expect("Sandbox configuration failed");
+
+        assert!(session.is_sandbox_locked());
 
         // 3) tools/call should now be forwarded and succeed.
         let response = app
