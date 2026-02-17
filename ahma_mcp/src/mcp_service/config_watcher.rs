@@ -150,57 +150,68 @@ impl AhmaMcpService {
                         })) {
                             println!("\n{}", notification);
                         }
-                    } else {
-                        tracing::info!("Sandbox scopes updated successfully");
+                        return;
+                    }
 
-                        // On Linux, apply Landlock kernel-level restrictions now that we have scopes.
-                        // This is critical for HTTP bridge deferred sandbox mode where Landlock
-                        // couldn't be applied at startup (scopes weren't known yet).
-                        // SECURITY: Fail the session if Landlock enforcement fails - we cannot
-                        // guarantee security without kernel-level restrictions.
-                        #[cfg(target_os = "linux")]
-                        {
-                            if !self.adapter.sandbox().is_test_mode() {
-                                if let Err(e) = crate::sandbox::enforce_landlock_sandbox(
-                                    &new_scopes,
-                                    self.adapter.sandbox().is_no_temp_files(),
-                                ) {
-                                    tracing::error!(
-                                        "FATAL: Failed to enforce Landlock sandbox: {}. \
-                                         Exiting to prevent running without kernel-level security.",
-                                        e
-                                    );
-                                    if let Ok(notification) =
-                                        serde_json::to_string(&serde_json::json!({
-                                            "jsonrpc": "2.0",
-                                            "method": "notifications/sandbox/failed",
-                                            "params": { "error": e.to_string() }
-                                        }))
-                                    {
-                                        println!("\n{}", notification);
-                                    }
-                                    std::process::exit(1);
+                    tracing::info!("Sandbox scopes updated successfully");
+
+                    // On Linux, apply Landlock kernel-level restrictions now that we have scopes.
+                    // This is critical for HTTP bridge deferred sandbox mode where Landlock
+                    // couldn't be applied at startup (scopes weren't known yet).
+                    // SECURITY: Fail the session if Landlock enforcement fails - we cannot
+                    // guarantee security without kernel-level restrictions.
+                    #[cfg(target_os = "linux")]
+                    {
+                        if !self.adapter.sandbox().is_test_mode() {
+                            if let Err(e) = crate::sandbox::enforce_landlock_sandbox(
+                                &new_scopes,
+                                self.adapter.sandbox().is_no_temp_files(),
+                            ) {
+                                tracing::error!(
+                                    "FATAL: Failed to enforce Landlock sandbox: {}. \
+                                     Exiting to prevent running without kernel-level security.",
+                                    e
+                                );
+                                if let Ok(notification) =
+                                    serde_json::to_string(&serde_json::json!({
+                                        "jsonrpc": "2.0",
+                                        "method": "notifications/sandbox/failed",
+                                        "params": { "error": e.to_string() }
+                                    }))
+                                {
+                                    println!("\n{}", notification);
                                 }
-                                tracing::info!("Landlock sandbox enforced successfully");
+                                std::process::exit(1);
                             }
-                        }
-
-                        // Notify bridge that sandbox has been configured so it can safely
-                        // forward tools/call requests. We emit a JSON-RPC notification
-                        // on stdout which the HTTP bridge listens for on the subprocess
-                        // stdout stream.
-                        // NOTE: we intentionally write the raw JSON to stdout instead of
-                        // using rmcp Peer helpers here to avoid relying on generated
-                        // methods for a new notification name.
-                        if let Ok(notification) = serde_json::to_string(&serde_json::json!({
-                            "jsonrpc": "2.0",
-                            "method": "notifications/sandbox/configured"
-                        })) {
-                            // Use println! with a leading newline to write to stdout so the bridge
-                            // picks it up even if it was concatenated with a previous partial message.
-                            println!("\n{}", notification);
+                            tracing::info!("Landlock sandbox enforced successfully");
                         }
                     }
+                } else if !self.adapter.sandbox().scopes().is_empty() {
+                    // Client provided no file:// roots but we have pre-configured scopes
+                    // from --working-directories. These are valid, so proceed.
+                    tracing::info!(
+                        "No new scopes from roots/list; using pre-configured scopes: {:?}",
+                        self.adapter.sandbox().scopes()
+                    );
+                } else {
+                    tracing::warn!("No scopes available from roots or pre-configuration");
+                    return;
+                }
+
+                // Notify bridge that sandbox has been configured so it can safely
+                // forward tools/call requests. We emit a JSON-RPC notification
+                // on stdout which the HTTP bridge listens for on the subprocess
+                // stdout stream.
+                // NOTE: we intentionally write the raw JSON to stdout instead of
+                // using rmcp Peer helpers here to avoid relying on generated
+                // methods for a new notification name.
+                if let Ok(notification) = serde_json::to_string(&serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "method": "notifications/sandbox/configured"
+                })) {
+                    // Use println! with a leading newline to write to stdout so the bridge
+                    // picks it up even if it was concatenated with a previous partial message.
+                    println!("\n{}", notification);
                 }
             }
             Err(e) => {

@@ -175,12 +175,21 @@ impl Session {
         self.terminated.load(Ordering::SeqCst)
     }
 
-    /// Check if the sandbox is locked (Configuring or Active)
+    /// Check if the sandbox is fully configured and active.
+    ///
+    /// Returns `true` only in `Active` state (subprocess confirmed sandbox configuration).
+    /// During `Configuring` state the subprocess may still be processing the roots response,
+    /// so tool calls must be held until the subprocess sends `notifications/sandbox/configured`.
     pub fn is_sandbox_locked(&self) -> bool {
-        !matches!(
-            self.sandbox_state_machine.current(),
-            SandboxState::AwaitingRoots
-        )
+        self.sandbox_state_machine.is_active()
+    }
+
+    /// Wait until the sandbox reaches `Active` state (subprocess confirmed configuration).
+    ///
+    /// Returns the configured scopes on success, or an error message if the sandbox
+    /// enters a terminal state (Failed/Terminated).
+    pub async fn wait_for_sandbox_active(&self) -> std::result::Result<Vec<PathBuf>, String> {
+        self.sandbox_state_machine.wait_for_active().await
     }
 
     /// Get the current handshake state

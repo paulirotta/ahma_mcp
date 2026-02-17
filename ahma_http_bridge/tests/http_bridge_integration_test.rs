@@ -220,6 +220,7 @@ fn is_transient_transport_error(error: &str) -> bool {
     let lower = error.to_ascii_lowercase();
     lower.contains("timeout")
         || lower.contains("timed out")
+        || lower.contains("http 409")
         || lower.contains("http 500")
         || lower.contains("http 502")
         || lower.contains("http 503")
