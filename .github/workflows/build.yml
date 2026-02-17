@@ -727,7 +727,7 @@ jobs:
 
       - name: Generate code simplicity report
         run: |
-          cargo run -p ahma_code_simplicity -- . --limit 20 --html
+          cargo run -p ahma_simplify -- . --limit 20 --html
           cp CODE_SIMPLICITY.md coverage/
           cp CODE_SIMPLICITY.html coverage/
 

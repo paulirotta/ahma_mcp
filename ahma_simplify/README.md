@@ -1,4 +1,4 @@
-# ahma_code_simplicity
+# ahma_simplify
 
 A code simplicity metrics aggregator that analyzes source code using [rust-code-analysis-cli](https://github.com/mozilla/rust-code-analysis) and generates comprehensive simplicity reports.
 
@@ -16,36 +16,37 @@ cargo install cargo-binstall
 # 3. Install rust-code-analysis and rust-code-analysis-cli
 cargo binstall rust-code-analysis rust-code-analysis-cli
 
-# 4. Install ahma_code_simplicity
-cargo install --path ahma_code_simplicity
+# 4. Install ahma_simplify
+
+cargo install --path ahma_simplify
 ```
 
 ## Usage
 
 ```bash
 # Analyze a single crate
-ahma_code_simplicity /path/to/crate
+ahma_simplify /path/to/crate
 
 # Analyze with HTML report
-ahma_code_simplicity /path/to/project --html
+ahma_simplify /path/to/project --html
 
 # Custom output directory
-ahma_code_simplicity /path/to/project -o my_results
+ahma_simplify /path/to/project -o my_results
 
 # Limit emergency items shown
-ahma_code_simplicity /path/to/project --limit 5
+ahma_simplify /path/to/project --limit 5
 
 # Open report automatically
-ahma_code_simplicity /path/to/project --html --open
+ahma_simplify /path/to/project --html --open
 
 # Analyze multiple languages (comma-separated list)
-ahma_code_simplicity /path/to/project --extensions rs,py,js
+ahma_simplify /path/to/project --extensions rs,py,js
 
 # All supported languages example
-ahma_code_simplicity /path/to/project --extensions rs,py,js,ts,tsx,c,h,cpp,cc,hpp,hh,cs,java,go,css,html
+ahma_simplify /path/to/project --extensions rs,py,js,ts,tsx,c,h,cpp,cc,hpp,hh,cs,java,go,css,html
 
 # Exclude custom paths (comma-separated list)
-ahma_code_simplicity /path/to/project --exclude "**/generated/**,**/vendor/**"
+ahma_simplify /path/to/project --exclude "**/generated/**,**/vendor/**"
 
 # Convenience wrapper script (analyzes the whole repo)
 ./scripts/code-simplicity.sh
@@ -128,15 +129,15 @@ Analyzes multiple languages using a comma-separated list of extensions via the `
 
 Example usage:
 ```bash
-ahma_code_simplicity . --extensions rs,py,js
+ahma_simplify . --extensions rs,py,js
 ```
 
 ## Development
 
 ```bash
 # Run tests
-cargo test -p ahma_code_simplicity
+cargo test -p ahma_simplify
 
 # Build
-cargo build -p ahma_code_simplicity --release
+cargo build -p ahma_simplify --release
 ```

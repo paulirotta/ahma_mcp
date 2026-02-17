@@ -343,7 +343,11 @@ fn format_metric_change(before: f64, after: f64, suffix: &str, higher_is_better:
     }
 
     let pct = ((after - before) / before) * 100.0;
-    format!("{:+.0}% {}", pct, get_direction_label(pct, higher_is_better))
+    format!(
+        "{:+.0}% {}",
+        pct,
+        get_direction_label(pct, higher_is_better)
+    )
 }
 
 fn print_metric_row(label: &str, before: f64, after: f64, suffix: &str, higher_is_better: bool) {
@@ -360,7 +364,7 @@ mod tests {
 
     #[test]
     fn test_cli_parsing() {
-        let args = vec!["ahma_code_simplicity", ".", "--output", "results"];
+        let args = vec!["ahma_simplify", ".", "--output", "results"];
         let cli = Cli::try_parse_from(args).unwrap();
         assert_eq!(cli.directory, PathBuf::from("."));
         assert_eq!(cli.output, PathBuf::from("results"));
@@ -370,7 +374,7 @@ mod tests {
     #[test]
     fn test_cli_parsing_with_output_path() {
         let args = vec![
-            "ahma_code_simplicity",
+            "ahma_simplify",
             ".",
             "--output",
             "results",
@@ -385,28 +389,28 @@ mod tests {
 
     #[test]
     fn test_cli_parsing_with_ai_fix() {
-        let args = vec!["ahma_code_simplicity", ".", "--ai-fix", "1"];
+        let args = vec!["ahma_simplify", ".", "--ai-fix", "1"];
         let cli = Cli::try_parse_from(args).unwrap();
         assert_eq!(cli.ai_fix, Some(1));
     }
 
     #[test]
     fn test_cli_parsing_without_ai_fix() {
-        let args = vec!["ahma_code_simplicity", "."];
+        let args = vec!["ahma_simplify", "."];
         let cli = Cli::try_parse_from(args).unwrap();
         assert_eq!(cli.ai_fix, None);
     }
 
     #[test]
     fn test_cli_parsing_with_verify() {
-        let args = vec!["ahma_code_simplicity", ".", "--verify", "src/main.rs"];
+        let args = vec!["ahma_simplify", ".", "--verify", "src/main.rs"];
         let cli = Cli::try_parse_from(args).unwrap();
         assert_eq!(cli.verify, Some(PathBuf::from("src/main.rs")));
     }
 
     #[test]
     fn test_cli_parsing_without_verify() {
-        let args = vec!["ahma_code_simplicity", "."];
+        let args = vec!["ahma_simplify", "."];
         let cli = Cli::try_parse_from(args).unwrap();
         assert_eq!(cli.verify, None);
     }

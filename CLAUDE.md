@@ -47,7 +47,7 @@ ahma_mcp/                     # Cargo workspace root
 ├── ahma_http_bridge/         # HTTP-to-stdio bridge for web clients
 ├── ahma_http_mcp_client/     # HTTP MCP client with OAuth 2.0 + PKCE
 ├── ahma_validate/            # Tool config validator CLI
-├── ahma_code_simplicity/     # Code simplicity metrics aggregator CLI
+├── ahma_simplify/             # Code simplicity metrics aggregator CLI
 ├── generate_tool_schema/     # MTDF schema generator CLI
 └── .ahma/tools/              # Tool JSON configurations
 ```

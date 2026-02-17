@@ -86,7 +86,7 @@ ahma_mcp/
 │   └── src/
 ├── ahma_validate/          # Tool config validator
 │   └── src/
-├── ahma_code_simplicity/   # Code simplicity metrics aggregator
+├── ahma_simplify/          # Code simplicity metrics aggregator
 │   └── src/
 ├── generate_tool_schema/   # MTDF schema generator
 │   └── src/

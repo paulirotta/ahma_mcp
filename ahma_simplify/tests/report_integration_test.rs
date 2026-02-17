@@ -1,6 +1,6 @@
-use ahma_code_simplicity::analysis::{check_dependencies, perform_analysis};
-use ahma_code_simplicity::models::{FileSimplicity, Language, MetricsResults};
-use ahma_code_simplicity::report::create_report_md;
+use ahma_simplify::analysis::{check_dependencies, perform_analysis};
+use ahma_simplify::models::{FileSimplicity, Language, MetricsResults};
+use ahma_simplify::report::create_report_md;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;

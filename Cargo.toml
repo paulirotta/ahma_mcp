@@ -14,7 +14,7 @@ members = [
     "ahma_http_bridge",
     "ahma_http_mcp_client",
     "ahma_common",
-    "ahma_code_simplicity",
+    "ahma_simplify",
 ]
 resolver = "3"
 
@@ -30,11 +30,11 @@ version = "0.4.5"
 anyhow = "1.0.101"
 async-trait = "0.1.89"
 chrono = { version = "0.4.43", features = ["serde"] }
-clap = { version = "4.5.58", features = ["derive"] }
+clap = { version = "4.5.59", features = ["derive"] }
 ctrlc = "3.5.2"
 directories = "6.0.0"
 dirs = "6.0.0"
-futures = "0.3.31"
+futures = "0.3.32"
 landlock = "0.4.4"
 opentelemetry = { version = "0.31", features = ["trace"] }
 opentelemetry-otlp = { version = "0.31", features = [
@@ -66,7 +66,7 @@ tokio = { version = "1.49.0", features = [
     "signal",
 ] }
 tokio-util = "0.7.18"
-toml = "1.0.1"
+toml = "1.0.2"
 tracing = "0.1.44"
 tracing-appender = "0.2.4"
 tracing-opentelemetry = "0.32"
