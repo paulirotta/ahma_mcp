@@ -7,14 +7,78 @@
 //! - Shell pool lifecycle and health checking
 //! - Error handling and recovery scenarios
 
-use ahma_mcp::shell_pool::{ShellCommand, ShellError, ShellPoolConfig, ShellPoolManager};
+use ahma_mcp::shell_pool::{PooledShell, ShellCommand, ShellError, ShellPoolConfig, ShellPoolManager};
 use anyhow::Result;
 use std::{
+    path::Path,
     sync::Arc,
     time::{Duration, Instant},
 };
 use tempfile::TempDir;
 use tokio::sync::Barrier;
+
+/// Helper: Create a shell command with standard parameters
+fn create_command(id: &str, args: Vec<String>, working_dir: &Path, timeout_ms: u64) -> ShellCommand {
+    ShellCommand {
+        id: id.to_string(),
+        command: args,
+        working_dir: working_dir.to_string_lossy().to_string(),
+        timeout_ms,
+    }
+}
+
+/// Helper: Execute a simple echo command and verify success
+async fn execute_echo_command(
+    shell: &mut PooledShell,
+    id: &str,
+    message: &str,
+    working_dir: &Path,
+) -> Result<()> {
+    let command = create_command(
+        id,
+        vec!["echo".to_string(), message.to_string()],
+        working_dir,
+        5000,
+    );
+    let response = shell.execute_command(command).await?;
+    assert_eq!(response.exit_code, 0);
+    assert!(response.stdout.contains(message));
+    Ok(())
+}
+
+/// Helper: Measure shell acquisition and command execution
+async fn measure_shell_operation(
+    manager: &ShellPoolManager,
+    path: &Path,
+    iteration: usize,
+) -> Result<(Duration, PooledShell)> {
+    let start_time = Instant::now();
+    let shell = manager.get_shell(path).await;
+    assert!(shell.is_some());
+    let mut shell = shell.unwrap();
+    let acquisition_time = start_time.elapsed();
+
+    let command = create_command(
+        &format!("reuse_test_{}", iteration),
+        vec!["echo".to_string(), "hello".to_string()],
+        path,
+        10000,
+    );
+
+    let response = shell.execute_command(command).await?;
+    assert_eq!(response.exit_code, 0);
+    assert!(response.stdout.contains("hello"));
+
+    Ok((acquisition_time, shell))
+}
+
+/// Helper: Calculate average duration from a slice
+fn average_duration(durations: &[Duration]) -> Duration {
+    if durations.is_empty() {
+        return Duration::ZERO;
+    }
+    durations.iter().sum::<Duration>() / durations.len() as u32
+}
 
 /// Test shell reuse efficiency under repeated operations
 #[tokio::test]
@@ -24,72 +88,43 @@ async fn test_shell_reuse_efficiency() -> Result<()> {
         enabled: true,
         shells_per_directory: 2,
         max_total_shells: 10,
-        shell_idle_timeout: Duration::from_secs(5), // Reduced from 30s
-        pool_cleanup_interval: Duration::from_secs(10), // Reduced from 60s
+        shell_idle_timeout: Duration::from_secs(5),
+        pool_cleanup_interval: Duration::from_secs(10),
         shell_spawn_timeout: Duration::from_secs(5),
-        command_timeout: Duration::from_secs(10), // Reduced from 30s
-        health_check_interval: Duration::from_secs(10), // Reduced from 30s
+        command_timeout: Duration::from_secs(10),
+        health_check_interval: Duration::from_secs(10),
     };
 
     let manager = Arc::new(ShellPoolManager::new(config));
-    // Skip background tasks to avoid polling issues
     manager.clone().start_background_tasks();
 
     let num_operations = 10;
-    let mut shell_creation_times = Vec::new();
-    let mut shell_reuse_times = Vec::new();
+    let mut creation_times = Vec::new();
+    let mut reuse_times = Vec::new();
 
     for i in 0..num_operations {
-        let start_time = Instant::now();
-
-        // Get shell (first time creates, subsequent times reuse)
-        let shell = manager.get_shell(temp_dir.path()).await;
-        assert!(shell.is_some());
-        let mut shell = shell.unwrap();
-
-        let get_shell_time = start_time.elapsed();
-
-        // Execute a simple command
-        let command = ShellCommand {
-            id: format!("reuse_test_{}", i),
-            command: vec!["echo".to_string(), "hello".to_string()],
-            working_dir: temp_dir.path().to_string_lossy().to_string(),
-            timeout_ms: 10000,
-        };
-
-        let response = shell.execute_command(command).await?;
-        assert_eq!(response.exit_code, 0);
-        assert!(response.stdout.contains("hello"));
-
-        // Return shell to pool
+        let (acquisition_time, shell) = measure_shell_operation(&manager, temp_dir.path(), i).await?;
         manager.return_shell(shell).await;
 
         if i == 0 {
-            shell_creation_times.push(get_shell_time);
+            creation_times.push(acquisition_time);
         } else {
-            shell_reuse_times.push(get_shell_time);
+            reuse_times.push(acquisition_time);
         }
     }
 
-    // Verify shell reuse is faster than creation
-    let avg_creation_time =
-        shell_creation_times.iter().sum::<Duration>() / shell_creation_times.len() as u32;
-    let avg_reuse_time = if !shell_reuse_times.is_empty() {
-        shell_reuse_times.iter().sum::<Duration>() / shell_reuse_times.len() as u32
-    } else {
-        Duration::ZERO
-    };
+    let avg_creation = average_duration(&creation_times);
+    let avg_reuse = average_duration(&reuse_times);
 
-    println!("Average shell creation time: {:?}", avg_creation_time);
-    println!("Average shell reuse time: {:?}", avg_reuse_time);
+    println!("Average shell creation time: {:?}", avg_creation);
+    println!("Average shell reuse time: {:?}", avg_reuse);
 
-    // Shell reuse should generally be faster (or at least not significantly slower)
-    if !shell_reuse_times.is_empty() {
+    if !reuse_times.is_empty() {
         assert!(
-            avg_reuse_time <= avg_creation_time * 2,
+            avg_reuse <= avg_creation * 2,
             "Shell reuse should be efficient, creation: {:?}, reuse: {:?}",
-            avg_creation_time,
-            avg_reuse_time
+            avg_creation,
+            avg_reuse
         );
     }
 
@@ -348,30 +383,15 @@ async fn test_shell_pool_lifecycle_and_health_checking() -> Result<()> {
     Ok(())
 }
 
-/// Test error handling and recovery scenarios
-#[tokio::test]
-async fn test_error_handling_and_recovery_scenarios() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let config = ShellPoolConfig {
-        enabled: true,
-        shells_per_directory: 2,
-        max_total_shells: 5, // Low limit to test capacity
-        shell_idle_timeout: Duration::from_secs(30),
-        pool_cleanup_interval: Duration::from_secs(60),
-        shell_spawn_timeout: Duration::from_secs(5),
-        command_timeout: Duration::from_millis(100), // Short timeout for testing
-        health_check_interval: Duration::from_secs(30),
-    };
-
-    let manager = Arc::new(ShellPoolManager::new(config));
-    manager.clone().start_background_tasks();
-
-    // Test shell acquisition and basic functionality
-    // Note: Current implementation doesn't enforce strict semaphore limits
+/// Helper: Acquire multiple shells from the pool
+async fn acquire_shells(
+    manager: &ShellPoolManager,
+    path: &Path,
+    count: usize,
+) -> Vec<PooledShell> {
     let mut shells = Vec::new();
-    for i in 0..3 {
-        // Just test a few shells instead of hitting limits
-        if let Some(shell) = manager.get_shell(temp_dir.path()).await {
+    for i in 0..count {
+        if let Some(shell) = manager.get_shell(path).await {
             shells.push(shell);
             println!("Acquired shell {}, total: {}", i + 1, shells.len());
         } else {
@@ -379,81 +399,82 @@ async fn test_error_handling_and_recovery_scenarios() -> Result<()> {
             break;
         }
     }
+    shells
+}
 
-    // Should be able to acquire at least some shells
-    assert!(
-        !shells.is_empty(),
-        "Should be able to acquire at least one shell"
-    );
-
-    // Test that we can return and reacquire shells
+/// Helper: Test shell return and reacquisition
+async fn test_shell_reacquisition(
+    manager: &ShellPoolManager,
+    shells: &mut Vec<PooledShell>,
+    path: &Path,
+) {
     if let Some(shell) = shells.pop() {
         manager.return_shell(shell).await;
-
-        let new_shell = manager.get_shell(temp_dir.path()).await;
-        assert!(
-            new_shell.is_some(),
-            "Should be able to get a shell after returning one"
-        );
+        let new_shell = manager.get_shell(path).await;
+        assert!(new_shell.is_some(), "Should be able to get a shell after returning one");
         shells.push(new_shell.unwrap());
     }
+}
 
-    // Test command timeout handling
+/// Helper: Test command timeout handling
+async fn test_timeout_handling(manager: &ShellPoolManager, shells: &mut Vec<PooledShell>, path: &Path) {
     if let Some(mut shell) = shells.pop() {
-        let timeout_command = ShellCommand {
-            id: "timeout_test".to_string(),
-            command: vec!["sleep".to_string(), "1".to_string()], // Will timeout with 100ms limit
-            working_dir: temp_dir.path().to_string_lossy().to_string(),
-            timeout_ms: 100,
-        };
-
-        let result = shell.execute_command(timeout_command).await;
-        // Should timeout or fail gracefully
+        let command = create_command("timeout_test", vec!["sleep".to_string(), "1".to_string()], path, 100);
+        let result = shell.execute_command(command).await;
         assert!(result.is_err() || result.unwrap().exit_code != 0);
-
         manager.return_shell(shell).await;
     }
+}
 
-    // Test invalid command handling
+/// Helper: Test invalid command handling
+async fn test_invalid_command(manager: &ShellPoolManager, shells: &mut Vec<PooledShell>, path: &Path) {
     if let Some(mut shell) = shells.pop() {
-        let invalid_command = ShellCommand {
-            id: "invalid_test".to_string(),
-            command: vec!["nonexistent_command_xyz".to_string()],
-            working_dir: temp_dir.path().to_string_lossy().to_string(),
-            timeout_ms: 5000,
-        };
-
-        let result = shell.execute_command(invalid_command).await;
-        // Should complete but with non-zero exit code
+        let command = create_command("invalid_test", vec!["nonexistent_command_xyz".to_string()], path, 5000);
+        let result = shell.execute_command(command).await;
         assert!(result.is_ok());
         if let Ok(response) = result {
             assert_ne!(response.exit_code, 0);
         }
-
         manager.return_shell(shell).await;
     }
+}
+
+/// Test error handling and recovery scenarios
+#[tokio::test]
+async fn test_error_handling_and_recovery_scenarios() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let config = ShellPoolConfig {
+        enabled: true,
+        shells_per_directory: 2,
+        max_total_shells: 5,
+        shell_idle_timeout: Duration::from_secs(30),
+        pool_cleanup_interval: Duration::from_secs(60),
+        shell_spawn_timeout: Duration::from_secs(5),
+        command_timeout: Duration::from_millis(100),
+        health_check_interval: Duration::from_secs(30),
+    };
+
+    let manager = Arc::new(ShellPoolManager::new(config));
+    manager.clone().start_background_tasks();
+
+    let mut shells = acquire_shells(&manager, temp_dir.path(), 3).await;
+    assert!(!shells.is_empty(), "Should be able to acquire at least one shell");
+
+    test_shell_reacquisition(&manager, &mut shells, temp_dir.path()).await;
+    test_timeout_handling(&manager, &mut shells, temp_dir.path()).await;
+    test_invalid_command(&manager, &mut shells, temp_dir.path()).await;
 
     // Return remaining shells
     for shell in shells {
         manager.return_shell(shell).await;
     }
 
-    // Test that manager continues to work after errors
+    // Verify recovery after errors
     let recovery_shell = manager.get_shell(temp_dir.path()).await;
     assert!(recovery_shell.is_some());
 
     if let Some(mut shell) = recovery_shell {
-        let recovery_command = ShellCommand {
-            id: "recovery_test".to_string(),
-            command: vec!["echo".to_string(), "recovered".to_string()],
-            working_dir: temp_dir.path().to_string_lossy().to_string(),
-            timeout_ms: 5000,
-        };
-
-        let response = shell.execute_command(recovery_command).await?;
-        assert_eq!(response.exit_code, 0);
-        assert!(response.stdout.contains("recovered"));
-
+        execute_echo_command(&mut shell, "recovery_test", "recovered", temp_dir.path()).await?;
         manager.return_shell(shell).await;
     }
 
@@ -492,6 +513,35 @@ async fn test_shell_pool_disabled_mode_fallback() -> Result<()> {
     Ok(())
 }
 
+/// Helper: Run concurrent worker operations
+async fn run_concurrent_worker(
+    manager: Arc<ShellPoolManager>,
+    path: std::path::PathBuf,
+    worker_id: usize,
+    operations: usize,
+) -> (usize, usize) {
+    let mut successful = 0;
+    for j in 0..operations {
+        if let Some(mut shell) = manager.get_shell(&path).await {
+            let command = create_command(
+                &format!("concurrent_{}_{}", worker_id, j),
+                vec!["echo".to_string(), format!("worker_{}_{}", worker_id, j)],
+                &path,
+                15000,
+            );
+
+            if let Ok(response) = shell.execute_command(command).await {
+                if response.exit_code == 0 {
+                    successful += 1;
+                }
+            }
+            manager.return_shell(shell).await;
+        }
+        tokio::task::yield_now().await;
+    }
+    (worker_id, successful)
+}
+
 /// Test concurrent access patterns
 #[tokio::test]
 async fn test_concurrent_access_patterns() -> Result<()> {
@@ -511,65 +561,36 @@ async fn test_concurrent_access_patterns() -> Result<()> {
     manager.clone().start_background_tasks();
 
     let num_concurrent = 5;
+    let operations_per_worker = 3;
     let barrier = Arc::new(Barrier::new(num_concurrent));
-    let mut handles = Vec::new();
 
-    // Start concurrent operations
-    for i in 0..num_concurrent {
-        let manager_clone = manager.clone();
-        let temp_path = temp_dir.path().to_path_buf();
-        let barrier_clone = barrier.clone();
+    let handles: Vec<_> = (0..num_concurrent)
+        .map(|i| {
+            let manager_clone = manager.clone();
+            let temp_path = temp_dir.path().to_path_buf();
+            let barrier_clone = barrier.clone();
+            tokio::spawn(async move {
+                barrier_clone.wait().await;
+                run_concurrent_worker(manager_clone, temp_path, i, operations_per_worker).await
+            })
+        })
+        .collect();
 
-        let handle = tokio::spawn(async move {
-            barrier_clone.wait().await;
-
-            let mut successful_operations = 0;
-            for j in 0..3 {
-                if let Some(mut shell) = manager_clone.get_shell(&temp_path).await {
-                    let command = ShellCommand {
-                        id: format!("concurrent_{}_{}", i, j),
-                        command: vec!["echo".to_string(), format!("worker_{}_{}", i, j)],
-                        working_dir: temp_path.to_string_lossy().to_string(),
-                        // Increase timeout to reduce flakiness under load
-                        timeout_ms: 15000,
-                    };
-
-                    if let Ok(response) = shell.execute_command(command).await
-                        && response.exit_code == 0
-                    {
-                        successful_operations += 1;
-                    }
-
-                    manager_clone.return_shell(shell).await;
-                }
-
-                // Yield between operations without timing
-                tokio::task::yield_now().await;
-            }
-
-            (i, successful_operations)
-        });
-
-        handles.push(handle);
-    }
-
-    // Wait for all concurrent operations to complete
     let results: Vec<(usize, usize)> = futures::future::join_all(handles)
         .await
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
 
-    // Verify all workers completed successfully
     for (worker_id, successful_ops) in &results {
         assert_eq!(
-            *successful_ops, 3,
-            "Worker {} should have completed 3 operations, got {}",
-            worker_id, successful_ops
+            *successful_ops, operations_per_worker,
+            "Worker {} should have completed {} operations, got {}",
+            worker_id, operations_per_worker, successful_ops
         );
     }
 
-    let total_successful = results.iter().map(|(_, ops)| ops).sum::<usize>();
-    assert_eq!(total_successful, num_concurrent * 3);
+    let total_successful: usize = results.iter().map(|(_, ops)| ops).sum();
+    assert_eq!(total_successful, num_concurrent * operations_per_worker);
 
     manager.shutdown_all().await;
     Ok(())
@@ -613,6 +634,41 @@ async fn test_shell_error_types_and_classification() -> Result<()> {
     Ok(())
 }
 
+/// Helper: Run a single stability test cycle
+async fn run_stability_cycle(
+    manager: &ShellPoolManager,
+    path: &Path,
+    cycle: usize,
+    operations: usize,
+) {
+    let mut shells = Vec::new();
+    for _ in 0..operations {
+        if let Some(shell) = manager.get_shell(path).await {
+            shells.push(shell);
+        }
+    }
+
+    for (i, mut shell) in shells.into_iter().enumerate() {
+        let command = create_command(
+            &format!("stability_{}_{}", cycle, i),
+            vec!["echo".to_string(), format!("cycle_{}", cycle)],
+            path,
+            5000,
+        );
+        let _ = shell.execute_command(command).await;
+        manager.return_shell(shell).await;
+    }
+}
+
+/// Helper: Check and log stats periodically
+async fn check_stats_if_needed(manager: &ShellPoolManager, cycle: usize, interval: usize) {
+    if cycle % interval == 0 {
+        let stats = manager.get_stats().await;
+        println!("Cycle {}: {:?}", cycle, stats);
+        assert!(stats.total_shells <= stats.max_shells);
+    }
+}
+
 /// Test memory usage stability under sustained load
 #[tokio::test]
 async fn test_memory_usage_stability_under_sustained_load() -> Result<()> {
@@ -621,63 +677,28 @@ async fn test_memory_usage_stability_under_sustained_load() -> Result<()> {
         enabled: true,
         shells_per_directory: 2,
         max_total_shells: 8,
-        shell_idle_timeout: Duration::from_millis(200), // Increased from 100ms for less aggressive cleanup
-        pool_cleanup_interval: Duration::from_millis(100), // Increased from 50ms
+        shell_idle_timeout: Duration::from_millis(200),
+        pool_cleanup_interval: Duration::from_millis(100),
         shell_spawn_timeout: Duration::from_secs(5),
         command_timeout: Duration::from_secs(30),
-        health_check_interval: Duration::from_millis(200), // Increased from 100ms
+        health_check_interval: Duration::from_millis(200),
     };
 
     let manager = Arc::new(ShellPoolManager::new(config));
-    // manager.clone().start_background_tasks(); // Disabled for performance
-
-    let num_cycles = 20; // Reduced from 50 to 20 for faster execution
-    let operations_per_cycle = 3; // Reduced from 5 to 3 for faster execution
+    let num_cycles = 20;
+    let operations_per_cycle = 3;
 
     for cycle in 0..num_cycles {
-        let mut cycle_shells = Vec::new();
+        run_stability_cycle(&manager, temp_dir.path(), cycle, operations_per_cycle).await;
+        check_stats_if_needed(&manager, cycle, 5).await;
 
-        // Acquire shells
-        for _i in 0..operations_per_cycle {
-            if let Some(shell) = manager.get_shell(temp_dir.path()).await {
-                cycle_shells.push(shell);
-            }
-        }
-
-        // Execute commands
-        for (i, mut shell) in cycle_shells.into_iter().enumerate() {
-            let command = ShellCommand {
-                id: format!("stability_{}_{}", cycle, i),
-                command: vec!["echo".to_string(), format!("cycle_{}", cycle)],
-                working_dir: temp_dir.path().to_string_lossy().to_string(),
-                timeout_ms: 5000,
-            };
-
-            let _ = shell.execute_command(command).await;
-            manager.return_shell(shell).await;
-        }
-
-        // Periodic stats check
-        if cycle % 5 == 0 {
-            // Reduced frequency from every 10 to every 5 cycles
-            let stats = manager.get_stats().await;
-            println!("Cycle {}: {:?}", cycle, stats);
-
-            // Should not accumulate unbounded resources
-            assert!(stats.total_shells <= stats.max_shells);
-        }
-
-        // Yield to allow background tasks without timing
         if cycle % 3 == 0 {
             tokio::task::yield_now().await;
         }
     }
 
-    // Final verification
     let final_stats = manager.get_stats().await;
     println!("Final stability stats: {:?}", final_stats);
-
-    // Should have bounded resource usage
     assert!(final_stats.total_shells <= final_stats.max_shells);
 
     manager.shutdown_all().await;

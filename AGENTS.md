@@ -2,12 +2,12 @@
 
 ## About This File
 
-This file provides AI-specific development guidance for the `ahma_mcp` project. For functional requirements and architecture, see [requirements.md](requirements.md). These files work together:
+This file provides AI-specific development guidance for the `ahma_mcp` project. For functional requirements and architecture, see [SPEC.md](SPEC.md). These files work together:
 
-- **requirements.md**: Single source of truth for **what** the product does and **how** it's architected
+- **SPEC.md**: Single source of truth for **what** the product does and **how** it's architected
 - **AGENTS.md**: Guide for **how** to develop, test, and contribute to the codebase
 
-**Note for crate-specific workflows**: If you're working in a specific crate directory (e.g., `ahma_http_bridge/`), this AGENTS.md is symlinked and applies workspace-wide. Crate-specific functional requirements are in each crate's `requirements.md`.
+**Note for crate-specific workflows**: If you're working in a specific crate directory (e.g., `ahma_http_bridge/`), this AGENTS.md is symlinked and applies workspace-wide. Crate-specific functional requirements are in each crate's `SPEC.md`.
 
 ---
 
@@ -230,7 +230,7 @@ cargo test test_name -- --nocapture
 
 ### Adding a New Tool
 1. Create a JSON configuration in `.ahma/tools/yourtool.json`
-2. Follow the MTDF schema (see [requirements.md Section 3](requirements.md#3-tool-definition-mtdf-schema))
+2. Follow the MTDF schema (see [SPEC.md Section 3](SPEC.md#3-tool-definition-mtdf-schema))
 3. Test the tool: `ahma_mcp yourtool_subcommand --help`
 4. The server hot-reloads automatically—no restart needed
 
@@ -383,7 +383,7 @@ ahma_mcp --debug --log-to-stderr cargo_test --working-directory .
 
 ## Additional Resources
 
-- **Architecture**: [requirements.md](requirements.md)
+- **Architecture**: [SPEC.md](SPEC.md)
 - **HTTP Bridge Details**: [docs/session-isolation.md](docs/session-isolation.md)
 - **Development Methodology**: [docs/spec-driven-development.md](docs/spec-driven-development.md)
 - **Coverage Reports**: https://paulirotta.github.io/ahma_mcp/html/

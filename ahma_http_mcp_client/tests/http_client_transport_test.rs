@@ -1385,7 +1385,7 @@ mod sse_integration_tests {
     #[tokio::test]
     async fn sse_reconnection_simulation() {
         // Simulate SSE reconnection behavior when connection drops
-        // This tests resilience requirements from REQUIREMENTS.md (future feature)
+        // This tests resilience requirements from SPEC.md (future feature)
 
         let _guard = token_env_guard().lock().unwrap();
         let tmp = tempdir().unwrap();

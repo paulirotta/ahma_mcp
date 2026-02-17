@@ -163,6 +163,6 @@ Key fields:
 
 ## Reference Documentation
 
-- **REQUIREMENTS.md**: Single source of truth for architecture and requirements
+- **SPEC.md**: Single source of truth for architecture and requirements
 - **AGENTS.md**: AI-specific development guidance and testing instructions
 - **docs/USAGE_GUIDE.md**: Workflow patterns and CLI flag inheritance

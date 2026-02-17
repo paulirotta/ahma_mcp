@@ -154,49 +154,58 @@ fn prepare_output_directory(output: &Path) -> Result<()> {
     fs::create_dir_all(output).context("Failed to create output directory")
 }
 
-fn determine_report_output_dir(output_path: &Option<PathBuf>) -> Result<PathBuf> {
-    let path = if let Some(p) = output_path {
-        if p.is_absolute() {
-            p.clone()
-        } else {
-            std::env::current_dir()
-                .context("Failed to get current directory")?
-                .join(p)
-        }
-    } else {
-        std::env::current_dir().context("Failed to get current directory")?
-    };
+fn resolve_path(path: &Path) -> Result<PathBuf> {
+    if path.is_absolute() {
+        return Ok(path.to_path_buf());
+    }
+    Ok(std::env::current_dir()
+        .context("Failed to get current directory")?
+        .join(path))
+}
 
-    // If path ends with a filename (has an extension or contains a dot), use its parent directory
-    // Otherwise, treat it as a directory
-    if path.extension().is_some()
+fn is_file_path(path: &Path) -> bool {
+    path.extension().is_some()
         || path
             .file_name()
             .is_some_and(|n| n.to_string_lossy().contains('.'))
-    {
-        path.parent().map(|p| p.to_path_buf()).ok_or_else(|| {
-            anyhow::anyhow!("Invalid output path: cannot determine parent directory")
-        })
-    } else {
-        Ok(path)
+}
+
+fn determine_report_output_dir(output_path: &Option<PathBuf>) -> Result<PathBuf> {
+    let path = match output_path {
+        Some(p) => resolve_path(p)?,
+        None => std::env::current_dir().context("Failed to get current directory")?,
+    };
+
+    if !is_file_path(&path) {
+        return Ok(path);
+    }
+
+    path.parent()
+        .map(|p| p.to_path_buf())
+        .ok_or_else(|| anyhow::anyhow!("Invalid output path: cannot determine parent directory"))
+}
+
+fn try_parse_metrics_file(path: &Path, normalized: bool) -> Option<FileSimplicity> {
+    let content = fs::read_to_string(path).ok()?;
+    match toml::from_str::<MetricsResults>(&content) {
+        Ok(results) => Some(FileSimplicity::calculate(&results, normalized)),
+        Err(e) => {
+            eprintln!("Error parsing {}: {}", path.display(), e);
+            None
+        }
     }
 }
 
 fn load_metrics(output: &Path, normalized: bool) -> Result<Vec<FileSimplicity>> {
-    let mut files_simplicity = Vec::new();
     println!("Aggregating metrics from {}...", output.display());
 
-    for entry in WalkDir::new(output).into_iter().filter_map(|e| e.ok()) {
-        if entry.path().extension().is_some_and(|ext| ext == "toml") {
-            let content = fs::read_to_string(entry.path())?;
-            match toml::from_str::<MetricsResults>(&content) {
-                Ok(results) => {
-                    files_simplicity.push(FileSimplicity::calculate(&results, normalized))
-                }
-                Err(e) => eprintln!("Error parsing {}: {}", entry.path().display(), e),
-            }
-        }
-    }
+    let files_simplicity = WalkDir::new(output)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "toml"))
+        .filter_map(|e| try_parse_metrics_file(e.path(), normalized))
+        .collect();
+
     Ok(files_simplicity)
 }
 
@@ -274,22 +283,22 @@ fn run_verify(
 fn find_baseline_metrics(output_dir: &Path, target_path: &Path) -> Result<MetricsResults> {
     let target_str = target_path.to_string_lossy();
 
-    for entry in WalkDir::new(output_dir).into_iter().filter_map(|e| e.ok()) {
-        if entry.path().extension().is_some_and(|ext| ext == "toml") {
-            let content = fs::read_to_string(entry.path())?;
-            if let Ok(results) = toml::from_str::<MetricsResults>(&content)
-                && results.name == target_str
-            {
-                return Ok(results);
-            }
-        }
-    }
-
-    anyhow::bail!(
-        "No baseline metrics found for {} in {}. Run a full analysis first.",
-        target_str,
-        output_dir.display()
-    )
+    WalkDir::new(output_dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "toml"))
+        .find_map(|entry| {
+            let content = fs::read_to_string(entry.path()).ok()?;
+            let results: MetricsResults = toml::from_str(&content).ok()?;
+            (results.name == target_str).then_some(results)
+        })
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "No baseline metrics found for {} in {}. Run a full analysis first.",
+                target_str,
+                output_dir.display()
+            )
+        })
 }
 
 fn print_verification(path: &str, before: &FileSimplicity, after: &FileSimplicity) {
@@ -315,27 +324,30 @@ fn print_verification(path: &str, before: &FileSimplicity, after: &FileSimplicit
     }
 }
 
-fn print_metric_row(label: &str, before: f64, after: f64, suffix: &str, higher_is_better: bool) {
-    let change = if before == 0.0 && after == 0.0 {
-        "unchanged".to_string()
-    } else if before == 0.0 {
-        format!("+{:.0}{}", after, suffix)
-    } else {
-        let pct = ((after - before) / before) * 100.0;
-        let direction = if higher_is_better {
-            if pct > 0.0 {
-                "improvement"
-            } else {
-                "regression"
-            }
-        } else if pct < 0.0 {
-            "reduction"
-        } else {
-            "increase"
-        };
-        format!("{:+.0}% {}", pct, direction)
-    };
+fn get_direction_label(pct: f64, higher_is_better: bool) -> &'static str {
+    let is_positive = pct > 0.0;
+    match (higher_is_better, is_positive) {
+        (true, true) => "improvement",
+        (true, false) => "regression",
+        (false, true) => "increase",
+        (false, false) => "reduction",
+    }
+}
 
+fn format_metric_change(before: f64, after: f64, suffix: &str, higher_is_better: bool) -> String {
+    if before == 0.0 && after == 0.0 {
+        return "unchanged".to_string();
+    }
+    if before == 0.0 {
+        return format!("+{:.0}{}", after, suffix);
+    }
+
+    let pct = ((after - before) / before) * 100.0;
+    format!("{:+.0}% {}", pct, get_direction_label(pct, higher_is_better))
+}
+
+fn print_metric_row(label: &str, before: f64, after: f64, suffix: &str, higher_is_better: bool) {
+    let change = format_metric_change(before, after, suffix, higher_is_better);
     println!(
         "  {:12} {:>6.0}{} -> {:>6.0}{} ({})",
         label, before, suffix, after, suffix, change
