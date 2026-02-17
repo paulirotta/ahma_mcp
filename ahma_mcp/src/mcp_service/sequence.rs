@@ -6,7 +6,9 @@
 use rmcp::model::{CallToolRequestParams, CallToolResult, Content, ErrorData as McpError};
 use rmcp::service::{RequestContext, RoleServer};
 use serde_json::{Map, Value};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use crate::adapter::Adapter;
@@ -22,13 +24,111 @@ use super::types::{META_PARAMS, SequenceKind};
 
 static SEQUENCE_ID: AtomicU64 = AtomicU64::new(1);
 
-use std::sync::{Arc, RwLock};
+// ============= Helper Functions =============
+
+/// Extracts working directory from params, falling back to sandbox scope or "."
+fn extract_working_directory(adapter: &Adapter, params: &CallToolRequestParams) -> String {
+    params
+        .arguments
+        .as_ref()
+        .and_then(|args| args.get("working_directory"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .or_else(|| {
+            if adapter.sandbox().is_test_mode() {
+                None
+            } else {
+                adapter
+                    .sandbox()
+                    .scopes()
+                    .first()
+                    .map(|p: &std::path::PathBuf| p.to_string_lossy().to_string())
+            }
+        })
+        .unwrap_or_else(|| ".".to_string())
+}
+
+/// Merges parent arguments with step arguments, excluding meta-parameters.
+fn merge_step_arguments(
+    parent_args: &Map<String, Value>,
+    step_args: &Map<String, Value>,
+) -> Map<String, Value> {
+    let mut merged = Map::new();
+    for (key, value) in parent_args.iter() {
+        if !META_PARAMS.contains(&key.as_str()) {
+            merged.insert(key.clone(), value.clone());
+        }
+    }
+    merged.extend(step_args.clone());
+    merged
+}
+
+/// Looks up a tool config from the configs map, returning an error if not found.
+fn get_tool_config(
+    configs: &Arc<RwLock<HashMap<String, ToolConfig>>>,
+    tool_name: &str,
+) -> Result<ToolConfig, McpError> {
+    let configs_lock = configs.read().unwrap();
+    configs_lock.get(tool_name).cloned().ok_or_else(|| {
+        McpError::internal_error(
+            format!(
+                "Tool '{}' referenced in sequence step is not configured.",
+                tool_name
+            ),
+            None,
+        )
+    })
+}
+
+/// Finds subcommand config with proper error handling for sequence steps.
+fn find_step_subcommand<'a>(
+    config: &'a ToolConfig,
+    subcommand: &str,
+    tool_name: &str,
+) -> Result<(&'a SubcommandConfig, Vec<String>), McpError> {
+    find_subcommand_config_from_args(config, Some(subcommand.to_string())).ok_or_else(|| {
+        McpError::internal_error(
+            format!(
+                "Subcommand '{}' for tool '{}' not found in sequence step.",
+                subcommand, tool_name
+            ),
+            None,
+        )
+    })
+}
+
+/// Generates a new unique operation ID.
+fn next_operation_id() -> String {
+    format!("op_{}", SEQUENCE_ID.fetch_add(1, Ordering::SeqCst))
+}
+
+/// Creates a callback sender if a progress token is available.
+fn create_callback(
+    context: &RequestContext<RoleServer>,
+    operation_id: &str,
+) -> Option<Box<dyn CallbackSender>> {
+    let progress_token = context.meta.get_progress_token()?;
+    let client_type = McpClientType::from_peer(&context.peer);
+    Some(Box::new(McpCallbackSender::new(
+        context.peer.clone(),
+        operation_id.to_string(),
+        Some(progress_token),
+        client_type,
+    )) as Box<dyn CallbackSender>)
+}
+
+/// Applies inter-step delay if configured and not the last step.
+async fn apply_step_delay(step_delay_ms: u64, current_index: usize, total_steps: usize) {
+    if step_delay_ms > 0 && current_index + 1 < total_steps {
+        tokio::time::sleep(Duration::from_millis(step_delay_ms)).await;
+    }
+}
 
 /// Handles execution of sequence tools - tools that invoke multiple other tools in order.
 pub async fn handle_sequence_tool(
     adapter: &Adapter,
     _operation_monitor: &OperationMonitor,
-    configs: &Arc<RwLock<std::collections::HashMap<String, ToolConfig>>>,
+    configs: &Arc<RwLock<HashMap<String, ToolConfig>>>,
     config: &ToolConfig,
     params: CallToolRequestParams,
     context: RequestContext<RoleServer>,
@@ -51,7 +151,7 @@ pub async fn handle_sequence_tool(
 /// Handles synchronous sequence execution - blocks until all steps complete
 async fn handle_sequence_tool_sync(
     adapter: &Adapter,
-    configs: &Arc<RwLock<std::collections::HashMap<String, ToolConfig>>>,
+    configs: &Arc<RwLock<HashMap<String, ToolConfig>>>,
     config: &ToolConfig,
     params: CallToolRequestParams,
     sequence: &[SequenceStep],
@@ -60,72 +160,22 @@ async fn handle_sequence_tool_sync(
     let mut final_result = CallToolResult::success(vec![]);
     let mut all_outputs = Vec::new();
     let kind = SequenceKind::TopLevel;
+    let parent_args = params.arguments.clone().unwrap_or_default();
+    let working_directory = extract_working_directory(adapter, &params);
 
     for (index, step) in sequence.iter().enumerate() {
-        // Extract working directory from parent args
-        let parent_args = params.arguments.clone().unwrap_or_default();
-        let working_directory = parent_args
-            .get("working_directory")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .or_else(|| {
-                if adapter.sandbox().is_test_mode() {
-                    None
-                } else {
-                    adapter
-                        .sandbox()
-                        .scopes()
-                        .first()
-                        .map(|p: &std::path::PathBuf| p.to_string_lossy().to_string())
-                }
-            })
-            .unwrap_or_else(|| ".".to_string());
-
         if should_skip_step_with_context(&kind, step, &working_directory) {
-            let message = format_step_skipped_message(&kind, step);
-            final_result.content.push(Content::text(message));
+            final_result
+                .content
+                .push(Content::text(format_step_skipped_message(&kind, step)));
             continue;
         }
 
-        // Merge arguments, excluding meta-parameters
-        let mut merged_args = Map::new();
-        for (key, value) in parent_args.iter() {
-            if !META_PARAMS.contains(&key.as_str()) {
-                merged_args.insert(key.clone(), value.clone());
-            }
-        }
-        merged_args.extend(step.args.clone());
+        let merged_args = merge_step_arguments(&parent_args, &step.args);
+        let step_tool_config = get_tool_config(configs, &step.tool)?;
+        let (subcommand_config, command_parts) =
+            find_step_subcommand(&step_tool_config, &step.subcommand, &step.tool)?;
 
-        // Acquire read lock to get tool config
-        let step_tool_config = {
-            let configs_lock = configs.read().unwrap();
-            match configs_lock.get(&step.tool) {
-                Some(cfg) => cfg.clone(), // Clone to release lock
-                None => {
-                    let error_message = format!(
-                        "Tool '{}' referenced in sequence step is not configured.",
-                        step.tool
-                    );
-                    return Err(McpError::internal_error(error_message, None));
-                }
-            }
-        };
-
-        let (subcommand_config, command_parts) = match find_subcommand_config_from_args(
-            &step_tool_config,
-            Some(step.subcommand.clone()),
-        ) {
-            Some(result) => result,
-            None => {
-                let error_message = format!(
-                    "Subcommand '{}' for tool '{}' not found in sequence step.",
-                    step.subcommand, step.tool
-                );
-                return Err(McpError::internal_error(error_message, None));
-            }
-        };
-
-        // Execute synchronously and wait for result
         let step_result = adapter
             .execute_sync_in_dir(
                 &command_parts.join(" "),
@@ -138,18 +188,19 @@ async fn handle_sequence_tool_sync(
 
         match step_result {
             Ok(output) => {
+                let output_text = if output.is_empty() {
+                    "(no output)"
+                } else {
+                    &output
+                };
                 let message = format!(
                     "✓ Step {} completed: {} {}\n{}",
                     index + 1,
                     step.tool,
                     step.subcommand,
-                    if output.is_empty() {
-                        "(no output)"
-                    } else {
-                        &output
-                    }
+                    output_text
                 );
-                all_outputs.push(message.clone());
+                all_outputs.push(message);
                 tracing::info!(
                     "Sequence step {} succeeded: {} {}",
                     index + 1,
@@ -158,14 +209,13 @@ async fn handle_sequence_tool_sync(
                 );
             }
             Err(e) => {
-                let error_message = format!(
+                all_outputs.push(format!(
                     "✗ Step {} FAILED: {} {}\nError: {}",
                     index + 1,
                     step.tool,
                     step.subcommand,
                     e
-                );
-                all_outputs.push(error_message.clone());
+                ));
                 tracing::error!(
                     "Sequence step {} failed: {} {}: {}",
                     index + 1,
@@ -173,8 +223,6 @@ async fn handle_sequence_tool_sync(
                     step.subcommand,
                     e
                 );
-
-                // Return failure immediately - don't continue with remaining steps
                 final_result.content.push(Content::text(format!(
                     "Sequence failed at step {}:\n\n{}",
                     index + 1,
@@ -185,13 +233,9 @@ async fn handle_sequence_tool_sync(
             }
         }
 
-        // Add delay between steps
-        if step_delay_ms > 0 && index + 1 < sequence.len() {
-            tokio::time::sleep(Duration::from_millis(step_delay_ms)).await;
-        }
+        apply_step_delay(step_delay_ms, index, sequence.len()).await;
     }
 
-    // All steps succeeded
     final_result.content.push(Content::text(format!(
         "All {} sequence steps completed successfully:\n\n{}",
         sequence.len(),
@@ -203,7 +247,7 @@ async fn handle_sequence_tool_sync(
 /// Handles asynchronous sequence execution - starts all steps and returns immediately
 async fn handle_sequence_tool_async(
     adapter: &Adapter,
-    configs: &Arc<RwLock<std::collections::HashMap<String, ToolConfig>>>,
+    configs: &Arc<RwLock<HashMap<String, ToolConfig>>>,
     params: CallToolRequestParams,
     context: RequestContext<RoleServer>,
     sequence: &[SequenceStep],
@@ -211,104 +255,39 @@ async fn handle_sequence_tool_async(
 ) -> Result<CallToolResult, McpError> {
     let mut final_result = CallToolResult::success(vec![]);
     let kind = SequenceKind::TopLevel;
+    let parent_args = params.arguments.clone().unwrap_or_default();
+    let working_directory = extract_working_directory(adapter, &params);
 
     for (index, step) in sequence.iter().enumerate() {
-        // Extract meta-parameters that should not be passed to tools
-        let parent_args = params.arguments.clone().unwrap_or_default();
-        let working_directory = parent_args
-            .get("working_directory")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .or_else(|| {
-                if adapter.sandbox().is_test_mode() {
-                    None
-                } else {
-                    adapter
-                        .sandbox()
-                        .scopes()
-                        .first()
-                        .map(|p: &std::path::PathBuf| p.to_string_lossy().to_string())
-                }
-            })
-            .unwrap_or_else(|| ".".to_string());
-
         if should_skip_step_with_context(&kind, step, &working_directory) {
-            let message = format_step_skipped_message(&kind, step);
-            final_result.content.push(Content::text(message));
+            final_result
+                .content
+                .push(Content::text(format_step_skipped_message(&kind, step)));
             continue;
         }
 
-        let mut step_params = params.clone();
-        step_params.name = step.tool.clone().into();
-
-        // Merge arguments, excluding meta-parameters from parent
-        let mut merged_args = Map::new();
-        for (key, value) in parent_args.iter() {
-            if !META_PARAMS.contains(&key.as_str()) {
-                merged_args.insert(key.clone(), value.clone());
-            }
-        }
-        // Add working_directory back for the step to use
+        let mut merged_args = merge_step_arguments(&parent_args, &step.args);
         merged_args.insert(
             "working_directory".to_string(),
-            Value::String(working_directory),
+            Value::String(working_directory.clone()),
         );
-        // Extend with step-specific args (which can override)
-        merged_args.extend(step.args.clone());
-        step_params.arguments = Some(merged_args);
 
-        // Acquire read lock to get tool config
-        let step_tool_config = {
-            let configs_lock = configs.read().unwrap();
-            match configs_lock.get(&step.tool) {
-                Some(cfg) => cfg.clone(), // Clone to release lock
-                None => {
-                    let error_message = format!(
-                        "Tool '{}' referenced in sequence step is not configured.",
-                        step.tool
-                    );
-                    return Err(McpError::internal_error(error_message, None));
-                }
-            }
-        };
+        let step_tool_config = get_tool_config(configs, &step.tool)?;
+        let (subcommand_config, command_parts) =
+            find_step_subcommand(&step_tool_config, &step.subcommand, &step.tool)?;
 
-        let (subcommand_config, command_parts) = match find_subcommand_config_from_args(
-            &step_tool_config,
-            Some(step.subcommand.clone()),
-        ) {
-            Some(result) => result,
-            None => {
-                let error_message = format!(
-                    "Subcommand '{}' for tool '{}' not found in sequence step.",
-                    step.subcommand, step.tool
-                );
-                return Err(McpError::internal_error(error_message, None));
-            }
-        };
-
-        let operation_id = format!("op_{}", SEQUENCE_ID.fetch_add(1, Ordering::SeqCst));
-        // Only send progress notifications when the client provided a progressToken in `_meta`.
-        // Skip progress for clients that don't handle them well (e.g., Cursor).
-        let progress_token = context.meta.get_progress_token();
-        let client_type = McpClientType::from_peer(&context.peer);
-        let callback: Option<Box<dyn CallbackSender>> = progress_token.map(|token| {
-            Box::new(McpCallbackSender::new(
-                context.peer.clone(),
-                operation_id.clone(),
-                Some(token),
-                client_type,
-            )) as Box<dyn CallbackSender>
-        });
+        let operation_id = next_operation_id();
+        let callback = create_callback(&context, &operation_id);
 
         let step_result = adapter
             .execute_async_in_dir_with_options(
                 &step.tool,
                 &command_parts.join(" "),
-                ".", // Assuming current directory for now
+                ".",
                 crate::adapter::AsyncExecOptions {
                     operation_id: Some(operation_id),
-                    args: step_params.arguments,
-                    timeout: None, // Add timeout logic if needed
+                    args: Some(merged_args),
+                    timeout: None,
                     callback,
                     subcommand_config: Some(subcommand_config),
                 },
@@ -317,8 +296,9 @@ async fn handle_sequence_tool_async(
 
         match step_result {
             Ok(id) => {
-                let message = format_step_started_message(&kind, step, &id);
-                final_result.content.push(Content::text(message));
+                final_result
+                    .content
+                    .push(Content::text(format_step_started_message(&kind, step, &id)));
             }
             Err(e) => {
                 let error_message = format!(
@@ -330,9 +310,7 @@ async fn handle_sequence_tool_async(
             }
         }
 
-        if step_delay_ms > 0 && index + 1 < sequence.len() {
-            tokio::time::sleep(Duration::from_millis(step_delay_ms)).await;
-        }
+        apply_step_delay(step_delay_ms, index, sequence.len()).await;
     }
 
     Ok(final_result)
@@ -346,7 +324,7 @@ pub async fn handle_subcommand_sequence(
     params: CallToolRequestParams,
     context: RequestContext<RoleServer>,
 ) -> Result<CallToolResult, McpError> {
-    let sequence: &Vec<SequenceStep> = subcommand_config.sequence.as_ref().unwrap(); // Safe due to prior check
+    let sequence = subcommand_config.sequence.as_ref().unwrap(); // Safe due to prior check
     let step_delay_ms = subcommand_config
         .step_delay_ms
         .or(config.step_delay_ms)
@@ -358,31 +336,19 @@ pub async fn handle_subcommand_sequence(
 
     for (index, step) in sequence.iter().enumerate() {
         let (step_config, command_parts) =
-            match find_subcommand_config_from_args(config, Some(step.subcommand.clone())) {
-                Some(result) => result,
-                None => {
-                    let error_message = format!(
+            find_subcommand_config_from_args(config, Some(step.subcommand.clone())).ok_or_else(
+                || {
+                    let msg = format!(
                         "Subcommand sequence step '{}' not found in tool config. Halting sequence.",
                         step.subcommand
                     );
-                    tracing::error!("{}", error_message);
-                    return Err(McpError::internal_error(error_message, None));
-                }
-            };
+                    tracing::error!("{}", msg);
+                    McpError::internal_error(msg, None)
+                },
+            )?;
 
-        let operation_id = format!("op_{}", SEQUENCE_ID.fetch_add(1, Ordering::SeqCst));
-        // Only send progress notifications when the client provided a progressToken in `_meta`.
-        // Skip progress for clients that don't handle them well (e.g., Cursor).
-        let progress_token = context.meta.get_progress_token();
-        let client_type = McpClientType::from_peer(&context.peer);
-        let callback: Option<Box<dyn CallbackSender>> = progress_token.map(|token| {
-            Box::new(McpCallbackSender::new(
-                context.peer.clone(),
-                operation_id.clone(),
-                Some(token),
-                client_type,
-            )) as Box<dyn CallbackSender>
-        });
+        let operation_id = next_operation_id();
+        let callback = create_callback(&context, &operation_id);
 
         let step_result = adapter
             .execute_async_in_dir_with_options(
@@ -401,22 +367,21 @@ pub async fn handle_subcommand_sequence(
 
         match step_result {
             Ok(id) => {
-                let message = format_step_started_message(&kind, step, &id);
-                final_result.content.push(Content::text(message));
+                final_result
+                    .content
+                    .push(Content::text(format_step_started_message(&kind, step, &id)));
             }
             Err(e) => {
-                let error_message = format!(
+                let msg = format!(
                     "Subcommand sequence step '{}' failed to start: {}. Halting sequence.",
                     step.subcommand, e
                 );
-                tracing::error!("{}", error_message);
-                return Err(McpError::internal_error(error_message, None));
+                tracing::error!("{}", msg);
+                return Err(McpError::internal_error(msg, None));
             }
         }
 
-        if step_delay_ms > 0 && index + 1 < sequence.len() {
-            tokio::time::sleep(Duration::from_millis(step_delay_ms)).await;
-        }
+        apply_step_delay(step_delay_ms, index, sequence.len()).await;
     }
 
     Ok(final_result)
