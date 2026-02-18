@@ -68,6 +68,14 @@ pub async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         server_args.push("--sync".to_string());
     }
 
+    if cli.no_sandbox {
+        server_args.push("--no-sandbox".to_string());
+    }
+
+    if cli.strict_sandbox {
+        server_args.push("--strict-sandbox".to_string());
+    }
+
     if let Some(scope) = &explicit_fallback_scope {
         server_args.push("--working-directories".to_string());
         server_args.push(scope.to_string_lossy().to_string());

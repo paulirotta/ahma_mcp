@@ -57,8 +57,53 @@ On Linux, Ahma uses [Landlock](https://docs.kernel.org/userspace-api/landlock.ht
 
 **Requirements**: 
 - **Linux kernel 5.13 or newer** (released June 2021)
-- The server will **refuse to start** on older kernels and display upgrade instructions
+- The server will **refuse to start** on older kernels unless sandbox is explicitly disabled
+- For legacy kernels, you can run with `--no-sandbox` or `AHMA_NO_SANDBOX=1`; Ahma logs a warning and runs without its internal sandbox
+- Use `--strict-sandbox` or `AHMA_STRICT_SANDBOX=1` to force fail-fast behavior even when `--no-sandbox` is set
 - Check your kernel version with: `uname -r`
+
+#### Raspberry Pi and Older Kernels
+
+Some platforms (notably older Raspberry Pi OS kernels) ship with kernels that
+do not support the Landlock LSM required for Ahma's Linux sandboxing. If your
+kernel is older than 5.13 or `/sys/kernel/security/lsm` does not list
+`landlock`, Ahma's kernel-enforced sandbox cannot be applied.
+
+Recommended options when running on such systems:
+
+- Quick check (shows kernel):
+
+```bash
+uname -r
+cat /sys/kernel/security/lsm  # optional - shows active LSMs
+```
+
+- Run Ahma in compatibility (unsandboxed) mode explicitly using the env var
+  or CLI flag. This makes the system usable on older kernels but disables
+  Ahma's internal sandbox protections.
+
+```bash
+# Environment variable (preferred for mcp.json / CI setups)
+export AHMA_NO_SANDBOX=1
+ahma_mcp --mode http --tools-dir .ahma
+
+# Or use the CLI flag
+ahma_mcp --no-sandbox --mode http --tools-dir .ahma
+```
+
+- If you need to enforce fail-fast behavior in CI or security-sensitive
+  environments (i.e., require Landlock and fail if unavailable), use:
+
+```bash
+export AHMA_STRICT_SANDBOX=1
+ahma_mcp --mode http --tools-dir .ahma
+```
+
+Security note: running with `AHMA_NO_SANDBOX=1` or `--no-sandbox` disables
+Ahma's kernel-level protections. Only use this mode on machines that are
+already sandboxed or otherwise trusted (for example, inside a container or
+managed development environment). Prefer upgrading the kernel to 5.13+ where
+possible to restore full Landlock enforcement.
 
 #### macOS (Seatbelt/sandbox-exec)
 
@@ -74,12 +119,12 @@ Previous approaches that parsed command-line strings for dangerous patterns are 
 
 ### Nested Sandbox Environments (Cursor, VS Code, Docker)
 
-When running inside another sandboxed environment (like Cursor IDE, VS Code, or Docker), Ahma automatically detects that it cannot apply its own sandbox and gracefully degrades. This is because:
+When running inside another sandboxed environment (like Cursor IDE, VS Code, or Docker), Ahma automatically detects that it cannot apply its own sandbox. By default, Ahma exits with clear instructions to explicitly disable its internal sandbox. This is because:
 
 - **Cursor/VS Code**: These IDEs sandbox MCP servers, preventing nested `sandbox-exec` calls on macOS
 - **Docker**: Containers may restrict the system calls needed for sandboxing
 
-**Auto-detection**: Ahma tests if `sandbox-exec` can be applied at startup. If it detects a nested sandbox, it logs a warning and continues without Ahma's sandbox—the outer sandbox still provides security.
+**Auto-detection**: Ahma tests if `sandbox-exec` can be applied at startup. If it detects a nested sandbox, it fails fast with guidance to use `--no-sandbox` or `AHMA_NO_SANDBOX=1`.
 
 **Manual override**: You can also explicitly disable Ahma's sandbox:
 
@@ -89,6 +134,10 @@ ahma_mcp --no-sandbox
 
 # Via environment variable (useful for mcp.json configuration)
 export AHMA_NO_SANDBOX=1
+ahma_mcp
+
+# Force strict sandbox enforcement (fail fast if sandbox prerequisites are unavailable)
+export AHMA_STRICT_SANDBOX=1
 ahma_mcp
 ```
 

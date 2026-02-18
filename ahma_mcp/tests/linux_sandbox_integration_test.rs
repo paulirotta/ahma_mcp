@@ -19,19 +19,62 @@ use std::fs;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::Command;
+use std::sync::OnceLock;
 use tempfile::TempDir;
 
 /// Check if Landlock is available on this Linux system.
-/// Returns true if Landlock LSM is enabled and the kernel version supports it.
+/// Returns true only when Landlock enforcement is actually effective.
 fn is_landlock_available() -> bool {
-    // First check if Landlock is listed in LSMs
-    if let Ok(content) = fs::read_to_string("/sys/kernel/security/lsm")
-        && content.contains("landlock")
-    {
-        return true;
+    static LANDLOCK_EFFECTIVE: OnceLock<bool> = OnceLock::new();
+    *LANDLOCK_EFFECTIVE.get_or_init(detect_landlock_enforcement)
+}
+
+/// Detect whether Landlock can be enforced effectively on this host.
+fn detect_landlock_enforcement() -> bool {
+    // Fast fail on kernels older than 5.13.
+    if !kernel_version_supports_landlock() {
+        return false;
     }
 
-    // Fallback: check kernel version (5.13+)
+    // If we can read LSM list and Landlock is not present, fail immediately.
+    if let Ok(content) = fs::read_to_string("/sys/kernel/security/lsm") {
+        if !content.contains("landlock") {
+            return false;
+        }
+    }
+
+    // Runtime probe: enforce Landlock in child and verify a write outside scope is denied.
+    let temp = match TempDir::new() {
+        Ok(temp) => temp,
+        Err(_) => return false,
+    };
+    let sandbox_subdir = temp.path().join("probe_scope");
+    if fs::create_dir(&sandbox_subdir).is_err() {
+        return false;
+    }
+    let blocked_file = temp.path().join("probe_blocked.txt");
+    let sandbox_scope_str = sandbox_subdir.to_string_lossy().to_string();
+
+    let output = unsafe {
+        Command::new("/bin/sh")
+            .arg("-c")
+            .arg(format!("echo probe > {}", blocked_file.display()))
+            .current_dir(&sandbox_subdir)
+            .pre_exec(move || {
+                apply_landlock_rules_strict(&sandbox_scope_str)?;
+                Ok(())
+            })
+            .output()
+    };
+
+    match output {
+        Ok(result) => !result.status.success() && !blocked_file.exists(),
+        Err(_) => false,
+    }
+}
+
+/// Kernel version guard (Landlock requires Linux 5.13+).
+fn kernel_version_supports_landlock() -> bool {
     if let Ok(output) = Command::new("uname").arg("-r").output() {
         let version_str = String::from_utf8_lossy(&output.stdout);
         let parts: Vec<&str> = version_str.trim().split('.').collect();
