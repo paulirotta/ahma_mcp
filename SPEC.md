@@ -226,7 +226,6 @@ The sandbox scope defines the root directory boundary. AI has **full read/write 
 - **R6.1.1**: Uses Landlock (kernel 5.13+) for kernel-level FS sandboxing.
 - **R6.1.2**: If Landlock is unavailable and sandbox is not explicitly disabled, server **must** refuse to start with upgrade instructions.
 - **R6.1.3**: If user explicitly opts into compatibility mode (`--no-sandbox` or `AHMA_NO_SANDBOX=1`), server **must** start in unsandboxed mode and emit a clear warning that Ahma sandboxing is disabled until the kernel is upgraded.
-- **R6.1.4**: If strict sandbox mode is enabled (`--strict-sandbox` or `AHMA_STRICT_SANDBOX=1`), server **must** enforce fail-fast behavior even when compatibility mode is requested.
 
 #### R6.2: macOS (Seatbelt)
 

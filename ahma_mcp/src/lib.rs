@@ -29,7 +29,7 @@
 //! - **Detection**: Ahma automatically detects nested sandboxes (e.g., inside Cursor/VS Code)
 //!   and exits unless sandboxing is explicitly disabled (`--no-sandbox` / `AHMA_NO_SANDBOX=1`).
 //! - **Compatibility Mode**: On unsupported Linux kernels, explicit no-sandbox mode allows
-//!   startup with a warning. Use `--strict-sandbox` / `AHMA_STRICT_SANDBOX=1` to require fail-fast.
+//!   startup with a warning.
 //!
 //! ### Async-First Workflow
 //!

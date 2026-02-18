@@ -79,10 +79,6 @@ pub struct Cli {
     #[arg(long)]
     pub no_sandbox: bool,
 
-    /// Require Ahma sandbox and fail startup if it cannot be enforced
-    #[arg(long)]
-    pub strict_sandbox: bool,
-
     /// Sandbox scope directories (multiple allowed)
     #[arg(long = "sandbox-scope")]
     pub sandbox_scope: Vec<PathBuf>,
@@ -136,20 +132,11 @@ pub async fn run() -> Result<()> {
     }
 
     // Resolve sandbox policy from flags/env.
-    // `--strict-sandbox` / `AHMA_STRICT_SANDBOX=1` overrides `--no-sandbox`.
     let no_sandbox_requested = cli.no_sandbox || env_flag_enabled("AHMA_NO_SANDBOX");
-    let strict_sandbox_enabled = cli.strict_sandbox || env_flag_enabled("AHMA_STRICT_SANDBOX");
-
-    if strict_sandbox_enabled && no_sandbox_requested {
-        tracing::warn!(
-            "Strict sandbox mode is enabled; ignoring --no-sandbox/AHMA_NO_SANDBOX and enforcing sandbox prerequisites"
-        );
-    }
 
     #[allow(unused_mut)] // mut needed for macOS nested sandbox detection
-    let mut no_sandbox = no_sandbox_requested && !strict_sandbox_enabled;
+    let mut no_sandbox = no_sandbox_requested;
     cli.no_sandbox = no_sandbox;
-    cli.strict_sandbox = strict_sandbox_enabled;
 
     // Determine Sandbox Mode
     let sandbox_mode = if no_sandbox {
@@ -159,8 +146,7 @@ pub async fn run() -> Result<()> {
             if let Err(error) = sandbox::check_sandbox_prerequisites() {
                 tracing::warn!(
                     "Continuing without Ahma sandbox because Linux sandbox prerequisites are unavailable: {}. \
-                     Update Linux kernel to 5.13+ to enable Landlock. \
-                     To require fail-fast behavior, use --strict-sandbox or AHMA_STRICT_SANDBOX=1.",
+                     Update Linux kernel to 5.13+ to enable Landlock.",
                     error
                 );
             }
