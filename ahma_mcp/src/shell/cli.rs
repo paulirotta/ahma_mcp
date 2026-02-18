@@ -79,6 +79,10 @@ pub struct Cli {
     #[arg(long)]
     pub no_sandbox: bool,
 
+    /// Block writes to /tmp and other temp directories (higher security, breaks tools needing temp access)
+    #[arg(long)]
+    pub no_temp_files: bool,
+
     /// Sandbox scope directories (multiple allowed)
     #[arg(long = "sandbox-scope")]
     pub sandbox_scope: Vec<PathBuf>,
@@ -237,10 +241,7 @@ pub async fn run() -> Result<()> {
 
     // Create the Sandbox instance
     let sandbox = if let Some(scopes) = sandbox_scopes {
-        // Check for no_temp_files env var (legacy support)
-        let no_temp_files = std::env::var("AHMA_NO_TEMP_FILES").is_ok();
-
-        let s = sandbox::Sandbox::new(scopes.clone(), sandbox_mode, no_temp_files)
+        let s = sandbox::Sandbox::new(scopes.clone(), sandbox_mode, cli.no_temp_files)
             .context("Failed to initialize sandbox")?;
 
         tracing::info!("Sandbox scopes initialized: {:?}", scopes);

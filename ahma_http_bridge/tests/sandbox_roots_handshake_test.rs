@@ -13,8 +13,8 @@
 //! ## Security Critical
 //!
 //! These tests are security-critical. Do NOT:
-//! - Enable AHMA_TEST_MODE for these tests
 //! - Weaken assertions to accept sandbox failures as "passing"
+//! - Add test-mode env var bypasses (see SPEC.md R21.3)
 //! - Remove environment variable clearing (see AGENTS.md guardrails)
 //!
 //! ## Test Environment

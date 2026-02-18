@@ -502,8 +502,7 @@ started_rx.await.ok();  // Don't return until spawn is live
   - Explicit CLI parameters (e.g., `--no-sandbox`)
   - Constructor parameters passed at initialization
 - **R21.3**: The following patterns are **FORBIDDEN**:
-  - Reading `AHMA_TEST_MODE` from environment in production code  
-  - Automatic "test mode" detection based on `NEXTEST`, `CARGO_TARGET_DIR`, etc.
+  - Any different behavior based on automatic "test mode" detection from environment variables like `NEXTEST`, `CARGO_TARGET_DIR`, etc.
   - Any environment variable that bypasses security checks
 
 ---
