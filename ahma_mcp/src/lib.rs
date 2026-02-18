@@ -27,7 +27,9 @@
 //! - **Linux (Landlock)**: Uses Landlock for FS restrictions (kernel 5.13+).
 //! - **macOS (Seatbelt)**: Uses `sandbox-exec` with generated SBPL profiles.
 //! - **Detection**: Ahma automatically detects nested sandboxes (e.g., inside Cursor/VS Code)
-//!   and gracefully degrades to the outer sandbox's protection.
+//!   and exits unless sandboxing is explicitly disabled (`--no-sandbox` / `AHMA_NO_SANDBOX=1`).
+//! - **Compatibility Mode**: On unsupported Linux kernels, explicit no-sandbox mode allows
+//!   startup with a warning. Use `--strict-sandbox` / `AHMA_STRICT_SANDBOX=1` to require fail-fast.
 //!
 //! ### Async-First Workflow
 //!

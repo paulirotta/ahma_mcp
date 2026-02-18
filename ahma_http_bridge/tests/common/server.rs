@@ -122,7 +122,26 @@ fn build_server_args(handshake_timeout_secs: Option<u64>) -> Vec<String> {
         args.push(timeout.to_string());
     }
 
+    if should_force_no_sandbox_for_test_server() {
+        args.push("--no-sandbox".to_string());
+    }
+
     args
+}
+
+#[cfg(target_os = "linux")]
+fn should_force_no_sandbox_for_test_server() -> bool {
+    use ahma_mcp::sandbox::SandboxError;
+
+    matches!(
+        ahma_mcp::sandbox::check_sandbox_prerequisites(),
+        Err(SandboxError::LandlockNotAvailable) | Err(SandboxError::PrerequisiteFailed(_))
+    )
+}
+
+#[cfg(not(target_os = "linux"))]
+fn should_force_no_sandbox_for_test_server() -> bool {
+    false
 }
 
 fn wire_output_reader<R: std::io::Read + Send + 'static>(reader: R, sender: mpsc::Sender<String>) {
@@ -197,6 +216,14 @@ pub async fn spawn_test_server_with_timeout(
         .env_remove("AHMA_HANDSHAKE_TIMEOUT_SECS")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+
+    if should_force_no_sandbox_for_test_server() {
+        eprintln!(
+            "[TestServer] Landlock unavailable on this Linux kernel; running test server with --no-sandbox"
+        );
+        cmd.env("AHMA_NO_SANDBOX", "1");
+    }
+
     SandboxTestEnv::configure(&mut cmd);
 
     let mut child = cmd
