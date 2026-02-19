@@ -37,6 +37,26 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tokio::time::sleep;
 
+fn coverage_mode() -> bool {
+    std::env::var_os("LLVM_PROFILE_FILE").is_some() || std::env::var_os("CARGO_LLVM_COV").is_some()
+}
+
+fn roots_handshake_timeout() -> Duration {
+    if coverage_mode() {
+        Duration::from_secs(30)
+    } else {
+        Duration::from_secs(15)
+    }
+}
+
+fn post_roots_configured_grace_timeout() -> Duration {
+    if coverage_mode() {
+        Duration::from_secs(8)
+    } else {
+        Duration::from_secs(3)
+    }
+}
+
 // =============================================================================
 // Test Infrastructure
 // =============================================================================
@@ -227,11 +247,22 @@ async fn answer_roots_list_with_uris(
 
     let mut stream = resp.bytes_stream();
     let mut buffer = String::new();
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    let mut roots_answered = false;
+    let deadline = tokio::time::Instant::now() + roots_handshake_timeout();
+    let mut post_roots_deadline: Option<tokio::time::Instant> = None;
 
     loop {
+        if let Some(timeout_at) = post_roots_deadline
+            && tokio::time::Instant::now() > timeout_at
+        {
+            return Err(
+                "Timeout waiting for notifications/sandbox/configured after roots/list response"
+                    .to_string(),
+            );
+        }
+
         if tokio::time::Instant::now() > deadline {
-            return Err("Timeout waiting for roots/list over SSE".to_string());
+            return Err("Timeout waiting for roots/list + sandbox/configured over SSE".to_string());
         }
 
         let chunk = tokio::time::timeout(Duration::from_millis(500), stream.next())
@@ -266,6 +297,23 @@ async fn answer_roots_list_with_uris(
                 };
 
                 let method = value.get("method").and_then(|m| m.as_str());
+
+                if method == Some("notifications/sandbox/failed") {
+                    let error = value
+                        .get("params")
+                        .and_then(|p| p.get("error"))
+                        .and_then(|e| e.as_str())
+                        .unwrap_or("unknown");
+                    return Err(format!("Sandbox configuration failed: {}", error));
+                }
+
+                if method == Some("notifications/sandbox/configured") {
+                    if roots_answered {
+                        return Ok(());
+                    }
+                    continue;
+                }
+
                 if method != Some("roots/list") {
                     continue;
                 }
@@ -287,7 +335,9 @@ async fn answer_roots_list_with_uris(
                 });
 
                 let _ = send_mcp_request(client, base_url, &response, Some(session_id)).await?;
-                return Ok(());
+                roots_answered = true;
+                post_roots_deadline =
+                    Some(tokio::time::Instant::now() + post_roots_configured_grace_timeout());
             }
         }
     }

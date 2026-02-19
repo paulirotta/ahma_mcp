@@ -19,10 +19,29 @@ use serial_test::serial;
 use std::net::TcpListener;
 use std::os::unix::fs as unix_fs;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use tokio::time::sleep;
+
+struct ServerGuard {
+    child: Option<Child>,
+}
+
+impl ServerGuard {
+    fn new(child: Child) -> Self {
+        Self { child: Some(child) }
+    }
+}
+
+impl Drop for ServerGuard {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
 
 /// Find an available port for testing (uses dynamic port allocation)
 fn find_available_port() -> u16 {
@@ -231,6 +250,26 @@ fn capped_backoff(base_ms: u64, attempt: usize, max_ms: u64) -> Duration {
     Duration::from_millis((base_ms.saturating_mul(attempt as u64)).min(max_ms))
 }
 
+fn coverage_mode() -> bool {
+    std::env::var_os("LLVM_PROFILE_FILE").is_some() || std::env::var_os("CARGO_LLVM_COV").is_some()
+}
+
+fn roots_handshake_timeout() -> Duration {
+    if coverage_mode() {
+        Duration::from_secs(30)
+    } else {
+        Duration::from_secs(15)
+    }
+}
+
+fn post_roots_configured_grace_timeout() -> Duration {
+    if coverage_mode() {
+        Duration::from_secs(8)
+    } else {
+        Duration::from_secs(3)
+    }
+}
+
 /// Send tools/call with retries for handshake races and transient transport failures.
 async fn send_tool_call_with_retry(
     client: &Client,
@@ -301,12 +340,24 @@ async fn answer_roots_list_over_sse(
 
     let mut stream = resp.bytes_stream();
     let mut buffer = String::new();
+    let mut roots_answered = false;
+    let mut post_roots_deadline: Option<tokio::time::Instant> = None;
 
-    // Hard timeout: if session isolation is broken, we may never see roots/list.
-    let roots_deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    // Hard timeout: if session isolation is broken, we may never see roots/list/configured.
+    let roots_deadline = tokio::time::Instant::now() + roots_handshake_timeout();
     loop {
+        if let Some(timeout_at) = post_roots_deadline
+            && tokio::time::Instant::now() > timeout_at
+        {
+            panic!(
+                "Timed out waiting for notifications/sandbox/configured after roots/list response"
+            );
+        }
+
         if tokio::time::Instant::now() > roots_deadline {
-            panic!("Timed out waiting for roots/list over SSE (session isolation likely broken)");
+            panic!(
+                "Timed out waiting for roots/list + sandbox/configured over SSE (session isolation likely broken)"
+            );
         }
 
         let chunk = tokio::time::timeout(Duration::from_millis(500), stream.next())
@@ -353,6 +404,9 @@ async fn answer_roots_list_over_sse(
                 }
 
                 if method == Some("notifications/sandbox/configured") {
+                    if roots_answered {
+                        return;
+                    }
                     continue;
                 }
 
@@ -386,7 +440,9 @@ async fn answer_roots_list_over_sse(
                 let _ = send_mcp_request(client, base_url, &response, Some(session_id))
                     .await
                     .expect("Failed to send roots/list response");
-                return;
+                roots_answered = true;
+                post_roots_deadline =
+                    Some(tokio::time::Instant::now() + post_roots_configured_grace_timeout());
             }
         }
     }
@@ -444,11 +500,23 @@ async fn answer_roots_list_over_sse_with_uris(
 
     let mut stream = resp.bytes_stream();
     let mut buffer = String::new();
+    let mut roots_answered = false;
+    let mut post_roots_deadline: Option<tokio::time::Instant> = None;
 
-    let roots_deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    let roots_deadline = tokio::time::Instant::now() + roots_handshake_timeout();
     loop {
+        if let Some(timeout_at) = post_roots_deadline
+            && tokio::time::Instant::now() > timeout_at
+        {
+            panic!(
+                "Timed out waiting for notifications/sandbox/configured after roots/list response"
+            );
+        }
+
         if tokio::time::Instant::now() > roots_deadline {
-            panic!("Timed out waiting for roots/list over SSE (session isolation likely broken)");
+            panic!(
+                "Timed out waiting for roots/list + sandbox/configured over SSE (session isolation likely broken)"
+            );
         }
 
         let chunk = tokio::time::timeout(Duration::from_millis(500), stream.next())
@@ -494,6 +562,9 @@ async fn answer_roots_list_over_sse_with_uris(
                 }
 
                 if method == Some("notifications/sandbox/configured") {
+                    if roots_answered {
+                        return;
+                    }
                     continue;
                 }
 
@@ -527,7 +598,9 @@ async fn answer_roots_list_over_sse_with_uris(
                 let _ = send_mcp_request(client, base_url, &response, Some(session_id))
                     .await
                     .expect("Failed to send roots/list response");
-                return;
+                roots_answered = true;
+                post_roots_deadline =
+                    Some(tokio::time::Instant::now() + post_roots_configured_grace_timeout());
             }
         }
     }
@@ -740,7 +813,7 @@ async fn test_basic_tool_call_within_sandbox() {
 
     let sandbox_scope = temp_dir.path().to_path_buf();
     let port = find_available_port();
-    let mut server = start_http_bridge(port, &tools_dir, &sandbox_scope).await;
+    let _server = ServerGuard::new(start_http_bridge(port, &tools_dir, &sandbox_scope).await);
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -829,8 +902,6 @@ async fn test_basic_tool_call_within_sandbox() {
             response
         );
     }
-
-    server.kill().expect("Failed to kill server");
 }
 
 /// Roots URIs may be percent-encoded (spaces/unicode) by real IDE clients.

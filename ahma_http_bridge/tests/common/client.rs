@@ -4,7 +4,6 @@ use reqwest::header::HeaderMap;
 use serde_json::{Value, json};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use tokio::time::sleep;
 
 use super::protocol::{JsonRpcRequest, JsonRpcResponse};
 use super::uri::encode_file_uri;
@@ -53,6 +52,12 @@ impl McpTestClient {
             .map(|s| s.to_string())
     }
 
+    fn required_session_id(&self) -> Result<&str, String> {
+        self.session_id
+            .as_deref()
+            .ok_or_else(|| "No session ID received".to_string())
+    }
+
     async fn send_initialize(&mut self, client_name: &str) -> Result<JsonRpcResponse, String> {
         let init_request = JsonRpcRequest::initialize(client_name);
         let response = self
@@ -89,17 +94,50 @@ impl McpTestClient {
         Ok(init_response)
     }
 
-    async fn send_initialized_notification(&self, session_id: &str) {
+    async fn send_initialized_notification(&self, session_id: &str) -> Result<(), String> {
         let initialized_notification = JsonRpcRequest::initialized();
-        let _ = self
+        let response = self
             .client
             .post(self.mcp_url())
             .header("Content-Type", "application/json")
             .header("Mcp-Session-Id", session_id)
             .json(&initialized_notification)
-            .timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(10))
             .send()
-            .await;
+            .await
+            .map_err(|e| format!("initialized notification failed: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(format!(
+                "initialized notification failed with HTTP {}: {}",
+                status, text
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn coverage_mode() -> bool {
+        std::env::var_os("LLVM_PROFILE_FILE").is_some()
+            || std::env::var_os("CARGO_LLVM_COV").is_some()
+    }
+
+    fn roots_handshake_timeout() -> Duration {
+        if Self::coverage_mode() {
+            Duration::from_secs(30)
+        } else {
+            Duration::from_secs(15)
+        }
+    }
+
+    fn post_roots_configured_grace_timeout() -> Duration {
+        if Self::coverage_mode() {
+            Duration::from_secs(8)
+        } else {
+            Duration::from_secs(3)
+        }
     }
 
     fn pop_next_sse_event(buffer: &mut String) -> Option<String> {
@@ -124,7 +162,7 @@ impl McpTestClient {
         serde_json::from_str::<Value>(&data).ok()
     }
 
-    async fn wait_for_roots_list_id(&self, session_id: &str) -> Result<Value, String> {
+    async fn open_handshake_sse(&self, session_id: &str) -> Result<reqwest::Response, String> {
         let sse_resp = self
             .client
             .get(self.mcp_url())
@@ -139,13 +177,34 @@ impl McpTestClient {
             return Err(format!("SSE stream failed with HTTP {}", sse_resp.status()));
         }
 
+        Ok(sse_resp)
+    }
+
+    async fn process_roots_handshake_stream(
+        &self,
+        sse_resp: reqwest::Response,
+        session_id: &str,
+        roots: &[PathBuf],
+    ) -> Result<(), String> {
         let mut stream = sse_resp.bytes_stream();
         let mut buffer = String::new();
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut roots_answered = false;
+        let deadline = Instant::now() + Self::roots_handshake_timeout();
+        let mut post_roots_deadline: Option<Instant> = None;
 
         loop {
+            if let Some(timeout_at) = post_roots_deadline
+                && Instant::now() > timeout_at {
+                    return Err(
+                        "Timeout waiting for notifications/sandbox/configured after roots/list response"
+                            .to_string(),
+                    );
+                }
+
             if Instant::now() > deadline {
-                return Err("Timeout waiting for roots/list over SSE".to_string());
+                return Err(
+                    "Timeout waiting for roots/list + sandbox/configured over SSE".to_string(),
+                );
             }
 
             let chunk = tokio::time::timeout(Duration::from_millis(500), stream.next())
@@ -164,14 +223,37 @@ impl McpTestClient {
                     };
 
                     let method = value.get("method").and_then(|m| m.as_str());
+
+                    if method == Some("notifications/sandbox/failed") {
+                        let error = value
+                            .get("params")
+                            .and_then(|p| p.get("error"))
+                            .and_then(|e| e.as_str())
+                            .unwrap_or("unknown");
+                        return Err(format!("Sandbox configuration failed: {}", error));
+                    }
+
+                    if method == Some("notifications/sandbox/configured") {
+                        if roots_answered {
+                            return Ok(());
+                        }
+                        continue;
+                    }
+
                     if method != Some("roots/list") {
                         continue;
                     }
 
-                    return value
+                    let request_id = value
                         .get("id")
                         .cloned()
-                        .ok_or_else(|| "roots/list must include id".to_string());
+                        .ok_or_else(|| "roots/list must include id".to_string())?;
+
+                    self.send_roots_response(session_id, request_id, roots)
+                        .await?;
+                    roots_answered = true;
+                    post_roots_deadline =
+                        Some(Instant::now() + Self::post_roots_configured_grace_timeout());
                 }
             }
         }
@@ -220,14 +302,36 @@ impl McpTestClient {
         self.initialize_with_name("mcp-test-client").await
     }
 
+    /// Send only initialize and capture the session ID.
+    pub async fn initialize_only(&mut self, client_name: &str) -> Result<JsonRpcResponse, String> {
+        self.send_initialize(client_name).await
+    }
+
+    /// Send notifications/initialized for the current session.
+    pub async fn send_initialized(&self) -> Result<(), String> {
+        let session_id = self.required_session_id()?;
+        self.send_initialized_notification(session_id).await
+    }
+
+    /// Complete roots handshake (SSE + roots/list response + sandbox/configured)
+    /// after the client has already sent notifications/initialized.
+    pub async fn complete_roots_handshake_after_initialized(
+        &self,
+        roots: &[PathBuf],
+    ) -> Result<(), String> {
+        let session_id = self.required_session_id()?;
+        let sse_resp = self.open_handshake_sse(session_id).await?;
+        self.process_roots_handshake_stream(sse_resp, session_id, roots)
+            .await
+    }
+
     /// Complete the MCP handshake with a custom client name.
     pub async fn initialize_with_name(
         &mut self,
         client_name: &str,
     ) -> Result<JsonRpcResponse, String> {
-        let init_response = self.send_initialize(client_name).await?;
-        let session_header = self.session_id.clone().unwrap_or_default();
-        self.send_initialized_notification(&session_header).await;
+        let init_response = self.initialize_only(client_name).await?;
+        self.send_initialized().await?;
         Ok(init_response)
     }
 
@@ -237,14 +341,13 @@ impl McpTestClient {
         client_name: &str,
         roots: &[PathBuf],
     ) -> Result<JsonRpcResponse, String> {
-        let init_response = self.send_initialize(client_name).await?;
-        let session_id = self.session_id.clone().ok_or("No session ID received")?;
+        let init_response = self.initialize_only(client_name).await?;
+        let session_id = self.required_session_id()?;
 
-        self.send_initialized_notification(&session_id).await;
-        let request_id = self.wait_for_roots_list_id(&session_id).await?;
-        self.send_roots_response(&session_id, request_id, roots)
+        let sse_resp = self.open_handshake_sse(session_id).await?;
+        self.send_initialized().await?;
+        self.process_roots_handshake_stream(sse_resp, session_id, roots)
             .await?;
-        sleep(Duration::from_millis(100)).await;
 
         Ok(init_response)
     }

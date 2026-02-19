@@ -555,7 +555,6 @@ jobs:
           restore-keys: |
             gradle-android-${{ runner.os }}-
 
-
       - uses: taiki-e/install-action@v2
         with:
           tool: nextest
@@ -701,7 +700,7 @@ jobs:
 
       - name: Generate coverage report
         run: |
-          cargo llvm-cov nextest --profile coverage --locked --no-default-features --html --output-dir ./coverage
+          cargo llvm-cov nextest --profile coverage --locked --no-default-features --html --output-dir ./coverage -- -E 'not test(gradlew) & not test(android)'
 
       - name: Install rust-code-analysis-cli
         run: |

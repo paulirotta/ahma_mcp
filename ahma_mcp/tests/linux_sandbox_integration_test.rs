@@ -37,11 +37,10 @@ fn detect_landlock_enforcement() -> bool {
     }
 
     // If we can read LSM list and Landlock is not present, fail immediately.
-    if let Ok(content) = fs::read_to_string("/sys/kernel/security/lsm") {
-        if !content.contains("landlock") {
+    if let Ok(content) = fs::read_to_string("/sys/kernel/security/lsm")
+        && !content.contains("landlock") {
             return false;
         }
-    }
 
     // Runtime probe: enforce Landlock in child and verify a write outside scope is denied.
     let temp = match TempDir::new() {

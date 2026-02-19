@@ -12,16 +12,35 @@
 
 mod common;
 
-use common::{SandboxTestEnv, encode_file_uri};
+use common::{McpTestClient, SandboxTestEnv};
 use futures::StreamExt;
 use reqwest::Client;
 use serde_json::{Value, json};
 use std::net::TcpListener;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::time::sleep;
+
+struct ServerGuard {
+    child: Option<Child>,
+}
+
+impl ServerGuard {
+    fn new(child: Child) -> Self {
+        Self { child: Some(child) }
+    }
+}
+
+impl Drop for ServerGuard {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
 
 #[cfg(target_os = "macos")]
 fn should_skip_in_nested_sandbox() -> bool {
@@ -52,6 +71,21 @@ fn get_ahma_mcp_binary() -> PathBuf {
     ahma_mcp::test_utils::cli::build_binary_cached("ahma_mcp", "ahma_mcp")
 }
 
+#[cfg(target_os = "linux")]
+fn should_force_no_sandbox_for_test_server() -> bool {
+    use ahma_mcp::sandbox::SandboxError;
+
+    matches!(
+        ahma_mcp::sandbox::check_sandbox_prerequisites(),
+        Err(SandboxError::LandlockNotAvailable) | Err(SandboxError::PrerequisiteFailed(_))
+    )
+}
+
+#[cfg(not(target_os = "linux"))]
+fn should_force_no_sandbox_for_test_server() -> bool {
+    false
+}
+
 async fn start_deferred_sandbox_server(
     port: u16,
     tools_dir: &std::path::Path,
@@ -70,6 +104,10 @@ async fn start_deferred_sandbox_server(
         "--defer-sandbox",
         "--log-to-stderr",
     ]);
+
+    if should_force_no_sandbox_for_test_server() {
+        cmd.arg("--no-sandbox");
+    }
 
     SandboxTestEnv::configure(&mut cmd);
 
@@ -141,92 +179,38 @@ async fn send_mcp_request(
     Ok((body, new_session_id))
 }
 
-async fn answer_roots_list_with_uris(
+async fn send_mcp_request_raw(
     client: &Client,
     base_url: &str,
-    session_id: &str,
-    root_uris: &[String],
-) -> Result<(), String> {
+    request: &Value,
+    session_id: Option<&str>,
+) -> Result<(u16, Value), String> {
     let url = format!("{}/mcp", base_url);
-    let resp = client
-        .get(&url)
-        .header("Accept", "text/event-stream")
-        .header("Cache-Control", "no-cache")
-        .header("Mcp-Session-Id", session_id)
+    let mut req = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .timeout(Duration::from_secs(60));
+
+    if let Some(id) = session_id {
+        req = req.header("Mcp-Session-Id", id);
+    }
+
+    let response = req
+        .json(request)
         .send()
         .await
-        .map_err(|e| format!("SSE connection failed: {}", e))?;
+        .map_err(|e| format!("Request failed: {:?}", e))?;
 
-    if !resp.status().is_success() {
-        return Err(format!("SSE stream failed: HTTP {}", resp.status()));
-    }
+    let status = response.status().as_u16();
+    let text = response.text().await.unwrap_or_default();
+    let body = if text.trim().is_empty() {
+        json!({})
+    } else {
+        serde_json::from_str(&text).unwrap_or_else(|_| json!({ "raw": text }))
+    };
 
-    let mut stream = resp.bytes_stream();
-    let mut buffer = String::new();
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
-
-    loop {
-        if tokio::time::Instant::now() > deadline {
-            return Err("Timeout waiting for roots/list over SSE".to_string());
-        }
-
-        let chunk = tokio::time::timeout(Duration::from_millis(500), stream.next())
-            .await
-            .ok()
-            .flatten();
-
-        if let Some(next) = chunk {
-            let bytes = next.map_err(|e| format!("SSE read error: {}", e))?;
-            let text = String::from_utf8_lossy(&bytes);
-            buffer.push_str(&text);
-
-            while let Some(idx) = buffer.find("\n\n") {
-                let raw_event = buffer[..idx].to_string();
-                buffer = buffer[idx + 2..].to_string();
-
-                let mut data_lines: Vec<&str> = Vec::new();
-                for line in raw_event.lines() {
-                    let line = line.trim_end_matches('\r');
-                    if let Some(rest) = line.strip_prefix("data:") {
-                        data_lines.push(rest.trim());
-                    }
-                }
-
-                if data_lines.is_empty() {
-                    continue;
-                }
-
-                let data = data_lines.join("\n");
-                let Ok(value) = serde_json::from_str::<Value>(&data) else {
-                    continue;
-                };
-
-                let method = value.get("method").and_then(|m| m.as_str());
-                if method != Some("roots/list") {
-                    continue;
-                }
-
-                let id = value
-                    .get("id")
-                    .cloned()
-                    .ok_or("roots/list must include id")?;
-
-                let roots_json: Vec<Value> = root_uris
-                    .iter()
-                    .map(|uri| json!({"uri": uri, "name": "root"}))
-                    .collect();
-
-                let response = json!({
-                    "jsonrpc": "2.0",
-                    "id": id,
-                    "result": {"roots": roots_json}
-                });
-
-                let _ = send_mcp_request(client, base_url, &response, Some(session_id)).await?;
-                return Ok(());
-            }
-        }
-    }
+    Ok((status, body))
 }
 
 // =============================================================================
@@ -260,37 +244,17 @@ async fn test_tool_call_before_roots_handshake() {
     .expect("Failed to write tool config");
 
     let port = find_available_port();
-    let mut server = start_deferred_sandbox_server(port, &tools_dir).await;
+    let _server = ServerGuard::new(start_deferred_sandbox_server(port, &tools_dir).await);
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
+    let mut mcp_client = McpTestClient::with_url(&base_url);
 
-    // 1. Initialize
-    let init_request = json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {"roots": {}},
-            "clientInfo": {"name": "test-client", "version": "1.0.0"}
-        }
-    });
-
-    let (_, session_id) = send_mcp_request(&client, &base_url, &init_request, None)
+    // 1. Initialize + initialized (without completing roots handshake yet)
+    mcp_client
+        .initialize_with_name("test-client")
         .await
         .expect("Initialize failed");
-    let session_id = session_id.expect("No session ID");
-
-    // 2. Send initialized notification
-    let initialized = json!({
-        "jsonrpc": "2.0",
-        "method": "notifications/initialized"
-    });
-    let _ = send_mcp_request(&client, &base_url, &initialized, Some(&session_id)).await;
-
-    // Give the session time to process the initialized notification
-    // Increased delay to ensure state transition completes before SSE connection
-    sleep(Duration::from_millis(500)).await;
+    let session_id = mcp_client.session_id().expect("No session ID").to_string();
 
     // 3. IMMEDIATELY try to call a tool (before answering roots/list)
     let tool_call = json!({
@@ -303,71 +267,50 @@ async fn test_tool_call_before_roots_handshake() {
         }
     });
 
-    let result = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id)).await;
+    let (status, body) = send_mcp_request_raw(&client, &base_url, &tool_call, Some(&session_id))
+        .await
+        .expect("Pre-handshake tools/call request failed");
 
-    // 4. Verify rejection
-    match result {
-        Ok((response, _)) => {
-            let error = response.get("error");
-            assert!(
-                error.is_some(),
-                "Tool call before roots should fail, got success: {:?}",
-                response
-            );
-            let error_msg = error
-                .and_then(|e| e.get("message"))
-                .and_then(|m| m.as_str())
-                .unwrap_or("");
+    // 4. Verify strict gating behavior
+    assert_eq!(
+        status, 409,
+        "Expected HTTP 409 during handshake; got status {} body {:?}",
+        status, body
+    );
+    let code = body
+        .get("error")
+        .and_then(|e| e.get("code"))
+        .and_then(|c| c.as_i64())
+        .unwrap_or_default();
+    assert_eq!(
+        code, -32001,
+        "Expected JSON-RPC code -32001 during handshake; got body {:?}",
+        body
+    );
 
-            assert!(
-                error_msg.contains("sandbox") || error_msg.contains("initializ"),
-                "Error should mention sandbox/initialization, got: {}",
-                error_msg
-            );
-        }
-        Err(e) => {
-            // HTTP error is also acceptable
-            eprintln!("Got HTTP error (acceptable): {}", e);
-        }
-    }
-
-    // 5. Now complete the handshake
-    let root_uri = encode_file_uri(temp_dir.path());
-    let sse_client = client.clone();
-    let sse_base_url = base_url.clone();
-    let sse_session_id = session_id.clone();
-
-    answer_roots_list_with_uris(&sse_client, &sse_base_url, &sse_session_id, &[root_uri])
+    // 5. Now complete the roots handshake
+    let roots = vec![temp_dir.path().to_path_buf()];
+    mcp_client
+        .complete_roots_handshake_after_initialized(&roots)
         .await
         .expect("Roots handshake failed");
 
     // 6. Verify tool call now works
-    sleep(Duration::from_millis(200)).await;
-
-    let tool_call_retry = json!({
-        "jsonrpc": "2.0",
-        "id": 3,
-        "method": "tools/call",
-        "params": {
-            "name": "pwd",
-            "arguments": {
+    let result = mcp_client
+        .call_tool(
+            "pwd",
+            json!({
                 "subcommand": "default",
                 "working_directory": temp_dir.path().to_string_lossy()
-            }
-        }
-    });
-
-    let (response, _) = send_mcp_request(&client, &base_url, &tool_call_retry, Some(&session_id))
-        .await
-        .expect("Tool call retry failed");
+            }),
+        )
+        .await;
 
     assert!(
-        response.get("error").is_none(),
+        result.success,
         "Tool call should succeed after handshake: {:?}",
-        response
+        result.error
     );
-
-    server.kill().expect("Failed to kill server");
 }
 
 // =============================================================================
@@ -401,38 +344,19 @@ async fn test_slow_client_handshake() {
     .expect("Failed to write tool config");
 
     let port = find_available_port();
-    let mut server = start_deferred_sandbox_server(port, &tools_dir).await;
+    let _server = ServerGuard::new(start_deferred_sandbox_server(port, &tools_dir).await);
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
+    let mut mcp_client = McpTestClient::with_url(&base_url);
 
-    // Initialize
-    let init_request = json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {"roots": {}},
-            "clientInfo": {"name": "slow-client", "version": "1.0.0"}
-        }
-    });
-
-    let (_, session_id) = send_mcp_request(&client, &base_url, &init_request, None)
+    mcp_client
+        .initialize_with_name("slow-client")
         .await
         .expect("Initialize failed");
-    let session_id = session_id.expect("No session ID");
-
-    let initialized = json!({
-        "jsonrpc": "2.0",
-        "method": "notifications/initialized"
-    });
-    let _ = send_mcp_request(&client, &base_url, &initialized, Some(&session_id)).await;
-
-    // Give the session time to process the initialized notification
-    sleep(Duration::from_millis(500)).await;
+    let session_id = mcp_client.session_id().expect("No session ID").to_string();
 
     // Start SSE connection but DELAY sending the roots response
-    let root_uri = encode_file_uri(temp_dir.path());
+    let root_uri = common::encode_file_uri(temp_dir.path());
     let sse_client = client.clone();
     let sse_base_url = base_url.clone();
     let sse_session_id = session_id.clone();
@@ -491,7 +415,7 @@ async fn test_slow_client_handshake() {
             send_mcp_request(&sse_client, &sse_base_url, &response, Some(&sse_session_id)).await;
     });
 
-    // Try to call tool during the delay - should fail
+    // Try to call tool during the delay - should fail with strict gating
     sleep(Duration::from_secs(1)).await;
     let tool_call = json!({
         "jsonrpc": "2.0",
@@ -503,17 +427,27 @@ async fn test_slow_client_handshake() {
         }
     });
 
-    let result = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id)).await;
-    if let Ok((response, _)) = result {
-        assert!(
-            response.get("error").is_some(),
-            "Tool call during handshake delay should fail"
-        );
-    }
+    let (status, body) = send_mcp_request_raw(&client, &base_url, &tool_call, Some(&session_id))
+        .await
+        .expect("tools/call during slow handshake request failed");
+    assert_eq!(
+        status, 409,
+        "Expected HTTP 409 while handshake is pending; got status {} body {:?}",
+        status, body
+    );
+    let code = body
+        .get("error")
+        .and_then(|e| e.get("code"))
+        .and_then(|c| c.as_i64())
+        .unwrap_or_default();
+    assert_eq!(
+        code, -32001,
+        "Expected JSON-RPC code -32001 while handshake pending; got body {:?}",
+        body
+    );
 
-    // Wait for handshake to complete
+    // Wait for handshake to complete (includes sandbox/configured)
     sse_task.await.expect("SSE task failed");
-    sleep(Duration::from_millis(200)).await;
 
     // Now it should work
     let tool_call_retry = json!({
@@ -538,8 +472,6 @@ async fn test_slow_client_handshake() {
         "Tool call should succeed after slow handshake: {:?}",
         response
     );
-
-    server.kill().expect("Failed to kill server");
 }
 
 // =============================================================================
@@ -573,7 +505,7 @@ async fn test_rapid_connect_disconnect() {
     .expect("Failed to write tool config");
 
     let port = find_available_port();
-    let mut server = start_deferred_sandbox_server(port, &tools_dir).await;
+    let _server = ServerGuard::new(start_deferred_sandbox_server(port, &tools_dir).await);
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -596,67 +528,32 @@ async fn test_rapid_connect_disconnect() {
 
     // Attempt 2: Connect immediately
     {
-        let init_request = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {"roots": {}},
-                "clientInfo": {"name": "second-client", "version": "1.0.0"}
-            }
-        });
-
-        let (_, session_id) = send_mcp_request(&client, &base_url, &init_request, None)
+        // Complete handshake for second client
+        let mut second_client = McpTestClient::with_url(&base_url);
+        second_client
+            .initialize_with_name("second-client")
             .await
             .expect("Second initialize failed");
-        let session_id = session_id.expect("No session ID for second client");
-
-        let initialized = json!({
-            "jsonrpc": "2.0",
-            "method": "notifications/initialized"
-        });
-        let _ = send_mcp_request(&client, &base_url, &initialized, Some(&session_id)).await;
-
-        // Give the session time to process the initialized notification
-        sleep(Duration::from_millis(500)).await;
-
-        // Complete handshake for second client
-        let root_uri = encode_file_uri(temp_dir.path());
-        let sse_client = client.clone();
-        let sse_base_url = base_url.clone();
-        let sse_session_id = session_id.clone();
-
-        answer_roots_list_with_uris(&sse_client, &sse_base_url, &sse_session_id, &[root_uri])
+        second_client
+            .complete_roots_handshake_after_initialized(&[temp_dir.path().to_path_buf()])
             .await
             .expect("Roots handshake failed for second client");
 
         // Verify tool call works
-        sleep(Duration::from_millis(200)).await;
-
-        let tool_call = json!({
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": "tools/call",
-            "params": {
-                "name": "pwd",
-                "arguments": {
+        let result = second_client
+            .call_tool(
+                "pwd",
+                json!({
                     "subcommand": "default",
                     "working_directory": temp_dir.path().to_string_lossy()
-                }
-            }
-        });
-
-        let (response, _) = send_mcp_request(&client, &base_url, &tool_call, Some(&session_id))
-            .await
-            .expect("Tool call failed");
+                }),
+            )
+            .await;
 
         assert!(
-            response.get("error").is_none(),
+            result.success,
             "Tool call should succeed for second client: {:?}",
-            response
+            result.error
         );
     }
-
-    server.kill().expect("Failed to kill server");
 }
