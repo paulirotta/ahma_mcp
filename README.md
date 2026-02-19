@@ -90,6 +90,8 @@ ahma_mcp --mode http --tools-dir .ahma
 ahma_mcp --no-sandbox --mode http --tools-dir .ahma
 ```
 
+- **Raspberry Pi OS**: Older kernels (pre-5.13) do not support Landlock. Ahma requires `--no-sandbox` (or `AHMA_NO_SANDBOX=1`) until the kernel is upgraded to a version that supports Landlock.
+
 Security note: running with `AHMA_NO_SANDBOX=1` or `--no-sandbox` disables
 Ahma's kernel-level protections. Only use this mode on machines that are
 already sandboxed or otherwise trusted (for example, inside a container or
@@ -332,6 +334,29 @@ To use `ahma_mcp` with GitHub Copilot in VS Code:
    **Important:** Replace `/path/to/your/ahma_mcp` with the absolute path to the cloned repository.
 
 3. **Restart VS Code** and start a chat with GitHub Copilot. You can now ask it to use `ahma_mcp` tools (e.g., "Use ahma_mcp to show the git status").
+
+## Google Antigravity Integration
+
+To use `ahma_mcp` with Google Antigravity, add the following to your configuration:
+
+```json
+{
+    "mcpServers": {
+        "Ahma": {
+            "command": "ahma_mcp",
+            "args": [
+                "--log-to-stderr"
+            ],
+            "env": {
+                "RUST_LOG": "debug"
+            }
+        }
+    }
+}
+```
+
+> [!IMPORTANT]
+> **Raspberry Pi Users**: On Raspberry Pi, `ahma_mcp` needs the `--no-sandbox` flag in the `args` array until the kernel is new enough to support the Landlock sandbox (Kernel 5.13+).
 
 ## Project Philosophy and Requirements
 
