@@ -699,22 +699,9 @@ jobs:
             echo "cargo-nextest already installed"
           fi
 
-      - name: Install debtmap
-        run: |
-          if ! command -v debtmap &> /dev/null; then
-             echo "debtmap not found, installing..."
-             cargo binstall debtmap --no-confirm || cargo install debtmap --locked
-          else
-             echo "debtmap is already installed"
-          fi
-
       - name: Generate coverage report
         run: |
           cargo llvm-cov nextest --profile coverage --locked --no-default-features --html --output-dir ./coverage
-
-      - name: Generate debtmap report
-        run: |
-          debtmap analyze . --format markdown > ./coverage/debtmap.md
 
       - name: Install rust-code-analysis-cli
         run: |
@@ -738,12 +725,6 @@ jobs:
         uses: actions/upload-pages-artifact@v4
         with:
           path: ./coverage
-
-      - name: Upload debtmap markdown artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: debtmap-markdown
-          path: ./coverage/debtmap.md
 
       - name: Upload code simplicity report artifact
         uses: actions/upload-artifact@v4
