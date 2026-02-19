@@ -226,7 +226,6 @@ The sandbox scope defines the root directory boundary. AI has **full read/write 
 - **R6.1.1**: Uses Landlock (kernel 5.13+) for kernel-level FS sandboxing.
 - **R6.1.2**: If Landlock is unavailable and sandbox is not explicitly disabled, server **must** refuse to start with upgrade instructions.
 - **R6.1.3**: If user explicitly opts into compatibility mode (`--no-sandbox` or `AHMA_NO_SANDBOX=1`), server **must** start in unsandboxed mode and emit a clear warning that Ahma sandboxing is disabled until the kernel is upgraded.
-- **R6.1.4**: If strict sandbox mode is enabled (`--strict-sandbox` or `AHMA_STRICT_SANDBOX=1`), server **must** enforce fail-fast behavior even when compatibility mode is requested.
 
 #### R6.2: macOS (Seatbelt)
 
@@ -503,8 +502,7 @@ started_rx.await.ok();  // Don't return until spawn is live
   - Explicit CLI parameters (e.g., `--no-sandbox`)
   - Constructor parameters passed at initialization
 - **R21.3**: The following patterns are **FORBIDDEN**:
-  - Reading `AHMA_TEST_MODE` from environment in production code  
-  - Automatic "test mode" detection based on `NEXTEST`, `CARGO_TARGET_DIR`, etc.
+  - Any different behavior based on automatic "test mode" detection from environment variables like `NEXTEST`, `CARGO_TARGET_DIR`, etc.
   - Any environment variable that bypasses security checks
 
 ---

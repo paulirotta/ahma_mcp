@@ -372,7 +372,7 @@ async fn red_team_command_write_escape_blocked() {
         .tools_dir(&tools_dir)
         .working_dir(temp_dir.path())
         .no_sandbox(false)
-        .env("AHMA_NO_TEMP_FILES", "1")
+        .arg("--no-temp-files")
         .build()
         .await
         .unwrap();
@@ -419,7 +419,7 @@ async fn red_team_command_read_escape_blocked_linux() {
         .tools_dir(&tools_dir)
         .working_dir(temp_dir.path())
         .no_sandbox(false)
-        .env("AHMA_NO_TEMP_FILES", "1")
+        .arg("--no-temp-files")
         .build()
         .await
         .unwrap();
@@ -474,7 +474,7 @@ async fn red_team_command_read_escape_blocked_linux_custom() {
         .tools_dir(&tools_dir)
         .working_dir(temp_dir.path())
         .no_sandbox(false)
-        .env("AHMA_NO_TEMP_FILES", "1")
+        .arg("--no-temp-files")
         .build()
         .await
         .unwrap();

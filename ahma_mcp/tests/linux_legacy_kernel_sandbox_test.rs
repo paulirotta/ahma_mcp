@@ -56,36 +56,3 @@ fn test_no_sandbox_warns_and_runs_on_legacy_kernel() {
         stdout
     );
 }
-
-#[test]
-fn test_strict_sandbox_overrides_no_sandbox_on_legacy_kernel() {
-    if !landlock_unavailable() {
-        eprintln!("SKIPPED: Landlock is available on this kernel");
-        return;
-    }
-
-    let binary = build_binary();
-    let output = Command::new(&binary)
-        .current_dir(workspace_dir())
-        .env("AHMA_NO_SANDBOX", "1")
-        .args([
-            "--strict-sandbox",
-            "sandboxed_shell",
-            "--",
-            "echo should-not-run",
-        ])
-        .output()
-        .expect("Failed to run ahma_mcp with strict sandbox override");
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    assert!(
-        !output.status.success(),
-        "Expected strict sandbox mode to fail on legacy kernel"
-    );
-    assert!(
-        stderr.contains("SECURITY ERROR"),
-        "Expected strict mode failure message. stderr:\n{}",
-        stderr
-    );
-}

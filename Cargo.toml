@@ -66,7 +66,7 @@ tokio = { version = "1.49.0", features = [
     "signal",
 ] }
 tokio-util = "0.7.18"
-toml = "1.0.2"
+toml = "1.0.3"
 tracing = "0.1.44"
 tracing-appender = "0.2.4"
 tracing-opentelemetry = "0.32"

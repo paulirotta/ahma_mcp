@@ -72,8 +72,8 @@ pub async fn run_http_bridge_mode(cli: Cli) -> Result<()> {
         server_args.push("--no-sandbox".to_string());
     }
 
-    if cli.strict_sandbox {
-        server_args.push("--strict-sandbox".to_string());
+    if cli.no_temp_files {
+        server_args.push("--no-temp-files".to_string());
     }
 
     if let Some(scope) = &explicit_fallback_scope {

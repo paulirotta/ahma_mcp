@@ -548,7 +548,7 @@ async fn answer_roots_list_over_sse_with_uris(
 ///
 /// WARNING TO FUTURE AI/MAINTAINERS:
 /// - Do NOT change this test to accept either success OR sandbox failure.
-/// - Do NOT enable AHMA_TEST_MODE for this test.
+/// - Do NOT add test-mode env var bypasses (see SPEC.md R21.3).
 /// - Fix scoping/session isolation if this fails.
 #[tokio::test]
 #[serial]
