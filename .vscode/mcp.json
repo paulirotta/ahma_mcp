@@ -1,10 +1,11 @@
 {
 	"servers": {
-		"Ahma-release": {
+		"Ahma": {
 			"type": "stdio",
 			"command": "ahma_mcp",
 			"args": [
 				"--log-to-stderr",
+				"--no-sandbox"
 			],
 			"env": {
 				"RUST_LOG": "debug"

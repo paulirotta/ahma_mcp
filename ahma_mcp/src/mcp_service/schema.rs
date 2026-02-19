@@ -53,52 +53,68 @@ pub fn get_schema_for_options(sub_config: &SubcommandConfig) -> (Map<String, Val
 
     if let Some(options) = sub_config.options.as_deref() {
         for option in options {
-            let mut option_schema = Map::new();
-            let param_type = normalize_option_type(&option.option_type);
-            option_schema.insert("type".to_string(), Value::String(param_type.to_string()));
-            if param_type == "array" {
-                let items_schema = build_items_schema(option);
-                option_schema.insert("items".to_string(), Value::Object(items_schema));
-            }
-            option_schema.insert(
-                "description".to_string(),
-                Value::String(option.description.clone().unwrap_or_default()),
-            );
-            if let Some(format) = &option.format {
-                option_schema.insert("format".to_string(), Value::String(format.clone()));
-            }
-
-            properties.insert(option.name.clone(), Value::Object(option_schema));
-
-            if option.required.unwrap_or(false) {
-                required.push(Value::String(option.name.clone()));
-            }
+            process_option(option, &mut properties, &mut required);
         }
     }
 
     if let Some(positional_args) = sub_config.positional_args.as_deref() {
         for arg in positional_args {
-            let mut arg_schema = Map::new();
-            let param_type = normalize_option_type(&arg.option_type);
-            arg_schema.insert("type".to_string(), Value::String(param_type.to_string()));
-            if let Some(ref desc) = arg.description {
-                arg_schema.insert("description".to_string(), Value::String(desc.clone()));
-            }
-            if let Some(ref format) = arg.format {
-                arg_schema.insert("format".to_string(), Value::String(format.clone()));
-            }
-            if param_type == "array" {
-                let items_schema = build_items_schema(arg);
-                arg_schema.insert("items".to_string(), Value::Object(items_schema));
-            }
-            properties.insert(arg.name.clone(), Value::Object(arg_schema));
-            if arg.required.unwrap_or(false) {
-                required.push(Value::String(arg.name.clone()));
-            }
+            process_positional_arg(arg, &mut properties, &mut required);
         }
     }
 
     (properties, required)
+}
+
+fn process_option(
+    option: &CommandOption,
+    properties: &mut Map<String, Value>,
+    required: &mut Vec<Value>,
+) {
+    let mut option_schema = Map::new();
+    let param_type = normalize_option_type(&option.option_type);
+    option_schema.insert("type".to_string(), Value::String(param_type.to_string()));
+    if param_type == "array" {
+        let items_schema = build_items_schema(option);
+        option_schema.insert("items".to_string(), Value::Object(items_schema));
+    }
+    option_schema.insert(
+        "description".to_string(),
+        Value::String(option.description.clone().unwrap_or_default()),
+    );
+    if let Some(format) = &option.format {
+        option_schema.insert("format".to_string(), Value::String(format.clone()));
+    }
+
+    properties.insert(option.name.clone(), Value::Object(option_schema));
+
+    if option.required.unwrap_or(false) {
+        required.push(Value::String(option.name.clone()));
+    }
+}
+
+fn process_positional_arg(
+    arg: &CommandOption,
+    properties: &mut Map<String, Value>,
+    required: &mut Vec<Value>,
+) {
+    let mut arg_schema = Map::new();
+    let param_type = normalize_option_type(&arg.option_type);
+    arg_schema.insert("type".to_string(), Value::String(param_type.to_string()));
+    if let Some(ref desc) = arg.description {
+        arg_schema.insert("description".to_string(), Value::String(desc.clone()));
+    }
+    if let Some(ref format) = arg.format {
+        arg_schema.insert("format".to_string(), Value::String(format.clone()));
+    }
+    if param_type == "array" {
+        let items_schema = build_items_schema(arg);
+        arg_schema.insert("items".to_string(), Value::Object(items_schema));
+    }
+    properties.insert(arg.name.clone(), Value::Object(arg_schema));
+    if arg.required.unwrap_or(false) {
+        required.push(Value::String(arg.name.clone()));
+    }
 }
 
 /// Recursively collects all leaf subcommands from a tool's configuration.
@@ -138,32 +154,59 @@ pub fn generate_schema_for_tool_config(
         collect_leaf_subcommands(subcommands, "", &mut leaf_subcommands);
     }
 
+    // Suppress unused guidance warning - guidance is used for tool descriptions, not schemas
+    let _ = guidance;
+
     // Case 1: Single default subcommand. No `subcommand` parameter needed.
     if leaf_subcommands.len() == 1 && leaf_subcommands[0].0 == "default" {
-        let (_, sub_config) = &leaf_subcommands[0];
-        let (mut properties, required) = get_schema_for_options(sub_config);
-
-        if tool_config.name != "cargo" {
-            properties.insert(
-                "working_directory".to_string(),
-                serde_json::json!({
-                    "type": "string",
-                    "description": "Working directory for command execution",
-                    "format": "path"
-                }),
-            );
-        }
-
-        let mut schema = Map::new();
-        schema.insert("type".to_string(), Value::String("object".to_string()));
-        schema.insert("properties".to_string(), Value::Object(properties));
-        if !required.is_empty() {
-            schema.insert("required".to_string(), Value::Array(required));
-        }
-        return Arc::new(schema);
+        return Arc::new(generate_single_command_schema(
+            tool_config,
+            &leaf_subcommands[0],
+        ));
     }
 
     // Case 2: Multiple subcommands. Use `subcommand` enum and `oneOf`.
+    Arc::new(generate_multi_command_schema(
+        tool_config,
+        &leaf_subcommands,
+    ))
+}
+
+fn add_working_directory_property(properties: &mut Map<String, Value>) {
+    properties.insert(
+        "working_directory".to_string(),
+        serde_json::json!({
+            "type": "string",
+            "description": "Working directory for command execution",
+            "format": "path"
+        }),
+    );
+}
+
+fn generate_single_command_schema(
+    tool_config: &ToolConfig,
+    leaf_subcommand: &(String, &SubcommandConfig),
+) -> Map<String, Value> {
+    let (_, sub_config) = leaf_subcommand;
+    let (mut properties, required) = get_schema_for_options(sub_config);
+
+    if tool_config.name != "cargo" {
+        add_working_directory_property(&mut properties);
+    }
+
+    let mut schema = Map::new();
+    schema.insert("type".to_string(), Value::String("object".to_string()));
+    schema.insert("properties".to_string(), Value::Object(properties));
+    if !required.is_empty() {
+        schema.insert("required".to_string(), Value::Array(required));
+    }
+    schema
+}
+
+fn generate_multi_command_schema(
+    tool_config: &ToolConfig,
+    leaf_subcommands: &[(String, &SubcommandConfig)],
+) -> Map<String, Value> {
     let mut all_properties = Map::new();
     let mut one_of = Vec::new();
     let mut subcommand_enum = Vec::new();
@@ -204,14 +247,7 @@ pub fn generate_schema_for_tool_config(
     }
 
     if tool_config.name != "cargo" {
-        all_properties.insert(
-            "working_directory".to_string(),
-            serde_json::json!({
-                "type": "string",
-                "description": "Working directory for command execution",
-                "format": "path"
-            }),
-        );
+        add_working_directory_property(&mut all_properties);
     }
 
     let mut schema = Map::new();
@@ -226,11 +262,7 @@ pub fn generate_schema_for_tool_config(
     if !one_of.is_empty() {
         schema.insert("oneOf".to_string(), Value::Array(one_of));
     }
-
-    // Suppress unused guidance warning - guidance is used for tool descriptions, not schemas
-    let _ = guidance;
-
-    Arc::new(schema)
+    schema
 }
 
 #[cfg(test)]

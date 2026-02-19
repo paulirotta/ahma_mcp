@@ -130,20 +130,30 @@ async fn test_cancel_missing_operation_id() -> Result<()> {
     };
 
     let result = client.call_tool(params).await;
+    assert_required_param_error(result, "required");
 
-    // Should return error because operation_id is required
+    client.cancel().await?;
+    Ok(())
+}
+
+fn assert_required_param_error<E: std::fmt::Debug>(
+    result: Result<rmcp::model::CallToolResult, E>,
+    keyword: &str,
+) {
     match result {
         Err(e) => {
             let msg = format!("{:?}", e);
-            assert!(msg.contains("required") || msg.contains("missing"));
+            assert!(
+                msg.contains(keyword) || msg.contains("missing"),
+                "Expected error validating '{}' or 'missing', got: {}",
+                keyword,
+                msg
+            );
         }
         Ok(r) => {
             assert!(r.is_error.unwrap_or(false));
         }
     }
-
-    client.cancel().await?;
-    Ok(())
 }
 
 /// Test cancel non-existent operation
@@ -282,16 +292,7 @@ async fn test_shell_missing_command() -> Result<()> {
     };
 
     let result = client.call_tool(params).await;
-
-    match result {
-        Err(e) => {
-            let msg = format!("{:?}", e);
-            assert!(msg.contains("required") || msg.contains("command parameter"));
-        }
-        Ok(r) => {
-            assert!(r.is_error.unwrap_or(false));
-        }
-    }
+    assert_required_param_error(result, "required");
 
     client.cancel().await?;
     Ok(())
@@ -411,26 +412,25 @@ async fn test_shell_timeout() -> Result<()> {
     };
 
     let result = client.call_tool(params).await;
+    assert_timeout_error(result);
 
-    // Should fail with timeout
+    client.cancel().await?;
+    Ok(())
+}
+
+fn assert_timeout_error<E: std::fmt::Debug>(result: Result<rmcp::model::CallToolResult, E>) {
     match result {
         Err(e) => {
             let msg = format!("{:?}", e);
             assert!(msg.contains("timeout") || msg.contains("timed out"));
         }
         Ok(r) => {
-            // Or return error result
             if !r.is_error.unwrap_or(false) {
-                // It might have succeeded if machine was very fast or sleep implementation varies,
-                // but generally we expect failure.
-                // However, since we can't control system load, a slight race condition is possible.
-                // If it somehow succeeded, we check output.
                 let text: String = r
                     .content
                     .iter()
                     .filter_map(|c| c.as_text().map(|t| t.text.clone()))
                     .collect();
-                // If it succeeded, it implies timeout didn't trigger.
                 panic!(
                     "Expected timeout failure, but shell command succeeded. Output: {}",
                     text
@@ -449,9 +449,6 @@ async fn test_shell_timeout() -> Result<()> {
             }
         }
     }
-
-    client.cancel().await?;
-    Ok(())
 }
 
 // ============================================================================

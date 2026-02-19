@@ -99,13 +99,10 @@ fn main() -> Result<()> {
     }
 
     sort_files_by_simplicity(&mut files_simplicity);
-
     let project_name = get_project_name(&directory);
 
     // Determine the report output paths
     let report_output_dir = determine_report_output_dir(&cli.output_path)?;
-
-    // Create report output directory if it doesn't exist
     fs::create_dir_all(&report_output_dir).context("Failed to create report output directory")?;
 
     generate_report(
@@ -121,25 +118,39 @@ fn main() -> Result<()> {
     print_report_locations(&report_output_dir, cli.html);
 
     if let Some(issue_number) = cli.ai_fix {
-        let md_path = report_output_dir.join("CODE_SIMPLICITY.md");
-        let report_content =
-            fs::read_to_string(&md_path).context("Failed to read generated report")?;
-        println!("{}", report_content);
-
-        match generate_ai_fix_prompt(&files_simplicity, issue_number, &directory) {
-            Some(prompt) => println!("\n{}", prompt),
-            None => eprintln!(
-                "Warning: Issue #{} is out of range (only {} files analyzed).",
-                issue_number,
-                files_simplicity.len()
-            ),
-        }
+        handle_ai_fix(
+            issue_number,
+            &report_output_dir,
+            &files_simplicity,
+            &directory,
+        )?;
     }
 
     if cli.open {
         open_report(&report_output_dir, cli.html)?;
     }
 
+    Ok(())
+}
+
+fn handle_ai_fix(
+    issue_number: usize,
+    report_output_dir: &Path,
+    files_simplicity: &[FileSimplicity],
+    directory: &Path,
+) -> Result<()> {
+    let md_path = report_output_dir.join("CODE_SIMPLICITY.md");
+    let report_content = fs::read_to_string(&md_path).context("Failed to read generated report")?;
+    println!("{}", report_content);
+
+    match generate_ai_fix_prompt(files_simplicity, issue_number, directory) {
+        Some(prompt) => println!("\n{}", prompt),
+        None => eprintln!(
+            "Warning: Issue #{} is out of range (only {} files analyzed).",
+            issue_number,
+            files_simplicity.len()
+        ),
+    }
     Ok(())
 }
 
@@ -312,16 +323,21 @@ fn print_verification(path: &str, before: &FileSimplicity, after: &FileSimplicit
     print_metric_row("MI", before.mi, after.mi, "", true);
 
     println!();
-    let improvement = after.score - before.score;
-    if improvement > 5.0 {
-        println!("VERDICT: Significant improvement achieved.");
+    print_verdict(before.score, after.score);
+}
+
+fn print_verdict(before_score: f64, after_score: f64) {
+    let improvement = after_score - before_score;
+    let msg = if improvement > 5.0 {
+        "VERDICT: Significant improvement achieved."
     } else if improvement > 0.0 {
-        println!("VERDICT: Modest improvement. Consider further refactoring.");
+        "VERDICT: Modest improvement. Consider further refactoring."
     } else if improvement == 0.0 {
-        println!("VERDICT: No change detected.");
+        "VERDICT: No change detected."
     } else {
-        println!("VERDICT: Regression detected - complexity increased.");
-    }
+        "VERDICT: Regression detected - complexity increased."
+    };
+    println!("{}", msg);
 }
 
 fn get_direction_label(pct: f64, higher_is_better: bool) -> &'static str {
@@ -335,19 +351,16 @@ fn get_direction_label(pct: f64, higher_is_better: bool) -> &'static str {
 }
 
 fn format_metric_change(before: f64, after: f64, suffix: &str, higher_is_better: bool) -> String {
-    if before == 0.0 && after == 0.0 {
-        return "unchanged".to_string();
-    }
     if before == 0.0 {
+        if after == 0.0 {
+            return "unchanged".to_string();
+        }
         return format!("+{:.0}{}", after, suffix);
     }
 
     let pct = ((after - before) / before) * 100.0;
-    format!(
-        "{:+.0}% {}",
-        pct,
-        get_direction_label(pct, higher_is_better)
-    )
+    let label = get_direction_label(pct, higher_is_better);
+    format!("{:.0}% {}", pct, label)
 }
 
 fn print_metric_row(label: &str, before: f64, after: f64, suffix: &str, higher_is_better: bool) {
