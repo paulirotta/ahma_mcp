@@ -1,0 +1,10 @@
+[target.aarch64-unknown-linux-gnu]
+# Use mold - far lower RAM usage than GNU ld, and much faster.
+# gcc 12+ supports -fuse-ld=mold natively; no clang needed.
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+[build]
+# Limit parallel jobs to avoid OOM-killing the linker on Pi 5 (8 GB RAM,
+# nearly-full zram swap).  Compilation is still parallelised; this caps how
+# many large link invocations run simultaneously.
+jobs = 4
