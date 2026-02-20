@@ -74,3 +74,21 @@ fn test_path_validation_outside_scope() {
     let outside_path = PathBuf::from("/etc/passwd");
     assert!(sandbox.validate_path(&outside_path).is_err());
 }
+
+#[cfg(unix)]
+#[test]
+fn test_path_validation_accepts_symlink_alias_scope_for_nonexistent_nested_path() {
+    let temp = tempdir().unwrap();
+    let real_root = temp.path().join("real_root");
+    std::fs::create_dir_all(&real_root).unwrap();
+
+    let alias_root = temp.path().join("alias_root");
+    std::os::unix::fs::symlink(&real_root, &alias_root).unwrap();
+
+    let sandbox = Sandbox::new(vec![alias_root.clone()], SandboxMode::Strict, false).unwrap();
+
+    // `nested` does not exist, so path resolution falls back to lexical normalization.
+    // The alias scope must still be accepted.
+    let alias_nested_target = alias_root.join("nested/new_file.txt");
+    assert!(sandbox.validate_path(&alias_nested_target).is_ok());
+}

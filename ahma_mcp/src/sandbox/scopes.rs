@@ -7,12 +7,24 @@ use super::types::SandboxMode;
 ///
 /// Rejects root filesystem (`/`) and empty paths in Strict mode.
 /// Falls back to raw paths in Test mode when canonicalization fails.
+///
+/// For symlink-aware compatibility, this preserves both canonical and absolute
+/// alias paths (when they differ). This allows equivalent paths to validate
+/// correctly even when lexical normalization is used for non-existent targets.
 pub(super) fn canonicalize_scopes(
     scopes: Vec<PathBuf>,
     mode: SandboxMode,
     context: &str,
 ) -> Result<Vec<PathBuf>> {
-    let mut canonicalized = Vec::with_capacity(scopes.len());
+    let cwd = std::env::current_dir().ok();
+    let mut canonicalized = Vec::with_capacity(scopes.len() * 2);
+
+    let mut push_unique = |candidate: PathBuf| {
+        if !canonicalized.contains(&candidate) {
+            canonicalized.push(candidate);
+        }
+    };
+
     for scope in scopes {
         if mode != SandboxMode::Test && (scope == Path::new("/") || scope == Path::new("")) {
             return Err(anyhow!(
@@ -20,6 +32,13 @@ pub(super) fn canonicalize_scopes(
                 context
             ));
         }
+
+        let absolute_alias = if scope.is_absolute() {
+            Some(scope.clone())
+        } else {
+            cwd.as_ref()
+                .map(|c| normalize_path_lexically(&c.join(&scope)))
+        };
 
         let canonical = match std::fs::canonicalize(&scope) {
             Ok(c) => c,
@@ -44,7 +63,14 @@ pub(super) fn canonicalize_scopes(
             ));
         }
 
-        canonicalized.push(canonical);
+        push_unique(canonical.clone());
+
+        if let Some(alias) = absolute_alias {
+            let alias = normalize_path_lexically(&alias);
+            if alias != canonical {
+                push_unique(alias);
+            }
+        }
     }
     Ok(canonicalized)
 }
