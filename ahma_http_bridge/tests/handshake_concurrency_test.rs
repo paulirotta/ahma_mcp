@@ -413,6 +413,19 @@ async fn test_slow_client_handshake() {
 
         let _ =
             send_mcp_request(&sse_client, &sse_base_url, &response, Some(&sse_session_id)).await;
+
+        // Wait for notifications/sandbox/configured so the sandbox is truly Active
+        // before the task returns.  Without this, the retry tool call races with
+        // the subprocess confirming sandbox activation and incorrectly gets 409.
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+        while let Ok(Some(chunk)) = tokio::time::timeout_at(deadline, stream.next()).await {
+            if let Ok(bytes) = chunk {
+                let text = String::from_utf8_lossy(&bytes);
+                if text.contains("notifications/sandbox/configured") {
+                    break;
+                }
+            }
+        }
     });
 
     // Try to call tool during the delay - should fail with strict gating
