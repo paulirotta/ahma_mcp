@@ -4,6 +4,7 @@
 
 use ahma_mcp::adapter::Adapter;
 use ahma_mcp::config::load_tool_configs;
+use clap::Parser;
 use ahma_mcp::mcp_service::AhmaMcpService;
 use ahma_mcp::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_mcp::shell_pool::{ShellPoolConfig, ShellPoolManager};

@@ -35,7 +35,7 @@ impl AhmaMcpService {
     }
 
     /// Starts a background task to watch for changes in the tools directory.
-    pub fn start_config_watcher(&self, tools_dir: PathBuf) {
+    pub fn start_config_watcher(&self, tools_dir: PathBuf, cli: crate::shell::cli::Cli) {
         let service = self.clone();
         // Use a weak pointer to the operation monitor to detect when the service is dropped
         let weak_monitor = Arc::downgrade(&self.operation_monitor);
@@ -90,7 +90,7 @@ impl AhmaMcpService {
                         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
                         tracing::info!("Detected change in tools directory, reloading configs...");
-                        match load_tool_configs(&tools_dir).await {
+                        match load_tool_configs(&cli, &tools_dir).await {
                             Ok(new_configs) => {
                                 service.update_tools(new_configs).await;
                                 tracing::info!("Successfully reloaded tool configurations");

@@ -26,7 +26,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 /// # Errors
 /// Returns an error if the tool execution fails.
 pub async fn run_cli_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result<()> {
-    let tool_name = cli.tool_name.unwrap();
+    let tool_name = cli.tool_name.clone().unwrap();
 
     // Initialize adapter and monitor for CLI mode
     let monitor_config = MonitorConfig::with_timeout(std::time::Duration::from_secs(cli.timeout));
@@ -47,7 +47,7 @@ pub async fn run_cli_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result<()
     // Load tool configurations (now async, no spawn_blocking needed)
     // If tools_dir is None, we'll only have built-in internal tools
     let raw_configs = if let Some(ref tools_dir) = cli.tools_dir {
-        load_tool_configs(tools_dir)
+        load_tool_configs(&cli, tools_dir)
             .await
             .context("Failed to load tool configurations")?
     } else {

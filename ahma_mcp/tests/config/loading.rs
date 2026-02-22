@@ -8,7 +8,7 @@ mod config_tests {
         init_test_logging();
         println!("Testing configuration loading...");
         let tools_dir = Path::new(".ahma");
-        match load_tool_configs(tools_dir) {
+        match load_tool_configs(&ahma_mcp::shell::cli::Cli::try_parse_from(&["ahma_mcp"]).unwrap(), tools_dir) {
             Ok(configs) => {
                 println!("Successfully loaded {} configurations:", configs.len());
                 for (name, config) in configs.iter() {

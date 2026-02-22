@@ -1,5 +1,6 @@
 use ahma_mcp::adapter::Adapter;
 use ahma_mcp::config::load_tool_configs;
+use clap::Parser;
 use ahma_mcp::mcp_service::{AhmaMcpService, GuidanceConfig};
 use ahma_mcp::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_mcp::shell_pool::{ShellPoolConfig, ShellPoolManager};
@@ -24,7 +25,7 @@ async fn create_test_service() -> AhmaMcpService {
 
     // Load tool configs from .ahma directory
     let tool_configs = if Path::new(".ahma").exists() {
-        load_tool_configs(Path::new(".ahma"))
+        load_tool_configs(&ahma_mcp::shell::cli::Cli::try_parse_from(&["ahma_mcp"]).unwrap(), Path::new(".ahma"))
             .await
             .unwrap_or_default()
     } else {

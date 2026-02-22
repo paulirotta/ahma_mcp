@@ -99,9 +99,9 @@ fn test_resolve_cli_subcommand_errors() {
 #[test]
 fn test_cli_argument_parsing() {
     // We can simulate parsing by creating a Cli struct.
-    // Testing `Cli::parse_from` via clap
+    // Testing `Cli::try_parse_from` via clap
     let args = vec!["ahma_mcp", "--mode", "http", "--http-port", "8080"];
-    let cli = Cli::parse_from(args);
+    let cli = Cli::try_parse_from(args).unwrap();
 
     assert_eq!(cli.mode, "http");
     assert_eq!(cli.http_port, 8080);

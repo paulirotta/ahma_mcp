@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use ahma_mcp::adapter::Adapter;
 use ahma_mcp::config::load_tool_configs;
+use clap::Parser;
 use ahma_mcp::mcp_service::{AhmaMcpService, GuidanceConfig};
 use ahma_mcp::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_mcp::sandbox::Sandbox;
@@ -27,7 +28,7 @@ async fn create_test_service() -> (AhmaMcpService, TempDir) {
 
     // Load tool configs from .ahma directory or use empty map
     let tool_configs = if Path::new(".ahma").exists() {
-        load_tool_configs(Path::new(".ahma"))
+        load_tool_configs(&ahma_mcp::shell::cli::Cli::try_parse_from(&["ahma_mcp"]).unwrap(), Path::new(".ahma"))
             .await
             .unwrap_or_default()
     } else {
@@ -114,7 +115,7 @@ async fn test_service_creation_with_existing_tool_configs() {
 
     // Load actual tool configs if they exist
     let tool_configs = if Path::new(".ahma").exists() {
-        load_tool_configs(Path::new(".ahma"))
+        load_tool_configs(&ahma_mcp::shell::cli::Cli::try_parse_from(&["ahma_mcp"]).unwrap(), Path::new(".ahma"))
             .await
             .unwrap_or_default()
     } else {

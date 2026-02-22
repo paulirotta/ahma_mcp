@@ -57,8 +57,8 @@ fn validate_tool_config(config_file: &str) -> ValidatedTool {
 }
 
 #[test]
-fn test_cargo_tool_config_valid() {
-    let tool = validate_tool_config("cargo.json");
+fn test_rust_tool_config_valid() {
+    let tool = validate_tool_config("rust.json");
 
     assert_eq!(tool.name, "cargo", "Name should be 'cargo'");
     assert_eq!(tool.command, "cargo", "Command should be 'cargo'");
@@ -119,7 +119,7 @@ fn test_python_tool_config_valid() {
 #[test]
 fn test_all_example_configs_have_subcommands() {
     let config_files = [
-        "cargo.json",
+        "rust.json",
         "file_tools.json",
         "gh.json",
         "git.json",

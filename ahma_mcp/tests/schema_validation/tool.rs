@@ -4,13 +4,18 @@ use ahma_mcp::test_utils as common;
 use ahma_mcp::config::load_tool_configs;
 use ahma_mcp::utils::logging::init_test_logging;
 use anyhow::Result;
+use clap::Parser;
 use common::fs::get_workspace_path;
 
 #[tokio::test]
 async fn test_all_tool_json_files_load_correctly() -> Result<()> {
     init_test_logging();
     let tools_dir = get_workspace_path(".ahma");
-    let tool_configs = load_tool_configs(&tools_dir).await;
+    let tool_configs = load_tool_configs(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(&["ahma_mcp"]).unwrap(),
+        &tools_dir,
+    )
+    .await;
 
     assert!(
         tool_configs.is_ok(),

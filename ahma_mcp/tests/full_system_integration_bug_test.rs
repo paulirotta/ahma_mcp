@@ -7,6 +7,7 @@ mod tests {
     use ahma_mcp::operation_monitor::{MonitorConfig, OperationMonitor};
     use ahma_mcp::sandbox::Sandbox;
     use ahma_mcp::shell_pool::{ShellPoolConfig, ShellPoolManager};
+    use clap::Parser;
 
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
@@ -79,9 +80,12 @@ mod tests {
         let adapter =
             Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager, sandbox).unwrap());
         let configs = Arc::new(
-            load_tool_configs(&std::path::PathBuf::from(".ahma"))
-                .await
-                .unwrap(),
+            load_tool_configs(
+                &ahma_mcp::shell::cli::Cli::try_parse_from(&["ahma_mcp"]).unwrap(),
+                &std::path::PathBuf::from(".ahma"),
+            )
+            .await
+            .unwrap(),
         );
         let _service = AhmaMcpService::new(
             adapter.clone(),

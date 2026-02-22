@@ -301,14 +301,18 @@ pub async fn load_mcp_config(config_path: &Path) -> anyhow::Result<McpConfig> {
 ///
 /// This function scans the specified directory for JSON files and attempts to
 /// deserialize each one into a `ToolConfig`. If the directory doesn't exist or
-/// is empty, an empty HashMap is returned.
+/// is empty, an empty HashMap is returned. It also loads built-in tools based on CLI flags.
 ///
 /// # Arguments
+/// * `cli` - Current CLI arguments to determine which tools are built-in
 /// * `tools_dir` - Path to the directory containing tool configuration files
 ///
 /// # Returns
 /// * `Result<HashMap<String, ToolConfig>>` - Map of tool name to configuration or error
-pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<String, ToolConfig>> {
+pub async fn load_tool_configs(
+    cli: &crate::shell::cli::Cli,
+    tools_dir: &Path,
+) -> anyhow::Result<HashMap<String, ToolConfig>> {
     use std::time::Duration;
     use tokio::fs;
     use tokio::time;
@@ -412,6 +416,59 @@ pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<Strin
         }
     }
 
+    // Load built-in tools based on CLI flags
+    let mut builtin_tools: Vec<(&str, &str)> = Vec::new();
+
+    if cli.rust {
+        builtin_tools.push(("rust", include_str!("../../.ahma/rust.json")));
+    }
+    if cli.file {
+        builtin_tools.push(("file_tools", include_str!("../../.ahma/file_tools.json")));
+    }
+    if cli.github {
+        builtin_tools.push(("gh", include_str!("../../.ahma/gh.json")));
+    }
+    if cli.git {
+        builtin_tools.push(("git", include_str!("../../.ahma/git.json")));
+    }
+    if cli.gradle {
+        builtin_tools.push(("gradlew", include_str!("../../.ahma/gradlew.json")));
+    }
+    if cli.python {
+        builtin_tools.push(("python", include_str!("../../.ahma/python.json")));
+    }
+    if cli.shell {
+        builtin_tools.push((
+            "sandboxed_shell",
+            include_str!("../../.ahma/sandboxed_shell.json"),
+        ));
+    }
+    if cli.simplify {
+        builtin_tools.push(("simplify", include_str!("../../.ahma/simplify.json")));
+    }
+
+    for (bundle_name, json_str) in builtin_tools {
+        match serde_json::from_str::<ToolConfig>(json_str) {
+            Ok(config) => {
+                if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
+                    anyhow::bail!(
+                        "Built-in tool '{}' conflicts with a hardcoded system tool.",
+                        config.name
+                    );
+                }
+                // Do not override if already loaded from tools_dir / .ahma
+                configs.entry(config.name.clone()).or_insert(config);
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Failed to parse built-in tool configuration for {}: {}",
+                    bundle_name,
+                    e
+                );
+            }
+        }
+    }
+
     Ok(configs)
 }
 
@@ -422,11 +479,15 @@ pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<Strin
 /// `load_tool_configs` function instead.
 ///
 /// # Arguments
+/// * `cli` - Current CLI arguments to determine which tools are built-in
 /// * `tools_dir` - Path to the directory containing tool configuration files
 ///
 /// # Returns
 /// * `Result<HashMap<String, ToolConfig>>` - Map of tool name to configuration or error
-pub fn load_tool_configs_sync(tools_dir: &Path) -> anyhow::Result<HashMap<String, ToolConfig>> {
+pub fn load_tool_configs_sync(
+    cli: &crate::shell::cli::Cli,
+    tools_dir: &Path,
+) -> anyhow::Result<HashMap<String, ToolConfig>> {
     use std::fs;
     use std::{thread, time::Duration};
 
@@ -503,6 +564,59 @@ pub fn load_tool_configs_sync(tools_dir: &Path) -> anyhow::Result<HashMap<String
                 // Include all tools (enabled or disabled)
                 // Disabled tools will be rejected at execution time with a helpful message
                 configs.insert(config.name.clone(), config);
+            }
+        }
+    }
+
+    // Load built-in tools based on CLI flags
+    let mut builtin_tools: Vec<(&str, &str)> = Vec::new();
+
+    if cli.rust {
+        builtin_tools.push(("rust", include_str!("../../.ahma/rust.json")));
+    }
+    if cli.file {
+        builtin_tools.push(("file_tools", include_str!("../../.ahma/file_tools.json")));
+    }
+    if cli.github {
+        builtin_tools.push(("gh", include_str!("../../.ahma/gh.json")));
+    }
+    if cli.git {
+        builtin_tools.push(("git", include_str!("../../.ahma/git.json")));
+    }
+    if cli.gradle {
+        builtin_tools.push(("gradlew", include_str!("../../.ahma/gradlew.json")));
+    }
+    if cli.python {
+        builtin_tools.push(("python", include_str!("../../.ahma/python.json")));
+    }
+    if cli.shell {
+        builtin_tools.push((
+            "sandboxed_shell",
+            include_str!("../../.ahma/sandboxed_shell.json"),
+        ));
+    }
+    if cli.simplify {
+        builtin_tools.push(("simplify", include_str!("../../.ahma/simplify.json")));
+    }
+
+    for (bundle_name, json_str) in builtin_tools {
+        match serde_json::from_str::<ToolConfig>(json_str) {
+            Ok(config) => {
+                if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
+                    anyhow::bail!(
+                        "Built-in tool '{}' conflicts with a hardcoded system tool.",
+                        config.name
+                    );
+                }
+                // Do not override if already loaded from tools_dir / .ahma
+                configs.entry(config.name.clone()).or_insert(config);
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Failed to parse built-in tool configuration for {}: {}",
+                    bundle_name,
+                    e
+                );
             }
         }
     }

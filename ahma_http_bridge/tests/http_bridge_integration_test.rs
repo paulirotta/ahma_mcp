@@ -16,7 +16,6 @@ use futures::StreamExt;
 use reqwest::Client;
 use serde_json::{Value, json};
 use serial_test::serial;
-use std::net::TcpListener;
 use std::os::unix::fs as unix_fs;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -41,15 +40,6 @@ impl Drop for ServerGuard {
             let _ = child.wait();
         }
     }
-}
-
-/// Find an available port for testing (uses dynamic port allocation)
-fn find_available_port() -> u16 {
-    TcpListener::bind("127.0.0.1:0")
-        .expect("Failed to bind to any port")
-        .local_addr()
-        .expect("Failed to get local address")
-        .port()
 }
 
 /// Build the ahma_mcp binary if needed and return the path
@@ -88,41 +78,85 @@ fn get_ahma_mcp_binary() -> PathBuf {
 
 /// Start the HTTP bridge server and return the process and URL
 async fn start_http_bridge(
-    port: u16,
     tools_dir: &std::path::Path,
     sandbox_scope: &std::path::Path,
-) -> std::process::Child {
+) -> (std::process::Child, u16) {
     let binary = get_ahma_mcp_binary();
 
-    let child = Command::new(&binary)
-        .args([
-            "--mode",
-            "http",
-            "--http-port",
-            &port.to_string(),
-            "--sync",
-            "--tools-dir",
-            &tools_dir.to_string_lossy(),
-            "--sandbox-scope",
-            &sandbox_scope.to_string_lossy(),
-            "--log-to-stderr",
-        ])
-        // IMPORTANT:
-        // These integration tests are explicitly verifying real sandbox-scope behavior.
-        // ahma_mcp auto-enables a permissive "test mode" (sandbox bypass + best-effort scope "/")
-        // when certain env vars are present (e.g. NEXTEST, CARGO_TARGET_DIR, RUST_TEST_THREADS).
-        // That makes tests pass even when real-life behavior fails.
-        //
-        // So we *clear* those env vars for the spawned server process to ensure it behaves
-        // like a real user-launched server.
-        .env_remove("NEXTEST")
+    let mut cmd = Command::new(&binary);
+    cmd.args([
+        "--mode",
+        "http",
+        "--http-port",
+        "0", // Use dynamic port
+        "--sync",
+        "--tools-dir",
+        &tools_dir.to_string_lossy(),
+        "--sandbox-scope",
+        &sandbox_scope.to_string_lossy(),
+        "--log-to-stderr",
+    ]);
+
+    // IMPORTANT:
+    // These integration tests are explicitly verifying real sandbox-scope behavior.
+    // ahma_mcp auto-enables a permissive "test mode" (sandbox bypass + best-effort scope "/")
+    // when certain env vars are present (e.g. NEXTEST, CARGO_TARGET_DIR, RUST_TEST_THREADS).
+    // That makes tests pass even when real-life behavior fails.
+    //
+    // So we *clear* those env vars for the spawned server process to ensure it behaves
+    // like a real user-launched server.
+    cmd.env_remove("NEXTEST")
         .env_remove("NEXTEST_EXECUTION_MODE")
         .env_remove("CARGO_TARGET_DIR")
-        .env_remove("RUST_TEST_THREADS")
+        .env_remove("RUST_TEST_THREADS");
+
+    let mut child = cmd
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .expect("Failed to start HTTP bridge");
+
+    // Capture stderr to find the bound port
+    let stderr = child.stderr.take().expect("Failed to capture stderr");
+    let (tx, rx) = std::sync::mpsc::channel();
+
+    std::thread::spawn(move || {
+        use std::io::{BufRead, BufReader};
+        let reader = BufReader::new(stderr);
+        for line in reader.lines().map_while(Result::ok) {
+            eprintln!("{}", line); // Pass through to test output
+            if line.contains("AHMA_BOUND_PORT=") {
+                let _ = tx.send(line);
+            }
+        }
+    });
+
+    // Wait for port
+    let start = std::time::Instant::now();
+    let timeout = Duration::from_secs(10);
+    let mut port = 0;
+
+    while start.elapsed() < timeout {
+        if let Ok(line) = rx.recv_timeout(Duration::from_millis(100))
+            && let Some(idx) = line.find("AHMA_BOUND_PORT=")
+        {
+            let port_str = &line[idx + "AHMA_BOUND_PORT=".len()..];
+            if let Ok(p) = port_str.trim().parse::<u16>() {
+                port = p;
+                break;
+            }
+        }
+
+        // check if child died
+        if let Ok(Some(status)) = child.try_wait() {
+            panic!("Child process exited unexpectedly with status: {}", status);
+        }
+    }
+
+    if port == 0 {
+        let _ = child.kill();
+        panic!("Timed out waiting for server to bind port");
+    }
 
     // Wait for server to be ready
     let client = Client::new();
@@ -133,7 +167,7 @@ async fn start_http_bridge(
         if let Ok(resp) = client.get(&health_url).send().await
             && resp.status().is_success()
         {
-            return child;
+            return (child, port);
         }
     }
 
@@ -142,20 +176,7 @@ async fn start_http_bridge(
     let _ = child.kill();
     let _ = child.wait();
 
-    // Capture stderr for debugging startup failures
-    let stderr_output = if let Some(stderr) = child.stderr.take() {
-        use std::io::Read;
-        let mut buf = String::new();
-        let _ = std::io::BufReader::new(stderr).read_to_string(&mut buf);
-        buf
-    } else {
-        String::new()
-    };
-
-    panic!(
-        "HTTP bridge failed to start within timeout. Stderr: {}",
-        stderr_output
-    );
+    panic!("HTTP bridge failed to start within timeout");
 }
 
 /// Send a JSON-RPC request to the MCP endpoint
@@ -659,8 +680,7 @@ async fn test_tool_call_with_different_working_directory() {
     // Client workspace scope (what must apply to THIS session after roots/list)
     let different_project_path = client_scope_dir.path().to_path_buf();
 
-    let port = find_available_port();
-    let mut server = start_http_bridge(port, &tools_dir, &sandbox_scope).await;
+    let (mut server, port) = start_http_bridge(&tools_dir, &sandbox_scope).await;
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -812,8 +832,8 @@ async fn test_basic_tool_call_within_sandbox() {
     .expect("Failed to write tool config");
 
     let sandbox_scope = temp_dir.path().to_path_buf();
-    let port = find_available_port();
-    let _server = ServerGuard::new(start_http_bridge(port, &tools_dir, &sandbox_scope).await);
+    let (child, port) = start_http_bridge(&tools_dir, &sandbox_scope).await;
+    let _server = ServerGuard::new(child);
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -938,8 +958,7 @@ async fn test_roots_uri_parsing_percent_encoded_path() {
         .await
         .expect("Failed to create client root");
 
-    let port = find_available_port();
-    let mut server = start_http_bridge(port, &tools_dir, server_scope_dir.path()).await;
+    let (mut server, port) = start_http_bridge(&tools_dir, server_scope_dir.path()).await;
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -1156,8 +1175,7 @@ async fn test_rejects_working_directory_path_traversal_outside_root() {
     )
     .expect("Failed to write tool config");
 
-    let port = find_available_port();
-    let mut server = start_http_bridge(port, &tools_dir, server_scope_dir.path()).await;
+    let (mut server, port) = start_http_bridge(&tools_dir, server_scope_dir.path()).await;
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -1265,8 +1283,7 @@ async fn test_symlink_escape_attempt_is_blocked() {
     )
     .expect("Failed to copy file_tools tool config");
 
-    let port = find_available_port();
-    let mut server = start_http_bridge(port, &tools_dir, server_scope_dir.path()).await;
+    let (mut server, port) = start_http_bridge(&tools_dir, server_scope_dir.path()).await;
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -1372,8 +1389,7 @@ async fn test_tool_call_without_initialize_returns_proper_error() {
     .expect("Failed to write tool config");
 
     let sandbox_scope = temp_dir.path().to_path_buf();
-    let port = find_available_port();
-    let mut server = start_http_bridge(port, &tools_dir, &sandbox_scope).await;
+    let (mut server, port) = start_http_bridge(&tools_dir, &sandbox_scope).await;
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 

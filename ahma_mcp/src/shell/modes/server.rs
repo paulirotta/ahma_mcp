@@ -110,7 +110,7 @@ pub async fn run_server_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result
     // Load tool configurations (now async, no spawn_blocking needed)
     // If tools_dir is None, we'll only have built-in internal tools
     let raw_configs = if let Some(ref tools_dir) = cli.tools_dir {
-        load_tool_configs(tools_dir)
+        load_tool_configs(&cli, tools_dir)
             .await
             .context("Failed to load tool configurations")?
     } else {
@@ -208,7 +208,7 @@ pub async fn run_server_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result
 
     // Start the config watcher to support hot-reloading of tools (if tools_dir exists)
     if let Some(tools_dir) = cli.tools_dir.clone() {
-        service_handler.start_config_watcher(tools_dir);
+        service_handler.start_config_watcher(tools_dir, cli.clone());
     }
 
     let sandbox_mode_label = if sandbox.is_test_mode() {

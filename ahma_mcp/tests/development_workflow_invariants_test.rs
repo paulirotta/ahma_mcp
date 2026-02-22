@@ -125,7 +125,7 @@ fn test_json_tool_configuration_count_invariant() {
     println!("📁 Found JSON tool configurations: {:?}", json_files);
 
     // CRITICAL: These are CLI tool adapters only. MCP tools (status, await) are hardwired.
-    // Expected core tools (minimal set): sandboxed_shell.json, cargo.json, python.json, git.json, gh.json, gradlew.json
+    // Expected core tools (minimal set): sandboxed_shell.json, rust.json, python.json, git.json, gh.json, gradlew.json
     // total should be at least 6.
     assert!(
         json_files.len() >= 6,
@@ -139,7 +139,7 @@ fn test_json_tool_configuration_count_invariant() {
     );
 
     // Verify core tools exist
-    let has_cargo = json_files.iter().any(|f| f == "cargo.json");
+    let has_rust = json_files.iter().any(|f| f == "rust.json");
     let legacy_cargo_files: Vec<_> = json_files
         .iter()
         .filter(|f| f.starts_with("cargo_") && f.ends_with(".json"))
@@ -147,7 +147,7 @@ fn test_json_tool_configuration_count_invariant() {
         .collect();
     assert!(
         legacy_cargo_files.is_empty(),
-        "Legacy cargo_*.json files should be merged into cargo.json: {:?}",
+        "Legacy cargo_*.json files should be merged into rust.json: {:?}",
         legacy_cargo_files
     );
     // ls tool is optional; do not assert its presence (legacy requirement removed)
@@ -155,8 +155,8 @@ fn test_json_tool_configuration_count_invariant() {
     let has_python = json_files.iter().any(|f| f.contains("python"));
 
     assert!(
-        has_cargo,
-        "cargo.json must exist (either in .ahma or examples/configs)"
+        has_rust,
+        "rust.json must exist (either in .ahma or examples/configs)"
     );
     // (Optional) assert for ls removed intentionally to allow repositories without ls.json
     assert!(

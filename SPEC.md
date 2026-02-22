@@ -21,6 +21,7 @@
 | Built-in `await` Tool | ✅ tests-pass | Blocking wait for operation completion |
 | Built-in `cancel` Tool | ✅ tests-pass | Cancel running operations |
 | Built-in `sandboxed_shell` | ✅ tests-pass | Execute arbitrary shell commands within sandbox |
+| Batteries-Included Tools | ✅ tests-pass | Built-in MTDF setups activated via CLI flags (e.g. `--rust`, `--python`) |
 | MTDF Schema Validation | ✅ tests-pass | JSON schema validation at startup |
 | Sequence Tools | ✅ tests-pass | Chain multiple commands into workflows |
 | Tool Hot-Reload | ✅ tests-pass | Watch `tools/` directory, reload on changes |
@@ -321,6 +322,11 @@ Direct MCP server over stdio for IDE integration:
 
 ```bash
 ahma_mcp --mode stdio --tools-dir .ahma/tools
+```
+
+Alternatively, standard tool configurations are bundled directly inside the binary. Enable them easily using CLI flags:
+```bash
+ahma_mcp --mode stdio --rust --python --git --github --file --shell --simplify --gradle
 ```
 
 ### 6.2 HTTP Bridge Mode

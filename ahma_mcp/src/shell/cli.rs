@@ -10,7 +10,7 @@ use clap::Parser;
 use std::{io::IsTerminal, path::PathBuf, sync::Arc};
 
 /// Ahma MCP Server: A generic, config-driven adapter for CLI tools.
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(
     author,
     version,
@@ -58,6 +58,38 @@ pub struct Cli {
     /// Path to the tools directory containing JSON configurations
     #[arg(long)]
     pub tools_dir: Option<PathBuf>,
+
+    /// Bundle and enable the rust toolset (rust.json)
+    #[arg(long)]
+    pub rust: bool,
+
+    /// Bundle and enable the file tools (file_tools.json)
+    #[arg(long)]
+    pub file: bool,
+
+    /// Bundle and enable the github toolset (gh.json)
+    #[arg(long)]
+    pub github: bool,
+
+    /// Bundle and enable the git toolset (git.json)
+    #[arg(long)]
+    pub git: bool,
+
+    /// Bundle and enable the gradle toolset (gradlew.json)
+    #[arg(long)]
+    pub gradle: bool,
+
+    /// Bundle and enable the python toolset (python.json)
+    #[arg(long)]
+    pub python: bool,
+
+    /// Bundle and enable the shell tool (sandboxed_shell.json)
+    #[arg(long)]
+    pub shell: bool,
+
+    /// Bundle and enable the simplify AI tool (simplify.json)
+    #[arg(long)]
+    pub simplify: bool,
 
     /// Default timeout for tool execution in seconds
     #[arg(long, default_value_t = 360)]

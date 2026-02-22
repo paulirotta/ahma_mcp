@@ -1,5 +1,6 @@
 /// Test to verify that the guard rail system correctly detects hardcoded tool conflicts
 use ahma_mcp::config::load_tool_configs_sync;
+use clap::Parser;
 use ahma_mcp::utils::logging::init_test_logging;
 use tempfile::TempDir;
 
@@ -63,7 +64,7 @@ fn test_guard_rail_detects_hardcoded_tool_conflicts() {
         .expect("Failed to write valid_tool.json");
 
     // Try to load tool configurations - this should fail due to guard rail
-    let result = load_tool_configs_sync(&tools_dir);
+    let result = load_tool_configs_sync(&ahma_mcp::shell::cli::Cli::try_parse_from(&["ahma_mcp"]).unwrap(), &tools_dir);
 
     match result {
         Err(e) => {
@@ -126,7 +127,7 @@ fn test_guard_rail_allows_valid_configurations() {
     std::fs::write(tools_dir.join("git.json"), git_config).expect("Failed to write git.json");
 
     // Try to load tool configurations - this should succeed
-    let result = load_tool_configs_sync(&tools_dir);
+    let result = load_tool_configs_sync(&ahma_mcp::shell::cli::Cli::try_parse_from(&["ahma_mcp"]).unwrap(), &tools_dir);
 
     match result {
         Ok(configs) => {
