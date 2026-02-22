@@ -72,7 +72,7 @@ fn test_synchronous_inheritance_logic() {
 fn test_gh_tool_optimized_format() -> Result<()> {
     // Test that our optimized gh.json loads correctly with inheritance pattern
     let workspace_root = get_workspace_path("");
-    let gh_path = workspace_root.join("ahma_mcp/examples/configs/gh.json");
+    let gh_path = workspace_root.join(".ahma/gh.json");
     let gh_json = std::fs::read_to_string(gh_path)?;
     let config: ToolConfig = serde_json::from_str(&gh_json)?;
 

@@ -144,7 +144,7 @@ mod android_tests {
     #[tokio::test]
     async fn test_gradlew_tool_definition_loading() -> Result<()> {
         let workspace_dir = get_workspace_dir();
-        let tools_dir = workspace_dir.join("ahma_mcp/examples/configs");
+        let tools_dir = workspace_dir.join(".ahma");
         let gradlew_tool_path = tools_dir.join("gradlew.json");
 
         // Verify tool definition file exists
@@ -188,7 +188,7 @@ mod android_tests {
     #[tokio::test]
     async fn test_gradlew_essential_subcommands() -> Result<()> {
         let workspace_dir = get_workspace_dir();
-        let gradlew_tool_path = workspace_dir.join("ahma_mcp/examples/configs/gradlew.json");
+        let gradlew_tool_path = workspace_dir.join(".ahma/gradlew.json");
         let tool_content = tokio::fs::read_to_string(&gradlew_tool_path).await?;
         let tool_def: Value = serde_json::from_str(&tool_content)?;
 
@@ -234,7 +234,7 @@ mod android_tests {
     #[tokio::test]
     async fn test_gradlew_async_sync_classification() -> Result<()> {
         let workspace_dir = get_workspace_dir();
-        let gradlew_tool_path = workspace_dir.join("ahma_mcp/examples/configs/gradlew.json");
+        let gradlew_tool_path = workspace_dir.join(".ahma/gradlew.json");
         let tool_content = tokio::fs::read_to_string(&gradlew_tool_path).await?;
         let tool_def: Value = serde_json::from_str(&tool_content)?;
 
@@ -310,7 +310,7 @@ mod android_tests {
     #[tokio::test]
     async fn test_gradlew_tool_schema_validation() -> Result<()> {
         let workspace_dir = get_workspace_dir();
-        let gradlew_tool_path = workspace_dir.join("ahma_mcp/examples/configs/gradlew.json");
+        let gradlew_tool_path = workspace_dir.join(".ahma/gradlew.json");
         let tool_content = tokio::fs::read_to_string(&gradlew_tool_path).await?;
         let tool_def: Value = serde_json::from_str(&tool_content)?;
 
@@ -383,7 +383,7 @@ mod android_tests {
     #[tokio::test]
     async fn test_gradlew_working_directory_support() -> Result<()> {
         let workspace_dir = get_workspace_dir();
-        let gradlew_tool_path = workspace_dir.join("ahma_mcp/examples/configs/gradlew.json");
+        let gradlew_tool_path = workspace_dir.join(".ahma/gradlew.json");
         let tool_content = tokio::fs::read_to_string(&gradlew_tool_path).await?;
         let tool_def: Value = serde_json::from_str(&tool_content)?;
 

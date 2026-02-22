@@ -12,9 +12,12 @@
 use ahma_mcp::schema_validation::MtdfValidator;
 use std::path::PathBuf;
 
-/// Get the path to the examples/configs directory
+/// Get the path to the .ahma directory
 fn configs_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/configs")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join(".ahma")
 }
 
 /// Validate a tool configuration and return a structured result for assertions

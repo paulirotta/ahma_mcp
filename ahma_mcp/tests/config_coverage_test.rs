@@ -757,7 +757,7 @@ async fn test_async_load_tool_configs_empty_directory() {
     let temp_dir = tempdir().unwrap();
     let configs = load_tool_configs(temp_dir.path()).await.unwrap();
     // Note: With multi-directory support, this may load tools from examples directory.
-    // When the empty temp_dir is passed, the loader also checks ahma_mcp/examples/configs,
+    // When the empty temp_dir is passed, the loader also checks .ahma,
     // so configs may not be empty. This is expected behavior for development/testing.
     // The important thing is that it doesn't fail.
     let _num_configs = configs.len();

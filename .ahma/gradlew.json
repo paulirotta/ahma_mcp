@@ -772,5 +772,12 @@
             ],
             "synchronous": false
         }
-    ]
+    ],
+    "availability_check": {
+        "command": "java",
+        "args": [
+            "-version"
+        ]
+    },
+    "install_instructions": "Java is required for Android/Gradle tools. Please install Java."
 }

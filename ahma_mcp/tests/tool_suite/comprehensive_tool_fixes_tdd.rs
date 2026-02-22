@@ -16,7 +16,7 @@ mod comprehensive_tool_fixes_tdd {
 
         // Let's verify what ahma_mcp clippy support looks like within cargo.json
         let workspace_root = get_workspace_path("");
-        let cargo_config_path = workspace_root.join("ahma_mcp/examples/configs/cargo.json");
+        let cargo_config_path = workspace_root.join(".ahma/cargo.json");
         let cargo_config = std::fs::read_to_string(&cargo_config_path)
             .expect("Failed to read cargo.json from examples/configs");
 
@@ -98,7 +98,7 @@ mod comprehensive_tool_fixes_tdd {
         // TDD: nextest needs "run" subcommand to work properly
 
         let workspace_root = get_workspace_path("");
-        let cargo_config_path = workspace_root.join("ahma_mcp/examples/configs/cargo.json");
+        let cargo_config_path = workspace_root.join(".ahma/cargo.json");
         let cargo_config = std::fs::read_to_string(&cargo_config_path)
             .expect("Failed to read cargo.json from examples/configs");
 
@@ -134,7 +134,7 @@ mod comprehensive_tool_fixes_tdd {
     #[test]
     fn test_nextest_run_has_availability_and_install_guidance() {
         let workspace_root = get_workspace_path("");
-        let cargo_config_path = workspace_root.join("ahma_mcp/examples/configs/cargo.json");
+        let cargo_config_path = workspace_root.join(".ahma/cargo.json");
         let cargo_config = std::fs::read_to_string(&cargo_config_path)
             .expect("Failed to read cargo.json from examples/configs");
 

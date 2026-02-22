@@ -194,12 +194,13 @@ impl McpTestClient {
 
         loop {
             if let Some(timeout_at) = post_roots_deadline
-                && Instant::now() > timeout_at {
-                    return Err(
+                && Instant::now() > timeout_at
+            {
+                return Err(
                         "Timeout waiting for notifications/sandbox/configured after roots/list response"
                             .to_string(),
                     );
-                }
+            }
 
             if Instant::now() > deadline {
                 return Err(

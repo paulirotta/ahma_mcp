@@ -36,7 +36,7 @@ pub fn is_tool_disabled(tool_name: &str) -> bool {
             .join(".ahma")
             .join(format!("{}.json", tool_name)),
         workspace_dir
-            .join("ahma_mcp/examples/configs")
+            .join(".ahma")
             .join(format!("{}.json", tool_name)),
     ];
 

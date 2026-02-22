@@ -97,7 +97,7 @@ fn test_json_tool_configuration_count_invariant() {
 
     // Count actual JSON files in tools directory and examples config directory
     let ahma_dir = common::fs::get_workspace_path(".ahma");
-    let examples_dir = common::fs::get_workspace_path("ahma_mcp/examples/configs");
+    let examples_dir = common::fs::get_workspace_path(".ahma");
 
     let mut json_files = Vec::new();
 

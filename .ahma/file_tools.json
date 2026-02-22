@@ -685,5 +685,12 @@
             "synchronous": true
         }
     ],
-    "synchronous": true
+    "synchronous": true,
+    "availability_check": {
+        "command": "sh",
+        "args": [
+            "-c",
+            "exit 0"
+        ]
+    }
 }

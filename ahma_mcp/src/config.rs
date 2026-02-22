@@ -317,12 +317,12 @@ pub async fn load_tool_configs(tools_dir: &Path) -> anyhow::Result<HashMap<Strin
     const RESERVED_TOOL_NAMES: &[&str] = &["await", "status"];
 
     // Identify all directories to load from. We always load from tools_dir,
-    // and if it exists, also from ahma_mcp/examples/configs relative to workspace root.
+    // and if it exists, also from .ahma relative to workspace root.
     let mut all_dirs = vec![tools_dir.to_path_buf()];
 
     if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
         let workspace_root = Path::new(&manifest_dir).parent().unwrap();
-        let examples_dir = workspace_root.join("ahma_mcp/examples/configs");
+        let examples_dir = workspace_root.join(".ahma");
         if examples_dir.exists() && examples_dir != tools_dir {
             all_dirs.insert(0, examples_dir); // Add to beginning so tools_dir overrides examples
         }
@@ -434,12 +434,12 @@ pub fn load_tool_configs_sync(tools_dir: &Path) -> anyhow::Result<HashMap<String
     const RESERVED_TOOL_NAMES: &[&str] = &["await", "status"];
 
     // Identify all directories to load from. We always load from tools_dir,
-    // and if it exists, also from ahma_mcp/examples/configs relative to workspace root.
+    // and if it exists, also from .ahma relative to workspace root.
     let mut all_dirs = vec![tools_dir.to_path_buf()];
 
     if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
         let workspace_root = Path::new(&manifest_dir).parent().unwrap();
-        let examples_dir = workspace_root.join("ahma_mcp/examples/configs");
+        let examples_dir = workspace_root.join(".ahma");
         if examples_dir.exists() && examples_dir != tools_dir {
             all_dirs.insert(0, examples_dir); // Add to beginning so tools_dir overrides examples
         }

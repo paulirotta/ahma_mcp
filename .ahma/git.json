@@ -152,5 +152,11 @@
             ],
             "synchronous": false
         }
-    ]
+    ],
+    "availability_check": {
+        "command": "git",
+        "args": [
+            "--version"
+        ]
+    }
 }

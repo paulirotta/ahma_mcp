@@ -62,9 +62,10 @@ fn add_landlock_system_rules(
     for path in &system_paths {
         let path_obj = std::path::Path::new(path);
         if path_obj.exists()
-            && let Ok(fd) = PathFd::new(path_obj) {
-                let _ = ruleset.add_rule(PathBeneath::new(fd, access_read_execute));
-            }
+            && let Ok(fd) = PathFd::new(path_obj)
+        {
+            let _ = ruleset.add_rule(PathBeneath::new(fd, access_read_execute));
+        }
     }
     Ok(())
 }
@@ -81,9 +82,10 @@ fn add_landlock_home_tool_rules(
         for tool in &tool_paths {
             let path = home_path.join(tool);
             if path.exists()
-                && let Ok(fd) = PathFd::new(&path) {
-                    let _ = ruleset.add_rule(PathBeneath::new(fd, access_read));
-                }
+                && let Ok(fd) = PathFd::new(&path)
+            {
+                let _ = ruleset.add_rule(PathBeneath::new(fd, access_read));
+            }
         }
     }
     Ok(())
@@ -97,9 +99,10 @@ fn add_landlock_temp_rules(
     use landlock::{PathBeneath, PathFd, RulesetCreatedAttr};
     let tmp_path = std::path::Path::new("/tmp");
     if tmp_path.exists()
-        && let Ok(fd) = PathFd::new(tmp_path) {
-            let _ = ruleset.add_rule(PathBeneath::new(fd, access_all));
-        }
+        && let Ok(fd) = PathFd::new(tmp_path)
+    {
+        let _ = ruleset.add_rule(PathBeneath::new(fd, access_all));
+    }
     Ok(())
 }
 

@@ -1,6 +1,6 @@
 //! Tool Configuration Schema Validation Tests
 //!
-//! This test module validates that all tool configuration files in examples/configs/
+//! This test module validates that all tool configuration files in the `.ahma/` directory
 //! conform to the MTDF schema and are correctly structured.
 
 use ahma_mcp::schema_validation::MtdfValidator;
@@ -9,7 +9,9 @@ use std::path::PathBuf;
 /// Helper function to get the path to a config file
 fn get_config_path(config_name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("examples/configs")
+        .parent()
+        .unwrap()
+        .join(".ahma")
         .join(format!("{}.json", config_name))
 }
 

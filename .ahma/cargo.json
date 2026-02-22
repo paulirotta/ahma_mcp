@@ -402,5 +402,11 @@
                 }
             ]
         }
-    ]
+    ],
+    "availability_check": {
+        "command": "cargo",
+        "args": [
+            "--version"
+        ]
+    }
 }
