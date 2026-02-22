@@ -202,7 +202,7 @@ async fn test_no_ahma_fallback_to_builtin_tools() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Test that sandboxed_shell is available as built-in even without .ahma/sandboxed_shell.json
+/// Test that sandboxed_shell is available as a core built-in even without any .ahma/ directory
 #[tokio::test]
 async fn test_sandboxed_shell_builtin_without_json_file() -> anyhow::Result<()> {
     // Create a temp directory with NO .ahma

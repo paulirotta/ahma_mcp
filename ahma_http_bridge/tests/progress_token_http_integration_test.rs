@@ -10,41 +10,7 @@ async fn test_http_no_progress_token_does_not_emit_progress_notifications() -> a
     let server = spawn_http_bridge().await?;
     let mut client = HttpMcpTestClient::new(server.base_url());
 
-    let tools_dir = server.temp_dir.path().join("tools");
-
-    // Create sandboxed_shell tool config
-    let shell_tool = r#"{
-    "name": "sandboxed_shell",
-    "description": "Execute shell commands",
-    "command": "bash -c",
-    "timeout_seconds": 30,
-    "synchronous": true,
-    "enabled": true,
-    "subcommand": [
-        {
-            "name": "default",
-            "description": "Run a shell command",
-            "positional_args": [
-                {
-                    "name": "command",
-                    "type": "string",
-                    "description": "Shell command to execute",
-                    "required": true
-                }
-            ],
-            "options": [
-                {
-                    "name": "working_directory",
-                    "type": "string",
-                    "description": "Directory to execute the command in",
-                    "format": "path"
-                }
-            ]
-        }
-    ]
-}"#;
-    std::fs::write(tools_dir.join("sandboxed_shell.json"), shell_tool)
-        .context("Failed to write sandboxed_shell tool config")?;
+    // sandboxed_shell is a core built-in tool - no JSON config needed
 
     // Handshake
     client.initialize().await?;
@@ -95,41 +61,7 @@ async fn test_http_progress_token_is_echoed_in_progress_notifications() -> anyho
     let server = spawn_http_bridge().await?;
     let mut client = HttpMcpTestClient::new(server.base_url());
 
-    let tools_dir = server.temp_dir.path().join("tools");
-
-    // Create sandboxed_shell tool config
-    let shell_tool = r#"{
-    "name": "sandboxed_shell",
-    "description": "Execute shell commands",
-    "command": "bash -c",
-    "timeout_seconds": 30,
-    "synchronous": true,
-    "enabled": true,
-    "subcommand": [
-        {
-            "name": "default",
-            "description": "Run a shell command",
-            "positional_args": [
-                {
-                    "name": "command",
-                    "type": "string",
-                    "description": "Shell command to execute",
-                    "required": true
-                }
-            ],
-            "options": [
-                {
-                    "name": "working_directory",
-                    "type": "string",
-                    "description": "Directory to execute the command in",
-                    "format": "path"
-                }
-            ]
-        }
-    ]
-}"#;
-    std::fs::write(tools_dir.join("sandboxed_shell.json"), shell_tool)
-        .context("Failed to write sandboxed_shell tool config")?;
+    // sandboxed_shell is a core built-in tool - no JSON config needed
 
     // Handshake
     client.initialize().await?;

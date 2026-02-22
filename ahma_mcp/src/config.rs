@@ -317,20 +317,11 @@ pub async fn load_tool_configs(
     use tokio::fs;
     use tokio::time;
 
-    // Hardcoded tool names that should not be overridden by user configurations
-    const RESERVED_TOOL_NAMES: &[&str] = &["await", "status"];
+    // Core tool names implemented directly in Rust code (mcp_service handlers).
+    // These must not be overridden by user or bundled JSON configurations.
+    const RESERVED_TOOL_NAMES: &[&str] = &["await", "status", "sandboxed_shell", "cancel"];
 
-    // Identify all directories to load from. We always load from tools_dir,
-    // and if it exists, also from .ahma relative to workspace root.
-    let mut all_dirs = vec![tools_dir.to_path_buf()];
-
-    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
-        let workspace_root = Path::new(&manifest_dir).parent().unwrap();
-        let examples_dir = workspace_root.join(".ahma");
-        if examples_dir.exists() && examples_dir != tools_dir {
-            all_dirs.insert(0, examples_dir); // Add to beginning so tools_dir overrides examples
-        }
-    }
+    let all_dirs = vec![tools_dir.to_path_buf()];
 
     let mut configs = HashMap::new();
 
@@ -437,12 +428,6 @@ pub async fn load_tool_configs(
     if cli.python {
         builtin_tools.push(("python", include_str!("../../.ahma/python.json")));
     }
-    if cli.shell {
-        builtin_tools.push((
-            "sandboxed_shell",
-            include_str!("../../.ahma/sandboxed_shell.json"),
-        ));
-    }
     if cli.simplify {
         builtin_tools.push(("simplify", include_str!("../../.ahma/simplify.json")));
     }
@@ -457,7 +442,14 @@ pub async fn load_tool_configs(
                     );
                 }
                 // Do not override if already loaded from tools_dir / .ahma
-                configs.entry(config.name.clone()).or_insert(config);
+                if configs.contains_key(&config.name) {
+                    tracing::info!(
+                        "Bundled tool '{}' overridden by local .ahma/ definition",
+                        config.name
+                    );
+                } else {
+                    configs.insert(config.name.clone(), config);
+                }
             }
             Err(e) => {
                 tracing::error!(
@@ -468,158 +460,49 @@ pub async fn load_tool_configs(
             }
         }
     }
+
+    // Inject synthetic config for `sandboxed_shell` so sequences can reference it.
+    // This is the single source of truth for sandboxed_shell's ToolConfig shape.
+    // The MCP service handler still intercepts `sandboxed_shell` calls directly,
+    // but sequences need a ToolConfig to resolve the command and subcommand.
+    configs.insert(
+        "sandboxed_shell".to_string(),
+        ToolConfig {
+            name: "sandboxed_shell".to_string(),
+            description: "Execute shell commands within a secure sandbox".to_string(),
+            command: "bash -c".to_string(),
+            enabled: true,
+            subcommand: Some(vec![SubcommandConfig {
+                name: "default".to_string(),
+                description: "Run a shell command".to_string(),
+                enabled: true,
+                positional_args: Some(vec![CommandOption {
+                    name: "command".to_string(),
+                    option_type: "string".to_string(),
+                    description: Some("The shell command to execute".to_string()),
+                    required: Some(true),
+                    format: None,
+                    items: None,
+                    file_arg: None,
+                    file_flag: None,
+                    alias: None,
+                }]),
+                ..Default::default()
+            }]),
+            ..Default::default()
+        },
+    );
 
     Ok(configs)
 }
 
-/// Synchronous version of `load_tool_configs` for test use only.
+/// Synchronous wrapper around `load_tool_configs` for test use only.
 ///
-/// This function is provided for tests per requirement R16.4, which allows
-/// tests to use synchronous I/O. Production code should use the async
-/// `load_tool_configs` function instead.
-///
-/// # Arguments
-/// * `cli` - Current CLI arguments to determine which tools are built-in
-/// * `tools_dir` - Path to the directory containing tool configuration files
-///
-/// # Returns
-/// * `Result<HashMap<String, ToolConfig>>` - Map of tool name to configuration or error
+/// Creates a one-shot Tokio runtime and delegates to the async version.
+/// Production code should use `load_tool_configs` directly.
 pub fn load_tool_configs_sync(
     cli: &crate::shell::cli::Cli,
     tools_dir: &Path,
 ) -> anyhow::Result<HashMap<String, ToolConfig>> {
-    use std::fs;
-    use std::{thread, time::Duration};
-
-    // Hardcoded tool names that should not be overridden by user configurations
-    const RESERVED_TOOL_NAMES: &[&str] = &["await", "status"];
-
-    // Identify all directories to load from. We always load from tools_dir,
-    // and if it exists, also from .ahma relative to workspace root.
-    let mut all_dirs = vec![tools_dir.to_path_buf()];
-
-    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
-        let workspace_root = Path::new(&manifest_dir).parent().unwrap();
-        let examples_dir = workspace_root.join(".ahma");
-        if examples_dir.exists() && examples_dir != tools_dir {
-            all_dirs.insert(0, examples_dir); // Add to beginning so tools_dir overrides examples
-        }
-    }
-
-    let mut configs = HashMap::new();
-
-    fn read_tool_config_with_retry(path: &Path) -> Option<ToolConfig> {
-        const MAX_ATTEMPTS: usize = 8;
-        const BACKOFF_MS: u64 = 40;
-
-        for attempt in 1..=MAX_ATTEMPTS {
-            match fs::read_to_string(path) {
-                Ok(contents) => match serde_json::from_str::<ToolConfig>(&contents) {
-                    Ok(config) => return Some(config),
-                    Err(e) => {
-                        if attempt == MAX_ATTEMPTS {
-                            tracing::warn!("Failed to parse {}: {}", path.display(), e);
-                            return None;
-                        }
-                    }
-                },
-                Err(e) => {
-                    if attempt == MAX_ATTEMPTS {
-                        tracing::warn!("Failed to read {}: {}", path.display(), e);
-                        return None;
-                    }
-                }
-            }
-
-            thread::sleep(Duration::from_millis(BACKOFF_MS));
-        }
-
-        None
-    }
-
-    for dir in all_dirs {
-        if !dir.exists() {
-            continue;
-        }
-
-        // Read directory entries
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
-
-            // Only process .json files
-            if path.extension().and_then(|s| s.to_str()) == Some("json")
-                && let Some(config) = read_tool_config_with_retry(&path)
-            {
-                // Guard rail: Check for conflicts with hardcoded tool names
-                if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
-                    anyhow::bail!(
-                        "Tool name '{}' conflicts with a hardcoded system tool. Reserved tool names: {:?}. Please rename your tool in {}",
-                        config.name,
-                        RESERVED_TOOL_NAMES,
-                        path.display()
-                    );
-                }
-
-                // Include all tools (enabled or disabled)
-                // Disabled tools will be rejected at execution time with a helpful message
-                configs.insert(config.name.clone(), config);
-            }
-        }
-    }
-
-    // Load built-in tools based on CLI flags
-    let mut builtin_tools: Vec<(&str, &str)> = Vec::new();
-
-    if cli.rust {
-        builtin_tools.push(("rust", include_str!("../../.ahma/rust.json")));
-    }
-    if cli.file {
-        builtin_tools.push(("file_tools", include_str!("../../.ahma/file_tools.json")));
-    }
-    if cli.github {
-        builtin_tools.push(("gh", include_str!("../../.ahma/gh.json")));
-    }
-    if cli.git {
-        builtin_tools.push(("git", include_str!("../../.ahma/git.json")));
-    }
-    if cli.gradle {
-        builtin_tools.push(("gradlew", include_str!("../../.ahma/gradlew.json")));
-    }
-    if cli.python {
-        builtin_tools.push(("python", include_str!("../../.ahma/python.json")));
-    }
-    if cli.shell {
-        builtin_tools.push((
-            "sandboxed_shell",
-            include_str!("../../.ahma/sandboxed_shell.json"),
-        ));
-    }
-    if cli.simplify {
-        builtin_tools.push(("simplify", include_str!("../../.ahma/simplify.json")));
-    }
-
-    for (bundle_name, json_str) in builtin_tools {
-        match serde_json::from_str::<ToolConfig>(json_str) {
-            Ok(config) => {
-                if RESERVED_TOOL_NAMES.contains(&config.name.as_str()) {
-                    anyhow::bail!(
-                        "Built-in tool '{}' conflicts with a hardcoded system tool.",
-                        config.name
-                    );
-                }
-                // Do not override if already loaded from tools_dir / .ahma
-                configs.entry(config.name.clone()).or_insert(config);
-            }
-            Err(e) => {
-                tracing::error!(
-                    "Failed to parse built-in tool configuration for {}: {}",
-                    bundle_name,
-                    e
-                );
-            }
-        }
-    }
-
-    Ok(configs)
+    tokio::runtime::Runtime::new()?.block_on(load_tool_configs(cli, tools_dir))
 }

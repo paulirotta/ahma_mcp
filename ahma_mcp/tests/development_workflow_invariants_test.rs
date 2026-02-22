@@ -124,11 +124,11 @@ fn test_json_tool_configuration_count_invariant() {
 
     println!("📁 Found JSON tool configurations: {:?}", json_files);
 
-    // CRITICAL: These are CLI tool adapters only. MCP tools (status, await) are hardwired.
-    // Expected core tools (minimal set): sandboxed_shell.json, rust.json, python.json, git.json, gh.json, gradlew.json
-    // total should be at least 6.
+    // CRITICAL: These are CLI tool adapters only. Core tools (sandboxed_shell, status, await, cancel) are hardwired.
+    // Expected bundled tool definitions (minimal set): rust.json, python.json, git.json, gh.json, gradlew.json, file_tools.json, simplify.json
+    // total should be at least 5.
     assert!(
-        json_files.len() >= 6,
+        json_files.len() >= 5,
         "Should have core CLI tool configurations (got {})",
         json_files.len()
     );

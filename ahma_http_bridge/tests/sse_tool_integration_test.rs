@@ -120,7 +120,7 @@ async fn test_list_tools_returns_all_expected_tools() {
         "gh_run_watch",
         "gh_workflow_view",
         "gh_workflow_list",
-        // From sandboxed_shell.json
+        // sandboxed_shell is a core built-in tool (always available)
         "sandboxed_shell",
         // From python.json
         "python_script",

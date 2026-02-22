@@ -75,13 +75,13 @@ pub async fn run_cli_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result<()
     }
 
     let configs = Arc::new(availability_summary.filtered_configs);
-    if configs.is_empty() {
+
+    if configs.is_empty() && tool_name != "sandboxed_shell" {
         tracing::error!("No external tool configurations found");
         anyhow::bail!("No tool '{}' found", tool_name);
     }
 
-    let configs_ref = configs.as_ref();
-    let (config_key, config) = find_matching_tool(configs_ref, &tool_name)?;
+    let (config_key, config) = find_matching_tool(configs.as_ref(), &tool_name)?;
 
     // Check if this is a top-level sequence tool (no subcommands, just sequence)
     let is_top_level_sequence = config.command == "sequence" && config.sequence.is_some();
@@ -209,7 +209,7 @@ pub async fn run_cli_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result<()
     if config.command == "sequence" && subcommand_config.sequence.is_some() {
         run_cli_sequence(
             &adapter,
-            configs_ref,
+            configs.as_ref(),
             config,
             subcommand_config,
             &working_dir_str,

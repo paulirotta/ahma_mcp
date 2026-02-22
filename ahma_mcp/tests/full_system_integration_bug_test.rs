@@ -81,7 +81,7 @@ mod tests {
             Arc::new(Adapter::new(operation_monitor.clone(), shell_pool_manager, sandbox).unwrap());
         let configs = Arc::new(
             load_tool_configs(
-                &ahma_mcp::shell::cli::Cli::try_parse_from(&["ahma_mcp"]).unwrap(),
+                &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
                 &std::path::PathBuf::from(".ahma"),
             )
             .await

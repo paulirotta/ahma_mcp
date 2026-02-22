@@ -324,10 +324,12 @@ Direct MCP server over stdio for IDE integration:
 ahma_mcp --mode stdio --tools-dir .ahma/tools
 ```
 
-Alternatively, standard tool configurations are bundled directly inside the binary. Enable them easily using CLI flags:
+Alternatively, standard tool configurations are bundled directly inside the binary. Enable them using CLI flags — only tools explicitly requested are offered to MCP clients:
 ```bash
-ahma_mcp --mode stdio --rust --python --git --github --file --shell --simplify --gradle
+ahma_mcp --mode stdio --rust --python --git --github --file --simplify --gradle
 ```
+
+Note: Core tools (`sandboxed_shell`, `await`, `status`, `cancel`) are always available without any flags. Tools placed in a local `.ahma/` directory are also loaded automatically and override bundled defaults with the same name.
 
 ### 6.2 HTTP Bridge Mode
 

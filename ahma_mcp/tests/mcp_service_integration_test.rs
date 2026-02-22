@@ -151,32 +151,7 @@ async fn setup_mcp_service_test_tools() -> Result<TempDir> {
 "#;
     fs::write(tools_dir.join("disabled_tool.json"), disabled_tool).await?;
 
-    // 5. Shell tool for more complex commands
-    let shell_tool = r#"
-{
-    "name": "sandboxed_shell",
-    "description": "Execute shell commands",
-    "command": "bash -c",
-    "timeout_seconds": 30,
-    "synchronous": true,
-    "enabled": true,
-    "subcommand": [
-        {
-            "name": "default",
-            "description": "Run a shell command",
-            "positional_args": [
-                {
-                    "name": "command",
-                    "type": "string",
-                    "description": "Shell command to execute",
-                    "required": true
-                }
-            ]
-        }
-    ]
-}
-"#;
-    fs::write(tools_dir.join("sandboxed_shell.json"), shell_tool).await?;
+    // sandboxed_shell is a core built-in tool - no JSON config needed
 
     Ok(temp_dir)
 }

@@ -1,4 +1,4 @@
-use ahma_mcp::config::{load_tool_configs, load_tool_configs_sync};
+use ahma_mcp::config::load_tool_configs;
 use ahma_mcp::shell::cli::Cli;
 use clap::Parser;
 use tempfile::tempdir;
@@ -37,15 +37,72 @@ async fn test_load_builtin_tools_async() {
     );
 }
 
-#[test]
-fn test_load_builtin_tools_sync() {
+/// Verify that a user-provided .ahma/ tool definition overrides the bundled version.
+#[tokio::test]
+async fn test_filesystem_overrides_bundled_tool() {
     let temp_dir = tempdir().unwrap();
 
-    let args_shell = vec!["ahma_mcp", "--shell"];
-    let cli_shell = Cli::try_parse_from(args_shell).unwrap();
-    let configs_shell = load_tool_configs_sync(&cli_shell, temp_dir.path()).unwrap();
-    assert!(
-        configs_shell.contains_key("sandboxed_shell"),
-        "Should load bundled sandboxed_shell.json"
+    // Create a local rust.json that defines "cargo" with a custom description
+    let custom_cargo = r#"{
+  "name": "cargo",
+  "description": "Custom user-defined cargo tool",
+  "command": "cargo",
+  "enabled": true,
+  "subcommand": [
+    {
+      "name": "build",
+      "description": "Custom build",
+      "options": [
+        {
+          "name": "release",
+          "type": "boolean",
+          "description": "Release mode"
+        }
+      ]
+    }
+  ]
+}"#;
+    std::fs::write(temp_dir.path().join("rust.json"), custom_cargo).unwrap();
+
+    // Load with --rust flag (bundled) AND the local override
+    let cli = Cli::try_parse_from(["ahma_mcp", "--rust"]).unwrap();
+    let configs = load_tool_configs(&cli, temp_dir.path()).await.unwrap();
+
+    assert!(configs.contains_key("cargo"), "Should have cargo tool");
+    let cargo = &configs["cargo"];
+    assert_eq!(
+        cargo.description, "Custom user-defined cargo tool",
+        "Local .ahma/ definition should override the bundled version"
     );
+}
+
+/// Verify that reserved tool names (core built-in tools) are rejected from .ahma/ files.
+#[tokio::test]
+async fn test_reserved_names_rejected() {
+    let temp_dir = tempdir().unwrap();
+
+    for reserved in &["await", "status", "sandboxed_shell", "cancel"] {
+        let config = format!(
+            r#"{{
+  "name": "{}",
+  "description": "Should be rejected",
+  "command": "echo",
+  "enabled": true,
+  "subcommand": [{{ "name": "default", "description": "test" }}]
+}}"#,
+            reserved
+        );
+        std::fs::write(temp_dir.path().join(format!("{}.json", reserved)), &config).unwrap();
+
+        let cli = Cli::try_parse_from(["ahma_mcp"]).unwrap();
+        let result = load_tool_configs(&cli, temp_dir.path()).await;
+        assert!(
+            result.is_err(),
+            "Reserved name '{}' should be rejected",
+            reserved
+        );
+
+        // Clean up for next iteration
+        std::fs::remove_file(temp_dir.path().join(format!("{}.json", reserved))).unwrap();
+    }
 }

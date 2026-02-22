@@ -2,51 +2,41 @@
 
 This directory contains tool configuration files for the AHMA MCP (Model Context Protocol) server. These configurations define how AI agents can interact with various command-line tools in a safe and structured way.
 
-## Available Tools
+## How Tool Loading Works
 
-- **sandboxed_shell.json** - Active shell execution tool (enabled by default)
+AHMA has a three-tier tool model:
 
-## Example Tool Configurations
+### 1. Core Built-in Tools (always available, no configuration needed)
+- **sandboxed_shell** — Execute shell commands in the security sandbox
+- **await** — Wait for async operations to complete
+- **status** — Query operation status without blocking
+- **cancel** — Cancel running operations
 
-Additional tool configurations are available as examples in `ahma_mcp/examples/configs/`. These can be copied, customized, and validated before deployment:
+These are implemented directly in Rust and cannot be overridden by JSON configurations. Their names are reserved.
 
-- **cargo.json** - Rust build tool and package manager
-- **file_tools.json** - Unix file operations (ls, cp, mv, rm, grep, etc.)
-- **gh.json** - GitHub CLI wrapper
-- **git.json** - Git version control client
-- **gradlew.json** - Android Gradle wrapper
-- **python.json** - Python interpreter
+### 2. Bundled Tool Configs (opt-in via CLI flags)
+Standard tool configurations are compiled into the `ahma_mcp` binary. They are only offered to MCP clients when explicitly enabled via a CLI flag:
 
-## Usage
+| Flag | Tool Name | Description |
+|------|-----------|-------------|
+| `--rust` | `cargo` | Rust build, test, clippy, fmt, etc. |
+| `--file` | `file_tools` | Unix file operations (ls, cp, mv, rm, grep, etc.) |
+| `--git` | `git` | Git version control |
+| `--github` | `gh` | GitHub CLI (PRs, issues, releases) |
+| `--python` | `python` | Python interpreter and pip |
+| `--gradle` | `gradlew` | Android Gradle wrapper |
+| `--simplify` | `simplify` | Code complexity metrics |
 
-### 1. Copy an Example Configuration
+Example: `ahma_mcp --mode stdio --rust --git --file`
 
-```bash
-# Copy an example configuration to .ahma directory
-cp ahma_mcp/examples/configs/cargo.json .ahma/
+### 3. Local `.ahma/` Overrides (automatic)
+If a `.ahma/` directory exists in the current working directory, all `*.json` files in it are loaded automatically — no CLI flag needed.
 
-# Or copy all examples
-cp ahma_mcp/examples/configs/*.json .ahma/
-```
+**Override rule:** If a local `.ahma/*.json` file defines a tool with the same `name` as a bundled tool, the local version **replaces** the bundled one entirely. This lets you customize tool descriptions, options, and subcommands for your project.
 
-### 2. Customize the Configuration
+Example: placing a `.ahma/rust.json` with `"name": "cargo"` will override the bundled cargo tool definition when `--rust` is also passed.
 
-Edit the copied JSON file to match your requirements:
-
-```bash
-# Edit with your preferred editor
-code .ahma/cargo.json
-# or
-vim .ahma/cargo.json
-```
-
-Key fields to customize:
-- `enabled`: Set to `true` to activate the tool
-- `timeout_seconds`: Adjust based on expected operation duration
-- `subcommand`: Add, remove, or modify available subcommands
-- `options`: Customize available options for each subcommand
-
-### 3. Validate Your Configuration
+## Available Tool Configurations
 
 Run the validation tool to ensure your configuration is correct:
 

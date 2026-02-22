@@ -201,35 +201,9 @@ impl ClientBuilder {
 
 pub async fn setup_mcp_service_with_client() -> Result<(TempDir, Client)> {
     // Create a temporary directory for tool configs
+    // sandboxed_shell is a core built-in tool, no JSON config needed
     let temp_dir = tempfile::tempdir()?;
     let tools_dir = temp_dir.path();
-    let tool_config_path = tools_dir.join("sandboxed_shell.json");
-
-    let tool_config_content = r#"
-    {
-        "name": "sandboxed_shell",
-        "description": "Execute shell commands asynchronously",
-        "command": "bash -c",
-        "timeout_seconds": 30,
-        "synchronous": false,
-        "enabled": true,
-        "subcommand": [
-            {
-                "name": "default",
-                "description": "Execute a shell command asynchronously",
-                "positional_args": [
-                    {
-                        "name": "command",
-                        "type": "string",
-                        "description": "shell command to execute",
-                        "required": true
-                    }
-                ]
-            }
-        ]
-    }
-    "#;
-    std::fs::write(&tool_config_path, tool_config_content)?;
 
     let mut client = Client::new();
     client

@@ -157,32 +157,7 @@ async fn setup_failure_test_configs() -> Result<TempDir> {
     )
     .await?;
 
-    // Create a sandboxed_shell tool for more complex tests
-    let shell_config = r#"
-{
-    "name": "sandboxed_shell",
-    "description": "Execute shell commands",
-    "command": "bash -c",
-    "timeout_seconds": 30,
-    "synchronous": true,
-    "enabled": true,
-    "subcommand": [
-        {
-            "name": "default",
-            "description": "Run a shell command",
-            "positional_args": [
-                {
-                    "name": "command",
-                    "type": "string",
-                    "description": "shell command to execute",
-                    "required": true
-                }
-            ]
-        }
-    ]
-}
-"#;
-    fs::write(tools_dir.join("sandboxed_shell.json"), shell_config).await?;
+    // sandboxed_shell is a core built-in tool - no JSON config needed
 
     // NOTE: marker_sequence is dynamically generated in the test that uses it,
     // because it needs paths inside the temp directory (sandbox-scoped).

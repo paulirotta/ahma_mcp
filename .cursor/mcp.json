@@ -1,1 +1,12 @@
-{"mcpServers":{"Ahma":{"type":"stdio","command":"ahma_mcp","args":["--log-to-stderr"]}}}
+{
+    "mcpServers": {
+        "Ahma": {
+            "type": "stdio",
+            "command": "ahma_mcp",
+            "args": [
+                "--log-to-stderr",
+                "--rust"
+            ]
+        }
+    }
+}

@@ -12,7 +12,7 @@ async fn test_all_tool_json_files_load_correctly() -> Result<()> {
     init_test_logging();
     let tools_dir = get_workspace_path(".ahma");
     let tool_configs = load_tool_configs(
-        &ahma_mcp::shell::cli::Cli::try_parse_from(&["ahma_mcp"]).unwrap(),
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
         &tools_dir,
     )
     .await;

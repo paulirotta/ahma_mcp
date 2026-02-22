@@ -83,10 +83,6 @@ pub struct Cli {
     #[arg(long)]
     pub python: bool,
 
-    /// Bundle and enable the shell tool (sandboxed_shell.json)
-    #[arg(long)]
-    pub shell: bool,
-
     /// Bundle and enable the simplify AI tool (simplify.json)
     #[arg(long)]
     pub simplify: bool,
