@@ -23,6 +23,21 @@ This script:
 
 Ensure `~/.local/bin` is in your `PATH`.
 
+### Supported Platforms
+
+Prebuilt binaries are provided for the following platforms:
+
+| Platform | Architecture | Prebuilt Binary | Sandbox |
+|---|---|---|---|
+| Linux | x86_64 | ✅ | Landlock (kernel ≥ 5.13) |
+| Linux | arm64 / aarch64 (Raspberry Pi 5, AWS Graviton, etc.) | ✅ | Landlock (kernel ≥ 5.13) |
+| macOS | Apple Silicon (M1/M2/M3+) | ✅ | Seatbelt / `sandbox-exec` |
+| macOS | Intel (pre-2021 x86_64) | ✅ | Seatbelt / `sandbox-exec` |
+
+> **Raspberry Pi note**: Raspberry Pi 4 and older models running kernels earlier than 5.13 (e.g., many Raspberry Pi OS releases) cannot use the Landlock sandbox. You must pass `--no-sandbox` or set `AHMA_NO_SANDBOX=1`. See the [Raspberry Pi and Older Kernels](#raspberry-pi-and-older-kernels) section below for details.
+
+For any other platform, [build from source](#installation-building-from-source) using `cargo build --release`.
+
 ## Documentation Strategy
 
 Ahma MCP follows a **code-first documentation** approach. Architectural details and technical guides are embedded directly in the source code using Rust doc comments (`//!`). This ensures documentation stays in sync with implementation.
