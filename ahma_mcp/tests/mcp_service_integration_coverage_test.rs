@@ -311,7 +311,7 @@ async fn test_cancel_tool_nonexistent_operation() -> Result<()> {
 
     assert_text_contains_any(
         &result,
-        &["not found", "❌", "never existed"],
+        &["not found", "FAIL", "never existed"],
         "Cancel should report operation not found",
     );
 

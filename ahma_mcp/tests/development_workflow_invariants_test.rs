@@ -47,7 +47,7 @@ fn test_wait_timeout_bounds_invariant() {
     );
 
     println!(
-        "✅ Wait timeout bounds validated: {}s default, {}s-{}s range",
+        "OK Wait timeout bounds validated: {}s default, {}s-{}s range",
         DEFAULT_TIMEOUT, MIN_TIMEOUT, MAX_TIMEOUT
     );
 }
@@ -80,7 +80,7 @@ fn test_graceful_shutdown_timing_invariant() {
     );
 
     println!(
-        "✅ Graceful shutdown timing validated: {}s delay",
+        "OK Graceful shutdown timing validated: {}s delay",
         SHUTDOWN_DELAY_SECONDS
     );
 }
@@ -103,7 +103,7 @@ fn test_json_tool_configuration_count_invariant() {
 
     for dir in &[ahma_dir, examples_dir] {
         if !dir.exists() {
-            println!("⚠️  Directory {:?} not found - skipping", dir);
+            println!("WARNING️  Directory {:?} not found - skipping", dir);
             continue;
         }
 
@@ -165,7 +165,7 @@ fn test_json_tool_configuration_count_invariant() {
     );
 
     println!(
-        "✅ Tool configuration count validated: {} JSON files",
+        "OK Tool configuration count validated: {} JSON files",
         json_files.len()
     );
 }
@@ -206,7 +206,7 @@ fn test_progressive_warning_percentages_invariant() {
     );
 
     println!(
-        "✅ Progressive warning percentages validated: {:?}%",
+        "OK Progressive warning percentages validated: {:?}%",
         WARNING_THRESHOLDS
     );
 }
@@ -257,7 +257,7 @@ fn test_error_remediation_patterns_invariant() {
         "Should have comprehensive pattern coverage"
     );
 
-    println!("✅ Error remediation patterns validated:");
+    println!("OK Error remediation patterns validated:");
     println!("   Lock files: {:?}", lock_file_patterns);
     println!("   Network ops: {:?}", network_keywords);
     println!("   Build ops: {:?}", build_keywords);
@@ -291,7 +291,7 @@ fn test_signal_handling_requirements_invariant() {
     );
 
     println!(
-        "✅ Signal handling requirements validated: {:?}",
+        "OK Signal handling requirements validated: {:?}",
         REQUIRED_SIGNALS
     );
     println!("   SIGTERM: cargo watch file change restarts");
@@ -321,6 +321,6 @@ mod documentation_requirements {
             assert!(content.len() > 1000, "{} must be comprehensive", doc);
         }
 
-        println!("✅ Required documentation validated: {:?}", required_docs);
+        println!("OK Required documentation validated: {:?}", required_docs);
     }
 }

@@ -470,7 +470,11 @@ fn test_items_spec_full() {
 #[test]
 fn test_load_tool_configs_empty_directory() {
     let temp_dir = tempdir().unwrap();
-    let _configs = load_tool_configs_sync(&ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(), temp_dir.path()).unwrap();
+    let _configs = load_tool_configs_sync(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
+        temp_dir.path(),
+    )
+    .unwrap();
     // May also load from examples directory, so can't assert empty
     // Just verify it doesn't error
 }
@@ -478,7 +482,11 @@ fn test_load_tool_configs_empty_directory() {
 #[test]
 fn test_load_tool_configs_nonexistent_directory() {
     let nonexistent = std::path::PathBuf::from("/nonexistent/path/that/does/not/exist");
-    let _configs = load_tool_configs_sync(&ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(), &nonexistent).unwrap();
+    let _configs = load_tool_configs_sync(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
+        &nonexistent,
+    )
+    .unwrap();
     // May still load from examples directory, so can't assert empty
     // Just verify it doesn't error
 }
@@ -498,7 +506,11 @@ fn test_load_tool_configs_single_tool() {
     )
     .unwrap();
 
-    let configs = load_tool_configs_sync(&ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(), temp_dir.path()).unwrap();
+    let configs = load_tool_configs_sync(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
+        temp_dir.path(),
+    )
+    .unwrap();
     // May also load from examples directory, so check for at least our tool
     assert!(configs.contains_key("echo"));
     assert_eq!(configs["echo"].command, "echo");
@@ -521,7 +533,11 @@ fn test_load_tool_configs_multiple_tools() {
     )
     .unwrap();
 
-    let configs = load_tool_configs_sync(&ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(), temp_dir.path()).unwrap();
+    let configs = load_tool_configs_sync(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
+        temp_dir.path(),
+    )
+    .unwrap();
     // May also load from examples directory, so check for at least our 2 tools
     assert!(configs.contains_key("echo"));
     assert!(configs.contains_key("cat"));
@@ -538,7 +554,11 @@ fn test_load_tool_configs_includes_disabled_tools() {
     )
     .unwrap();
 
-    let configs = load_tool_configs_sync(&ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(), temp_dir.path()).unwrap();
+    let configs = load_tool_configs_sync(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
+        temp_dir.path(),
+    )
+    .unwrap();
     // May also load from examples directory, so check for at least our disabled tool
     assert!(configs.contains_key("disabled_tool"));
     assert!(!configs.get("disabled_tool").unwrap().enabled);
@@ -563,7 +583,11 @@ fn test_load_tool_configs_skips_non_json_files() {
     )
     .unwrap();
 
-    let configs = load_tool_configs_sync(&ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(), temp_dir.path()).unwrap();
+    let configs = load_tool_configs_sync(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
+        temp_dir.path(),
+    )
+    .unwrap();
     // May also load from examples directory, so check for at least our echo tool
     assert!(configs.contains_key("echo"));
     assert!(!configs.is_empty());
@@ -583,7 +607,11 @@ fn test_load_tool_configs_handles_invalid_json() {
     // Invalid JSON (missing quotes)
     std::fs::write(temp_dir.path().join("invalid.json"), "{name: broken}").unwrap();
 
-    let configs = load_tool_configs_sync(&ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(), temp_dir.path()).unwrap();
+    let configs = load_tool_configs_sync(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
+        temp_dir.path(),
+    )
+    .unwrap();
     // Should load valid tool, skip invalid
     // May also load from examples directory
     assert!(configs.contains_key("valid"));
@@ -600,7 +628,10 @@ fn test_load_tool_configs_reserved_name_await_fails() {
     )
     .unwrap();
 
-    let result = load_tool_configs_sync(&ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(), temp_dir.path());
+    let result = load_tool_configs_sync(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
+        temp_dir.path(),
+    );
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(err.contains("await"));
@@ -617,7 +648,10 @@ fn test_load_tool_configs_reserved_name_status_fails() {
     )
     .unwrap();
 
-    let result = load_tool_configs_sync(&ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(), temp_dir.path());
+    let result = load_tool_configs_sync(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
+        temp_dir.path(),
+    );
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(err.contains("status"));
@@ -756,7 +790,12 @@ fn test_command_option_unknown_field_fails() {
 async fn test_async_load_tool_configs_empty_directory() {
     use ahma_mcp::config::load_tool_configs;
     let temp_dir = tempdir().unwrap();
-    let configs = load_tool_configs(&ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(), temp_dir.path()).await.unwrap();
+    let configs = load_tool_configs(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
+        temp_dir.path(),
+    )
+    .await
+    .unwrap();
     // Note: With multi-directory support, this may load tools from examples directory.
     // When the empty temp_dir is passed, the loader also checks .ahma,
     // so configs may not be empty. This is expected behavior for development/testing.
@@ -769,7 +808,12 @@ async fn test_async_load_tool_configs_empty_directory() {
 async fn test_async_load_tool_configs_nonexistent_directory() {
     use ahma_mcp::config::load_tool_configs;
     let nonexistent = std::path::PathBuf::from("/nonexistent/tools/dir");
-    let _configs = load_tool_configs(&ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(), &nonexistent).await.unwrap();
+    let _configs = load_tool_configs(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
+        &nonexistent,
+    )
+    .await
+    .unwrap();
     // May still load from examples directory, so can't assert empty
     // Just verify it doesn't error
 }
@@ -789,7 +833,12 @@ async fn test_async_load_tool_configs_single_tool() {
     )
     .unwrap();
 
-    let configs = load_tool_configs(&ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(), temp_dir.path()).await.unwrap();
+    let configs = load_tool_configs(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
+        temp_dir.path(),
+    )
+    .await
+    .unwrap();
     // May also load from examples directory, so check for at least our tool
     assert!(configs.contains_key("async_test"));
     assert!(!configs.is_empty());
@@ -813,7 +862,12 @@ async fn test_async_load_tool_configs_multiple_tools() {
         .unwrap();
     }
 
-    let configs = load_tool_configs(&ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(), temp_dir.path()).await.unwrap();
+    let configs = load_tool_configs(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
+        temp_dir.path(),
+    )
+    .await
+    .unwrap();
     // May also load from examples directory, so check for at least our 3 tools
     assert!(configs.contains_key("tool_1"));
     assert!(configs.contains_key("tool_2"));
@@ -837,7 +891,12 @@ async fn test_async_load_tool_configs_includes_disabled_tools() {
     )
     .unwrap();
 
-    let configs = load_tool_configs(&ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(), temp_dir.path()).await.unwrap();
+    let configs = load_tool_configs(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
+        temp_dir.path(),
+    )
+    .await
+    .unwrap();
     // May also load from examples directory, so check for at least our disabled tool
     assert!(configs.contains_key("disabled_async"));
     assert!(!configs.get("disabled_async").unwrap().enabled);
@@ -864,7 +923,12 @@ async fn test_async_load_tool_configs_skips_non_json_files() {
     )
     .unwrap();
 
-    let configs = load_tool_configs(&ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(), temp_dir.path()).await.unwrap();
+    let configs = load_tool_configs(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
+        temp_dir.path(),
+    )
+    .await
+    .unwrap();
     // May also load from examples directory, so check for at least our valid tool
     assert!(configs.contains_key("valid_tool"));
     assert!(!configs.is_empty());
@@ -890,7 +954,12 @@ async fn test_async_load_tool_configs_handles_invalid_json() {
     )
     .unwrap();
 
-    let configs = load_tool_configs(&ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(), temp_dir.path()).await.unwrap();
+    let configs = load_tool_configs(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
+        temp_dir.path(),
+    )
+    .await
+    .unwrap();
     // Invalid JSON should be skipped; valid tool should be loaded
     // May also load from examples directory
     assert!(configs.contains_key("valid_after_invalid"));
@@ -912,7 +981,11 @@ async fn test_async_load_tool_configs_reserved_name_await_fails() {
     )
     .unwrap();
 
-    let result = load_tool_configs(&ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(), temp_dir.path()).await;
+    let result = load_tool_configs(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
+        temp_dir.path(),
+    )
+    .await;
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
     assert!(err_msg.contains("await"));
@@ -934,7 +1007,11 @@ async fn test_async_load_tool_configs_reserved_name_status_fails() {
     )
     .unwrap();
 
-    let result = load_tool_configs(&ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(), temp_dir.path()).await;
+    let result = load_tool_configs(
+        &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
+        temp_dir.path(),
+    )
+    .await;
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
     assert!(err_msg.contains("status"));

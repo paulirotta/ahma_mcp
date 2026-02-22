@@ -166,7 +166,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Write schema to file
     let docs_path = write_schema_to_file(&output_dir, &schema_json)?;
 
-    println!("✓ Generated MTDF JSON Schema at: {}", docs_path.display());
+    println!("OK Generated MTDF JSON Schema at: {}", docs_path.display());
     println!("  Schema size: {} bytes", schema_json.len());
 
     // Show preview

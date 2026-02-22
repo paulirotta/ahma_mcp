@@ -34,7 +34,7 @@ mod tests {
             None,
         );
         monitor.add_operation(operation).await;
-        println!("✅ Added operation in Pending state: {}", test_op_id);
+        println!("OK Added operation in Pending state: {}", test_op_id);
 
         // Step 2: Simulate notification loop clearing operations while operation is still pending
         let cleared_while_pending = monitor.get_completed_operations().await;
@@ -42,7 +42,7 @@ mod tests {
             cleared_while_pending.is_empty(),
             "Should not clear pending operations"
         );
-        println!("✅ Notification loop found no completed operations (expected)");
+        println!("OK Notification loop found no completed operations (expected)");
 
         // Step 3: Now the operation completes (simulating the tokio::spawn completion)
         monitor
@@ -52,7 +52,7 @@ mod tests {
                 Some(Value::String("race condition test completed".to_string())),
             )
             .await;
-        println!("✅ Operation completed and status updated");
+        println!("OK Operation completed and status updated");
 
         // Step 4: Notification loop should find it consistently in completion history
         let first_access = monitor.get_completed_operations().await;
@@ -62,7 +62,7 @@ mod tests {
             "Should find the completed operation in history"
         );
         assert_eq!(first_access[0].id, test_op_id);
-        println!("✅ First history access found the completed operation");
+        println!("OK First history access found the completed operation");
 
         // Step 5: NEW BEHAVIOR - operations persist in completion history
         let second_access = monitor.get_completed_operations().await;
@@ -72,7 +72,7 @@ mod tests {
             "Operation should persist in completion history for await operations"
         );
         assert_eq!(second_access[0].id, test_op_id);
-        println!("✅ Second access finds same operation in completion history");
+        println!("OK Second access finds same operation in completion history");
 
         // Step 6: Verify the operation remains consistently available
         for i in 3..=5 {
@@ -86,7 +86,7 @@ mod tests {
             assert_eq!(subsequent_access[0].id, test_op_id);
         }
         println!(
-            "✅ Race condition prevention test passed - operation persists in completion history"
+            "OK Race condition prevention test passed - operation persists in completion history"
         );
     }
 
@@ -120,7 +120,7 @@ mod tests {
         // Initial check - operation should be in completion history
         let initial_check = monitor.get_completed_operations().await;
         assert_eq!(initial_check.len(), 1);
-        println!("✅ Operation found in completion history");
+        println!("OK Operation found in completion history");
 
         // NOW: Try to update the status of the already-completed operation
         // This simulates a late-arriving update_status call
@@ -131,7 +131,7 @@ mod tests {
                 Some(Value::String("late update".to_string())),
             )
             .await;
-        println!("✅ Called update_status on already-completed operation");
+        println!("OK Called update_status on already-completed operation");
 
         // Check that operation is still in history and properly handled
         let recheck = monitor.get_completed_operations().await;
@@ -153,7 +153,7 @@ mod tests {
         }
 
         println!(
-            "✅ Late update_status properly handled - operation remains in history with original result (late updates ignored)"
+            "OK Late update_status properly handled - operation remains in history with original result (late updates ignored)"
         );
     }
 
@@ -211,7 +211,7 @@ mod tests {
         let (_completion_result, total_notified) =
             tokio::try_join!(completion_handle, notification_handle).unwrap();
 
-        println!("✅ Concurrent test completed:");
+        println!("OK Concurrent test completed:");
         println!("   - Total unique operations notified: {}", total_notified);
 
         // The operation should be notified for exactly once.
@@ -221,7 +221,7 @@ mod tests {
             total_notified
         );
 
-        println!("✅ Concurrent completion and notification test passed");
+        println!("OK Concurrent completion and notification test passed");
     }
 
     /// Test the specific scenario where multiple notification loops might run concurrently.
@@ -250,7 +250,7 @@ mod tests {
                 Some(Value::String("completed".to_string())),
             )
             .await;
-        println!("✅ Operation added and completed");
+        println!("OK Operation added and completed");
 
         // Use a shared set to track notifications across all concurrent loops
         let notified_ops_global = Arc::new(Mutex::new(std::collections::HashSet::new()));
@@ -281,7 +281,7 @@ mod tests {
         let results = futures::future::join_all(handles).await;
         let total_notifications_sent: usize = results.into_iter().map(|res| res.unwrap()).sum();
 
-        println!("✅ Multiple loops completed:");
+        println!("OK Multiple loops completed:");
         println!(
             "   - Total notifications sent across all loops: {}",
             total_notifications_sent
@@ -294,6 +294,6 @@ mod tests {
             total_notifications_sent
         );
 
-        println!("✅ Multiple notification loops test passed");
+        println!("OK Multiple notification loops test passed");
     }
 }

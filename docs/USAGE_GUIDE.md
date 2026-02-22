@@ -105,11 +105,11 @@ cargo test -- unit      # Specific test subset
 
 # Make file changes freely
 # AHMA MCP handles graceful shutdown:
-# ✓ File changes detected
-# ✓ 10-second grace period provided
-# ✓ Operations complete naturally
-# ✓ Results delivered automatically
-# ✓ New operations start with updated code
+# OK File changes detected
+# OK 10-second grace period provided
+# OK Operations complete naturally
+# OK Results delivered automatically
+# OK New operations start with updated code
 ```
 
 ### 3. Monitoring and Coordination
@@ -132,11 +132,11 @@ status --operation_id op_123
 Use the `await` tool only when results are critical for your next step.
 
 ```bash
-# ✅ Good use cases for await:
+# OK Good use cases for await:
 await --tools cargo --timeout_seconds 120    # Before deployment
 await --operation_id op_build --timeout_seconds 60  # Before a dependent task
 
-# ❌ Avoid waiting for:
+# FAIL Avoid waiting for:
 await --tools cargo                           # Routine builds
 await --timeout_seconds 300                   # Long timeouts that block work
 ```
@@ -211,9 +211,9 @@ AHMA MCP provides sophisticated graceful shutdown during development:
 🔄 Graceful shutdown initiated...
 ⏳ Allowing 10 seconds for operations to complete...
 📊 2 operations running: cargo_build, cargo_test
-✅ cargo_build completed successfully (3.2s)
+OK cargo_build completed successfully (3.2s)
 ⏳ cargo_test still running... (7.8s remaining)
-✅ cargo_test completed successfully (9.1s)
+OK cargo_test completed successfully (9.1s)
 🏁 All operations completed. Shutting down gracefully.
 ```
 
@@ -262,7 +262,7 @@ status    # Shows concurrency analysis and await time metrics
 # Example output:
 # Operations status: 2 active, 5 completed (total: 7)
 # Concurrency Analysis:
-# ✅ High concurrency efficiency: 5.2% of execution time spent waiting
+# OK High concurrency efficiency: 5.2% of execution time spent waiting
 ```
 
 ### Resource-Aware Concurrency
@@ -345,7 +345,7 @@ AHMA MCP provides intelligent timeout remediation:
 
 ## Best Practices Summary
 
-### ✅ Recommended Patterns
+### OK Recommended Patterns
 
 1. **Async-First Development:**
 
@@ -364,7 +364,7 @@ AHMA MCP provides intelligent timeout remediation:
    - Adjust parallelism based on available resources
    - Use shell pool efficiency feedback for optimization
 
-### ❌ Anti-Patterns to Avoid
+### FAIL Anti-Patterns to Avoid
 
 1. **Blocking Workflows:**
 

@@ -494,7 +494,7 @@ fn test_format_errors() {
     assert!(formatted.contains("test.json"));
     assert!(formatted.contains("Missing required field 'name'"));
     assert!(formatted.contains("Expected string"));
-    assert!(formatted.contains("💡 Suggestion: Add a name field"));
+    assert!(formatted.contains("Suggestion: Add a name field"));
     assert!(formatted.contains("'name'"));
     assert!(formatted.contains("'command'"));
 }

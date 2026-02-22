@@ -6,7 +6,7 @@ A simple HTTP-to-stdio bridge for MCP (Model Context Protocol) servers.
 
 This crate provides an HTTP server that acts as a bridge between HTTP clients and stdio-based MCP servers. It spawns an MCP server as a subprocess and proxies JSON-RPC messages between HTTP requests and the server's stdin/stdout.
 
-**Status: Complete and Production-Ready** ✅
+**Status: Complete and Production-Ready** OK
 
 ## Features
 
@@ -268,7 +268,7 @@ For production use with server-initiated messages, consider using WebSocket.
 
 The HTTP bridge implements a sandboxing security model to restrict AI-generated commands to the client's workspace.
 
-### What's Protected ✅
+### What's Protected OK
 
 1. **File Write Access**: Write operations are restricted to the client's workspace (sandbox scope)
 2. **Per-Session Isolation**: Each client session gets its own sandbox scope derived from workspace roots
@@ -290,7 +290,7 @@ ahma_http_bridge --no-temp-files
 
 This prevents data exfiltration via `/tmp` or `/var/folders` but breaks tools that require temp file access.
 
-### Known Security Limitations ⚠️
+### Known Security Limitations WARNING️
 
 These are accepted trade-offs for practical operation:
 

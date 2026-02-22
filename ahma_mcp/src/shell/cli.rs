@@ -295,11 +295,15 @@ pub async fn run() -> Result<()> {
         tracing::info!("🔓 Sandbox mode: DISABLED (commands run without Ahma sandboxing)");
     } else {
         #[cfg(target_os = "linux")]
-        tracing::info!("🔒 Sandbox mode: LANDLOCK (Linux kernel-level file system restrictions)");
+        tracing::info!(
+            "SECURE Sandbox mode: LANDLOCK (Linux kernel-level file system restrictions)"
+        );
         #[cfg(target_os = "macos")]
-        tracing::info!("🔒 Sandbox mode: SEATBELT (macOS sandbox-exec per-command restrictions)");
+        tracing::info!(
+            "SECURE Sandbox mode: SEATBELT (macOS sandbox-exec per-command restrictions)"
+        );
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-        tracing::info!("🔒 Sandbox mode: ACTIVE");
+        tracing::info!("SECURE Sandbox mode: ACTIVE");
     }
 
     // Determine mode based on CLI arguments
@@ -317,7 +321,7 @@ pub async fn run() -> Result<()> {
                 // Check if stdin is a terminal (interactive mode)
                 if std::io::stdin().is_terminal() {
                     eprintln!(
-                        "\n❌ Error: ahma_mcp is an MCP server designed for JSON-RPC communication over stdio.\n"
+                        "\nFAIL Error: ahma_mcp is an MCP server designed for JSON-RPC communication over stdio.\n"
                     );
                     eprintln!("It cannot be run directly from an interactive terminal.\n");
                     eprintln!("Usage options:");

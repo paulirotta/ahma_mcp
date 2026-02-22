@@ -126,7 +126,7 @@ async fn test_cargo_check_with_assertions() {
     let server = match spawn_test_server().await {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("⚠️  Skipping test - failed to spawn server: {}", e);
+            eprintln!("WARNING️  Skipping test - failed to spawn server: {}", e);
             return;
         }
     };
@@ -140,13 +140,13 @@ async fn test_cargo_check_with_assertions() {
         .await
         .is_err()
     {
-        eprintln!("⚠️  Skipping test - failed to initialize MCP client");
+        eprintln!("WARNING️  Skipping test - failed to initialize MCP client");
         return;
     }
 
     // Skip if cargo tool is not available (may not be in CI environment)
     if !is_cargo_tool_available(&client).await {
-        eprintln!("⚠️  Skipping test - cargo tool not available");
+        eprintln!("WARNING️  Skipping test - cargo tool not available");
         return;
     }
 
@@ -188,7 +188,7 @@ async fn test_cargo_check_with_assertions() {
         );
     }
 
-    println!("✓ cargo_check succeeded in {}ms", result.duration_ms);
+    println!("OK cargo_check succeeded in {}ms", result.duration_ms);
 }
 
 // =============================================================================
@@ -206,7 +206,7 @@ async fn test_cargo_clippy_basic_with_assertions() {
     let server = match spawn_test_server().await {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("⚠️  Skipping test - failed to spawn server: {}", e);
+            eprintln!("WARNING️  Skipping test - failed to spawn server: {}", e);
             return;
         }
     };
@@ -218,13 +218,13 @@ async fn test_cargo_clippy_basic_with_assertions() {
         .await
         .is_err()
     {
-        eprintln!("⚠️  Skipping test - failed to initialize MCP client");
+        eprintln!("WARNING️  Skipping test - failed to initialize MCP client");
         return;
     }
 
     // Skip if cargo tool is not available (may not be in CI environment)
     if !is_cargo_tool_available(&client).await {
-        eprintln!("⚠️  Skipping test - cargo tool not available");
+        eprintln!("WARNING️  Skipping test - cargo tool not available");
         return;
     }
 
@@ -256,7 +256,7 @@ async fn test_cargo_clippy_basic_with_assertions() {
     }
 
     println!(
-        "✓ cargo_clippy (basic) succeeded in {}ms",
+        "OK cargo_clippy (basic) succeeded in {}ms",
         result.duration_ms
     );
 }
@@ -276,7 +276,7 @@ async fn test_cargo_clippy_with_tests_flag_assertions() {
     let server = match spawn_test_server().await {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("⚠️  Skipping test - failed to spawn server: {}", e);
+            eprintln!("WARNING️  Skipping test - failed to spawn server: {}", e);
             return;
         }
     };
@@ -288,13 +288,13 @@ async fn test_cargo_clippy_with_tests_flag_assertions() {
         .await
         .is_err()
     {
-        eprintln!("⚠️  Skipping test - failed to initialize MCP client");
+        eprintln!("WARNING️  Skipping test - failed to initialize MCP client");
         return;
     }
 
     // Skip if cargo tool is not available (may not be in CI environment)
     if !is_cargo_tool_available(&client).await {
-        eprintln!("⚠️  Skipping test - cargo tool not available");
+        eprintln!("WARNING️  Skipping test - cargo tool not available");
         return;
     }
 
@@ -339,7 +339,7 @@ async fn test_cargo_clippy_with_tests_flag_assertions() {
     }
 
     println!(
-        "✓ cargo_clippy --tests succeeded in {}ms",
+        "OK cargo_clippy --tests succeeded in {}ms",
         result.duration_ms
     );
 }
@@ -359,7 +359,7 @@ async fn test_cargo_build_with_assertions() {
     let server = match spawn_test_server().await {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("⚠️  Skipping test - failed to spawn server: {}", e);
+            eprintln!("WARNING️  Skipping test - failed to spawn server: {}", e);
             return;
         }
     };
@@ -371,13 +371,13 @@ async fn test_cargo_build_with_assertions() {
         .await
         .is_err()
     {
-        eprintln!("⚠️  Skipping test - failed to initialize MCP client");
+        eprintln!("WARNING️  Skipping test - failed to initialize MCP client");
         return;
     }
 
     // Skip if cargo tool is not available (may not be in CI environment)
     if !is_cargo_tool_available(&client).await {
-        eprintln!("⚠️  Skipping test - cargo tool not available");
+        eprintln!("WARNING️  Skipping test - cargo tool not available");
         return;
     }
 
@@ -406,7 +406,7 @@ async fn test_cargo_build_with_assertions() {
         );
     }
 
-    println!("✓ cargo_build succeeded in {}ms", result.duration_ms);
+    println!("OK cargo_build succeeded in {}ms", result.duration_ms);
 }
 
 // =============================================================================
@@ -424,7 +424,7 @@ async fn test_cargo_test_with_assertions() {
     let server = match spawn_test_server().await {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("⚠️  Skipping test - failed to spawn server: {}", e);
+            eprintln!("WARNING️  Skipping test - failed to spawn server: {}", e);
             return;
         }
     };
@@ -436,13 +436,13 @@ async fn test_cargo_test_with_assertions() {
         .await
         .is_err()
     {
-        eprintln!("⚠️  Skipping test - failed to initialize MCP client");
+        eprintln!("WARNING️  Skipping test - failed to initialize MCP client");
         return;
     }
 
     // Skip if cargo tool is not available (may not be in CI environment)
     if !is_cargo_tool_available(&client).await {
-        eprintln!("⚠️  Skipping test - cargo tool not available");
+        eprintln!("WARNING️  Skipping test - cargo tool not available");
         return;
     }
 
@@ -481,7 +481,7 @@ async fn test_cargo_test_with_assertions() {
         );
     }
 
-    println!("✓ cargo_test succeeded in {}ms", result.duration_ms);
+    println!("OK cargo_test succeeded in {}ms", result.duration_ms);
 }
 
 // =============================================================================
@@ -499,7 +499,7 @@ async fn test_cargo_fmt_with_assertions() {
     let server = match spawn_test_server().await {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("⚠️  Skipping test - failed to spawn server: {}", e);
+            eprintln!("WARNING️  Skipping test - failed to spawn server: {}", e);
             return;
         }
     };
@@ -511,13 +511,13 @@ async fn test_cargo_fmt_with_assertions() {
         .await
         .is_err()
     {
-        eprintln!("⚠️  Skipping test - failed to initialize MCP client");
+        eprintln!("WARNING️  Skipping test - failed to initialize MCP client");
         return;
     }
 
     // Skip if cargo tool is not available (may not be in CI environment)
     if !is_cargo_tool_available(&client).await {
-        eprintln!("⚠️  Skipping test - cargo tool not available");
+        eprintln!("WARNING️  Skipping test - cargo tool not available");
         return;
     }
 
@@ -546,7 +546,7 @@ async fn test_cargo_fmt_with_assertions() {
         );
     }
 
-    println!("✓ cargo_fmt succeeded in {}ms", result.duration_ms);
+    println!("OK cargo_fmt succeeded in {}ms", result.duration_ms);
 }
 
 // =============================================================================
@@ -614,7 +614,7 @@ async fn test_sandboxed_shell_execution_with_assertions() {
     let server = match spawn_test_server().await {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("⚠️  Skipping test - failed to spawn server: {}", e);
+            eprintln!("WARNING️  Skipping test - failed to spawn server: {}", e);
             return;
         }
     };
@@ -626,7 +626,7 @@ async fn test_sandboxed_shell_execution_with_assertions() {
         .await
         .is_err()
     {
-        eprintln!("⚠️  Skipping test - failed to initialize MCP client");
+        eprintln!("WARNING️  Skipping test - failed to initialize MCP client");
         return;
     }
 
@@ -705,5 +705,5 @@ async fn test_sandboxed_shell_execution_with_assertions() {
         );
     }
 
-    println!("✓ sandboxed_shell core tests passed");
+    println!("OK sandboxed_shell core tests passed");
 }

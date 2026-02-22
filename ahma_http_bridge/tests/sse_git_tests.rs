@@ -26,7 +26,7 @@ async fn test_git_status() {
             &output[..output.len().min(200)]
         );
     } else {
-        eprintln!("⚠️  git_status failed: {:?}", result.error);
+        eprintln!("WARNING️  git_status failed: {:?}", result.error);
     }
 }
 
@@ -40,9 +40,9 @@ async fn test_git_log() {
     let result = call_tool(&client, "git_log", json!({"-n": 5})).await;
 
     if result.success {
-        println!("✓ git log succeeded");
+        println!("OK git log succeeded");
     } else {
-        eprintln!("⚠️  git_log failed: {:?}", result.error);
+        eprintln!("WARNING️  git_log failed: {:?}", result.error);
     }
 }
 

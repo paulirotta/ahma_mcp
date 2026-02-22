@@ -80,7 +80,7 @@ fn resolve_binary_path() -> PathBuf {
         .unwrap_or_else(|| {
             panic!(
                 "\n\
-                 ❌ ahma_mcp binary NOT FOUND in target directory.\n\n\
+                 FAIL ahma_mcp binary NOT FOUND in target directory.\n\n\
                  The integration tests require the server binary to be built first.\n\
                  Please run: cargo build --package ahma_mcp --bin ahma_mcp\n\n\
                  Looked in: {:?}\n",

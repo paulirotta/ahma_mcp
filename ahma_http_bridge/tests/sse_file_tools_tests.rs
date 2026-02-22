@@ -195,15 +195,15 @@ async fn test_file_tools_touch_and_rm() {
 
     // Check if tools are available before testing
     if !is_tool_available(&client, "file_tools_touch").await {
-        eprintln!("⚠️  file_tools_touch not available on server, skipping test");
+        eprintln!("WARNING️  file_tools_touch not available on server, skipping test");
         return;
     }
     if !is_tool_available(&client, "file_tools_rm").await {
-        eprintln!("⚠️  file_tools_rm not available on server, skipping test");
+        eprintln!("WARNING️  file_tools_rm not available on server, skipping test");
         return;
     }
     if !is_tool_available(&client, "file_tools_ls").await {
-        eprintln!("⚠️  file_tools_ls not available on server, skipping test");
+        eprintln!("WARNING️  file_tools_ls not available on server, skipping test");
         return;
     }
 
@@ -214,7 +214,7 @@ async fn test_file_tools_touch_and_rm() {
 
     if !touch_result.success {
         eprintln!(
-            "⚠️  file_tools_touch failed (may be outside sandbox): {:?}",
+            "WARNING️  file_tools_touch failed (may be outside sandbox): {:?}",
             touch_result.error
         );
         return;
@@ -257,11 +257,11 @@ async fn test_file_tools_cp_and_mv() {
 
     // Check if tools are available before testing
     if !is_tool_available(&client, "file_tools_cp").await {
-        eprintln!("⚠️  file_tools_cp not available on server, skipping test");
+        eprintln!("WARNING️  file_tools_cp not available on server, skipping test");
         return;
     }
     if !is_tool_available(&client, "file_tools_mv").await {
-        eprintln!("⚠️  file_tools_mv not available on server, skipping test");
+        eprintln!("WARNING️  file_tools_mv not available on server, skipping test");
         return;
     }
 
@@ -279,7 +279,10 @@ async fn test_file_tools_cp_and_mv() {
     .await;
 
     if !create_result.success {
-        eprintln!("⚠️  Could not create test file: {:?}", create_result.error);
+        eprintln!(
+            "WARNING️  Could not create test file: {:?}",
+            create_result.error
+        );
         return;
     }
 
@@ -391,7 +394,7 @@ async fn test_file_tools_sed() {
 
     if !result.success {
         eprintln!(
-            "⚠️  sed via shell failed (may be sandbox restriction): {:?}",
+            "WARNING️  sed via shell failed (may be sandbox restriction): {:?}",
             result.error
         );
         return;
@@ -402,14 +405,14 @@ async fn test_file_tools_sed() {
     // sandboxed_shell may run asynchronously, returning operation ID instead of output
     if output.contains("Asynchronous operation started") || output.contains("ASYNC AHMA OPERATION")
     {
-        eprintln!("⚠️  sandboxed_shell ran asynchronously, cannot validate sed output");
+        eprintln!("WARNING️  sandboxed_shell ran asynchronously, cannot validate sed output");
         return;
     }
 
     println!("sed output: {:?}", output);
 
     if output.trim().is_empty() {
-        eprintln!("⚠️  sed command returned empty output, skipping assertion");
+        eprintln!("WARNING️  sed command returned empty output, skipping assertion");
         return;
     }
 

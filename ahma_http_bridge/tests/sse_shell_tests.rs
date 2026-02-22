@@ -39,12 +39,12 @@ async fn test_sandboxed_shell_echo() {
         || output.contains("op_");
 
     if has_expected_output {
-        println!("✓ Got expected output: {}", output);
+        println!("OK Got expected output: {}", output);
     } else if is_async_operation {
-        println!("✓ Got async operation response (valid): {}", output);
+        println!("OK Got async operation response (valid): {}", output);
     } else {
         println!(
-            "⚠️  Unexpected output format (but tool call succeeded): {}",
+            "WARNING️  Unexpected output format (but tool call succeeded): {}",
             output
         );
     }
@@ -80,12 +80,12 @@ async fn test_sandboxed_shell_pipe() {
         || output.contains("op_");
 
     if has_expected_output {
-        println!("✓ Got expected line count: {}", output.trim());
+        println!("OK Got expected line count: {}", output.trim());
     } else if is_async_operation {
-        println!("✓ Got async operation response (valid): {}", output);
+        println!("OK Got async operation response (valid): {}", output);
     } else {
         println!(
-            "⚠️  Unexpected output format (but tool call succeeded): {}",
+            "WARNING️  Unexpected output format (but tool call succeeded): {}",
             output
         );
     }
@@ -121,12 +121,12 @@ async fn test_sandboxed_shell_variable_substitution() {
         || output.contains("op_");
 
     if has_expected_output {
-        println!("✓ Got expected PWD output: {}", output);
+        println!("OK Got expected PWD output: {}", output);
     } else if is_async_operation {
-        println!("✓ Got async operation response (valid): {}", output);
+        println!("OK Got async operation response (valid): {}", output);
     } else {
         println!(
-            "⚠️  Unexpected output format (but tool call succeeded): {}",
+            "WARNING️  Unexpected output format (but tool call succeeded): {}",
             output
         );
     }

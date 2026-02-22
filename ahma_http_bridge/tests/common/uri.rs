@@ -58,7 +58,7 @@ pub mod malformed_uris {
         ("file:///tmp/test", Some("/tmp/test")),
         ("file:///", Some("/")),
         ("file:///tmp/test%20file", Some("/tmp/test file")),
-        ("file:///tmp/%E2%9C%93", Some("/tmp/✓")),
+        ("file:///tmp/%C3%B1", Some("/tmp/ñ")),
         ("file:///tmp/a%2Fb", Some("/tmp/a/b")),
         ("file:///C:/Windows", Some("/C:/Windows")),
     ];

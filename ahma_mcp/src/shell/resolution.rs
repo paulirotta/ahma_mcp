@@ -264,7 +264,7 @@ pub async fn run_cli_sequence(
         if !output.trim().is_empty() {
             println!("{}", output);
         } else {
-            println!("✓ Completed without output");
+            println!("OK Completed without output");
         }
 
         if delay_ms > 0 && index + 1 < sequence.len() {

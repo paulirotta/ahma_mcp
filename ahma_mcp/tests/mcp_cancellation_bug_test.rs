@@ -105,7 +105,7 @@ async fn test_mcp_cancellation_does_not_trigger_canceled_canceled_message() {
         0,
         "Should have no background operations to cancel"
     );
-    println!("✓ Test 1 passed: No spurious cancellations when no background operations");
+    println!("OK Test 1 passed: No spurious cancellations when no background operations");
 
     // Scenario 2: Test cancellation when there's a mix of operations
     println!("🔍 Test 2: MCP cancellation with mixed operation types");
@@ -154,13 +154,13 @@ async fn test_mcp_cancellation_does_not_trigger_canceled_canceled_message() {
         "Should identify the correct background operation"
     );
 
-    println!("✓ Test 2 passed: Correctly filters background vs synchronous operations");
+    println!("OK Test 2 passed: Correctly filters background vs synchronous operations");
 
     // Clean up: cancel the background operation
     let cancelled = operation_monitor.cancel_operation(&bg_operation_id).await;
     assert!(cancelled, "Should be able to cancel background operation");
 
-    println!("✅ All MCP cancellation bug tests passed!");
+    println!("OK All MCP cancellation bug tests passed!");
 }
 
 #[tokio::test]
@@ -198,8 +198,8 @@ async fn test_await_tool_timeout_handling() {
         "Should return quickly, not wait for 5-minute timeout"
     );
 
-    println!("✓ Operation monitor correctly handles non-existent operations");
-    println!("✅ Await tool timeout test passed!");
+    println!("OK Operation monitor correctly handles non-existent operations");
+    println!("OK Await tool timeout test passed!");
 }
 
 #[test]
@@ -230,5 +230,5 @@ fn test_cancellation_detection_patterns() {
         );
     }
 
-    println!("✅ All cancellation detection pattern tests passed!");
+    println!("OK All cancellation detection pattern tests passed!");
 }

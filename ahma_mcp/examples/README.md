@@ -33,7 +33,7 @@ When you run an example, you'll see output like:
 
 ```
 Loading cargo tool configuration from: /path/to/ahma_mcp/examples/configs/cargo.json
-✅ Configuration is valid!
+OK Configuration is valid!
 
 📋 Tool Details:
    Name: cargo

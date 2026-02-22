@@ -15,7 +15,7 @@ echo "Running pre-push checks..."
 
 DIRTY_STATUS="$(git status --porcelain)"
 if [ -n "$DIRTY_STATUS" ]; then
-  echo "❌ Refusing push: working tree is not clean."
+  echo "FAIL Refusing push: working tree is not clean."
   echo ""
   echo "Detected changes:"
   echo "$DIRTY_STATUS"
@@ -24,8 +24,8 @@ if [ -n "$DIRTY_STATUS" ]; then
   exit 1
 fi
 
-echo "✅ Working tree is clean"
+echo "OK Working tree is clean"
 echo "=== Running cargo check --workspace --locked ==="
 cargo check --workspace --locked
 
-echo "✅ Pre-push checks passed"
+echo "OK Pre-push checks passed"

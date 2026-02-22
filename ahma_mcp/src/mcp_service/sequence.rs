@@ -194,7 +194,7 @@ async fn handle_sequence_tool_sync(
                     &output
                 };
                 let message = format!(
-                    "✓ Step {} completed: {} {}\n{}",
+                    "OK Step {} completed: {} {}\n{}",
                     index + 1,
                     step.tool,
                     step.subcommand,

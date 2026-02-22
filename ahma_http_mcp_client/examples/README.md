@@ -59,13 +59,13 @@ Configuration:
   Sync clients: 1
 
 Starting server...
-✓ Server is healthy
+OK Server is healthy
 
 Starting 4 client(s)...
-✓ Sync client initialized
-✓ Async client 1 initialized
-✓ Async client 2 initialized
-✓ Async client 3 initialized
+OK Sync client initialized
+OK Async client 1 initialized
+OK Async client 2 initialized
+OK Async client 3 initialized
 
 Running stress test...
 
@@ -74,7 +74,7 @@ Running stress test...
 [ 45s] Success: 1385 | Errors: 0 | Rate: 30/s
 [ 60s] Success: 1842 | Errors: 0 | Rate: 30/s
 
-✓ Test duration completed
+OK Test duration completed
 
 ╔═══════════════════════════════════════════════════════════╗
 ║                     Test Results                          ║
@@ -85,7 +85,7 @@ Running stress test...
   Duration: 60.1s
   Average rate: 30.6 req/s
 
-✓ Test completed successfully
+OK Test completed successfully
 ```
 
 **Error Handling:**

@@ -123,9 +123,9 @@ let config_path = Path::new(".ahma/mytool.json");
 let content = std::fs::read_to_string(config_path)?;
 
 match validator.validate_tool_config(config_path, &content) {
-    Ok(config) => println!("✅ Valid configuration"),
+    Ok(config) => println!("OK Valid configuration"),
     Err(errors) => {
-        eprintln!("❌ Validation errors:");
+        eprintln!("FAIL Validation errors:");
         for error in errors {
             eprintln!("  - {}: {}", error.field_path, error.message);
         }

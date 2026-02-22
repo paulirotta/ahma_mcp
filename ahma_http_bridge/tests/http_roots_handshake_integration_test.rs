@@ -122,7 +122,7 @@ async fn http_roots_handshake_then_tool_call_defaults_to_root() {
         Some(id) => id,
         None => {
             eprintln!(
-                "⚠️  Server at {} did not return mcp-session-id (session isolation likely disabled); skipping test. Response: {}",
+                "WARNING️  Server at {} did not return mcp-session-id (session isolation likely disabled); skipping test. Response: {}",
                 base_url, body
             );
             return;

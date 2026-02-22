@@ -98,7 +98,7 @@ mod tests {
         .await
         .unwrap();
         let tracking_callback = Arc::new(TrackingCallback::new());
-        println!("✅ Full system initialized");
+        println!("OK Full system initialized");
 
         let current_dir = std::env::current_dir().unwrap();
         let current_dir_str = current_dir.to_str().unwrap();
@@ -116,7 +116,7 @@ mod tests {
             completed_op.is_some(),
             "Operation should have completed and been returned by wait_for_operation"
         );
-        println!("✅ Operation completed and is in history.");
+        println!("OK Operation completed and is in history.");
 
         // Simulate a notification loop that runs multiple times
         println!("🔄 Simulating notification loop...");
@@ -161,7 +161,7 @@ mod tests {
             completed_notifications
         );
 
-        println!("✅ Full system integration test passed - operation was notified exactly once.");
+        println!("OK Full system integration test passed - operation was notified exactly once.");
     }
 
     /// Test system under load with multiple operations, ensuring each is notified once.
@@ -204,7 +204,7 @@ mod tests {
                 op_id
             );
         }
-        println!("✅ All operations completed.");
+        println!("OK All operations completed.");
 
         assert_eq!(
             operation_monitor.get_completed_operations().await.len(),
@@ -247,7 +247,7 @@ mod tests {
         );
 
         println!(
-            "✅ Multiple operations integration test passed - each operation was notified exactly once."
+            "OK Multiple operations integration test passed - each operation was notified exactly once."
         );
     }
 }

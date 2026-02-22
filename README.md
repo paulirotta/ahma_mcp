@@ -6,27 +6,22 @@ _Create agents from your command line tools with one JSON file, then watch them 
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------: |
 | [![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml) [![Coverage Report](https://img.shields.io/badge/Coverage-Report-blue)](https://paulirotta.github.io/ahma_mcp/html/) [![Code Simplicity](https://img.shields.io/badge/Code-Simplicity-green)](https://paulirotta.github.io/ahma_mcp/CODE_SIMPLICITY.html) [![Prebuilt Binaries](https://img.shields.io/badge/Prebuilt-Binaries-blueviolet)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml?query=branch%3Amain+event%3Apush+is%3Asuccess) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![Rust](https://img.shields.io/badge/Rust-1.93%2B-B7410E.svg)](https://www.rust-lang.org/) | ![Ahma MCP Logo](./assets/ahma.png) |
 
-`ahma_mcp` is a toolbox for safely wrapping command line tools for AI use. This is done by creating (use AI) a ´.ahma/tools/somenewtool.json´.
+`ahma_mcp` is a toolbox for safely wrapping command line tools for AI use. This is done by creating (use AI) a `.ahma/tools/somenewtool.json`.
 
-## 🚀 Quick Install (macOS & Linux)
+## Installation
 
-Install the latest prebuilt binaries for your platform with one command (requires `curl`, `tar`, and `gh` CLI):
+Install the latest prebuilt binaries for macOS and Linux with one command:
 
 ```bash
-# Set your platform (e.g., darwin-arm64, darwin-x86_64, linux-x86_64)
-PLATFORM="darwin-arm64" 
-
-# Download, extract, and install to ~/.local/bin
-RUN_ID=$(gh run list --workflow build.yml --branch main --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId')
-gh run download "$RUN_ID" --name "release-binaries-$PLATFORM" --dir .
-tar -xzf ahma-release-*.tar.gz
-mkdir -p ~/.local/bin && mv ahma_mcp ahma_simplify ~/.local/bin/
-rm ahma-release-*.tar.gz SHA256SUMS README.md
-echo "Installed to ~/.local/bin/ahma_mcp and ~/.local/bin/ahma_simplify"
+curl -sSf https://raw.githubusercontent.com/paulirotta/ahma_mcp/main/scripts/install.sh | bash
 ```
 
-> [!NOTE]
-> `ahma_simplify` is the binary used for code simplicity analysis. Ensure `~/.local/bin` is in your `PATH`.
+This script:
+1. Detects your OS and architecture
+2. Downloads the latest release from GitHub
+3. Installs `ahma_mcp` and `ahma_simplify` to `~/.local/bin`
+
+Ensure `~/.local/bin` is in your `PATH`.
 
 ## Documentation Strategy
 

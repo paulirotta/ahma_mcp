@@ -6,31 +6,31 @@
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Core Tool Execution | ✅ tests-pass | `ahma_mcp` adapter executes CLI tools via MTDF JSON |
-| Async-First Operations | ✅ tests-pass | Operations return `operation_id`, push results via MCP notifications |
-| Shell Pool | ✅ tests-pass | Pre-warmed zsh shells for 5-20ms command startup latency |
-| Linux Sandbox (Landlock) | ✅ tests-pass | Kernel-level FS sandboxing on Linux 5.13+ |
-| macOS Sandbox (Seatbelt) | ✅ tests-pass | Kernel-level FS sandboxing via `sandbox-exec` |
-| Nested Sandbox Detection | ✅ tests-pass | Detects Cursor/VS Code/Docker outer sandboxes |
-| STDIO Mode | ✅ tests-pass | Direct MCP server over stdio for IDE integration |
-| HTTP Bridge Mode | ✅ tests-pass | HTTP/SSE proxy for web clients |
-| Session Isolation (HTTP) | ✅ tests-pass | Per-session sandbox scope via MCP `roots/list` |
-| Built-in `status` Tool | ✅ tests-pass | Non-blocking progress check for async operations |
-| Built-in `await` Tool | ✅ tests-pass | Blocking wait for operation completion |
-| Built-in `cancel` Tool | ✅ tests-pass | Cancel running operations |
-| Built-in `sandboxed_shell` | ✅ tests-pass | Execute arbitrary shell commands within sandbox |
-| Batteries-Included Tools | ✅ tests-pass | Built-in MTDF setups activated via CLI flags (e.g. `--rust`, `--python`) |
-| MTDF Schema Validation | ✅ tests-pass | JSON schema validation at startup |
-| Sequence Tools | ✅ tests-pass | Chain multiple commands into workflows |
-| Tool Hot-Reload | ✅ tests-pass | Watch `tools/` directory, reload on changes |
-| MCP Callback Notifications | ✅ tests-pass | Push async results via `notifications/progress` |
-| HTTP MCP Client | ✅ tests-pass | Connect to external HTTP MCP servers |
-| OAuth 2.0 + PKCE | ✅ tests-pass | Authentication for HTTP MCP servers |
-| `ahma_validate` CLI | ✅ tests-pass | Validate tool configs against MTDF schema |
-| `generate_tool_schema` CLI | ✅ tests-pass | Generate MTDF JSON schema |
-| Graceful Shutdown | ✅ tests-pass | 10-second grace period for operation completion |
-| Unified Shell Output | ✅ tests-pass | stderr redirected to stdout (`2>&1`) |
-| Logging (File + Stderr) | ✅ tests-pass | Daily rolling logs, `--log-to-stderr` for debug |
+| Core Tool Execution | tests-pass | `ahma_mcp` adapter executes CLI tools via MTDF JSON |
+| Async-First Operations | tests-pass | Operations return `operation_id`, push results via MCP notifications |
+| Shell Pool | tests-pass | Pre-warmed zsh shells for 5-20ms command startup latency |
+| Linux Sandbox (Landlock) | tests-pass | Kernel-level FS sandboxing on Linux 5.13+ |
+| macOS Sandbox (Seatbelt) | tests-pass | Kernel-level FS sandboxing via `sandbox-exec` |
+| Nested Sandbox Detection | tests-pass | Detects Cursor/VS Code/Docker outer sandboxes |
+| STDIO Mode | tests-pass | Direct MCP server over stdio for IDE integration |
+| HTTP Bridge Mode | tests-pass | HTTP/SSE proxy for web clients |
+| Session Isolation (HTTP) | tests-pass | Per-session sandbox scope via MCP `roots/list` |
+| Built-in `status` Tool | tests-pass | Non-blocking progress check for async operations |
+| Built-in `await` Tool | tests-pass | Blocking wait for operation completion |
+| Built-in `cancel` Tool | tests-pass | Cancel running operations |
+| Built-in `sandboxed_shell` | tests-pass | Execute arbitrary shell commands within sandbox |
+| Batteries-Included Tools | tests-pass | Built-in MTDF setups activated via CLI flags (e.g. `--rust`, `--python`) |
+| MTDF Schema Validation | tests-pass | JSON schema validation at startup |
+| Sequence Tools | tests-pass | Chain multiple commands into workflows |
+| Tool Hot-Reload | tests-pass | Watch `tools/` directory, reload on changes |
+| MCP Callback Notifications | tests-pass | Push async results via `notifications/progress` |
+| HTTP MCP Client | tests-pass | Connect to external HTTP MCP servers |
+| OAuth 2.0 + PKCE | tests-pass | Authentication for HTTP MCP servers |
+| `ahma_validate` CLI | tests-pass | Validate tool configs against MTDF schema |
+| `generate_tool_schema` CLI | tests-pass | Generate MTDF JSON schema |
+| Graceful Shutdown | tests-pass | 10-second grace period for operation completion |
+| Unified Shell Output | tests-pass | stderr redirected to stdout (`2>&1`) |
+| Logging (File + Stderr) | tests-pass | Daily rolling logs, `--log-to-stderr` for debug |
 
 ---
 
@@ -462,7 +462,7 @@ These control execution environment but **must not** be passed as CLI arguments:
 - **R18.3**: Example anti-pattern:
 
 ```rust
-// ❌ WRONG: Polling for state change
+// WRONG: Polling for state change
 while !session.is_sandbox_ready() {
     sleep(Duration::from_millis(100)).await;
 }
@@ -471,7 +471,7 @@ while !session.is_sandbox_ready() {
 - **R18.4**: Correct pattern:
 
 ```rust
-// ✅ CORRECT: Explicit state transition notification
+// CORRECT: Explicit state transition notification
 session.wait_for_state(SandboxState::Ready).await;
 // where wait_for_state uses a channel that the setter notifies
 ```
@@ -510,6 +510,12 @@ started_rx.await.ok();  // Don't return until spawn is live
 - **R21.3**: The following patterns are **FORBIDDEN**:
   - Any different behavior based on automatic "test mode" detection from environment variables like `NEXTEST`, `CARGO_TARGET_DIR`, etc.
   - Any environment variable that bypasses security checks
+
+#### R22: Visual Minimalism
+
+- **R22.1**: Public communications, including user messages, error logs, and documentation, **must** minimize the use of icons and emojis.
+- **R22.2**: Standard ASCII text **should** be used for all status indications and visual cues.
+- **R22.3**: Emojis are **forbidden** in source code logs and terminal output unless explicitly required for a specific standardized protocol.
 
 ---
 
@@ -685,7 +691,7 @@ assert_eventually(
 
 #### R17.1: Example Anti-Pattern vs Correct Pattern
 
-❌ **WRONG**: Fixed sleep for operation completion
+FAIL **WRONG**: Fixed sleep for operation completion
 ```rust
 async fn test_operation_completes() {
     let op_id = start_operation().await;
@@ -694,7 +700,7 @@ async fn test_operation_completes() {
 }
 ```
 
-✅ **CORRECT**: Condition-based waiting
+OK **CORRECT**: Condition-based waiting
 ```rust
 async fn test_operation_completes() {
     let op_id = start_operation().await;
@@ -705,44 +711,20 @@ async fn test_operation_completes() {
 }
 ```
 
-❌ **WRONG**: Creating files in repo directory
+FAIL **WRONG**: Creating files in repo directory
 ```rust
-fn test_file_processing() {
-    std::fs::create_dir_all("./test_files").unwrap();  // Pollutes repo!
-    std::fs::write("./test_files/input.txt", "data").unwrap();
-}
+let f = File::create("test.txt"); // WRONG
 ```
 
-✅ **CORRECT**: Using temp directory
+OK **CORRECT**: Using temp directory
 ```rust
-fn test_file_processing() {
-    let temp = tempdir().unwrap();
-    let input = temp.path().join("input.txt");
-    std::fs::write(&input, "data").unwrap();
-    // Auto-cleaned on drop
-}
+let t = tempdir();
+let f = File::create(t.path().join("test.txt")); // OK
 ```
 
----
+### 11.2 Recurring Failure Mode Detection
 
-
-## 11. Known Issues & Guardrails
-
-### 11.1 Agent Guardrails (from AGENTS.md)
-
-⚠️ **This repo has a recurring failure mode: tests can pass while real-world usage is broken.**
-
-1. **Do not weaken tests** - The regression test in `ahma_http_bridge/tests/http_bridge_integration_test.rs` is intentionally strict. If it fails, assume HTTP session scoping is broken.
-
-2. **Test-mode bypass** - `ahma_mcp::sandbox::is_test_mode()` auto-enables permissive mode when certain env vars are present (`NEXTEST`, `CARGO_TARGET_DIR`, `RUST_TEST_THREADS`). This can mask production failures.
-
-3. **HTTP mode must be session-isolated** - Per-session sandbox scope derived from MCP `roots/list`. If this regresses to shared scope, real usage breaks even if tests pass.
-
-### 11.2 Current Limitations
-
-- Nested subcommands beyond 2 levels not extensively tested
-- Limited Windows testing (primarily macOS/Linux)
-- HTTP mode is for **local development only** - do not expose to untrusted networks
+This repo has a recurring failure mode: tests can pass while real-world usage is broken.
 
 ---
 
@@ -752,47 +734,47 @@ fn test_file_processing() {
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Adapter execution | ✅ tests-pass | Sync/async CLI tool execution |
-| MCP ServerHandler | ✅ tests-pass | Complete MCP protocol implementation |
-| Shell pool | ✅ tests-pass | Pre-warmed processes, per-directory pooling |
-| Linux sandbox | ✅ tests-pass | Landlock enforcement |
-| macOS sandbox | ✅ tests-pass | Seatbelt/sandbox-exec enforcement |
-| Nested sandbox detection | ✅ tests-pass | Detect outer sandboxes |
-| Operation monitor | ✅ tests-pass | Track async operations |
-| Callback system | ✅ tests-pass | Push completion notifications |
-| Config loading | ✅ tests-pass | MTDF JSON parsing |
-| Schema validation | ✅ tests-pass | Validate at startup |
-| Sequence tools | ✅ tests-pass | Multi-command workflows |
-| Hot-reload | ✅ tests-pass | Watch tools directory |
+| Adapter execution | PASS | Sync/async CLI tool execution |
+| MCP ServerHandler | PASS | Complete MCP protocol implementation |
+| Shell pool | PASS | Pre-warmed processes, per-directory pooling |
+| Linux sandbox | PASS | Landlock enforcement |
+| macOS sandbox | PASS | Seatbelt/sandbox-exec enforcement |
+| Nested sandbox detection | PASS | Detect outer sandboxes |
+| Operation monitor | PASS | Track async operations |
+| Callback system | PASS | Push completion notifications |
+| Config loading | PASS | MTDF JSON parsing |
+| Schema validation | PASS | Validate at startup |
+| Sequence tools | PASS | Multi-command workflows |
+| Hot-reload | PASS | Watch tools directory |
 
 ### 12.2 ahma_http_bridge
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| HTTP-to-stdio bridge | ✅ tests-pass | Proxy JSON-RPC to subprocess |
-| SSE streaming | ✅ tests-pass | Server-sent events for notifications |
-| Session isolation | ✅ tests-pass | Per-session sandbox scope |
-| Auto-restart | ✅ tests-pass | Restart crashed subprocess |
-| Health endpoint | ✅ tests-pass | `/health` monitoring |
-| Session termination | ✅ tests-pass | DELETE with `Mcp-Session-Id` |
+| HTTP-to-stdio bridge | PASS | Proxy JSON-RPC to subprocess |
+| SSE streaming | PASS | Server-sent events for notifications |
+| Session isolation | PASS | Per-session sandbox scope |
+| Auto-restart | PASS | Restart crashed subprocess |
+| Health endpoint | PASS | `/health` monitoring |
+| Session termination | PASS | DELETE with `Mcp-Session-Id` |
 
 ### 12.3 ahma_http_mcp_client
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| HTTP transport | ✅ tests-pass | POST requests with Bearer auth |
-| SSE receiving | ✅ tests-pass | Background task for server messages |
-| OAuth 2.0 + PKCE | ✅ tests-pass | Browser-based auth flow |
-| Token storage | ✅ tests-pass | Persist to temp directory |
-| Token refresh | ⏳ planned | Auto-refresh expired tokens |
+| HTTP transport | PASS | POST requests with Bearer auth |
+| SSE receiving | PASS | Background task for server messages |
+| OAuth 2.0 + PKCE | PASS | Browser-based auth flow |
+| Token storage | PASS | Persist to temp directory |
+| Token refresh | PLANNED | Auto-refresh expired tokens |
 
 ### 12.4 ahma_validate
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Schema validation | ✅ tests-pass | Validate tool configs against MTDF |
-| CLI interface | ✅ tests-pass | `ahma_validate <file>` |
-| Clear error messages | ✅ tests-pass | Actionable validation errors |
+| Schema validation | PASS | Validate tool configs against MTDF |
+| CLI interface | PASS | `ahma_validate <file>` |
+| Clear error messages | PASS | Actionable validation errors |
 
 ---
 
@@ -882,7 +864,7 @@ This ensures:
 > 1. Update the "Quick Status" table
 > 2. Add to "Known Issues" if new bugs found
 > 3. Update feature tables with status changes
-> 4. **BEFORE stopping work: Run `cargo clippy` then `cargo nextest run` to verify quality**
+> 4. **BEFORE stopping work: Run `cargo clippy` then `cargo nextest run` to verify quality`
 
 **Last Updated**: 2026-01-18
 

@@ -42,14 +42,14 @@ impl AhmaMcpService {
                 .as_deref()
                 .unwrap_or("No reason provided (default: user-initiated)");
             format!(
-                "✓ Operation '{}' has been cancelled successfully.\nString: reason='{}'.\nHint: Consider restarting the operation if needed.",
+                "OK Operation '{}' has been cancelled successfully.\nString: reason='{}'.\nHint: Consider restarting the operation if needed.",
                 operation_id, why
             )
         } else {
             // Check if operation exists but is already terminal
             if let Some(operation) = self.operation_monitor.get_operation(&operation_id).await {
                 format!(
-                    "⚠ Operation '{}' is already {} and cannot be cancelled.",
+                    "WARNING Operation '{}' is already {} and cannot be cancelled.",
                     operation_id,
                     match operation.state {
                         crate::operation_monitor::OperationStatus::Completed => "completed",
@@ -61,7 +61,7 @@ impl AhmaMcpService {
                 )
             } else {
                 format!(
-                    "❌ Operation '{}' not found. It may have already completed or never existed.",
+                    "FAIL Operation '{}' not found. It may have already completed or never existed.",
                     operation_id
                 )
             }

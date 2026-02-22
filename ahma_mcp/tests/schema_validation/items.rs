@@ -111,7 +111,7 @@ async fn test_array_parameters_must_have_items_property() -> anyhow::Result<()> 
             );
 
             eprintln!(
-                "✅ Array parameter '{}' has valid items property",
+                "OK Array parameter '{}' has valid items property",
                 param_name
             );
             Ok(())

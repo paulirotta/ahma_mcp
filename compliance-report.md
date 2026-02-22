@@ -10,26 +10,26 @@
 
 | Module | Status | Confirmed | Mismatches | Notes |
 |--------|--------|-----------|------------|-------|
-| `ahma_mcp` | ⚠️ Partial | R1-R5, R7.1-R7.5, R15-R17, R19 | R6.9, R7.6 | Nested sandbox handling, workspace config |
-| `ahma_http_bridge` | ⚠️ Partial | R8.1-R8.4.6, R8.4.8+ | R8.4.7 | Missing HTTP DELETE endpoint |
-| `ahma_http_mcp_client` | ✅ Compliant | R9.3-R9.8 | None | OAuth PKCE, token persistence |
-| `ahma_validate` | ✅ Compliant | R5.2, R6.4 | None | MTDF validation, exit codes |
-| `generate_tool_schema` | ✅ Compliant | R6.5 | None | Schema generation |
+| `ahma_mcp` | WARN Partial | R1-R5, R7.1-R7.5, R15-R17, R19 | R6.9, R7.6 | Nested sandbox handling, workspace config |
+| `ahma_http_bridge` | WARN Partial | R8.1-R8.4.6, R8.4.8+ | R8.4.7 | Missing HTTP DELETE endpoint |
+| `ahma_http_mcp_client` | COMPLIANT | R9.3-R9.8 | None | OAuth PKCE, token persistence |
+| `ahma_validate` | COMPLIANT | R5.2, R6.4 | None | MTDF validation, exit codes |
+| `generate_tool_schema` | COMPLIANT | R6.5 | None | Schema generation |
 
 ---
 
 # Module: ahma_mcp
 
-## ✅ Requirements Confirmed
+## OK Requirements Confirmed
 
 ### R1: Configuration-Driven Tools & Hot-Reloading
 
 | Req | Description | Status | Evidence |
 |-----|-------------|--------|----------|
-| R1.1 | JSON tool definitions | ✅ | `ahma_mcp/src/config.rs` defines `ToolConfig`, `SubcommandConfig` |
-| R1.2 | Directory scanning | ✅ | `load_tool_configs()` in `config.rs` |
-| R1.3 | Startup validation | ✅ | `ahma_mcp/src/schema_validation.rs` `MtdfValidator` |
-| R1.4 | Hot-reload + notification | ✅ | `mcp_service/mod.rs:202-259` `start_config_watcher()` uses `notify` crate, calls `notify_tool_list_changed()` at line 191 |
+| R1.1 | JSON tool definitions | OK | `ahma_mcp/src/config.rs` defines `ToolConfig`, `SubcommandConfig` |
+| R1.2 | Directory scanning | OK | `load_tool_configs()` in `config.rs` |
+| R1.3 | Startup validation | OK | `ahma_mcp/src/schema_validation.rs` `MtdfValidator` |
+| R1.4 | Hot-reload + notification | OK | `mcp_service/mod.rs:202-259` `start_config_watcher()` uses `notify` crate, calls `notify_tool_list_changed()` at line 191 |
 
 **Evidence excerpt:**
 
@@ -48,10 +48,10 @@
 
 | Req | Description | Status | Evidence |
 |-----|-------------|--------|----------|
-| R2.1 | Async by default | ✅ | `mcp_service/mod.rs:1420-1443` defaults to `AsyncResultPush` mode |
-| R2.2 | Operation ID return | ✅ | `adapter.rs:421` generates `op_<id>` pattern |
-| R2.3 | Progress notifications | ✅ | `mcp_callback.rs` implements `CallbackSender` |
-| R3.1 | Sync override | ✅ | `--sync` CLI flag or `synchronous: true` in config |
+| R2.1 | Async by default | OK | `mcp_service/mod.rs:1420-1443` defaults to `AsyncResultPush` mode |
+| R2.2 | Operation ID return | OK | `adapter.rs:421` generates `op_<id>` pattern |
+| R2.3 | Progress notifications | OK | `mcp_callback.rs` implements `CallbackSender` |
+| R3.1 | Sync override | OK | `--sync` CLI flag or `synchronous: true` in config |
 
 **Evidence excerpt (async default):**
 
@@ -68,8 +68,8 @@
 
 | Req | Description | Status | Evidence |
 |-----|-------------|--------|----------|
-| R4.1 | Pre-warmed shell pool | ✅ | `ahma_mcp/src/shell_pool.rs` `ShellPoolManager` |
-| R4.2 | Background replenishment | ✅ | `start_background_tasks()` in shell_pool.rs |
+| R4.1 | Pre-warmed shell pool | OK | `ahma_mcp/src/shell_pool.rs` `ShellPoolManager` |
+| R4.2 | Background replenishment | OK | `start_background_tasks()` in shell_pool.rs |
 
 ---
 
@@ -77,10 +77,10 @@
 
 | Req | Description | Status | Evidence |
 |-----|-------------|--------|----------|
-| R5.1 | Schema generation | ✅ | `schemars::schema_for!(ToolConfig)` in generate_tool_schema |
-| R5.2 | Startup validation | ✅ | `MtdfValidator::validate_tool_config()` |
-| R5.3 | `format: "path"` support | ✅ | `adapter.rs:937-953` validates paths with `path_security::validate_path()` |
-| R5.4 | `file_arg`/`file_flag` | ✅ | `adapter.rs:871-897` creates temp files for multi-line args |
+| R5.1 | Schema generation | OK | `schemars::schema_for!(ToolConfig)` in generate_tool_schema |
+| R5.2 | Startup validation | OK | `MtdfValidator::validate_tool_config()` |
+| R5.3 | `format: "path"` support | OK | `adapter.rs:937-953` validates paths with `path_security::validate_path()` |
+| R5.4 | `file_arg`/`file_flag` | OK | `adapter.rs:871-897` creates temp files for multi-line args |
 
 ---
 
@@ -88,11 +88,11 @@
 
 | Req | Description | Status | Evidence |
 |-----|-------------|--------|----------|
-| R7.1 | Landlock (Linux) | ✅ | `sandbox.rs:634-694` `enforce_landlock_sandbox()` |
-| R7.2 | Seatbelt (macOS) | ✅ | `sandbox.rs:524-622` `generate_seatbelt_profile()` |
-| R7.3 | Scope immutability | ✅ | `sandbox.rs:170-173` uses `OnceLock` for `SANDBOX_SCOPES` |
-| R7.4 | Path validation | ✅ | `sandbox.rs:201-237` `validate_path_in_sandbox()` |
-| R7.5 | Sandbox prerequisite check | ✅ | `sandbox.rs:268-285` `check_sandbox_prerequisites()` |
+| R7.1 | Landlock (Linux) | OK | `sandbox.rs:634-694` `enforce_landlock_sandbox()` |
+| R7.2 | Seatbelt (macOS) | OK | `sandbox.rs:524-622` `generate_seatbelt_profile()` |
+| R7.3 | Scope immutability | OK | `sandbox.rs:170-173` uses `OnceLock` for `SANDBOX_SCOPES` |
+| R7.4 | Path validation | OK | `sandbox.rs:201-237` `validate_path_in_sandbox()` |
+| R7.5 | Sandbox prerequisite check | OK | `sandbox.rs:268-285` `check_sandbox_prerequisites()` |
 
 ---
 
@@ -100,7 +100,7 @@
 
 | Req | Description | Status | Evidence |
 |-----|-------------|--------|----------|
-| R15.1 | stderr→stdout redirect | ✅ | `adapter.rs:836-850` `ensure_shell_redirect()` appends `2>&1` |
+| R15.1 | stderr→stdout redirect | OK | `adapter.rs:836-850` `ensure_shell_redirect()` appends `2>&1` |
 
 **Evidence excerpt:**
 
@@ -130,8 +130,8 @@
 
 | Req | Description | Status | Evidence |
 |-----|-------------|--------|----------|
-| R16.1 | File logging default | ✅ | `logging.rs` uses `tracing-appender` |
-| R16.2 | `--log-to-stderr` option | ✅ | `main_logic.rs:171` CLI arg |
+| R16.1 | File logging default | OK | `logging.rs` uses `tracing-appender` |
+| R16.2 | `--log-to-stderr` option | OK | `main_logic.rs:171` CLI arg |
 
 ---
 
@@ -139,9 +139,9 @@
 
 | Req | Description | Status | Evidence |
 |-----|-------------|--------|----------|
-| R17.1 | Progress notifications | ✅ | `mcp_callback.rs` `McpCallbackSender` |
-| R17.2 | Client-type detection | ✅ | `client_type.rs` `McpClientType::from_peer()` |
-| R17.3 | Progress token handling | ✅ | `mcp_service/mod.rs:1473-1481` checks for `progressToken` |
+| R17.1 | Progress notifications | OK | `mcp_callback.rs` `McpCallbackSender` |
+| R17.2 | Client-type detection | OK | `client_type.rs` `McpClientType::from_peer()` |
+| R17.3 | Progress token handling | OK | `mcp_service/mod.rs:1473-1481` checks for `progressToken` |
 
 ---
 
@@ -149,8 +149,8 @@
 
 | Req | Description | Status | Evidence |
 |-----|-------------|--------|----------|
-| R19.1 | MCP cancellation handling | ✅ | `mcp_service/mod.rs:881-963` `on_cancelled()` |
-| R19.2 | Background op filtering | ✅ | Lines 909-915 filter out `await`/`status`/`cancel` tools |
+| R19.1 | MCP cancellation handling | OK | `mcp_service/mod.rs:881-963` `on_cancelled()` |
+| R19.2 | Background op filtering | OK | Lines 909-915 filter out `await`/`status`/`cancel` tools |
 
 **Evidence excerpt:**
 
@@ -166,7 +166,7 @@
 
 ---
 
-## ⚠️ Mismatches Found
+## WARN Mismatches Found
 
 ### R7.6: Nested Sandbox Environments — MISMATCH
 
@@ -175,8 +175,8 @@
 
 **Actual Implementation:**
 
-- Detection: ✅ `sandbox.rs:368-400` `test_sandbox_exec_available()` correctly detects nested sandbox
-- Handling: ❌ `main_logic.rs:231-254` logs warnings and **continues** instead of exiting
+- Detection: OK `sandbox.rs:368-400` `test_sandbox_exec_available()` correctly detects nested sandbox
+- Handling: FAIL `main_logic.rs:231-254` logs warnings and **continues** instead of exiting
 
 **Code Evidence:**
 
@@ -247,21 +247,21 @@ members = ["ahma_mcp", "ahma_validate", "generate_tool_schema", "ahma_http_bridg
 
 # Module: ahma_http_bridge
 
-## ✅ Requirements Confirmed
+## OK Requirements Confirmed
 
 ### R8: HTTP Bridge
 
 | Req | Description | Status | Evidence |
 |-----|-------------|--------|----------|
-| R8.1 | HTTP/SSE transport | ✅ | `bridge.rs:81-83` POST/GET `/mcp` routes |
-| R8.2 | Content negotiation | ✅ | JSON response handling in `json_response()` |
-| R8.3 | Debug colored output | ✅ | `session.rs:788-825` colored STDIN/STDOUT/STDERR |
-| R8.4.1 | Session creation on initialize | ✅ | `bridge.rs:283-343` creates session on first `initialize` |
-| R8.4.2 | `Mcp-Session-Id` header | ✅ | `bridge.rs:59` constant, lines 317-322 set in response |
-| R8.4.3 | Session routing | ✅ | `bridge.rs:344-365` routes by session ID |
-| R8.4.4 | Sandbox from roots/list | ✅ | `bridge.rs:539-579` locks sandbox from roots response |
-| R8.4.5 | Sandbox immutability | ✅ | `session.rs:650-651` checks `sandbox_locked` before modification |
-| R8.4.6 | Roots change rejection | ✅ | `session.rs:694-726` `handle_roots_changed()` terminates session |
+| R8.1 | HTTP/SSE transport | OK | `bridge.rs:81-83` POST/GET `/mcp` routes |
+| R8.2 | Content negotiation | OK | JSON response handling in `json_response()` |
+| R8.3 | Debug colored output | OK | `session.rs:788-825` colored STDIN/STDOUT/STDERR |
+| R8.4.1 | Session creation on initialize | OK | `bridge.rs:283-343` creates session on first `initialize` |
+| R8.4.2 | `Mcp-Session-Id` header | OK | `bridge.rs:59` constant, lines 317-322 set in response |
+| R8.4.3 | Session routing | OK | `bridge.rs:344-365` routes by session ID |
+| R8.4.4 | Sandbox from roots/list | OK | `bridge.rs:539-579` locks sandbox from roots response |
+| R8.4.5 | Sandbox immutability | OK | `session.rs:650-651` checks `sandbox_locked` before modification |
+| R8.4.6 | Roots change rejection | OK | `session.rs:694-726` `handle_roots_changed()` terminates session |
 
 ### Session Handshake State Machine
 
@@ -277,7 +277,7 @@ members = ["ahma_mcp", "ahma_validate", "generate_tool_schema", "ahma_http_bridg
 
 ---
 
-## ⚠️ Mismatch Found
+## WARN Mismatch Found
 
 ### R8.4.7: HTTP DELETE Session Termination — MISSING
 
@@ -327,14 +327,14 @@ async fn handle_session_delete(
 
 # Module: ahma_http_mcp_client
 
-## ✅ Fully Compliant
+## OK Fully Compliant
 
 | Req | Description | Status | Evidence |
 |-----|-------------|--------|----------|
-| R9.3 | OAuth PKCE flow | ✅ | `client.rs:112-178` `perform_oauth_flow()` with `PkceCodeChallenge` |
-| R9.4 | Token persistence | ✅ | `client.rs:304-334` `save_token()`, `load_token()` |
-| R9.5 | Token path override | ✅ | `client.rs:329-334` `AHMA_HTTP_CLIENT_TOKEN_PATH` env var |
-| R9.8 | Transport implementation | ✅ | `client.rs:222-294` `impl Transport<RoleClient>` |
+| R9.3 | OAuth PKCE flow | OK | `client.rs:112-178` `perform_oauth_flow()` with `PkceCodeChallenge` |
+| R9.4 | Token persistence | OK | `client.rs:304-334` `save_token()`, `load_token()` |
+| R9.5 | Token path override | OK | `client.rs:329-334` `AHMA_HTTP_CLIENT_TOKEN_PATH` env var |
+| R9.8 | Transport implementation | OK | `client.rs:222-294` `impl Transport<RoleClient>` |
 
 **Test coverage:** Token round-trip, env override, minimal fields — `client.rs:336-490`
 
@@ -342,15 +342,15 @@ async fn handle_session_delete(
 
 # Module: ahma_validate
 
-## ✅ Fully Compliant
+## OK Fully Compliant
 
 | Req | Description | Status | Evidence |
 |-----|-------------|--------|----------|
-| R5.2/R6.4 | Validation binary | ✅ | `main.rs` uses `MtdfValidator` |
-| Exit codes | 0 valid, non-zero invalid | ✅ | `main.rs:42-49` returns `Err` on failure |
-| `--guidance-file` | Guidance config support | ✅ | `main.rs:26-27` CLI arg |
-| `--debug` | Debug logging | ✅ | `main.rs:30-31` CLI arg |
-| Multiple targets | Comma-separated support | ✅ | `main.rs:61-68` splits by comma |
+| R5.2/R6.4 | Validation binary | OK | `main.rs` uses `MtdfValidator` |
+| Exit codes | 0 valid, non-zero invalid | OK | `main.rs:42-49` returns `Err` on failure |
+| `--guidance-file` | Guidance config support | OK | `main.rs:26-27` CLI arg |
+| `--debug` | Debug logging | OK | `main.rs:30-31` CLI arg |
+| Multiple targets | Comma-separated support | OK | `main.rs:61-68` splits by comma |
 
 **Test coverage:** 15 tests covering valid/invalid JSON, directories, comma-separated targets — `main.rs:123-489`
 
@@ -358,13 +358,13 @@ async fn handle_session_delete(
 
 # Module: generate_tool_schema
 
-## ✅ Fully Compliant
+## OK Fully Compliant
 
 | Req | Description | Status | Evidence |
 |-----|-------------|--------|----------|
-| R6.5 | Schema generation | ✅ | `main.rs:14-17` `schemars::schema_for!(ToolConfig)` |
-| File output | `mtdf-schema.json` | ✅ | `main.rs:39` joins with output dir |
-| Preview | First N lines | ✅ | `main.rs:46-63` `generate_preview()` |
+| R6.5 | Schema generation | OK | `main.rs:14-17` `schemars::schema_for!(ToolConfig)` |
+| File output | `mtdf-schema.json` | OK | `main.rs:39` joins with output dir |
+| Preview | First N lines | OK | `main.rs:46-63` `generate_preview()` |
 
 **Test coverage:** 12 tests covering generation, file writing, preview — `main.rs:87-262`
 
@@ -406,26 +406,26 @@ async fn test_delete_session_terminates_subprocess() {
 
 | Requirement | ahma_mcp | ahma_http_bridge | ahma_http_mcp_client | ahma_validate | generate_tool_schema |
 |-------------|-----------|------------------|----------------------|---------------|---------------------|
-| R0 (Terminology) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| R1 (Config/Hot-reload) | ✅ | — | — | — | — |
-| R2 (Async-first) | ✅ | — | — | — | — |
-| R3 (Sync override) | ✅ | — | — | — | — |
-| R4 (Shell pool) | ✅ | — | — | — | — |
-| R5 (MTDF validation) | ✅ | — | — | ✅ | ✅ |
-| R6 (Modular arch) | ⚠️ R6.9 | ✅ | ✅ | ✅ | ✅ |
-| R7 (Sandbox) | ⚠️ R7.6 | ✅ | — | — | — |
-| R8 (HTTP bridge) | — | ⚠️ R8.4.7 | — | — | — |
-| R9 (OAuth) | — | — | ✅ | — | — |
-| R10 (Meta-params) | ✅ | — | — | — | — |
-| R11 (Dependencies) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| R12 (Error handling) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| R13 (Testing) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| R15 (Unified output) | ✅ | — | — | — | — |
-| R16 (Logging) | ✅ | — | — | — | — |
-| R17 (Callbacks) | ✅ | — | — | — | — |
-| R19 (Cancellation) | ✅ | — | — | — | — |
+| R0 (Terminology) | OK | OK | OK | OK | OK |
+| R1 (Config/Hot-reload) | OK | — | — | — | — |
+| R2 (Async-first) | OK | — | — | — | — |
+| R3 (Sync override) | OK | — | — | — | — |
+| R4 (Shell pool) | OK | — | — | — | — |
+| R5 (MTDF validation) | OK | — | — | OK | OK |
+| R6 (Modular arch) | WARN R6.9 | OK | OK | OK | OK |
+| R7 (Sandbox) | WARN R7.6 | OK | — | — | — |
+| R8 (HTTP bridge) | — | WARN R8.4.7 | — | — | — |
+| R9 (OAuth) | — | — | OK | — | — |
+| R10 (Meta-params) | OK | — | — | — | — |
+| R11 (Dependencies) | OK | OK | OK | OK | OK |
+| R12 (Error handling) | OK | OK | OK | OK | OK |
+| R13 (Testing) | OK | OK | OK | OK | OK |
+| R15 (Unified output) | OK | — | — | — | — |
+| R16 (Logging) | OK | — | — | — | — |
+| R17 (Callbacks) | OK | — | — | — | — |
+| R19 (Cancellation) | OK | — | — | — | — |
 
-**Legend:** ✅ Confirmed | ⚠️ Mismatch | — Not applicable
+**Legend:** OK Confirmed | WARN Mismatch | — Not applicable
 
 ---
 

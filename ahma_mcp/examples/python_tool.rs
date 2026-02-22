@@ -27,7 +27,7 @@ fn main() {
     let content = match std::fs::read_to_string(&config_path) {
         Ok(content) => content,
         Err(e) => {
-            eprintln!("❌ Failed to read config file: {}", e);
+            eprintln!("FAIL Failed to read config file: {}", e);
             process::exit(1);
         }
     };
@@ -36,7 +36,7 @@ fn main() {
     let validator = MtdfValidator::new();
     match validator.validate_tool_config(&config_path, &content) {
         Ok(config) => {
-            println!("✅ Configuration is valid!");
+            println!("OK Configuration is valid!");
             println!("\n📋 Tool Details:");
             println!("   Name: {}", config.name);
             println!("   Description: {}", config.description);
@@ -53,11 +53,11 @@ fn main() {
             }
         }
         Err(errors) => {
-            eprintln!("❌ Validation failed with {} error(s):", errors.len());
+            eprintln!("FAIL Validation failed with {} error(s):", errors.len());
             for error in errors {
                 eprintln!("   - {}: {}", error.field_path, error.message);
                 if let Some(suggestion) = error.suggestion {
-                    eprintln!("     💡 Suggestion: {}", suggestion);
+                    eprintln!("     Suggestion Suggestion: {}", suggestion);
                 }
             }
             process::exit(1);

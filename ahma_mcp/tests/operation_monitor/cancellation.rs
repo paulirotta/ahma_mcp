@@ -90,12 +90,12 @@ async fn test_operation_cancellation_functionality() {
 
     if let Some(op) = operation {
         if op.state == OperationStatus::InProgress {
-            println!("✓ Confirmed operation is in progress");
+            println!("OK Confirmed operation is in progress");
 
             // Cancel the operation
             let cancelled = operation_monitor.cancel_operation(&operation_id).await;
             assert!(cancelled, "Operation cancellation should succeed");
-            println!("✓ Operation cancellation succeeded");
+            println!("OK Operation cancellation succeeded");
 
             // Wait for cancellation to be processed
             let _ = wait_for_condition(Duration::from_secs(5), Duration::from_millis(50), || {
@@ -117,7 +117,7 @@ async fn test_operation_cancellation_functionality() {
             // The operation might have been moved to completion history
             if let Some(op) = cancelled_operation {
                 assert_eq!(op.state, OperationStatus::Cancelled);
-                println!("✓ Operation state is correctly set to Cancelled");
+                println!("OK Operation state is correctly set to Cancelled");
             } else {
                 // Check completion history
                 let completed_ops = operation_monitor.get_completed_operations().await;
@@ -127,11 +127,11 @@ async fn test_operation_cancellation_functionality() {
                     "Cancelled operation should be in completion history"
                 );
                 assert_eq!(cancelled_op.unwrap().state, OperationStatus::Cancelled);
-                println!("✓ Operation found in completion history with Cancelled state");
+                println!("OK Operation found in completion history with Cancelled state");
             }
         } else {
             println!(
-                "⚠ Operation completed/failed too quickly to test cancellation, state: {:?}",
+                "WARNING Operation completed/failed too quickly to test cancellation, state: {:?}",
                 op.state
             );
             if let Some(result) = &op.result {
@@ -143,7 +143,7 @@ async fn test_operation_cancellation_functionality() {
                 !cancelled,
                 "Should not be able to cancel already completed operation"
             );
-            println!("✓ Correctly prevented cancellation of completed operation");
+            println!("OK Correctly prevented cancellation of completed operation");
         }
     } else {
         // Operation might have moved to completion history already
@@ -151,7 +151,7 @@ async fn test_operation_cancellation_functionality() {
         let completed_op = completed_ops.iter().find(|op| op.id == operation_id);
         if let Some(op) = completed_op {
             println!(
-                "⚠ Operation completed too quickly, final state: {:?}",
+                "WARNING Operation completed too quickly, final state: {:?}",
                 op.state
             );
             if let Some(result) = &op.result {
@@ -168,7 +168,7 @@ async fn test_operation_cancellation_functionality() {
         !second_cancel,
         "Second cancellation attempt should return false"
     );
-    println!("✓ Second cancellation attempt correctly returned false");
+    println!("OK Second cancellation attempt correctly returned false");
 
     // Test cancelling a non-existent operation
     let fake_cancel = operation_monitor.cancel_operation("nonexistent_id").await;
@@ -176,7 +176,7 @@ async fn test_operation_cancellation_functionality() {
         !fake_cancel,
         "Cancelling non-existent operation should return false"
     );
-    println!("✓ Cancelling non-existent operation correctly returned false");
+    println!("OK Cancelling non-existent operation correctly returned false");
 
     println!("🎉 All operation cancellation tests passed!");
 }
@@ -224,7 +224,7 @@ async fn test_operation_cancellation_before_execution() {
         assert_eq!(cancelled_op.unwrap().state, OperationStatus::Cancelled);
     }
 
-    println!("✓ Pre-execution cancellation test passed");
+    println!("OK Pre-execution cancellation test passed");
 }
 
 /// Test the basic cancellation token functionality
@@ -281,5 +281,5 @@ async fn test_cancellation_token_integration() {
         );
     }
 
-    println!("✓ Cancellation token integration test passed");
+    println!("OK Cancellation token integration test passed");
 }

@@ -46,16 +46,16 @@ echo "Running guardrail checks (phase: $PHASE)..."
 if [[ "$ALLOW_DIRTY" -ne 1 ]]; then
   DIRTY_STATUS="$(git status --porcelain)"
   if [[ -n "$DIRTY_STATUS" ]]; then
-    echo "❌ Working tree is not clean."
+    echo "FAIL Working tree is not clean."
     echo ""
     echo "$DIRTY_STATUS"
     echo ""
     echo "Commit/stash/remove local changes (including untracked files), or rerun with --allow-dirty."
     exit 1
   fi
-  echo "✅ Working tree is clean"
+  echo "OK Working tree is clean"
 else
-  echo "⚠️  --allow-dirty enabled (clean tree check skipped)"
+  echo "WARNING️  --allow-dirty enabled (clean tree check skipped)"
 fi
 
 echo "=== Guardrail: crate root preflight (src/lib.rs or src/main.rs) ==="
@@ -76,11 +76,11 @@ done < <(find . -name Cargo.toml -not -path "./target/*")
 
 if [[ "$missing" -ne 0 ]]; then
   echo ""
-  echo "❌ Crate root preflight failed."
+  echo "FAIL Crate root preflight failed."
   echo "Likely cause: required files exist locally but are untracked or misnamed."
   exit 1
 fi
-echo "✅ Crate root preflight passed"
+echo "OK Crate root preflight passed"
 
 echo "=== Guardrail: lint path checks ==="
 ./scripts/lint_test_paths.sh
@@ -93,14 +93,14 @@ cargo test -p ahma_mcp --test tool_tests tool_execution_integration_test::test_c
 
 echo "=== Guardrail: nextest diagnostics config ==="
 if ! grep -q 'success-output = "immediate"' .config/nextest.toml; then
-  echo "❌ .config/nextest.toml missing success-output = \"immediate\""
+  echo "FAIL .config/nextest.toml missing success-output = \"immediate\""
   exit 1
 fi
 if ! grep -q 'failure-output = "immediate"' .config/nextest.toml; then
-  echo "❌ .config/nextest.toml missing failure-output = \"immediate\""
+  echo "FAIL .config/nextest.toml missing failure-output = \"immediate\""
   exit 1
 fi
-echo "✅ Nextest diagnostics config looks good"
+echo "OK Nextest diagnostics config looks good"
 
 echo ""
-echo "✅ All guardrails passed for phase: $PHASE"
+echo "OK All guardrails passed for phase: $PHASE"

@@ -66,9 +66,9 @@ async fn test_callback_messages_are_ai_actionable() {
             "Duration should be available for performance assessment"
         );
 
-        println!("✅ Final result message contains all necessary AI decision-making info");
+        println!("OK Final result message contains all necessary AI decision-making info");
     } else {
-        panic!("❌ Expected FinalResult variant");
+        panic!("FAIL Expected FinalResult variant");
     }
 
     // Test 3: Failed message should be actionable
@@ -91,7 +91,7 @@ async fn test_callback_messages_are_ai_actionable() {
             "Specific exit code should be available"
         );
 
-        println!("✅ Failed message provides actionable error information");
+        println!("OK Failed message provides actionable error information");
     }
 
     println!("🎯 All callback messages provide sufficient clarity for AI decision-making");
@@ -159,7 +159,7 @@ test result: FAILED. 15 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out;
             "AI should have timing information"
         );
 
-        println!("✅ Nextest output provides comprehensive failure analysis for AI");
+        println!("OK Nextest output provides comprehensive failure analysis for AI");
     }
 
     println!("🎯 Nextest callback messages enable AI to diagnose and respond to test failures");

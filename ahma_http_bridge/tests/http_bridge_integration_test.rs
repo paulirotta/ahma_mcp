@@ -953,7 +953,7 @@ async fn test_roots_uri_parsing_percent_encoded_path() {
     .expect("Failed to write tool config");
 
     // Make a workspace root with space + unicode in the path.
-    let client_root = client_scope_dir.path().join("my proj ✓");
+    let client_root = client_scope_dir.path().join("my proj OK");
     tokio::fs::create_dir_all(&client_root)
         .await
         .expect("Failed to create client root");
@@ -1065,7 +1065,7 @@ async fn test_roots_uri_parsing_file_localhost() {
     )
     .expect("Failed to write tool config");
 
-    let client_root = client_scope_dir.path().join("my proj ✓");
+    let client_root = client_scope_dir.path().join("my proj OK");
     tokio::fs::create_dir_all(&client_root)
         .await
         .expect("Failed to create client root");

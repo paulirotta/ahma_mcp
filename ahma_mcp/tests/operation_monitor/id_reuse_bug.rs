@@ -40,7 +40,7 @@ mod tests {
             1,
             "History should have one entry after first completion."
         );
-        println!("✅ First operation completed and is in history.");
+        println!("OK First operation completed and is in history.");
 
         // Second operation instance with the same ID
         let operation2 = Operation::new(
@@ -50,7 +50,7 @@ mod tests {
             None,
         );
         monitor.add_operation(operation2).await;
-        println!("⚠️  Added second operation with same ID (should overwrite).");
+        println!("WARNING️  Added second operation with same ID (should overwrite).");
 
         monitor
             .update_status(
@@ -74,7 +74,7 @@ mod tests {
             "The operation should have been overwritten with the new description."
         );
 
-        println!("✅ Operation ID reuse test passed: History was correctly overwritten.");
+        println!("OK Operation ID reuse test passed: History was correctly overwritten.");
     }
 
     /// Verifies that multiple `add_operation` calls for the same ID before completion
@@ -105,7 +105,7 @@ mod tests {
                 None,
             ))
             .await;
-        println!("✅ Called add_operation multiple times.");
+        println!("OK Called add_operation multiple times.");
 
         // Complete the operation
         monitor
@@ -126,7 +126,7 @@ mod tests {
         );
 
         println!(
-            "✅ Multiple add_operation test passed: Only one operation was recorded in history."
+            "OK Multiple add_operation test passed: Only one operation was recorded in history."
         );
     }
 
@@ -153,7 +153,7 @@ mod tests {
         monitor
             .update_status(test_op_id, OperationStatus::InProgress, None)
             .await;
-        println!("✅ Step 1-2: Operation added and in-progress.");
+        println!("OK Step 1-2: Operation added and in-progress.");
 
         // Step 3: Notification loop runs, finds no completed operations
         let completed1 = monitor.get_completed_operations().await;
@@ -161,7 +161,7 @@ mod tests {
             completed1.is_empty(),
             "No operations should be complete yet."
         );
-        println!("✅ Step 3: Notification loop finds no completed operations.");
+        println!("OK Step 3: Notification loop finds no completed operations.");
 
         // Step 4: Operation completes
         monitor
@@ -171,7 +171,7 @@ mod tests {
                 Some(Value::String("cargo 1.89.0".to_string())),
             )
             .await;
-        println!("✅ Step 4: Operation completed.");
+        println!("OK Step 4: Operation completed.");
 
         // Step 5: Notification loop finds the completed operation
         let completed2 = monitor.get_completed_operations().await;
@@ -185,7 +185,7 @@ mod tests {
             new_notifications, 1,
             "Should have sent exactly one notification."
         );
-        println!("✅ Step 5: Notification loop processed 1 new operation.");
+        println!("OK Step 5: Notification loop processed 1 new operation.");
 
         // Step 6-10: Subsequent notification loops should find the same history but send no new notifications
         for step in 6..=10 {
@@ -202,12 +202,12 @@ mod tests {
                 step
             );
             println!(
-                "✅ Step {}: Notification loop sent 0 new notifications (expected).",
+                "OK Step {}: Notification loop sent 0 new notifications (expected).",
                 step
             );
         }
 
-        println!("✅ Production sequence test passed.");
+        println!("OK Production sequence test passed.");
     }
 
     /// Tests edge cases around status transitions, ensuring the completion history remains consistent.
@@ -245,7 +245,7 @@ mod tests {
                 Some(Value::String("second completion".to_string())),
             )
             .await;
-        println!("✅ Updated status to Completed multiple times.");
+        println!("OK Updated status to Completed multiple times.");
 
         // The history should only contain one entry.
         let completed = monitor.get_completed_operations().await;
@@ -264,7 +264,7 @@ mod tests {
                 Some(Value::String("post-history completion".to_string())),
             )
             .await;
-        println!("✅ Attempted post-history status update (should be ignored).");
+        println!("OK Attempted post-history status update (should be ignored).");
 
         // The history should still have only one entry.
         let final_history = monitor.get_completed_operations().await;
@@ -274,6 +274,6 @@ mod tests {
             "POST-HISTORY UPDATE BUG: History size changed after update to an already-completed operation."
         );
 
-        println!("✅ Status transition edge cases test passed.");
+        println!("OK Status transition edge cases test passed.");
     }
 }

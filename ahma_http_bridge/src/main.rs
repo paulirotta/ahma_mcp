@@ -93,7 +93,9 @@ async fn main() -> anyhow::Result<()> {
     let mut server_args = args.server_args;
     if args.no_temp_files {
         server_args.push("--no-temp-files".to_string());
-        tracing::info!("🔒 High-security mode: temp file writes will be blocked in subprocesses");
+        tracing::info!(
+            "SECURE High-security mode: temp file writes will be blocked in subprocesses"
+        );
     }
 
     let config = BridgeConfig {

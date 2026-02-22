@@ -83,7 +83,7 @@ fn test_guard_rail_detects_hardcoded_tool_conflicts() {
                 error_message
             );
             println!(
-                "✓ Guard rail correctly detected conflict: {}",
+                "OK Guard rail correctly detected conflict: {}",
                 error_message
             );
         }
@@ -92,7 +92,7 @@ fn test_guard_rail_detects_hardcoded_tool_conflicts() {
         }
     }
 
-    println!("✅ Guard rail system test passed!");
+    println!("OK Guard rail system test passed!");
 }
 
 #[test]
@@ -151,7 +151,7 @@ fn test_guard_rail_allows_valid_configurations() {
                 !configs.contains_key("cancel"),
                 "Should not contain hardcoded cancel tool"
             );
-            println!("✓ Guard rail correctly allowed valid configurations");
+            println!("OK Guard rail correctly allowed valid configurations");
         }
         Err(e) => {
             panic!(
@@ -161,5 +161,5 @@ fn test_guard_rail_allows_valid_configurations() {
         }
     }
 
-    println!("✅ Guard rail validation test passed!");
+    println!("OK Guard rail validation test passed!");
 }

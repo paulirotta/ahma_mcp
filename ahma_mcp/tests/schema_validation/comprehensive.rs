@@ -434,7 +434,8 @@ async fn test_error_message_quality_and_helpfulness() -> Result<()> {
             && !expected_error_content.contains("invalid type")
         {
             assert!(
-                error_report.contains("💡 Suggestion:") || error_report.contains("Common fixes:"),
+                error_report.contains("Suggestion Suggestion:")
+                    || error_report.contains("Common fixes:"),
                 "Error report should contain suggestions: {}",
                 error_report
             );

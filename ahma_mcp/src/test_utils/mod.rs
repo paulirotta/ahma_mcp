@@ -104,7 +104,10 @@ pub fn strip_ansi(input: &str) -> String {
 macro_rules! skip_if_disabled {
     ($tool_name:expr) => {
         if $crate::test_utils::is_tool_disabled($tool_name) {
-            eprintln!("⚠️  Skipping test - {} is disabled in config", $tool_name);
+            eprintln!(
+                "WARNING️  Skipping test - {} is disabled in config",
+                $tool_name
+            );
             return;
         }
     };
@@ -115,7 +118,10 @@ macro_rules! skip_if_disabled {
 macro_rules! skip_if_disabled_async_result {
     ($tool_name:expr) => {
         if $crate::test_utils::is_tool_disabled($tool_name) {
-            eprintln!("⚠️  Skipping test - {} is disabled in config", $tool_name);
+            eprintln!(
+                "WARNING️  Skipping test - {} is disabled in config",
+                $tool_name
+            );
             return Ok(());
         }
     };
@@ -126,7 +132,10 @@ macro_rules! skip_if_disabled_async_result {
 macro_rules! skip_if_disabled_async {
     ($tool_name:expr) => {
         if $crate::test_utils::is_tool_disabled($tool_name) {
-            eprintln!("⚠️  Skipping test - {} is disabled in config", $tool_name);
+            eprintln!(
+                "WARNING️  Skipping test - {} is disabled in config",
+                $tool_name
+            );
             return;
         }
     };

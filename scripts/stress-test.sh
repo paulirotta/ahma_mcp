@@ -58,7 +58,7 @@ NC='\033[0m' # No Color
 
 # Cleanup function - kills server on exit
 cleanup() {
-    echo -e "\n${YELLOW}🧹 Cleaning up...${NC}"
+    echo -e "\n${YELLOW}CLEAN Cleaning up...${NC}"
     
     if [[ -n "$SERVER_PID" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
         echo -e "   Stopping server (PID $SERVER_PID)..."
@@ -67,7 +67,7 @@ cleanup() {
         echo -e "   ${GREEN}Server stopped${NC}"
     fi
     
-    echo -e "${YELLOW}✅ Cleanup complete${NC}"
+    echo -e "${YELLOW}OK Cleanup complete${NC}"
 }
 
 # Set trap for cleanup on any exit (success, error, or Ctrl+C)
@@ -79,18 +79,18 @@ echo -e "${BLUE}╚════════════════════�
 echo
 
 # Step 1: Build the project
-echo -e "${CYAN}📦 Building project (release mode)...${NC}"
+echo -e "${CYAN}Building project (release mode)...${NC}"
 cargo build --release -p ahma_mcp --bin ahma_mcp 2>&1 | tail -5
-echo -e "${GREEN}✓ Build complete${NC}"
+echo -e "${GREEN}OK Build complete${NC}"
 echo
 
 # Step 2: Find a random available port
-echo -e "${CYAN}🔌 Finding available port...${NC}"
+echo -e "${CYAN}Finding available port...${NC}"
 # Use port 0 to let the OS assign a port, we'll extract it from server output
 TEMP_PORT_FILE=$(mktemp)
 
 # Step 3: Start the HTTP server
-echo -e "${CYAN}🚀 Starting HTTP server...${NC}"
+echo -e "${CYAN}Starting HTTP server...${NC}"
 TOOLS_DIR="$PROJECT_ROOT/.ahma/tools"
 SANDBOX_SCOPE="$PROJECT_ROOT"
 
@@ -132,7 +132,7 @@ while [[ $ELAPSED -lt $TIMEOUT ]]; do
     
     # Check if server died
     if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-        echo -e "${RED}❌ Server process died unexpectedly${NC}"
+        echo -e "${RED}FAIL Server process died unexpectedly${NC}"
         echo "Server output:"
         cat "$TEMP_PORT_FILE"
         exit 1
@@ -143,18 +143,18 @@ while [[ $ELAPSED -lt $TIMEOUT ]]; do
 done
 
 if [[ -z "$HTTP_PORT" ]]; then
-    echo -e "${RED}❌ Timeout waiting for server to report port${NC}"
+    echo -e "${RED}FAIL Timeout waiting for server to report port${NC}"
     echo "Server output:"
     cat "$TEMP_PORT_FILE"
     exit 1
 fi
 
 rm -f "$TEMP_PORT_FILE"
-echo -e "${GREEN}✓ Server running on port $HTTP_PORT${NC}"
+echo -e "${GREEN}OK Server running on port $HTTP_PORT${NC}"
 echo
 
 # Step 4: Wait for health check
-echo -e "${CYAN}🏥 Checking server health...${NC}"
+echo -e "${CYAN}Checking server health...${NC}"
 SERVER_URL="http://127.0.0.1:$HTTP_PORT"
 HEALTH_OK=false
 
@@ -167,11 +167,11 @@ for i in {1..20}; do
 done
 
 if ! $HEALTH_OK; then
-    echo -e "${RED}❌ Server health check failed${NC}"
+    echo -e "${RED}FAIL Server health check failed${NC}"
     exit 1
 fi
 
-echo -e "${GREEN}✓ Server is healthy${NC}"
+echo -e "${GREEN}OK Server is healthy${NC}"
 echo
 
 # Step 5: Run stress tests
@@ -196,21 +196,21 @@ echo
 echo -e "${CYAN}═══ Session Stress Tests (session_stress_test.rs) ═══${NC}"
 echo
 cargo nextest run -p ahma_http_bridge --test session_stress_test 2>&1 || {
-    echo -e "${YELLOW}⚠️  Some session stress tests may have failed${NC}"
+    echo -e "${YELLOW}WARNING️  Some session stress tests may have failed${NC}"
 }
 
 echo
 echo -e "${CYAN}═══ Handshake State Machine Tests ═══${NC}"
 echo
 cargo nextest run -p ahma_http_bridge --test handshake_state_machine_test 2>&1 || {
-    echo -e "${YELLOW}⚠️  Some handshake tests may have failed${NC}"
+    echo -e "${YELLOW}WARNING️  Some handshake tests may have failed${NC}"
 }
 
 echo
 echo -e "${CYAN}═══ Concurrent Tool Call Tests (normally ignored) ═══${NC}"
 echo
 cargo nextest run -p ahma_http_bridge --test sse_tool_integration_test $TEST_FILTER 2>&1 || {
-    echo -e "${YELLOW}⚠️  Some concurrent tool tests may have failed${NC}"
+    echo -e "${YELLOW}WARNING️  Some concurrent tool tests may have failed${NC}"
 }
 
 echo
@@ -219,6 +219,6 @@ echo -e "${BLUE}║                    Stress Test Complete                     
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo
 
-echo -e "${GREEN}✅ Stress test suite finished${NC}"
+echo -e "${GREEN}OK Stress test suite finished${NC}"
 echo -e "   Server ran on port: ${CYAN}$HTTP_PORT${NC}"
 echo -e "   Server URL was: ${CYAN}$SERVER_URL${NC}"

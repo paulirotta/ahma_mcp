@@ -134,22 +134,22 @@ impl AhmaMcpService {
                 let avg_wait_ratio = (total_wait_time / total_execution_time) * 100.0;
                 if avg_wait_ratio < 10.0 {
                     Some(format!(
-                        "✓ Good concurrency efficiency: {:.1}% of execution time spent waiting",
+                        "OK Good concurrency efficiency: {:.1}% of execution time spent waiting",
                         avg_wait_ratio
                     ))
                 } else if avg_wait_ratio < 50.0 {
                     Some(format!(
-                        "⚠ Moderate concurrency efficiency: {:.1}% of execution time spent waiting",
+                        "WARNING Moderate concurrency efficiency: {:.1}% of execution time spent waiting",
                         avg_wait_ratio
                     ))
                 } else {
                     Some(format!(
-                        "⚠ Low concurrency efficiency: {:.1}% of execution time spent waiting. Consider using status tool instead of frequent waits.",
+                        "WARNING Low concurrency efficiency: {:.1}% of execution time spent waiting. Consider using status tool instead of frequent waits.",
                         avg_wait_ratio
                     ))
                 }
             } else {
-                Some("✓ Excellent concurrency: No blocking waits detected".to_string())
+                Some("OK Excellent concurrency: No blocking waits detected".to_string())
             }
         } else {
             None

@@ -910,7 +910,7 @@ async fn wait_for_health(base_url: &str, timeout_secs: u64) -> Result<()> {
         }
         match client.get(&health_url).send().await {
             Ok(resp) if resp.status().is_success() => {
-                println!("✓ Server is healthy");
+                println!("OK Server is healthy");
                 return Ok(());
             }
             _ => tokio::time::sleep(Duration::from_millis(200)).await,
@@ -967,7 +967,7 @@ fn spawn_client(
         let mut client = StressClient::new(base_url, config.is_sync, &counters);
         let lcg = Lcg::new(config.seed);
         client.initialize().await?;
-        println!("✓ {} initialized", config.label);
+        println!("OK {} initialized", config.label);
         client.run_commands(commands, lcg, stop_flag).await
     });
 }
@@ -997,7 +997,7 @@ async fn run_monitoring_loop(
         }
 
         if start.elapsed() >= duration {
-            println!("\n✓ Test duration completed");
+            println!("\nOK Test duration completed");
             return TestOutcome::DurationElapsed;
         }
 
@@ -1075,7 +1075,7 @@ async fn main() -> Result<()> {
 
     let base_url = format!("http://127.0.0.1:{}", args.port);
     if let Err(e) = wait_for_health(&base_url, 120).await {
-        eprintln!("\n❌ Failed to start server: {}", e);
+        eprintln!("\nFAIL Failed to start server: {}", e);
         eprintln!("Cleaning up server process...");
         let _ = server.kill().await;
         std::process::exit(1);
@@ -1160,18 +1160,18 @@ async fn main() -> Result<()> {
     print_final_report(&counters, start.elapsed().as_secs_f64());
 
     if counters.error.load(Ordering::Relaxed) > 0 || had_server_error {
-        eprintln!("❌ Test completed with errors");
+        eprintln!("FAIL Test completed with errors");
         std::process::exit(1);
     }
 
-    println!("✓ Test completed successfully");
+    println!("OK Test completed successfully");
     Ok(())
 }
 
 async fn print_server_error(server: &ServerManager) {
     eprintln!();
     eprintln!("╔═══════════════════════════════════════════════════════════╗");
-    eprintln!("║             ❌ SERVER ERROR DETECTED                       ║");
+    eprintln!("║             FAIL SERVER ERROR DETECTED                       ║");
     eprintln!("╚═══════════════════════════════════════════════════════════╝");
     eprintln!();
     for line in server.get_error_context().await {
@@ -1186,7 +1186,7 @@ fn print_excessive_errors(counters: &SharedCounters) {
     let errors = counters.error.load(Ordering::Relaxed);
     eprintln!();
     eprintln!("╔═══════════════════════════════════════════════════════════╗");
-    eprintln!("║       ❌ TOO MANY CLIENT ERRORS - ABORTING                 ║");
+    eprintln!("║       FAIL TOO MANY CLIENT ERRORS - ABORTING                 ║");
     eprintln!("╚═══════════════════════════════════════════════════════════╝");
     eprintln!();
     eprintln!("  Errors: {} with 0 successes", errors);

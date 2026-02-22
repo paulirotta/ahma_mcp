@@ -476,7 +476,7 @@ fn test_landlock_works_with_bash() {
 fn test_landlock_availability_check() {
     // This test always runs to provide diagnostic information
     if is_landlock_available() {
-        eprintln!("✓ Landlock is available on this system");
+        eprintln!("OK Landlock is available on this system");
 
         // Additional diagnostics
         if let Ok(content) = fs::read_to_string("/sys/kernel/security/lsm") {

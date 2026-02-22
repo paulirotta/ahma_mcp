@@ -86,7 +86,7 @@ async fn test_array_parameters_have_items_property_fixed() -> anyhow::Result<()>
             );
 
             println!(
-                "✅ Array parameter '{}' has valid items property",
+                "OK Array parameter '{}' has valid items property",
                 param_name
             );
         }
@@ -184,7 +184,7 @@ async fn test_all_tools_array_schemas_are_valid_fixed() -> anyhow::Result<()> {
         }
     }
 
-    println!("✅ Schema validation results:");
+    println!("OK Schema validation results:");
     println!("   - Total tools tested: {}", total_tools);
     println!("   - Tools with array parameters: {}", tools_with_arrays);
     println!("   - Total array parameters: {}", total_array_params);

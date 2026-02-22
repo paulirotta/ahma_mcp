@@ -293,7 +293,7 @@ async fn test_invalid_tool_name_returns_fast_error() {
     let session_id = match initialize_session(&client).await {
         Some(id) => id,
         None => {
-            eprintln!("⚠️  Could not initialize session, skipping test");
+            eprintln!("WARNING️  Could not initialize session, skipping test");
             return;
         }
     };
@@ -368,7 +368,7 @@ async fn test_invalid_subcommand_returns_fast_error() {
     let session_id = match initialize_session(&client).await {
         Some(id) => id,
         None => {
-            eprintln!("⚠️  Could not initialize session, skipping test");
+            eprintln!("WARNING️  Could not initialize session, skipping test");
             return;
         }
     };
@@ -437,7 +437,7 @@ async fn test_invalid_method_returns_fast_error() {
     let session_id = match initialize_session(&client).await {
         Some(id) => id,
         None => {
-            eprintln!("⚠️  Could not initialize session, skipping test");
+            eprintln!("WARNING️  Could not initialize session, skipping test");
             return;
         }
     };
@@ -547,7 +547,7 @@ async fn test_missing_required_args_returns_fast_error() {
     let session_id = match initialize_session(&client).await {
         Some(id) => id,
         None => {
-            eprintln!("⚠️  Could not initialize session, skipping test");
+            eprintln!("WARNING️  Could not initialize session, skipping test");
             return;
         }
     };

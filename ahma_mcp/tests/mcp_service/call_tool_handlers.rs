@@ -303,7 +303,7 @@ async fn test_cancel_tool_nonexistent_operation() -> Result<()> {
         assert!(
             text_content.text.contains("not found")
                 || text_content.text.contains("never existed")
-                || text_content.text.contains("❌")
+                || text_content.text.contains("FAIL")
         );
     }
 

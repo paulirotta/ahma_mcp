@@ -675,7 +675,7 @@ fn test_format_errors_with_suggestion() {
 
     let report = validator.format_errors(&errors, &PathBuf::from("config.json"));
 
-    assert!(report.contains("💡 Suggestion"));
+    assert!(report.contains("Suggestion: Use 'boolean' instead of 'bool'"));
     assert!(report.contains("boolean"));
 }
 

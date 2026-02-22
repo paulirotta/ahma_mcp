@@ -18,7 +18,7 @@ while IFS= read -r file; do
     
     # Skip files that just remove the env var (that's OK)
     if grep -q 'std::env::var("CARGO_TARGET_DIR")' "$file" && ! grep -q 'env_remove("CARGO_TARGET_DIR")' "$file"; then
-        echo "❌ VIOLATION: $file"
+        echo "FAIL VIOLATION: $file"
         echo "   Found manual CARGO_TARGET_DIR access"
         echo "   Use ahma_mcp::test_utils::cli::get_binary_path() instead"
         echo ""
@@ -27,11 +27,11 @@ while IFS= read -r file; do
 done < <(find . -path "*/tests/*.rs" -o -name "*_test.rs" -o -name "test_*.rs" | grep -v target)
 
 if [ $VIOLATIONS -eq 0 ]; then
-    echo "✅ No violations found"
+    echo "OK No violations found"
     exit 0
 else
     echo ""
-    echo "❌ Found $VIOLATIONS violation(s)"
+    echo "FAIL Found $VIOLATIONS violation(s)"
     echo ""
     echo "Fix: Replace manual CARGO_TARGET_DIR logic with:"
     echo "  - ahma_mcp::test_utils::cli::get_binary_path(package, binary)"

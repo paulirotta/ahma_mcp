@@ -41,7 +41,7 @@ mod tests {
         );
         operation_monitor.add_operation(op2).await;
 
-        println!("✅ Added 2 operations to monitor");
+        println!("OK Added 2 operations to monitor");
 
         // Complete both operations via update_status (this moves them to completion_history)
         operation_monitor
@@ -60,7 +60,7 @@ mod tests {
             )
             .await;
 
-        println!("✅ Completed both operations (moved to completion_history)");
+        println!("OK Completed both operations (moved to completion_history)");
 
         // Wait for operations to be available
         operation_monitor.wait_for_operation(op1_id).await;
@@ -91,7 +91,7 @@ mod tests {
             );
 
             println!(
-                "✅ Iteration {}: Found expected 2 operations in completion history",
+                "OK Iteration {}: Found expected 2 operations in completion history",
                 iteration
             );
 
@@ -104,7 +104,7 @@ mod tests {
             // simulate notification timing, but it's not necessary for correctness.
         }
 
-        println!("\n✅ Persistent completion history test PASSED");
+        println!("\nOK Persistent completion history test PASSED");
         println!("  - Operations moved to completion_history on completion");
         println!("  - Operations remain accessible for await operations");
         println!("  - Duplicate notifications prevented by MCP callback system");

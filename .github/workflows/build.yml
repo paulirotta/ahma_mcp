@@ -856,3 +856,31 @@ jobs:
 
       - name: Show sccache stats
         run: sccache --show-stats
+
+  #######################################
+
+  job-publish-release:
+    name: Publish Release
+    needs: [job-release-binaries]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download all release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-binaries-*
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest Release
+          body: "Automated release from main branch"
+          draft: false
+          prerelease: false
+          files: ahma-release-*.tar.gz

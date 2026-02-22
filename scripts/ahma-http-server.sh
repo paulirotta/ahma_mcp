@@ -62,7 +62,7 @@ if [[ -n "$RELEASE_FLAG" ]]; then
     echo "  Build mode:    Release (optimized)"
 fi
 echo "-----------------------------------------------"
-echo "⚠️  Security: HTTP mode is for local development only."
+echo "WARNING️  Security: HTTP mode is for local development only."
 echo "    Do not expose to untrusted networks."
 echo "-----------------------------------------------"
 echo

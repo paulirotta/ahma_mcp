@@ -44,7 +44,7 @@ pub async fn ensure_server_available() -> Option<TestServerInstance> {
         {
             Ok(resp) if resp.status().is_success() => return None,
             _ => {
-                eprintln!("⚠️  Custom server at {} not available", url);
+                eprintln!("WARNING️  Custom server at {} not available", url);
                 return None;
             }
         }
@@ -59,7 +59,7 @@ pub async fn ensure_server_available() -> Option<TestServerInstance> {
             Some(server)
         }
         Err(e) => {
-            eprintln!("⚠️  Failed to spawn test server: {}", e);
+            eprintln!("WARNING️  Failed to spawn test server: {}", e);
             None
         }
     }
@@ -246,7 +246,10 @@ pub async fn call_tool(client: &Client, name: &str, arguments: Value) -> ToolCal
 macro_rules! skip_if_unavailable {
     ($client:expr, $tool_name:expr) => {
         if !$crate::sse_test_helpers::is_tool_available($client, $tool_name).await {
-            eprintln!("⚠️  {} not available on server, skipping test", $tool_name);
+            eprintln!(
+                "WARNING️  {} not available on server, skipping test",
+                $tool_name
+            );
             return;
         }
     };

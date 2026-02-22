@@ -42,7 +42,7 @@ async fn test_list_tools_returns_all_expected_tools() {
         Ok(resp) => resp,
         Err(e) => {
             eprintln!(
-                "⚠️  Failed to send list_tools request: {}, skipping test",
+                "WARNING️  Failed to send list_tools request: {}, skipping test",
                 e
             );
             return;
@@ -50,14 +50,17 @@ async fn test_list_tools_returns_all_expected_tools() {
     };
 
     if let Some(ref err) = response.error {
-        eprintln!("⚠️  list_tools returned error: {:?}, skipping test", err);
+        eprintln!(
+            "WARNING️  list_tools returned error: {:?}, skipping test",
+            err
+        );
         return;
     }
 
     let result = match response.result {
         Some(r) => r,
         None => {
-            eprintln!("⚠️  No result in response, skipping test");
+            eprintln!("WARNING️  No result in response, skipping test");
             return;
         }
     };
@@ -65,7 +68,7 @@ async fn test_list_tools_returns_all_expected_tools() {
     let tools = match result.get("tools").and_then(|t| t.as_array()) {
         Some(t) => t,
         None => {
-            eprintln!("⚠️  No tools array in response, skipping test");
+            eprintln!("WARNING️  No tools array in response, skipping test");
             return;
         }
     };
@@ -170,9 +173,9 @@ async fn test_list_tools_returns_all_expected_tools() {
     let core_tools = ["sandboxed_shell", "file_tools_ls", "file_tools_pwd"];
     for tool in &core_tools {
         if tool_names.contains(tool) {
-            println!("✓ Core tool available: {}", tool);
+            println!("OK Core tool available: {}", tool);
         } else {
-            println!("⚠️  Core tool not available: {}", tool);
+            println!("WARNING️  Core tool not available: {}", tool);
         }
     }
 }
@@ -246,7 +249,7 @@ async fn test_all_tools_comprehensive() {
     let response = match send_request(&client, &request).await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("⚠️  Failed to list tools: {}", e);
+            eprintln!("WARNING️  Failed to list tools: {}", e);
             return;
         }
     };
@@ -304,7 +307,7 @@ async fn test_all_tools_comprehensive() {
 
     if filtered_cases.is_empty() {
         println!(
-            "⚠️  No expected tools found on server. Available tools: {:?}",
+            "WARNING️  No expected tools found on server. Available tools: {:?}",
             available_tools
         );
         // Test sandboxed_shell at minimum which should always be there
@@ -339,9 +342,9 @@ async fn test_all_tools_comprehensive() {
 
     for result in &results {
         let status = if result.success {
-            "✅ PASS"
+            "OK PASS"
         } else {
-            "❌ FAIL"
+            "FAIL FAIL"
         };
         println!(
             "{} {} ({}ms) {}",

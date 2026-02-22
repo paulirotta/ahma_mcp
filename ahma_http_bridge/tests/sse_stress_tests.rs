@@ -78,7 +78,7 @@ async fn test_concurrent_tool_calls() {
             successes += 1;
         } else {
             failures += 1;
-            eprintln!("❌ {} failed: {:?}", result.tool_name, result.error);
+            eprintln!("FAIL {} failed: {:?}", result.tool_name, result.error);
         }
         total_tool_time += result.duration_ms;
     }

@@ -49,9 +49,9 @@ async fn test_dump_actual_schemas_for_debugging() -> anyhow::Result<()> {
                     );
 
                     if let Some(items) = param_obj.get("items") {
-                        println!("    ✅ Items property: {}", serde_json::to_string(items)?);
+                        println!("    OK Items property: {}", serde_json::to_string(items)?);
                     } else {
-                        println!("    ❌ MISSING items property!");
+                        println!("    FAIL MISSING items property!");
                     }
                 }
             }

@@ -315,7 +315,7 @@ pub async fn run_server_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result
                 let current_summary = operation_monitor_for_signal.get_shutdown_summary().await;
 
                 if current_summary.total_active == 0 {
-                    info!("✅ All operations completed successfully");
+                    info!("OK All operations completed successfully");
                     break;
                 } else if current_summary.total_active != shutdown_summary.total_active {
                     info!(
@@ -349,11 +349,11 @@ pub async fn run_server_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result
                         .await;
 
                     if cancelled {
-                        info!("   ✓ Cancelled operation '{}' ({})", op.id, op.tool_name);
+                        info!("   OK Cancelled operation '{}' ({})", op.id, op.tool_name);
                         tracing::debug!("Successfully cancelled operation '{}' with reason", op.id);
                     } else {
                         tracing::warn!(
-                            "   ⚠ Failed to cancel operation '{}' ({})",
+                            "   WARNING Failed to cancel operation '{}' ({})",
                             op.id,
                             op.tool_name
                         );
@@ -365,7 +365,7 @@ pub async fn run_server_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result
                 }
             }
         } else {
-            info!("✅ No active operations - proceeding with immediate shutdown");
+            info!("OK No active operations - proceeding with immediate shutdown");
         }
 
         info!("🔄 Shutting down adapter and shell pools...");
