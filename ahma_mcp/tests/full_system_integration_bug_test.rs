@@ -82,7 +82,7 @@ mod tests {
         let configs = Arc::new(
             load_tool_configs(
                 &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
-                &std::path::PathBuf::from(".ahma"),
+                Some(&std::path::PathBuf::from(".ahma")),
             )
             .await
             .unwrap(),

@@ -375,8 +375,14 @@ impl ServerHandler for AhmaMcpService {
             });
 
             {
+                // Reserved names are already hard-wired above; skip them from
+                // user/bundled configs to avoid duplicates in `tools/list`.
+                const HARDCODED_TOOLS: &[&str] = &["await", "status", "sandboxed_shell", "cancel"];
                 let configs_lock = self.configs.read().unwrap();
                 for config in configs_lock.values() {
+                    if HARDCODED_TOOLS.contains(&config.name.as_str()) {
+                        continue;
+                    }
                     if !config.enabled {
                         tracing::debug!(
                             "Skipping disabled tool '{}' during list_tools",

@@ -9,7 +9,7 @@ async fn test_load_builtin_tools_async() {
 
     let args_rust = vec!["ahma_mcp", "--rust"];
     let cli_rust = Cli::try_parse_from(args_rust).unwrap();
-    let configs_rust = load_tool_configs(&cli_rust, temp_dir.path()).await.unwrap();
+    let configs_rust = load_tool_configs(&cli_rust, Some(temp_dir.path())).await.unwrap();
     assert!(
         configs_rust.contains_key("cargo"),
         "Should load bundled rust.json (named cargo)"
@@ -17,7 +17,7 @@ async fn test_load_builtin_tools_async() {
 
     let args_python = vec!["ahma_mcp", "--python"];
     let cli_python = Cli::try_parse_from(args_python).unwrap();
-    let configs_python = load_tool_configs(&cli_python, temp_dir.path())
+    let configs_python = load_tool_configs(&cli_python, Some(temp_dir.path()))
         .await
         .unwrap();
     assert!(
@@ -27,7 +27,7 @@ async fn test_load_builtin_tools_async() {
 
     let args_multiple = vec!["ahma_mcp", "--rust", "--python"];
     let cli_multiple = Cli::try_parse_from(args_multiple).unwrap();
-    let configs_multiple = load_tool_configs(&cli_multiple, temp_dir.path())
+    let configs_multiple = load_tool_configs(&cli_multiple, Some(temp_dir.path()))
         .await
         .unwrap();
     assert!(configs_multiple.contains_key("cargo"), "Should load cargo");
@@ -66,7 +66,7 @@ async fn test_filesystem_overrides_bundled_tool() {
 
     // Load with --rust flag (bundled) AND the local override
     let cli = Cli::try_parse_from(["ahma_mcp", "--rust"]).unwrap();
-    let configs = load_tool_configs(&cli, temp_dir.path()).await.unwrap();
+    let configs = load_tool_configs(&cli, Some(temp_dir.path())).await.unwrap();
 
     assert!(configs.contains_key("cargo"), "Should have cargo tool");
     let cargo = &configs["cargo"];
@@ -95,7 +95,7 @@ async fn test_reserved_names_rejected() {
         std::fs::write(temp_dir.path().join(format!("{}.json", reserved)), &config).unwrap();
 
         let cli = Cli::try_parse_from(["ahma_mcp"]).unwrap();
-        let result = load_tool_configs(&cli, temp_dir.path()).await;
+        let result = load_tool_configs(&cli, Some(temp_dir.path())).await;
         assert!(
             result.is_err(),
             "Reserved name '{}' should be rejected",
@@ -104,5 +104,59 @@ async fn test_reserved_names_rejected() {
 
         // Clean up for next iteration
         std::fs::remove_file(temp_dir.path().join(format!("{}.json", reserved))).unwrap();
+    }
+}
+
+/// Verify that bundled tools load even when NO tools directory exists.
+/// This is the exact scenario when a user runs `ahma_mcp --rust --simplify`
+/// from a repo that has no `.ahma/` directory and no `--tools-dir` flag.
+#[tokio::test]
+async fn test_bundled_tools_load_without_tools_dir() {
+    // Pass --rust --simplify but NO --tools-dir, and tools_dir = None
+    let cli = Cli::try_parse_from(["ahma_mcp", "--rust", "--simplify"]).unwrap();
+
+    // Call with None — this is the code path that was previously broken
+    let configs = load_tool_configs(&cli, None).await.unwrap();
+
+    assert!(
+        configs.contains_key("cargo"),
+        "--rust flag should load bundled cargo tool even without tools_dir. Got keys: {:?}",
+        configs.keys().collect::<Vec<_>>()
+    );
+    assert!(
+        configs.contains_key("simplify"),
+        "--simplify flag should load bundled simplify tool even without tools_dir. Got keys: {:?}",
+        configs.keys().collect::<Vec<_>>()
+    );
+
+    // sandboxed_shell synthetic config should also be present
+    assert!(
+        configs.contains_key("sandboxed_shell"),
+        "sandboxed_shell synthetic config should always be present"
+    );
+}
+
+/// Verify that each individual bundled flag works without a tools directory.
+#[tokio::test]
+async fn test_each_bundled_flag_works_without_tools_dir() {
+    let flag_and_expected: &[(&str, &str)] = &[
+        ("--rust", "cargo"),
+        ("--simplify", "simplify"),
+        ("--python", "python"),
+        ("--git", "git"),
+        ("--github", "gh"),
+        ("--file", "file_tools"),
+    ];
+
+    for &(flag, expected_tool) in flag_and_expected {
+        let cli = Cli::try_parse_from(["ahma_mcp", flag]).unwrap();
+        let configs = load_tool_configs(&cli, None).await.unwrap();
+        assert!(
+            configs.contains_key(expected_tool),
+            "Flag '{}' should load bundled tool '{}' even without tools_dir. Got keys: {:?}",
+            flag,
+            expected_tool,
+            configs.keys().collect::<Vec<_>>()
+        );
     }
 }

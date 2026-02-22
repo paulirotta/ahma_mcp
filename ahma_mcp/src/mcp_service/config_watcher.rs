@@ -90,7 +90,7 @@ impl AhmaMcpService {
                         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
                         tracing::info!("Detected change in tools directory, reloading configs...");
-                        match load_tool_configs(&cli, &tools_dir).await {
+                        match load_tool_configs(&cli, Some(&tools_dir)).await {
                             Ok(new_configs) => {
                                 service.update_tools(new_configs).await;
                                 tracing::info!("Successfully reloaded tool configurations");

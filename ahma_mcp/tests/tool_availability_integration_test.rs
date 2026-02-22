@@ -40,7 +40,7 @@ async fn test_tool_availability_integration_with_tempfile() -> Result<()> {
     // 4. Load the tool configs from the temp directory exactly as the server does
     let raw_configs = load_tool_configs(
         &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
-        tools_dir,
+        Some(tools_dir),
     )
     .await?;
 

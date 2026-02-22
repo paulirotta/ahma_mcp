@@ -29,7 +29,7 @@ async fn create_test_service() -> (AhmaMcpService, TempDir) {
     let tool_configs = if Path::new(".ahma").exists() {
         load_tool_configs(
             &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
-            Path::new(".ahma"),
+            Some(Path::new(".ahma")),
         )
         .await
         .unwrap_or_default()
@@ -107,7 +107,7 @@ async fn test_service_creation_with_existing_tool_configs() {
     let tool_configs = if Path::new(".ahma").exists() {
         load_tool_configs(
             &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
-            Path::new(".ahma"),
+            Some(Path::new(".ahma")),
         )
         .await
         .unwrap_or_default()

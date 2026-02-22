@@ -16,7 +16,6 @@ use ahma_http_mcp_client::client::HttpMcpTransport;
 use anyhow::{Context, Result};
 use rmcp::ServiceExt;
 use std::{
-    collections::HashMap,
     path::PathBuf,
     sync::Arc,
     time::{Duration, Instant},
@@ -108,15 +107,11 @@ pub async fn run_server_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result
     )?);
 
     // Load tool configurations (now async, no spawn_blocking needed)
-    // If tools_dir is None, we'll only have built-in internal tools
-    let raw_configs = if let Some(ref tools_dir) = cli.tools_dir {
-        load_tool_configs(&cli, tools_dir)
-            .await
-            .context("Failed to load tool configurations")?
-    } else {
-        // No tools directory - empty configs (only internal tools)
-        HashMap::new()
-    };
+    // Always call load_tool_configs so that bundled tools from --rust, --simplify, etc.
+    // are loaded even when no --tools-dir or .ahma/ directory is present.
+    let raw_configs = load_tool_configs(&cli, cli.tools_dir.as_deref())
+        .await
+        .context("Failed to load tool configurations")?;
 
     let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let availability_summary = evaluate_tool_availability(

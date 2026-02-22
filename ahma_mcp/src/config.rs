@@ -305,13 +305,15 @@ pub async fn load_mcp_config(config_path: &Path) -> anyhow::Result<McpConfig> {
 ///
 /// # Arguments
 /// * `cli` - Current CLI arguments to determine which tools are built-in
-/// * `tools_dir` - Path to the directory containing tool configuration files
+/// * `tools_dir` - Optional path to the directory containing tool configuration files.
+///   When `None`, only bundled (CLI-flag) tools and the synthetic `sandboxed_shell` config
+///   are loaded. This ensures `--rust`, `--simplify`, etc. work even without a `.ahma/` dir.
 ///
 /// # Returns
 /// * `Result<HashMap<String, ToolConfig>>` - Map of tool name to configuration or error
 pub async fn load_tool_configs(
     cli: &crate::shell::cli::Cli,
-    tools_dir: &Path,
+    tools_dir: Option<&Path>,
 ) -> anyhow::Result<HashMap<String, ToolConfig>> {
     use std::time::Duration;
     use tokio::fs;
@@ -321,7 +323,8 @@ pub async fn load_tool_configs(
     // These must not be overridden by user or bundled JSON configurations.
     const RESERVED_TOOL_NAMES: &[&str] = &["await", "status", "sandboxed_shell", "cancel"];
 
-    let all_dirs = vec![tools_dir.to_path_buf()];
+    let all_dirs: Vec<std::path::PathBuf> =
+        tools_dir.map(|p| vec![p.to_path_buf()]).unwrap_or_default();
 
     let mut configs = HashMap::new();
 
@@ -502,7 +505,7 @@ pub async fn load_tool_configs(
 /// Production code should use `load_tool_configs` directly.
 pub fn load_tool_configs_sync(
     cli: &crate::shell::cli::Cli,
-    tools_dir: &Path,
+    tools_dir: Option<&Path>,
 ) -> anyhow::Result<HashMap<String, ToolConfig>> {
     tokio::runtime::Runtime::new()?.block_on(load_tool_configs(cli, tools_dir))
 }

@@ -27,7 +27,7 @@ async fn create_test_service() -> AhmaMcpService {
     let tool_configs = if Path::new(".ahma").exists() {
         load_tool_configs(
             &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
-            Path::new(".ahma"),
+            Some(Path::new(".ahma")),
         )
         .await
         .unwrap_or_default()

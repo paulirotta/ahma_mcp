@@ -66,7 +66,7 @@ fn test_guard_rail_detects_hardcoded_tool_conflicts() {
     // Try to load tool configurations - this should fail due to guard rail
     let result = load_tool_configs_sync(
         &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
-        &tools_dir,
+        Some(&tools_dir),
     );
 
     match result {
@@ -132,7 +132,7 @@ fn test_guard_rail_allows_valid_configurations() {
     // Try to load tool configurations - this should succeed
     let result = load_tool_configs_sync(
         &ahma_mcp::shell::cli::Cli::try_parse_from(["ahma_mcp"]).unwrap(),
-        &tools_dir,
+        Some(&tools_dir),
     );
 
     match result {
