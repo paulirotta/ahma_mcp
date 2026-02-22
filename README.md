@@ -1,6 +1,6 @@
 # Ahma MCP
 
-_Create agents from your command line tools with one JSON file, then watch them complete your work faster with **true multi-threaded tool-use agentic AI workflows**._
+_Create agents from your command line tools with one JSON file, then watch them complete your work faster with **true multi-threaded tool-use agentic AI workflows**. Built with a **security-first** philosophy, enforcing hard kernel-level boundaries by default._
 
 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |                                     |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------: |
@@ -8,9 +8,25 @@ _Create agents from your command line tools with one JSON file, then watch them 
 
 `ahma_mcp` is a toolbox for safely wrapping command line tools for AI use. This is done by creating (use AI) a ´.ahma/tools/somenewtool.json´.
 
-"Ahma" is Finnish for wolverine. An ahama is fast and fearless, able to eat just about anything. Use the existing tools or add a PR for new ones you crate.
+## 🚀 Quick Install (macOS & Linux)
 
-This project is actively used and still undergoing rapid evolution. http MCP is still a work in progress, setup isn't as smooth as we like yet and expect breaking changes including CLI parameters.
+Install the latest prebuilt binaries for your platform with one command (requires `curl`, `tar`, and `gh` CLI):
+
+```bash
+# Set your platform (e.g., darwin-arm64, darwin-x86_64, linux-x86_64)
+PLATFORM="darwin-arm64" 
+
+# Download, extract, and install to ~/.local/bin
+RUN_ID=$(gh run list --workflow build.yml --branch main --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run download "$RUN_ID" --name "release-binaries-$PLATFORM" --dir .
+tar -xzf ahma-release-*.tar.gz
+mkdir -p ~/.local/bin && mv ahma_mcp ahma_simplify ~/.local/bin/
+rm ahma-release-*.tar.gz SHA256SUMS README.md
+echo "Installed to ~/.local/bin/ahma_mcp and ~/.local/bin/ahma_simplify"
+```
+
+> [!NOTE]
+> `ahma_simplify` is the binary used for code simplicity analysis. Ensure `~/.local/bin` is in your `PATH`.
 
 ## Documentation Strategy
 
@@ -29,14 +45,18 @@ If you are an AI agent interacting with this repository:
 
 ## Key Features
 
-- **Sandboxed Execution**: Strict path validation prevents accessing files outside the workspace.
+- **Kernel-Level Sandboxing**: Security by default. Hard kernel boundaries prevent accessing any files outside the workspace, regardless of how an AI constructs its commands.
 - **Asynchronous By Default with Sync Override**: Operations run asynchronously by default, allowing the LLM to continue work while awaiting results. Use `--sync` flag or set `"synchronous": true` in tool config for operations that must complete before proceeding. Supports multiple concurrent long-running operations (builds, tests).
 - **Easy Tool Definition**: Add any command-line tool to your AI's arsenal by creating a single JSON file. No recompilation needed.
 - **Multi-Step Workflows (Preferred)**: Run multi-command pipelines via `sandboxed_shell` (e.g., `cargo fmt --all && cargo clippy --all-targets && cargo test`).
 
 ## Security Sandbox
 
-Ahma MCP implements **kernel-level sandboxing** to protect your system. The sandbox scope is set once at server startup and cannot be changed during the session—the AI has full access within the sandbox but zero access outside it.
+Security by default is a project core value. Unlike other tools that "yolo" system access or rely on easily bypassed string filters, Ahma MCP enforces hard kernel-level boundaries. The sandbox scope is set once at server startup and cannot be changed during the session—the AI has full access within the sandbox but zero access outside it.
+
+### Why Kernel-Level Sandboxing?
+
+Security by default is a core value of this project. While other tools rely on fragile string-based filtering that AI can easily bypass, Ahma MCP enforces hard kernel-level boundaries that cannot be circumvented. This prevents "yolo" security risks where users might otherwise trust an AI with broad system access.
 
 ### Sandbox Scope
 
@@ -103,12 +123,6 @@ possible to restore full Landlock enforcement.
 On macOS, Ahma uses Apple's built-in `sandbox-exec` with [Seatbelt profiles](https://reverse.put.as/wp-content/uploads/2011/09/Apple-Sandbox-Guide-v1.0.pdf) for kernel-level file system sandboxing. No additional installation is required—`sandbox-exec` is built into macOS.
 
 **Requirements**: Any modern version of macOS. The server generates a Seatbelt profile (SBPL) that restricts write access to only the sandbox scope.
-
-### Why Kernel-Level Sandboxing?
-
-Previous approaches that parsed command-line strings for dangerous patterns are fundamentally insufficient for security. AI models can easily construct commands that bypass string-based checks. Kernel-level enforcement provides a hard security boundary that cannot be circumvented by clever command construction.
-
-**Security Model**: "AI can do whatever it likes inside the sandbox—it has no access outside the sandbox."
 
 ### Nested Sandbox Environments (Cursor, VS Code, Docker)
 
@@ -184,48 +198,19 @@ Here's an example of Claude Sonnet 4.5's workflow. Notice both the tool and the 
 
 This modular architecture ensures clean separation of concerns and enables future extensions (e.g., web interface, authentication).
 
-### Installation
+### Installation (Building from Source)
 
-1. **Install from latest successful CI prebuilt binary (macOS/Linux)**:
+If you prefer to build from source or are on a platform without prebuilt binaries:
 
-   Requires GitHub CLI (`gh`) and authentication (`gh auth login`).
-
-   ```bash
-   # Find the latest successful push run on main (all jobs green)
-   RUN_ID=$(gh run list \
-     --workflow build.yml \
-     --branch main \
-     --event push \
-     --status success \
-     --limit 1 \
-     --json databaseId \
-     --jq '.[0].databaseId')
-
-  # Download release artifact for your platform (Linux x86_64 shown)
-  gh run download "$RUN_ID" --name release-binaries-linux-x86_64 --dir .
-
-  # Or for macOS (Apple Silicon or Intel, depending on the runner)
-  # gh run download "$RUN_ID" --name release-binaries-darwin-arm64 --dir .
-  # gh run download "$RUN_ID" --name release-binaries-darwin-x86_64 --dir .
-
-  tar -xzf release-binaries-*/ahma-release-*.tar.gz
-   chmod +x ahma_mcp ahma_simplify
-
-   # Optional: install into ~/.local/bin
-   mkdir -p ~/.local/bin
-   mv ahma_mcp ahma_simplify ~/.local/bin/
-   ```
-
-2. **Clone and build the repository**:
+1. **Clone and build the repository**:
 
    ```bash
    git clone https://github.com/paulirotta/ahma_mcp.git
    cd ahma_mcp
    cargo build --release
-   cargo run --release -- --help
    ```
 
-3. **Add the MCP definition**:
+2. **Add the MCP definition**:
 
    In your global `mcp.json` file add the following (e.g., Mac: `~/Library/Application Support/Code/User/mcp.json` or `~/Library/Application Support/Cursor/User/mcp.json`, or Linux: `~/.config/Code/User/mcp.json` or `~/.config/Cursor/User/mcp.json`).
 
