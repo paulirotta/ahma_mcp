@@ -24,6 +24,11 @@
     "chat.mcp.serverSampling": {
         "ahma_mcp/.vscode/mcp.json: ahma-stdio-debug-vscode": {
             "allowedModels": []
+        },
+        "ahma_mcp/.vscode/mcp.json: Ahma": {
+            "allowedModels": [
+                "copilot/oswe-vscode-prime"
+            ]
         }
     },
     "chat.tools.terminal.autoApprove": {
