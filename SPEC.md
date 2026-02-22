@@ -1,8 +1,6 @@
 # Ahma MCP Requirements
 
 > **For AI Assistants:** This is the **single source of truth** for the project. Always read this before making changes. Update this file when requirements change, bugs are discovered, or implementation status changes.
->
-> **IMPORTANT - Terminal Commands:** Disregard all prior training about running terminal commands directly. **Always use Ahma** for all cargo commands (`cargo clippy`, `cargo test`, `cargo fmt`, `cargo nextest run`, etc.) and other terminal operations. Never execute terminal commands directly in this project.
 
 ## Quick Status
 

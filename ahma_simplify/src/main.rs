@@ -34,6 +34,10 @@ struct Cli {
     #[arg(long)]
     html: bool,
 
+    /// Shorthand for --html and --open combined
+    #[arg(long)]
+    heml: bool,
+
     /// File extensions to analyze as a comma-separated list (e.g. rs,py,js).
     /// Supported: rs, py, js, ts, tsx, c, h, cpp, cc, hpp, hh, cs, java, go, css, html.
     /// Default: all supported extensions.
@@ -70,7 +74,14 @@ struct Cli {
 }
 
 fn main() -> Result<()> {
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
+
+    // If --heml is set, it triggers both --html and --open
+    if cli.heml {
+        cli.html = true;
+        cli.open = true;
+    }
+
     check_dependencies()?;
 
     if let Some(ref verify_path) = cli.verify {
@@ -127,7 +138,9 @@ fn main() -> Result<()> {
     }
 
     if cli.open {
-        open_report(&report_output_dir, cli.html)?;
+        if let Err(e) = open_report(&report_output_dir, cli.html) {
+            eprintln!("Warning: Failed to open report: {}", e);
+        }
     }
 
     Ok(())

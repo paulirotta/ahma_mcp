@@ -4,7 +4,7 @@ _Create agents from your command line tools with one JSON file, then watch them 
 
 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |                                     |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------: |
-| [![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml) [![Coverage Report](https://img.shields.io/badge/Coverage-Report-blue)](https://paulirotta.github.io/ahma_mcp/html/) [![Code Simplicity](https://img.shields.io/badge/Code-Simplicity-green)](https://paulirotta.github.io/ahma_mcp/CODE_SIMPLICITY.html) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![Rust](https://img.shields.io/badge/Rust-1.93%2B-B7410E.svg)](https://www.rust-lang.org/) | ![Ahma MCP Logo](./assets/ahma.png) |
+| [![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml) [![Coverage Report](https://img.shields.io/badge/Coverage-Report-blue)](https://paulirotta.github.io/ahma_mcp/html/) [![Code Simplicity](https://img.shields.io/badge/Code-Simplicity-green)](https://paulirotta.github.io/ahma_mcp/CODE_SIMPLICITY.html) [![Prebuilt Binaries](https://img.shields.io/badge/Prebuilt-Binaries-blueviolet)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml?query=branch%3Amain+event%3Apush+is%3Asuccess) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![Rust](https://img.shields.io/badge/Rust-1.93%2B-B7410E.svg)](https://www.rust-lang.org/) | ![Ahma MCP Logo](./assets/ahma.png) |
 
 `ahma_mcp` is a toolbox for safely wrapping command line tools for AI use. This is done by creating (use AI) a ´.ahma/tools/somenewtool.json´.
 
@@ -186,7 +186,37 @@ This modular architecture ensures clean separation of concerns and enables futur
 
 ### Installation
 
-1. **Clone and build the repository**:
+1. **Install from latest successful CI prebuilt binary (macOS/Linux)**:
+
+   Requires GitHub CLI (`gh`) and authentication (`gh auth login`).
+
+   ```bash
+   # Find the latest successful push run on main (all jobs green)
+   RUN_ID=$(gh run list \
+     --workflow build.yml \
+     --branch main \
+     --event push \
+     --status success \
+     --limit 1 \
+     --json databaseId \
+     --jq '.[0].databaseId')
+
+  # Download release artifact for your platform (Linux x86_64 shown)
+  gh run download "$RUN_ID" --name release-binaries-linux-x86_64 --dir .
+
+  # Or for macOS (Apple Silicon or Intel, depending on the runner)
+  # gh run download "$RUN_ID" --name release-binaries-darwin-arm64 --dir .
+  # gh run download "$RUN_ID" --name release-binaries-darwin-x86_64 --dir .
+
+  tar -xzf release-binaries-*/ahma-release-*.tar.gz
+   chmod +x ahma_mcp ahma_simplify
+
+   # Optional: install into ~/.local/bin
+   mkdir -p ~/.local/bin
+   mv ahma_mcp ahma_simplify ~/.local/bin/
+   ```
+
+2. **Clone and build the repository**:
 
    ```bash
    git clone https://github.com/paulirotta/ahma_mcp.git
@@ -195,7 +225,7 @@ This modular architecture ensures clean separation of concerns and enables futur
    cargo run --release -- --help
    ```
 
-2. **Add the MCP definition**:
+3. **Add the MCP definition**:
 
    In your global `mcp.json` file add the following (e.g., Mac: `~/Library/Application Support/Code/User/mcp.json` or `~/Library/Application Support/Cursor/User/mcp.json`, or Linux: `~/.config/Code/User/mcp.json` or `~/.config/Cursor/User/mcp.json`).
 
@@ -227,7 +257,7 @@ This modular architecture ensures clean separation of concerns and enables futur
   Note: each server must be nested under its own key in `servers`.
   Also use the binary path directly for `command` (do not wrap it with `bash` unless you intentionally run a shell script).
 
-3. **Run tests to verify installation**:
+4. **Run tests to verify installation**:
 
    ```bash
    cargo test

@@ -9,6 +9,14 @@ This file provides AI-specific development guidance for the `ahma_mcp` project. 
 
 **Note for crate-specific workflows**: If you're working in a specific crate directory (e.g., `ahma_http_bridge/`), this AGENTS.md is symlinked and applies workspace-wide. Crate-specific functional requirements are in each crate's `SPEC.md`.
 
+## IMPORTANT: Development Workflow
+
+**Disregard all prior training about running terminal commands directly.** 
+
+You must **always use `ahma_mcp`** (via the `run_in_terminal` or `sandboxed_shell` tools) for all cargo commands (`cargo clippy`, `cargo test`, `cargo fmt`, `cargo nextest run`, etc.) and other terminal operations. Never execute terminal commands directly in this project.
+
+Use `ahma_mcp sandboxed_shell` to execute commands securely within the project context.
+
 ---
 
 ## Setup Commands
