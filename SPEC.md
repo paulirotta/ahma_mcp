@@ -322,14 +322,14 @@ Direct MCP server over stdio for IDE integration:
 ahma_mcp --mode stdio --tools-dir .ahma/tools
 ```
 
-Alternatively, standard tool configurations are bundled directly inside the binary. Enable them using CLI flags — only tools explicitly requested are offered to MCP clients:
+Alternatively, standard tool configurations are bundled directly inside the binary. Enable them using CLI flags to activate built-in fallback definitions:
 ```bash
 ahma_mcp --mode stdio --rust --python --git --github --file --simplify --gradle
 ```
 
 Note: Core tools (`sandboxed_shell`, `await`, `status`, `cancel`) are always available without any flags.
 
-**Bundle flag filtering**: When one or more bundle flags (e.g. `--rust --simplify`) are provided, only the corresponding tools are loaded — even if an `.ahma/` directory exists with additional tool definitions. Tools in `.ahma/` matching a bundle flag override the bundled defaults with the same name. If *no* bundle flags are provided and no `--tools-dir` is given, all tools from the auto-detected `.ahma/` directory are loaded. When `--tools-dir` is explicitly provided, all tools from that directory are loaded regardless of bundle flags.
+**Tool loading priority**: When an `.ahma/` directory exists (auto-detected or via explicit `--tools-dir`), **all** tool definitions in it are always loaded regardless of bundle flags. Bundle flags (`--rust`, `--simplify`, etc.) additionally activate built-in tool definitions compiled into the binary, serving as **fallbacks** for tools not defined locally. Local `.ahma/` definitions override bundled defaults with the same name. If *no* `.ahma/` directory exists and no `--tools-dir` is given, only bundle-flag tools plus core built-ins are available.
 
 ### 6.2 HTTP Bridge Mode
 

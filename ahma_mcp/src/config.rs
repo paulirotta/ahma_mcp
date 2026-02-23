@@ -359,44 +359,11 @@ pub async fn load_tool_configs(
         None
     }
 
-    // Determine which tool names are requested via bundle flags.
-    // When any bundle flag is set, only those tools (plus tools loaded from
-    // an *explicit* --tools-dir) should be offered to MCP clients.
-    // See SPEC §6.1: "only tools explicitly requested are offered".
-    let requested_tool_names: Option<std::collections::HashSet<String>> = {
-        let mut names = std::collections::HashSet::new();
-        if cli.rust {
-            names.insert("cargo".to_string());
-        }
-        if cli.file {
-            names.insert("file_tools".to_string());
-        }
-        if cli.github {
-            names.insert("gh".to_string());
-        }
-        if cli.git {
-            names.insert("git".to_string());
-        }
-        if cli.gradle {
-            names.insert("gradlew".to_string());
-        }
-        if cli.python {
-            names.insert("python".to_string());
-        }
-        if cli.simplify {
-            names.insert("simplify".to_string());
-        }
-        if names.is_empty() {
-            None // No bundle flags → load everything from .ahma/
-        } else {
-            Some(names)
-        }
-    };
-
     // When --tools-dir is explicitly provided, load all tools from it regardless
-    // of bundle flags. When .ahma/ is auto-detected AND bundle flags are set,
-    // we filter to only the requested tools.
-    let explicit_tools_dir = cli.explicit_tools_dir;
+    // of bundle flags. When .ahma/ is auto-detected, also load ALL local tools
+    // regardless of bundle flags. Bundle flags only control which built-in
+    // (compiled-in) fallback definitions are activated; local .ahma/ definitions
+    // always take precedence and are always fully loaded.
 
     for dir in all_dirs {
         if !fs::try_exists(&dir).await.unwrap_or(false) {
@@ -433,20 +400,6 @@ pub async fn load_tool_configs(
                                 RESERVED_TOOL_NAMES,
                                 path.display()
                             );
-                        }
-
-                        // When bundle flags are active and this is an auto-detected
-                        // .ahma/ directory (not an explicit --tools-dir), only keep
-                        // tools whose names match a requested bundle flag.
-                        if !explicit_tools_dir
-                            && let Some(ref requested) = requested_tool_names
-                            && !requested.contains(&config.name)
-                        {
-                            tracing::debug!(
-                                "Skipping tool '{}' from .ahma/ — not requested via bundle flags",
-                                config.name
-                            );
-                            continue;
                         }
 
                         // Include all tools (enabled or disabled)

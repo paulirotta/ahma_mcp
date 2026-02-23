@@ -9,7 +9,9 @@ async fn test_load_builtin_tools_async() {
 
     let args_rust = vec!["ahma_mcp", "--rust"];
     let cli_rust = Cli::try_parse_from(args_rust).unwrap();
-    let configs_rust = load_tool_configs(&cli_rust, Some(temp_dir.path())).await.unwrap();
+    let configs_rust = load_tool_configs(&cli_rust, Some(temp_dir.path()))
+        .await
+        .unwrap();
     assert!(
         configs_rust.contains_key("cargo"),
         "Should load bundled rust.json (named cargo)"
@@ -66,7 +68,9 @@ async fn test_filesystem_overrides_bundled_tool() {
 
     // Load with --rust flag (bundled) AND the local override
     let cli = Cli::try_parse_from(["ahma_mcp", "--rust"]).unwrap();
-    let configs = load_tool_configs(&cli, Some(temp_dir.path())).await.unwrap();
+    let configs = load_tool_configs(&cli, Some(temp_dir.path()))
+        .await
+        .unwrap();
 
     assert!(configs.contains_key("cargo"), "Should have cargo tool");
     let cargo = &configs["cargo"];
@@ -159,4 +163,169 @@ async fn test_each_bundled_flag_works_without_tools_dir() {
             configs.keys().collect::<Vec<_>>()
         );
     }
+}
+
+/// Verify that `load_tool_configs` never produces duplicate keys.
+/// The synthetic `sandboxed_shell` config and RESERVED_TOOL_NAMES must be consistent.
+#[tokio::test]
+async fn test_no_duplicate_tool_names_in_config_output() {
+    let temp_dir = tempdir().unwrap();
+
+    // Create two tool configs in the temp dir
+    for (file, name, desc) in &[
+        ("tool_a.json", "tool_a", "Tool A"),
+        ("tool_b.json", "tool_b", "Tool B"),
+    ] {
+        let json = format!(
+            r#"{{
+  "name": "{}",
+  "description": "{}",
+  "command": "echo",
+  "enabled": true,
+  "subcommand": [{{ "name": "default", "description": "test" }}]
+}}"#,
+            name, desc
+        );
+        std::fs::write(temp_dir.path().join(file), json).unwrap();
+    }
+
+    let cli = Cli::try_parse_from(["ahma_mcp"]).unwrap();
+    let configs = load_tool_configs(&cli, Some(temp_dir.path()))
+        .await
+        .unwrap();
+
+    // HashMap keys are inherently unique, but verify that all names match their keys
+    for (key, config) in &configs {
+        assert_eq!(
+            key, &config.name,
+            "HashMap key '{}' must match config.name '{}'",
+            key, config.name
+        );
+    }
+
+    // Verify sandboxed_shell synthetic config exists exactly once and is in RESERVED set
+    assert!(
+        configs.contains_key("sandboxed_shell"),
+        "Synthetic sandboxed_shell config should always be present"
+    );
+
+    // Count occurrences of each name to confirm no logical duplicates
+    let names: Vec<&str> = configs.values().map(|c| c.name.as_str()).collect();
+    let mut seen = std::collections::HashSet::new();
+    for name in &names {
+        assert!(
+            seen.insert(name),
+            "Duplicate tool name '{}' found in configs",
+            name
+        );
+    }
+}
+
+/// Verify that when bundle flags are set and .ahma/ is auto-detected,
+/// ALL local .ahma/ tools are loaded (not just those matching the flags).
+/// Bundle flags serve as fallbacks for tools not found locally.
+#[tokio::test]
+async fn test_bundle_flags_with_auto_detected_ahma_loads_all_local_tools() {
+    let temp_dir = tempdir().unwrap();
+
+    // Create three local tool definitions: two match flags, one does not
+    let tools = [
+        ("rust.json", "cargo", "Local cargo tool"),
+        ("simplify.json", "simplify", "Local simplify tool"),
+        ("git.json", "git", "Local git tool"),
+    ];
+    for (file, name, desc) in &tools {
+        let json = format!(
+            r#"{{
+  "name": "{}",
+  "description": "{}",
+  "command": "{}",
+  "enabled": true,
+  "subcommand": [{{ "name": "default", "description": "test" }}]
+}}"#,
+            name, desc, name
+        );
+        std::fs::write(temp_dir.path().join(file), json).unwrap();
+    }
+
+    // --rust --simplify flags, but NOT --git. Auto-detected dir (not explicit).
+    let mut cli = Cli::try_parse_from(["ahma_mcp", "--rust", "--simplify"]).unwrap();
+    cli.explicit_tools_dir = false;
+
+    let configs = load_tool_configs(&cli, Some(temp_dir.path()))
+        .await
+        .unwrap();
+
+    // ALL three local tools should be loaded (local .ahma/ always fully loaded)
+    assert!(
+        configs.contains_key("cargo"),
+        "Local cargo should be loaded. Keys: {:?}",
+        configs.keys().collect::<Vec<_>>()
+    );
+    assert!(
+        configs.contains_key("simplify"),
+        "Local simplify should be loaded. Keys: {:?}",
+        configs.keys().collect::<Vec<_>>()
+    );
+    assert!(
+        configs.contains_key("git"),
+        "Local git should be loaded even without --git flag. Keys: {:?}",
+        configs.keys().collect::<Vec<_>>()
+    );
+
+    // Verify local definitions are used (not bundled fallbacks)
+    assert_eq!(
+        configs["cargo"].description, "Local cargo tool",
+        "Local .ahma/ definition should be used, not the bundled version"
+    );
+    assert_eq!(
+        configs["simplify"].description, "Local simplify tool",
+        "Local .ahma/ definition should be used, not the bundled version"
+    );
+}
+
+/// Verify that local .ahma/ definitions override bundled tools AND
+/// other non-flagged local tools are also loaded.
+#[tokio::test]
+async fn test_local_ahma_overrides_bundled_with_all_loaded() {
+    let temp_dir = tempdir().unwrap();
+
+    // Create a local rust.json with custom description + a non-flagged tool
+    let custom_cargo = r#"{
+  "name": "cargo",
+  "description": "Overridden cargo from local .ahma/",
+  "command": "cargo",
+  "enabled": true,
+  "subcommand": [{ "name": "build", "description": "Build" }]
+}"#;
+    std::fs::write(temp_dir.path().join("rust.json"), custom_cargo).unwrap();
+
+    let extra_tool = r#"{
+  "name": "my_extra_tool",
+  "description": "Extra tool not matching any flag",
+  "command": "echo",
+  "enabled": true,
+  "subcommand": [{ "name": "default", "description": "test" }]
+}"#;
+    std::fs::write(temp_dir.path().join("extra.json"), extra_tool).unwrap();
+
+    let mut cli = Cli::try_parse_from(["ahma_mcp", "--rust"]).unwrap();
+    cli.explicit_tools_dir = false;
+
+    let configs = load_tool_configs(&cli, Some(temp_dir.path()))
+        .await
+        .unwrap();
+
+    // Local cargo should override bundled
+    assert_eq!(
+        configs["cargo"].description, "Overridden cargo from local .ahma/",
+        "Local definition should override bundled"
+    );
+
+    // Extra non-flagged tool should also be loaded
+    assert!(
+        configs.contains_key("my_extra_tool"),
+        "Non-flagged local tools should also be loaded. Keys: {:?}",
+        configs.keys().collect::<Vec<_>>()
+    );
 }
