@@ -123,6 +123,12 @@ pub async fn run_server_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result
     .await?;
 
     if !availability_summary.disabled_tools.is_empty() {
+        let current_path = std::env::var("PATH").unwrap_or_else(|_| "<not set>".to_string());
+        tracing::warn!(
+            "{} tool(s) disabled by availability probes. PATH={}",
+            availability_summary.disabled_tools.len(),
+            current_path
+        );
         for disabled in &availability_summary.disabled_tools {
             tracing::warn!(
                 "Tool '{}' disabled at startup. {}",

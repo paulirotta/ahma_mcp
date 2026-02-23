@@ -327,7 +327,9 @@ Alternatively, standard tool configurations are bundled directly inside the bina
 ahma_mcp --mode stdio --rust --python --git --github --file --simplify --gradle
 ```
 
-Note: Core tools (`sandboxed_shell`, `await`, `status`, `cancel`) are always available without any flags. Tools placed in a local `.ahma/` directory are also loaded automatically and override bundled defaults with the same name.
+Note: Core tools (`sandboxed_shell`, `await`, `status`, `cancel`) are always available without any flags.
+
+**Bundle flag filtering**: When one or more bundle flags (e.g. `--rust --simplify`) are provided, only the corresponding tools are loaded — even if an `.ahma/` directory exists with additional tool definitions. Tools in `.ahma/` matching a bundle flag override the bundled defaults with the same name. If *no* bundle flags are provided and no `--tools-dir` is given, all tools from the auto-detected `.ahma/` directory are loaded. When `--tools-dir` is explicitly provided, all tools from that directory are loaded regardless of bundle flags.
 
 ### 6.2 HTTP Bridge Mode
 

@@ -1,13 +1,15 @@
 {
-	"servers": {
-		"Ahma": {
-			"type": "stdio",
-			"command": "ahma_mcp",
-			"args": [
-				"--log-to-stderr",
-				"--rust",
-				"--simplify"
-			]
-		}
-	}
+    "servers": {
+        "Ahma": {
+            "type": "stdio",
+            "command": "ahma_mcp",
+            "args": [
+                "--rust",
+                "--simplify"
+            ],
+            "env": {
+                "PATH": "${env:HOME}/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+            }
+        }
+    }
 }

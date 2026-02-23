@@ -59,6 +59,12 @@ pub struct Cli {
     #[arg(long)]
     pub tools_dir: Option<PathBuf>,
 
+    /// Whether --tools-dir was explicitly provided on the command line
+    /// (as opposed to auto-detected via .ahma/ directory).
+    /// Set automatically during CLI initialization; not a user-facing flag.
+    #[arg(skip)]
+    pub explicit_tools_dir: bool,
+
     /// Bundle and enable the rust toolset (rust.json)
     #[arg(long)]
     pub rust: bool,
@@ -148,6 +154,7 @@ pub struct Cli {
 
 pub async fn run() -> Result<()> {
     let mut cli = Cli::parse();
+    cli.explicit_tools_dir = cli.tools_dir.is_some();
     cli.tools_dir = resolution::normalize_tools_dir(cli.tools_dir);
 
     // Initialize logging

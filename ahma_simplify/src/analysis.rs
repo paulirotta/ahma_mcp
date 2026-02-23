@@ -153,49 +153,54 @@ pub fn run_analysis(
         .map(|e| e.trim_start_matches('.'))
         .collect();
 
-    let mut count = 0usize;
+    let count = source_files(dir, &allowed_exts, custom_excludes)
+        .try_fold(0usize, |count, path| {
+            write_metrics_toml(&path, dir, output_dir)?;
+            Ok(count + 1)
+        })?;
 
-    for entry in WalkDir::new(dir)
+    println!("  Analyzed {} files.", count);
+    Ok(())
+}
+
+/// Iterate source files in `dir` matching extension and exclusion filters.
+fn source_files<'a>(
+    dir: &'a Path,
+    allowed_exts: &'a std::collections::HashSet<&'a str>,
+    custom_excludes: &'a [String],
+) -> impl Iterator<Item = PathBuf> + 'a {
+    WalkDir::new(dir)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
-    {
-        let path = entry.path();
-
-        // Extension filter
-        let ext = match path.extension().and_then(|e| e.to_str()) {
-            Some(e) => e.to_lowercase(),
-            None => continue,
-        };
-        if !allowed_exts.is_empty() && !allowed_exts.contains(ext.as_str()) {
-            continue;
-        }
-
-        // Exclusion filter
-        if should_exclude(path, custom_excludes) {
-            continue;
-        }
-
-        // Analyse and write TOML output
-        if let Some(results) = analyze_file(path) {
-            let toml_content =
-                toml::to_string(&results).context("Failed to serialize metrics to TOML")?;
-
-            // Mirror the directory structure inside output_dir, swapping the
-            // source extension for .toml so load_metrics() can find the files.
-            let relative = path.strip_prefix(dir).unwrap_or(path);
-            let toml_path = output_dir.join(relative.with_extension("toml"));
-            if let Some(parent) = toml_path.parent() {
-                fs::create_dir_all(parent)
-                    .with_context(|| format!("Failed to create {}", parent.display()))?;
+        .filter_map(move |entry| {
+            let path = entry.into_path();
+            let ext = path.extension()?.to_str()?.to_lowercase();
+            if !allowed_exts.is_empty() && !allowed_exts.contains(ext.as_str()) {
+                return None;
             }
-            fs::write(&toml_path, toml_content)
-                .with_context(|| format!("Failed to write {}", toml_path.display()))?;
-            count += 1;
-        }
-    }
+            if should_exclude(&path, custom_excludes) {
+                return None;
+            }
+            Some(path)
+        })
+}
 
-    println!("  Analyzed {} files.", count);
+/// Analyse a single file and write its metrics as TOML into `output_dir`.
+fn write_metrics_toml(path: &Path, dir: &Path, output_dir: &Path) -> Result<()> {
+    let Some(results) = analyze_file(path) else {
+        return Ok(());
+    };
+    let toml_content =
+        toml::to_string(&results).context("Failed to serialize metrics to TOML")?;
+    let relative = path.strip_prefix(dir).unwrap_or(path);
+    let toml_path = output_dir.join(relative.with_extension("toml"));
+    if let Some(parent) = toml_path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create {}", parent.display()))?;
+    }
+    fs::write(&toml_path, toml_content)
+        .with_context(|| format!("Failed to write {}", toml_path.display()))?;
     Ok(())
 }
 
@@ -206,22 +211,23 @@ pub fn perform_analysis(
     extensions: &[String],
     custom_excludes: &[String],
 ) -> Result<()> {
-    let mut analyzed_something = false;
-    if is_workspace {
-        // Dynamically detect workspace members by looking for subdirectories with Cargo.toml
-        let members = get_workspace_members(directory)?;
-
-        for member in members {
-            let target_path = directory.join(&member);
-            if target_path.is_dir() {
-                run_analysis(&target_path, output, extensions, custom_excludes)?;
-                analyzed_something = true;
-            }
-        }
+    if !is_workspace {
+        return run_analysis(directory, output, extensions, custom_excludes);
     }
 
-    if !analyzed_something {
-        run_analysis(directory, output, extensions, custom_excludes)?;
+    let members = get_workspace_members(directory)?;
+    let member_dirs: Vec<PathBuf> = members
+        .iter()
+        .map(|m| directory.join(m))
+        .filter(|p| p.is_dir())
+        .collect();
+
+    if member_dirs.is_empty() {
+        return run_analysis(directory, output, extensions, custom_excludes);
+    }
+
+    for target_path in member_dirs {
+        run_analysis(&target_path, output, extensions, custom_excludes)?;
     }
     Ok(())
 }
@@ -230,44 +236,47 @@ pub fn perform_analysis(
 /// 1. Parsing [workspace] members from Cargo.toml if present
 /// 2. Falling back to directories containing Cargo.toml
 fn get_workspace_members(dir: &Path) -> Result<Vec<String>> {
-    let cargo_toml = dir.join("Cargo.toml");
-    if let Ok(content) = fs::read_to_string(&cargo_toml)
-        && let Ok(value) = content.parse::<toml::Value>()
-    {
-        // Try to get explicit members from [workspace] section
-        if let Some(members) = value
-            .get("workspace")
-            .and_then(|w| w.get("members"))
-            .and_then(|m| m.as_array())
-        {
-            let explicit: Vec<String> = members
-                .iter()
-                .filter_map(|v| v.as_str())
-                .map(|s| s.to_string())
-                .collect();
-            if !explicit.is_empty() {
-                return Ok(explicit);
-            }
-        }
+    if let Some(members) = parse_explicit_workspace_members(dir) {
+        return Ok(members);
     }
+    Ok(discover_member_directories(dir))
+}
 
-    // Fallback: find directories with Cargo.toml
-    let mut members = Vec::new();
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
+/// Parse explicit workspace members from `[workspace] members` in Cargo.toml.
+fn parse_explicit_workspace_members(dir: &Path) -> Option<Vec<String>> {
+    let content = fs::read_to_string(dir.join("Cargo.toml")).ok()?;
+    let value: toml::Value = content.parse().ok()?;
+    let members_array = value
+        .get("workspace")?
+        .get("members")?
+        .as_array()?;
+    let explicit: Vec<String> = members_array
+        .iter()
+        .filter_map(|v| v.as_str())
+        .map(|s| s.to_string())
+        .collect();
+    if explicit.is_empty() { None } else { Some(explicit) }
+}
+
+/// Fallback: discover subdirectories that contain a Cargo.toml.
+fn discover_member_directories(dir: &Path) -> Vec<String> {
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return Vec::new(),
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| {
             let path = entry.path();
-            if path.is_dir()
-                && path.join("Cargo.toml").exists()
-                && let Some(name) = path.file_name().and_then(|n| n.to_str())
-            {
-                // Skip common non-crate directories
-                if name != "target" && name != ".git" && !name.starts_with('.') {
-                    members.push(name.to_string());
-                }
-            }
-        }
-    }
-    Ok(members)
+            let name = path.file_name()?.to_str()?;
+            let dominated = !path.is_dir()
+                || !path.join("Cargo.toml").exists()
+                || name == "target"
+                || name == ".git"
+                || name.starts_with('.');
+            if dominated { None } else { Some(name.to_string()) }
+        })
+        .collect()
 }
 
 pub fn get_project_name(dir: &Path) -> String {
