@@ -154,7 +154,7 @@ pub fn run_analysis(
         .collect();
 
     let count = source_files(dir, &allowed_exts, custom_excludes)
-        .try_fold(0usize, |count, path| {
+        .try_fold(0usize, |count, path| -> Result<usize> {
             write_metrics_toml(&path, dir, output_dir)?;
             Ok(count + 1)
         })?;
