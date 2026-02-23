@@ -1,50 +1,104 @@
 use anyhow::{Context, Result};
+use rust_code_analysis::{
+    FuncSpace, SpaceKind, get_function_spaces, get_language_for_file, read_file_with_eol,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use walkdir::WalkDir;
 
-pub fn check_dependencies() -> Result<()> {
-    let output = Command::new("rust-code-analysis-cli")
-        .arg("--version")
-        .output();
+use crate::models::{Cognitive, Cyclomatic, Loc, Metrics, MetricsResults, Mi, SpaceEntry};
 
-    if output.is_err() {
-        anyhow::bail!(
-            "rust-code-analysis-cli not found. Please install it using:\n\
-             cargo binstall rust-code-analysis-cli\n\
-             Or from source:\n\
-             cargo install --git https://github.com/mozilla/rust-code-analysis rust-code-analysis-cli"
-        );
+// ---------------------------------------------------------------------------
+// Conversion helpers: rust-code-analysis native types → our MetricsResults
+// ---------------------------------------------------------------------------
+
+fn code_metrics_to_metrics(cm: &rust_code_analysis::CodeMetrics) -> Metrics {
+    Metrics {
+        cognitive: Cognitive {
+            sum: cm.cognitive.cognitive_sum(),
+        },
+        cyclomatic: Cyclomatic {
+            sum: cm.cyclomatic.cyclomatic_sum(),
+        },
+        mi: Mi {
+            mi_visual_studio: cm.mi.mi_visual_studio(),
+        },
+        loc: Loc {
+            sloc: cm.loc.sloc(),
+        },
     }
-    Ok(())
 }
 
-pub fn run_analysis(
-    dir: &Path,
-    output_dir: &Path,
-    extensions: &[String],
-    custom_excludes: &[String],
-) -> Result<()> {
-    println!("Analyzing {}...", dir.display());
+fn func_space_to_space_entry(space: &FuncSpace) -> SpaceEntry {
+    let kind_str = match space.kind {
+        SpaceKind::Function => "function",
+        SpaceKind::Class => "class",
+        SpaceKind::Struct => "struct",
+        SpaceKind::Trait => "trait",
+        SpaceKind::Impl => "impl",
+        SpaceKind::Unit => "unit",
+        SpaceKind::Namespace => "namespace",
+        SpaceKind::Interface => "interface",
+        SpaceKind::Unknown => "unknown",
+    }
+    .to_string();
 
-    // Build include patterns for all specified extensions
-    let include_patterns: Vec<String> = extensions
-        .iter()
-        .map(|ext| format!("**/*.{}", ext.trim_start_matches('.')))
-        .collect();
+    SpaceEntry {
+        name: space.name.clone().unwrap_or_default(),
+        start_line: space.start_line as u32,
+        end_line: space.end_line as u32,
+        kind: kind_str,
+        metrics: code_metrics_to_metrics(&space.metrics),
+        spaces: space.spaces.iter().map(func_space_to_space_entry).collect(),
+    }
+}
 
-    let mut cmd = Command::new("rust-code-analysis-cli");
-    cmd.arg("--paths")
-        .arg(dir)
-        .arg("--metrics")
-        .arg("--function")
-        .arg("--output-format")
-        .arg("toml")
-        .arg("--output")
-        .arg(output_dir);
+fn func_space_to_metrics_results(space: FuncSpace) -> MetricsResults {
+    MetricsResults {
+        name: space.name.clone().unwrap_or_default(),
+        metrics: code_metrics_to_metrics(&space.metrics),
+        spaces: space.spaces.iter().map(func_space_to_space_entry).collect(),
+    }
+}
 
-    // Default exclusions for common build environments, dependencies, and IDEs
-    let default_excludes = [
+// ---------------------------------------------------------------------------
+// Per-file analysis using the library
+// ---------------------------------------------------------------------------
+
+fn analyze_file(path: &Path) -> Option<MetricsResults> {
+    let lang = get_language_for_file(path)?;
+    let source = read_file_with_eol(path).ok().flatten()?;
+    let func_space = get_function_spaces(&lang, source, path, None)?;
+    Some(func_space_to_metrics_results(func_space))
+}
+
+// ---------------------------------------------------------------------------
+// Exclusion filtering (replaces --exclude flags passed to the old CLI)
+// ---------------------------------------------------------------------------
+
+fn segment_matches(pattern_segment: &str, component: &str) -> bool {
+    if let Some(prefix) = pattern_segment.strip_suffix('*') {
+        component.starts_with(prefix)
+    } else {
+        component == pattern_segment
+    }
+}
+
+/// Returns true if `path` should be excluded based on glob-style patterns.
+/// Handles patterns of the form `**/<segment>/**` with optional trailing `*`
+/// wildcard in the segment — covers every default exclusion and most
+/// user-supplied ones.
+fn pattern_matches_path(pattern: &str, path: &Path) -> bool {
+    let segment = pattern.trim_start_matches("**/").trim_end_matches("/**");
+    if segment.is_empty() {
+        return false;
+    }
+    path.components()
+        .any(|c| segment_matches(segment, &c.as_os_str().to_string_lossy()))
+}
+
+fn should_exclude(path: &Path, custom_excludes: &[String]) -> bool {
+    const DEFAULT_EXCLUDES: &[&str] = &[
         "**/target/**",
         "**/node_modules/**",
         "**/dist/**",
@@ -63,6 +117,7 @@ pub fn run_analysis(
         "**/.next/**",
         "**/.nuxt/**",
         "**/cmake-build-*/**",
+        "**/analysis_results/**",
         "**/.git/**",
         "**/.svn/**",
         "**/.hg/**",
@@ -70,28 +125,77 @@ pub fn run_analysis(
         "**/.vscode/**",
     ];
 
-    for exclude in &default_excludes {
-        cmd.arg("--exclude").arg(exclude);
+    DEFAULT_EXCLUDES
+        .iter()
+        .any(|p| pattern_matches_path(p, path))
+        || custom_excludes
+            .iter()
+            .any(|p| pattern_matches_path(p, path))
+}
+
+// ---------------------------------------------------------------------------
+// Public analysis API (drop-in replacement for the old CLI-based version)
+// ---------------------------------------------------------------------------
+
+/// Analyses all source files under `dir` and writes per-file TOML metric
+/// results into `output_dir`, mirroring the old `rust-code-analysis-cli`
+/// output format so that `--verify` and the rest of main.rs continue to work.
+pub fn run_analysis(
+    dir: &Path,
+    output_dir: &Path,
+    extensions: &[String],
+    custom_excludes: &[String],
+) -> Result<()> {
+    println!("Analyzing {}...", dir.display());
+
+    let allowed_exts: std::collections::HashSet<&str> = extensions
+        .iter()
+        .map(|e| e.trim_start_matches('.'))
+        .collect();
+
+    let mut count = 0usize;
+
+    for entry in WalkDir::new(dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        let path = entry.path();
+
+        // Extension filter
+        let ext = match path.extension().and_then(|e| e.to_str()) {
+            Some(e) => e.to_lowercase(),
+            None => continue,
+        };
+        if !allowed_exts.is_empty() && !allowed_exts.contains(ext.as_str()) {
+            continue;
+        }
+
+        // Exclusion filter
+        if should_exclude(path, custom_excludes) {
+            continue;
+        }
+
+        // Analyse and write TOML output
+        if let Some(results) = analyze_file(path) {
+            let toml_content =
+                toml::to_string(&results).context("Failed to serialize metrics to TOML")?;
+
+            // Mirror the directory structure inside output_dir, swapping the
+            // source extension for .toml so load_metrics() can find the files.
+            let relative = path.strip_prefix(dir).unwrap_or(path);
+            let toml_path = output_dir.join(relative.with_extension("toml"));
+            if let Some(parent) = toml_path.parent() {
+                fs::create_dir_all(parent)
+                    .with_context(|| format!("Failed to create {}", parent.display()))?;
+            }
+            fs::write(&toml_path, toml_content)
+                .with_context(|| format!("Failed to write {}", toml_path.display()))?;
+            count += 1;
+        }
     }
 
-    // Add custom exclusions
-    for exclude in custom_excludes {
-        cmd.arg("--exclude").arg(exclude);
-    }
-
-    // Add all include patterns
-    for pattern in &include_patterns {
-        cmd.arg("--include").arg(pattern);
-    }
-
-    let status = cmd
-        .status()
-        .context("Failed to execute rust-code-analysis-cli")?;
-
-    if !status.success() {
-        anyhow::bail!("rust-code-analysis-cli failed for {}", dir.display());
-    }
-
+    println!("  Analyzed {} files.", count);
     Ok(())
 }
 

@@ -8,7 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
-use analysis::{check_dependencies, get_project_name, is_cargo_workspace, perform_analysis};
+use analysis::{get_project_name, is_cargo_workspace, perform_analysis};
 use models::{FileSimplicity, MetricsResults};
 use report::{generate_ai_fix_prompt, generate_report};
 
@@ -81,8 +81,6 @@ fn main() -> Result<()> {
         cli.html = true;
         cli.open = true;
     }
-
-    check_dependencies()?;
 
     if let Some(ref verify_path) = cli.verify {
         return run_verify(verify_path, &cli.output, &cli.directory, &cli.extensions);

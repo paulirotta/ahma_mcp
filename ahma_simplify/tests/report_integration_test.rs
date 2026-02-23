@@ -1,4 +1,4 @@
-use ahma_simplify::analysis::{check_dependencies, perform_analysis};
+use ahma_simplify::analysis::perform_analysis;
 use ahma_simplify::models::{FileSimplicity, Language, MetricsResults};
 use ahma_simplify::report::create_report_md;
 use std::collections::HashSet;
@@ -520,12 +520,7 @@ fn test_multi_language_multi_module_maximalist() {
 }
 
 #[test]
-#[ignore = "requires rust-code-analysis-cli in PATH"]
 fn test_full_pipeline_on_generated_fixtures_single_and_multi_module() {
-    if check_dependencies().is_err() {
-        return;
-    }
-
     let temp = TempDir::new().unwrap();
     let extensions = extension_list();
 
