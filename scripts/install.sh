@@ -21,7 +21,13 @@ esac
 # Map OS names
 case "$OS" in
     linux) ;;
-    darwin) ;;
+    darwin)
+        if [ "$ARCH" = "x86_64" ]; then
+            echo "Error: macOS Intel (x86_64) is no longer supported. Prebuilt binaries are only available for Apple Silicon (arm64)."
+            echo "You can still build from source: cargo build --release"
+            exit 1
+        fi
+        ;;
     *)
         echo "Error: Unsupported operating system: $OS"
         exit 1

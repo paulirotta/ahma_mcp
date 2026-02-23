@@ -32,7 +32,6 @@ Prebuilt binaries are provided for the following platforms:
 | Linux | x86_64 | ✅ | Landlock (kernel ≥ 5.13) |
 | Linux | arm64 / aarch64 (Raspberry Pi 5, AWS Graviton, etc.) | ✅ | Landlock (kernel ≥ 5.13) |
 | macOS | Apple Silicon (M1/M2/M3+) | ✅ | Seatbelt / `sandbox-exec` |
-| macOS | Intel (pre-2021 x86_64) | ✅ | Seatbelt / `sandbox-exec` |
 
 > **Raspberry Pi note**: Raspberry Pi 4 and older models running kernels earlier than 5.13 (e.g., many Raspberry Pi OS releases) cannot use the Landlock sandbox. You must pass `--no-sandbox` or set `AHMA_NO_SANDBOX=1`. See the [Raspberry Pi and Older Kernels](#raspberry-pi-and-older-kernels) section below for details.
 
