@@ -2,16 +2,16 @@
 
 ## Purpose
 
-`ahma_simplify` is a code simplicity metrics aggregator that uses [rust-code-analysis-cli](https://github.com/mozilla/rust-code-analysis) to analyze source code and generate comprehensive simplicity reports (Markdown and HTML).
+`ahma_simplify` is a code simplicity metrics aggregator that uses the [rust-code-analysis](https://github.com/mozilla/rust-code-analysis) library to analyze source code and generate comprehensive simplicity reports (Markdown and HTML).
 
 It is a workspace member of the [Ahma MCP](../SPEC.md) project.
 
 ## Functional Requirements
 
-### R1: External Dependency
+### R1: Analysis Library
 
-- **R1.1**: The tool requires `rust-code-analysis-cli` to be installed and available on `$PATH`.
-- **R1.2**: On missing dependency, the tool must exit with a clear installation instruction.
+- **R1.1**: The tool links the `rust-code-analysis` library at compile time — no external CLI binary is required.
+- **R1.2**: _(Removed)_ Previously required a PATH check; no longer applicable.
 
 ### R2: Analysis Scope
 
@@ -44,7 +44,7 @@ It is a workspace member of the [Ahma MCP](../SPEC.md) project.
 
 ### R5: Output Directory
 
-- **R5.1**: Intermediate `rust-code-analysis-cli` output is stored in a configurable directory (`--output`, default: `analysis_results`).
+- **R5.1**: Intermediate analysis output (TOML files) is stored in a configurable directory (`--output`, default: `analysis_results`).
 - **R5.2**: The output directory is cleared before each run.
 
 ### R6: AI Fix Prompt

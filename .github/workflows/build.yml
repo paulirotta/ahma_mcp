@@ -702,15 +702,6 @@ jobs:
         run: |
           cargo llvm-cov nextest --profile coverage --locked --no-default-features --html --output-dir ./coverage -E 'not test(gradlew) & not test(android)'
 
-      - name: Install rust-code-analysis-cli
-        run: |
-          if ! command -v rust-code-analysis-cli &> /dev/null; then
-            echo "rust-code-analysis-cli not found, installing..."
-            cargo binstall rust-code-analysis-cli --no-confirm || cargo install --git https://github.com/mozilla/rust-code-analysis rust-code-analysis-cli
-          else
-            echo "rust-code-analysis-cli is already installed"
-          fi
-
       - name: Generate code simplicity report
         run: |
           cargo run -p ahma_simplify -- . --limit 20 --html

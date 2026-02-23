@@ -203,7 +203,7 @@ Here's an example of Claude Sonnet 4.5's workflow. Notice both the tool and the 
 - **`ahma_mcp`**: Library crate containing all core functionality (tool execution, configuration, async orchestration, MCP service)
 - **`ahma_shell`**: Binary crate providing the CLI interface and server startup logic (includes `--list-tools` functionality)
 - **`ahma_validate`**: Binary crate for validating tool configuration files against the MTDF schema
-- **`ahma_simplify`**: Binary crate for code simplicity metrics aggregation using `rust-code-analysis-cli`
+- **`ahma_simplify`**: Binary crate for code simplicity metrics aggregation using the `rust-code-analysis` library
 
 This modular architecture ensures clean separation of concerns and enables future extensions (e.g., web interface, authentication).
 

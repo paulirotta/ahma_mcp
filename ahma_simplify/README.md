@@ -1,23 +1,13 @@
 # ahma_simplify
 
-A code simplicity metrics aggregator that analyzes source code using [rust-code-analysis-cli](https://github.com/mozilla/rust-code-analysis) and generates comprehensive simplicity reports.
+A code simplicity metrics aggregator that analyzes source code using the [rust-code-analysis](https://github.com/mozilla/rust-code-analysis) library and generates comprehensive simplicity reports.
 
 Part of the [Ahma MCP](../README.md) workspace.
 
 ## Installation
 
 ```bash
-# 1. Install ahma_mcp (MCP server)
-cargo install --path ahma_mcp
-
-# 2. Install cargo-binstall
-cargo install cargo-binstall
-
-# 3. Install rust-code-analysis and rust-code-analysis-cli
-cargo binstall rust-code-analysis rust-code-analysis-cli
-
-# 4. Install ahma_simplify
-
+# Install ahma_simplify (all analysis dependencies are compiled in)
 cargo install --path ahma_simplify
 ```
 

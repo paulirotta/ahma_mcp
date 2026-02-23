@@ -1,6 +1,6 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct MetricsResults {
     pub name: String,
     pub metrics: Metrics,
@@ -8,7 +8,7 @@ pub struct MetricsResults {
     pub spaces: Vec<SpaceEntry>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Metrics {
     pub cognitive: Cognitive,
     pub cyclomatic: Cyclomatic,
@@ -16,29 +16,29 @@ pub struct Metrics {
     pub loc: Loc,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Cognitive {
     pub sum: f64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Cyclomatic {
     pub sum: f64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Mi {
     pub mi_visual_studio: f64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Loc {
     pub sloc: f64,
 }
 
-/// A parsed entry from the `spaces` array in rust-code-analysis TOML output.
+/// A parsed entry from the `spaces` array in rust-code-analysis output.
 /// Represents a code "space" (function, impl block, closure, etc.) with its metrics.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct SpaceEntry {
     pub name: String,
     pub start_line: u32,
