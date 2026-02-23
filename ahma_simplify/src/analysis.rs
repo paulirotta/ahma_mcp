@@ -153,11 +153,13 @@ pub fn run_analysis(
         .map(|e| e.trim_start_matches('.'))
         .collect();
 
-    let count = source_files(dir, &allowed_exts, custom_excludes)
-        .try_fold(0usize, |count, path| -> Result<usize> {
+    let count = source_files(dir, &allowed_exts, custom_excludes).try_fold(
+        0usize,
+        |count, path| -> Result<usize> {
             write_metrics_toml(&path, dir, output_dir)?;
             Ok(count + 1)
-        })?;
+        },
+    )?;
 
     println!("  Analyzed {} files.", count);
     Ok(())
@@ -191,8 +193,7 @@ fn write_metrics_toml(path: &Path, dir: &Path, output_dir: &Path) -> Result<()> 
     let Some(results) = analyze_file(path) else {
         return Ok(());
     };
-    let toml_content =
-        toml::to_string(&results).context("Failed to serialize metrics to TOML")?;
+    let toml_content = toml::to_string(&results).context("Failed to serialize metrics to TOML")?;
     let relative = path.strip_prefix(dir).unwrap_or(path);
     let toml_path = output_dir.join(relative.with_extension("toml"));
     if let Some(parent) = toml_path.parent() {
@@ -246,16 +247,17 @@ fn get_workspace_members(dir: &Path) -> Result<Vec<String>> {
 fn parse_explicit_workspace_members(dir: &Path) -> Option<Vec<String>> {
     let content = fs::read_to_string(dir.join("Cargo.toml")).ok()?;
     let value: toml::Value = content.parse().ok()?;
-    let members_array = value
-        .get("workspace")?
-        .get("members")?
-        .as_array()?;
+    let members_array = value.get("workspace")?.get("members")?.as_array()?;
     let explicit: Vec<String> = members_array
         .iter()
         .filter_map(|v| v.as_str())
         .map(|s| s.to_string())
         .collect();
-    if explicit.is_empty() { None } else { Some(explicit) }
+    if explicit.is_empty() {
+        None
+    } else {
+        Some(explicit)
+    }
 }
 
 /// Fallback: discover subdirectories that contain a Cargo.toml.
@@ -274,7 +276,11 @@ fn discover_member_directories(dir: &Path) -> Vec<String> {
                 || name == "target"
                 || name == ".git"
                 || name.starts_with('.');
-            if dominated { None } else { Some(name.to_string()) }
+            if dominated {
+                None
+            } else {
+                Some(name.to_string())
+            }
         })
         .collect()
 }
