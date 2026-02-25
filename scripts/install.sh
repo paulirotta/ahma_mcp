@@ -98,8 +98,10 @@ if [ -f "$TEMP_DIR/ahma_simplify" ]; then
     chmod +x "$INSTALL_DIR/ahma_simplify"
 fi
 
-ahma_mcp --version
-ahma_simplify --version
+"$INSTALL_DIR/ahma_mcp" --version
+if [ -x "$INSTALL_DIR/ahma_simplify" ]; then
+    "$INSTALL_DIR/ahma_simplify" --version
+fi
 echo "Success! Installed ahma_mcp and ahma_simplify to ${INSTALL_DIR}"
 echo ""
 echo "Please ensure ${INSTALL_DIR} is in your PATH:"
