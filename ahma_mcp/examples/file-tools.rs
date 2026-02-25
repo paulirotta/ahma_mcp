@@ -1,12 +1,12 @@
 //! File Tools Configuration Example
 //!
-//! This example demonstrates how to load and validate the file_tools configuration
+//! This example demonstrates how to load and validate the file-tools configuration
 //! from the examples/configs directory.
 //!
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example file_tools
+//! cargo run --example file-tools
 //! ```
 
 use ahma_mcp::schema_validation::MtdfValidator;
@@ -16,10 +16,10 @@ use std::process;
 fn main() {
     // Get the workspace root
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let config_path = manifest_dir.join("examples/configs/file_tools.json");
+    let config_path = manifest_dir.join("examples/configs/file-tools.json");
 
     println!(
-        "Loading file_tools configuration from: {}",
+        "Loading file-tools configuration from: {}",
         config_path.display()
     );
 

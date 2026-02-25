@@ -348,14 +348,14 @@ async fn test_call_tool_invalid_subcommand() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
-    if !client_has_tool_prefix(&client, "file_tools").await? {
+    if !client_has_tool_prefix(&client, "file-tools").await? {
         client.cancel().await?;
         return Ok(());
     }
 
     let result = client
         .call_tool(make_params(
-            "file_tools",
+            "file-tools",
             Some(json!({"subcommand": "nonexistent_subcommand"})),
         ))
         .await;
@@ -501,7 +501,7 @@ async fn test_async_operation_full_lifecycle() -> Result<()> {
 // Working Directory Integration Tests
 // ============================================================================
 
-/// Test that file_tools respects working directory
+/// Test that file-tools respects working directory
 #[tokio::test]
 async fn test_file_tools_in_temp_directory() -> Result<()> {
     init_test_logging();
@@ -520,13 +520,13 @@ async fn test_file_tools_in_temp_directory() -> Result<()> {
         .build()
         .await?;
 
-    if !client_has_tool_prefix(&client, "file_tools").await? {
+    if !client_has_tool_prefix(&client, "file-tools").await? {
         client.cancel().await?;
         return Ok(());
     }
 
     let result = client
-        .call_tool(make_params("file_tools", Some(json!({"subcommand": "ls"}))))
+        .call_tool(make_params("file-tools", Some(json!({"subcommand": "ls"}))))
         .await?;
 
     assert_text_contains_any(

@@ -97,40 +97,20 @@ fn pattern_matches_path(pattern: &str, path: &Path) -> bool {
         .any(|c| segment_matches(segment, &c.as_os_str().to_string_lossy()))
 }
 
-fn should_exclude(path: &Path, custom_excludes: &[String]) -> bool {
-    const DEFAULT_EXCLUDES: &[&str] = &[
-        "**/target/**",
-        "**/node_modules/**",
-        "**/dist/**",
-        "**/build/**",
-        "**/out/**",
-        "**/bin/**",
-        "**/obj/**",
-        "**/venv/**",
-        "**/.venv/**",
-        "**/env/**",
-        "**/.env/**",
-        "**/__pycache__/**",
-        "**/.tox/**",
-        "**/.pytest_cache/**",
-        "**/.mypy_cache/**",
-        "**/.next/**",
-        "**/.nuxt/**",
-        "**/cmake-build-*/**",
-        "**/analysis_results/**",
-        "**/.git/**",
-        "**/.svn/**",
-        "**/.hg/**",
-        "**/.idea/**",
-        "**/.vscode/**",
-    ];
+const DEFAULT_EXCLUDES: &[&str] = &[
+    "**/target/**",      "**/node_modules/**", "**/dist/**",
+    "**/build/**",       "**/out/**",          "**/bin/**",
+    "**/obj/**",         "**/venv/**",         "**/.venv/**",
+    "**/env/**",         "**/.env/**",         "**/__pycache__/**",
+    "**/.tox/**",        "**/.pytest_cache/**", "**/.mypy_cache/**",
+    "**/.next/**",       "**/.nuxt/**",        "**/cmake-build-*/**",
+    "**/analysis_results/**", "**/.git/**",    "**/.svn/**",
+    "**/.hg/**",         "**/.idea/**",        "**/.vscode/**",
+];
 
-    DEFAULT_EXCLUDES
-        .iter()
-        .any(|p| pattern_matches_path(p, path))
-        || custom_excludes
-            .iter()
-            .any(|p| pattern_matches_path(p, path))
+fn should_exclude(path: &Path, custom_excludes: &[String]) -> bool {
+    DEFAULT_EXCLUDES.iter().any(|p| pattern_matches_path(p, path))
+        || custom_excludes.iter().any(|p| pattern_matches_path(p, path))
 }
 
 // ---------------------------------------------------------------------------
@@ -165,6 +145,22 @@ pub fn run_analysis(
     Ok(())
 }
 
+/// Check if a file matches the extension filter and is not excluded.
+fn is_matching_source_file(
+    path: &Path,
+    allowed_exts: &std::collections::HashSet<&str>,
+    custom_excludes: &[String],
+) -> bool {
+    let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+        return false;
+    };
+    let ext_lower = ext.to_lowercase();
+    if !allowed_exts.is_empty() && !allowed_exts.contains(ext_lower.as_str()) {
+        return false;
+    }
+    !should_exclude(path, custom_excludes)
+}
+
 /// Iterate source files in `dir` matching extension and exclusion filters.
 fn source_files<'a>(
     dir: &'a Path,
@@ -175,17 +171,8 @@ fn source_files<'a>(
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
-        .filter_map(move |entry| {
-            let path = entry.into_path();
-            let ext = path.extension()?.to_str()?.to_lowercase();
-            if !allowed_exts.is_empty() && !allowed_exts.contains(ext.as_str()) {
-                return None;
-            }
-            if should_exclude(&path, custom_excludes) {
-                return None;
-            }
-            Some(path)
-        })
+        .map(walkdir::DirEntry::into_path)
+        .filter(move |path| is_matching_source_file(path, allowed_exts, custom_excludes))
 }
 
 /// Analyse a single file and write its metrics as TOML into `output_dir`.
@@ -212,77 +199,52 @@ pub fn perform_analysis(
     extensions: &[String],
     custom_excludes: &[String],
 ) -> Result<()> {
-    if !is_workspace {
-        return run_analysis(directory, output, extensions, custom_excludes);
-    }
-
-    let members = get_workspace_members(directory)?;
-    let member_dirs: Vec<PathBuf> = members
-        .iter()
-        .map(|m| directory.join(m))
-        .filter(|p| p.is_dir())
-        .collect();
-
-    if member_dirs.is_empty() {
-        return run_analysis(directory, output, extensions, custom_excludes);
-    }
-
-    for target_path in member_dirs {
-        run_analysis(&target_path, output, extensions, custom_excludes)?;
+    let dirs = workspace_analysis_dirs(directory, is_workspace)?;
+    for dir in &dirs {
+        run_analysis(dir, output, extensions, custom_excludes)?;
     }
     Ok(())
 }
 
-/// Dynamically detect workspace members by:
-/// 1. Parsing [workspace] members from Cargo.toml if present
-/// 2. Falling back to directories containing Cargo.toml
-fn get_workspace_members(dir: &Path) -> Result<Vec<String>> {
-    if let Some(members) = parse_explicit_workspace_members(dir) {
-        return Ok(members);
+/// Resolve which directories to analyse: workspace members or just the root.
+fn workspace_analysis_dirs(directory: &Path, is_workspace: bool) -> Result<Vec<PathBuf>> {
+    if !is_workspace {
+        return Ok(vec![directory.to_path_buf()]);
     }
-    Ok(discover_member_directories(dir))
+    let member_dirs: Vec<PathBuf> = get_workspace_members(directory)?
+        .into_iter()
+        .map(|m| directory.join(m))
+        .filter(|p| p.is_dir())
+        .collect();
+    if member_dirs.is_empty() {
+        return Ok(vec![directory.to_path_buf()]);
+    }
+    Ok(member_dirs)
 }
 
-/// Parse explicit workspace members from `[workspace] members` in Cargo.toml.
-fn parse_explicit_workspace_members(dir: &Path) -> Option<Vec<String>> {
-    let content = fs::read_to_string(dir.join("Cargo.toml")).ok()?;
-    let value: toml::Value = content.parse().ok()?;
-    let members_array = value.get("workspace")?.get("members")?.as_array()?;
-    let explicit: Vec<String> = members_array
-        .iter()
-        .filter_map(|v| v.as_str())
-        .map(|s| s.to_string())
-        .collect();
-    if explicit.is_empty() {
-        None
-    } else {
-        Some(explicit)
-    }
+/// Detect workspace members from Cargo.toml `[workspace] members`, or fall
+/// back to discovering subdirectories that contain a Cargo.toml.
+fn get_workspace_members(dir: &Path) -> Result<Vec<String>> {
+    let explicit = fs::read_to_string(dir.join("Cargo.toml"))
+        .ok()
+        .and_then(|c| c.parse::<toml::Value>().ok())
+        .and_then(|v| v.get("workspace")?.get("members")?.as_array().cloned())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(str::to_string)).collect::<Vec<_>>())
+        .filter(|v: &Vec<String>| !v.is_empty());
+    Ok(explicit.unwrap_or_else(|| discover_member_directories(dir)))
 }
 
 /// Fallback: discover subdirectories that contain a Cargo.toml.
 fn discover_member_directories(dir: &Path) -> Vec<String> {
-    let entries = match fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return Vec::new(),
-    };
-    entries
-        .flatten()
-        .filter_map(|entry| {
-            let path = entry.path();
-            let name = path.file_name()?.to_str()?;
-            let dominated = !path.is_dir()
-                || !path.join("Cargo.toml").exists()
-                || name == "target"
-                || name == ".git"
-                || name.starts_with('.');
-            if dominated {
-                None
-            } else {
-                Some(name.to_string())
-            }
-        })
-        .collect()
+    let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
+    entries.flatten().filter_map(|entry| {
+        let path = entry.path();
+        let name = path.file_name()?.to_str()?;
+        let dominated = !path.is_dir()
+            || !path.join("Cargo.toml").exists()
+            || name == "target" || name.starts_with('.');
+        (!dominated).then(|| name.to_string())
+    }).collect()
 }
 
 pub fn get_project_name(dir: &Path) -> String {

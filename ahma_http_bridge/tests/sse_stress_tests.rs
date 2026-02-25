@@ -35,10 +35,10 @@ async fn test_concurrent_tool_calls() {
 
     // Create a batch of concurrent requests
     let requests = vec![
-        ("file_tools_pwd", json!({})),
-        ("file_tools_ls", json!({"path": "."})),
-        ("file_tools_ls", json!({"path": "ahma_mcp"})),
-        ("file_tools_cat", json!({"files": ["Cargo.toml"]})),
+        ("file-tools_pwd", json!({})),
+        ("file-tools_ls", json!({"path": "."})),
+        ("file-tools_ls", json!({"path": "ahma_mcp"})),
+        ("file-tools_cat", json!({"files": ["Cargo.toml"]})),
         ("sandboxed_shell", json!({"command": "echo test1"})),
         ("sandboxed_shell", json!({"command": "echo test2"})),
         ("sandboxed_shell", json!({"command": "echo test3"})),

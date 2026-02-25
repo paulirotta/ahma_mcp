@@ -88,21 +88,21 @@ async fn test_list_tools_returns_all_expected_tools() {
         "cargo_clippy",
         "cargo_audit",
         "cargo_nextest_run",
-        // From file_tools.json
-        "file_tools_ls",
-        "file_tools_mv",
-        "file_tools_cp",
-        "file_tools_rm",
-        "file_tools_grep",
-        "file_tools_sed",
-        "file_tools_touch",
-        "file_tools_pwd",
-        "file_tools_cd",
-        "file_tools_cat",
-        "file_tools_find",
-        "file_tools_head",
-        "file_tools_tail",
-        "file_tools_diff",
+        // From file-tools.json
+        "file-tools_ls",
+        "file-tools_mv",
+        "file-tools_cp",
+        "file-tools_rm",
+        "file-tools_grep",
+        "file-tools_sed",
+        "file-tools_touch",
+        "file-tools_pwd",
+        "file-tools_cd",
+        "file-tools_cat",
+        "file-tools_find",
+        "file-tools_head",
+        "file-tools_tail",
+        "file-tools_diff",
         // From git.json
         "git_status",
         "git_add",
@@ -170,7 +170,7 @@ async fn test_list_tools_returns_all_expected_tools() {
     );
 
     // Log which core tools are available for informational purposes
-    let core_tools = ["sandboxed_shell", "file_tools_ls", "file_tools_pwd"];
+    let core_tools = ["sandboxed_shell", "file-tools_ls", "file-tools_pwd"];
     for tool in &core_tools {
         if tool_names.contains(tool) {
             println!("OK Core tool available: {}", tool);
@@ -224,8 +224,8 @@ async fn test_missing_required_arg_returns_error() {
     let _server = ensure_server_available().await;
 
     let client = Client::new();
-    // file_tools_cat requires 'files' argument
-    let result = call_tool(&client, "file_tools_cat", json!({})).await;
+    // file-tools_cat requires 'files' argument
+    let result = call_tool(&client, "file-tools_cat", json!({})).await;
 
     // Should either fail or return error about missing files argument
     println!(
@@ -272,23 +272,23 @@ async fn test_all_tools_comprehensive() {
     // Define test cases for tools we want to test (if they exist)
     let test_cases: Vec<(&str, Value)> = vec![
         // File tools
-        ("file_tools_pwd", json!({})),
-        ("file_tools_ls", json!({"path": "."})),
-        ("file_tools_cat", json!({"files": ["Cargo.toml"]})),
+        ("file-tools_pwd", json!({})),
+        ("file-tools_ls", json!({"path": "."})),
+        ("file-tools_cat", json!({"files": ["Cargo.toml"]})),
         (
-            "file_tools_head",
+            "file-tools_head",
             json!({"files": ["README.md"], "lines": 5}),
         ),
         (
-            "file_tools_tail",
+            "file-tools_tail",
             json!({"files": ["README.md"], "lines": 5}),
         ),
         (
-            "file_tools_grep",
+            "file-tools_grep",
             json!({"pattern": "name", "files": ["Cargo.toml"]}),
         ),
         (
-            "file_tools_find",
+            "file-tools_find",
             json!({"path": ".", "-name": "*.toml", "-maxdepth": 1}),
         ),
         // Sandboxed shell

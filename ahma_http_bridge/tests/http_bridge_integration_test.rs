@@ -1272,16 +1272,16 @@ async fn test_symlink_escape_attempt_is_blocked() {
     let tools_dir = server_scope_dir.path().join("tools");
     std::fs::create_dir_all(&tools_dir).expect("Failed to create tools dir");
 
-    // Copy the workspace file_tools config so we can attempt a write.
+    // Copy the workspace file-tools config so we can attempt a write.
     let workspace_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("Failed to get workspace dir")
         .to_path_buf();
     std::fs::copy(
-        workspace_dir.join(".ahma/file_tools.json"),
-        tools_dir.join("file_tools.json"),
+        workspace_dir.join(".ahma/file-tools.json"),
+        tools_dir.join("file-tools.json"),
     )
-    .expect("Failed to copy file_tools tool config");
+    .expect("Failed to copy file-tools tool config");
 
     let (mut server, port) = start_http_bridge(&tools_dir, server_scope_dir.path()).await;
     let base_url = format!("http://127.0.0.1:{}", port);
@@ -1325,7 +1325,7 @@ async fn test_symlink_escape_attempt_is_blocked() {
         "id": 2,
         "method": "tools/call",
         "params": {
-            "name": "file_tools",
+            "name": "file-tools",
             "arguments": {
                 "subcommand": "touch",
                 "working_directory": client_root.to_string_lossy(),
@@ -1341,7 +1341,7 @@ async fn test_symlink_escape_attempt_is_blocked() {
         "Symlink escape must not create files outside sandbox root"
     );
 
-    // file_tools failures may be represented either as a JSON-RPC error or as result.isError=true.
+    // file-tools failures may be represented either as a JSON-RPC error or as result.isError=true.
     let is_jsonrpc_error = resp.get("error").is_some();
     let is_tool_error = resp
         .get("result")

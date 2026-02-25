@@ -7,7 +7,7 @@ This directory contains example Rust programs that demonstrate how to validate t
 Each example loads and validates a specific tool configuration from the `configs/` directory:
 
 - **[cargo_tool.rs](cargo_tool.rs)** - Validates `configs/cargo.json` (Rust build tool)
-- **[file_tools.rs](file_tools.rs)** - Validates `configs/file_tools.json` (Unix file operations)
+- **[file-tools.rs](file-tools.rs)** - Validates `configs/file-tools.json` (Unix file operations)
 - **[gh_tool.rs](gh_tool.rs)** - Validates `configs/gh.json` (GitHub CLI)
 - **[git_tool.rs](git_tool.rs)** - Validates `configs/git.json` (Git version control)
 - **[gradlew_tool.rs](gradlew_tool.rs)** - Validates `configs/gradlew.json` (Gradle wrapper)
@@ -20,7 +20,7 @@ Run any example using cargo:
 ```bash
 # Run a specific example
 cargo run --example cargo_tool
-cargo run --example file_tools
+cargo run --example file-tools
 cargo run --example gh_tool
 cargo run --example git_tool
 cargo run --example gradlew_tool

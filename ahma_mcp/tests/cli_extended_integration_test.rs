@@ -190,7 +190,7 @@ mod flag_combination_tests {
                 tools_dir.to_str().unwrap(),
                 "--sync",
                 "--debug",
-                "file_tools_pwd",
+                "file-tools_pwd",
             ])
             .output()
             .expect("Failed to execute ahma_mcp with multiple flags");
@@ -432,7 +432,7 @@ mod cli_execution_tests {
         // Try to run file_tools_pwd which should be available
         let output = test_command(&binary)
             .current_dir(&workspace)
-            .args(["--tools-dir", tools_dir.to_str().unwrap(), "file_tools_pwd"])
+            .args(["--tools-dir", tools_dir.to_str().unwrap(), "file-tools_pwd"])
             .output()
             .expect("Failed to execute file_tools_pwd");
 
@@ -493,7 +493,7 @@ mod cli_execution_tests {
                 "--tools-dir",
                 tools_dir.to_str().unwrap(),
                 "--sync",
-                "file_tools_pwd",
+                "file-tools_pwd",
             ])
             .output()
             .expect("Failed to execute file_tools_pwd in sync mode");
@@ -554,7 +554,7 @@ mod ahma_validate_extended_tests {
         let tools_dir = workspace.join(".ahma");
 
         // Validate specific tool files if they exist
-        for tool_name in ["cargo.json", "git.json", "file_tools.json"] {
+        for tool_name in ["cargo.json", "git.json", "file-tools.json"] {
             let tool_path = tools_dir.join(tool_name);
             if tool_path.exists() {
                 let output = Command::new(&binary)

@@ -69,9 +69,9 @@ pub struct Cli {
     #[arg(long)]
     pub rust: bool,
 
-    /// Bundle and enable the file tools (file_tools.json)
+    /// Bundle and enable the file tools (file-tools.json)
     #[arg(long)]
-    pub file: bool,
+    pub file_tools: bool,
 
     /// Bundle and enable the github toolset (gh.json)
     #[arg(long)]

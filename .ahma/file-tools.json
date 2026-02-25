@@ -1,5 +1,5 @@
 {
-    "name": "file_tools",
+    "name": "file-tools",
     "description": "Essential file operations toolkit providing secure, scoped access to common Unix commands. All file and directory paths are automatically validated and constrained to the current working scope for safety. These tools run synchronously by default to ensure immediate feedback and prevent race conditions. Enable efficient AI-driven file management with pre-approved commands.",
     "command": "/bin/sh",
     "enabled": true,

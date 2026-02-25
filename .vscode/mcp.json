@@ -5,11 +5,9 @@
             "command": "ahma_mcp",
             "args": [
                 "--rust",
-                "--simplify"
-            ],
-            "env": {
-                "PATH": "${env:HOME}/.cargo/bin:${env:HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-            }
+                "--simplify",
+                "--file-tools"
+            ]
         }
     }
 }

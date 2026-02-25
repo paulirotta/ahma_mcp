@@ -128,7 +128,7 @@ mod ahma_mcp_tests {
         // Check if file_tools exists (a simple tool to test with)
         let output = test_command(&binary)
             .current_dir(&workspace)
-            .args(["--tools-dir", tools_dir.to_str().unwrap(), "file_tools_pwd"])
+            .args(["--tools-dir", tools_dir.to_str().unwrap(), "file-tools_pwd"])
             .output()
             .expect("Failed to execute ahma_mcp with file_tools_pwd");
 

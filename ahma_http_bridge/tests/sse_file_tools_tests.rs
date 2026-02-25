@@ -14,15 +14,15 @@ async fn test_file_tools_pwd() {
     let _server = ensure_server_available().await;
     let client = Client::new();
 
-    skip_if_unavailable!(&client, "file_tools_pwd");
+    skip_if_unavailable!(&client, "file-tools_pwd");
 
-    let result = call_tool(&client, "file_tools_pwd", json!({})).await;
+    let result = call_tool(&client, "file-tools_pwd", json!({})).await;
 
-    assert!(result.success, "file_tools_pwd failed: {:?}", result.error);
-    assert!(result.output.is_some(), "No output from file_tools_pwd");
+    assert!(result.success, "file-tools_pwd failed: {:?}", result.error);
+    assert!(result.output.is_some(), "No output from file-tools_pwd");
 
     let output = result.output.unwrap();
-    assert!(!output.is_empty(), "Empty output from file_tools_pwd");
+    assert!(!output.is_empty(), "Empty output from file-tools_pwd");
     println!("PWD: {}", output);
 }
 
@@ -31,15 +31,15 @@ async fn test_file_tools_ls() {
     let _server = ensure_server_available().await;
     let client = Client::new();
 
-    skip_if_unavailable!(&client, "file_tools_ls");
+    skip_if_unavailable!(&client, "file-tools_ls");
 
-    let result = call_tool(&client, "file_tools_ls", json!({"path": "."})).await;
+    let result = call_tool(&client, "file-tools_ls", json!({"path": "."})).await;
 
-    assert!(result.success, "file_tools_ls failed: {:?}", result.error);
-    assert!(result.output.is_some(), "No output from file_tools_ls");
+    assert!(result.success, "file-tools_ls failed: {:?}", result.error);
+    assert!(result.output.is_some(), "No output from file-tools_ls");
 
     let output = result.output.unwrap();
-    assert!(!output.is_empty(), "Empty output from file_tools_ls");
+    assert!(!output.is_empty(), "Empty output from file-tools_ls");
     println!(
         "LS output (first 500 chars): {}",
         &output[..output.len().min(500)]
@@ -51,11 +51,11 @@ async fn test_file_tools_ls_with_options() {
     let _server = ensure_server_available().await;
     let client = Client::new();
 
-    skip_if_unavailable!(&client, "file_tools_ls");
+    skip_if_unavailable!(&client, "file-tools_ls");
 
     let result = call_tool(
         &client,
-        "file_tools_ls",
+        "file-tools_ls",
         json!({
             "path": ".",
             "long": true,
@@ -66,7 +66,7 @@ async fn test_file_tools_ls_with_options() {
 
     assert!(
         result.success,
-        "file_tools_ls with options failed: {:?}",
+        "file-tools_ls with options failed: {:?}",
         result.error
     );
     assert!(result.output.is_some());
@@ -83,11 +83,11 @@ async fn test_file_tools_cat() {
     let _server = ensure_server_available().await;
     let client = Client::new();
 
-    skip_if_unavailable!(&client, "file_tools_cat");
+    skip_if_unavailable!(&client, "file-tools_cat");
 
-    let result = call_tool(&client, "file_tools_cat", json!({"files": ["Cargo.toml"]})).await;
+    let result = call_tool(&client, "file-tools_cat", json!({"files": ["Cargo.toml"]})).await;
 
-    assert!(result.success, "file_tools_cat failed: {:?}", result.error);
+    assert!(result.success, "file-tools_cat failed: {:?}", result.error);
     assert!(result.output.is_some());
 
     let output = result.output.unwrap();
@@ -102,11 +102,11 @@ async fn test_file_tools_head() {
     let _server = ensure_server_available().await;
     let client = Client::new();
 
-    skip_if_unavailable!(&client, "file_tools_head");
+    skip_if_unavailable!(&client, "file-tools_head");
 
     let result = call_tool(
         &client,
-        "file_tools_head",
+        "file-tools_head",
         json!({
             "files": ["README.md"],
             "lines": 5
@@ -114,7 +114,7 @@ async fn test_file_tools_head() {
     )
     .await;
 
-    assert!(result.success, "file_tools_head failed: {:?}", result.error);
+    assert!(result.success, "file-tools_head failed: {:?}", result.error);
     assert!(result.output.is_some());
 }
 
@@ -123,11 +123,11 @@ async fn test_file_tools_tail() {
     let _server = ensure_server_available().await;
     let client = Client::new();
 
-    skip_if_unavailable!(&client, "file_tools_tail");
+    skip_if_unavailable!(&client, "file-tools_tail");
 
     let result = call_tool(
         &client,
-        "file_tools_tail",
+        "file-tools_tail",
         json!({
             "files": ["README.md"],
             "lines": 5
@@ -135,7 +135,7 @@ async fn test_file_tools_tail() {
     )
     .await;
 
-    assert!(result.success, "file_tools_tail failed: {:?}", result.error);
+    assert!(result.success, "file-tools_tail failed: {:?}", result.error);
     assert!(result.output.is_some());
 }
 
@@ -144,11 +144,11 @@ async fn test_file_tools_grep() {
     let _server = ensure_server_available().await;
     let client = Client::new();
 
-    skip_if_unavailable!(&client, "file_tools_grep");
+    skip_if_unavailable!(&client, "file-tools_grep");
 
     let result = call_tool(
         &client,
-        "file_tools_grep",
+        "file-tools_grep",
         json!({
             "pattern": "ahma",
             "files": ["Cargo.toml"],
@@ -157,7 +157,7 @@ async fn test_file_tools_grep() {
     )
     .await;
 
-    assert!(result.success, "file_tools_grep failed: {:?}", result.error);
+    assert!(result.success, "file-tools_grep failed: {:?}", result.error);
 }
 
 #[tokio::test]
@@ -165,11 +165,11 @@ async fn test_file_tools_find() {
     let _server = ensure_server_available().await;
     let client = Client::new();
 
-    skip_if_unavailable!(&client, "file_tools_find");
+    skip_if_unavailable!(&client, "file-tools_find");
 
     let result = call_tool(
         &client,
-        "file_tools_find",
+        "file-tools_find",
         json!({
             "path": ".",
             "-name": "*.toml",
@@ -178,7 +178,7 @@ async fn test_file_tools_find() {
     )
     .await;
 
-    assert!(result.success, "file_tools_find failed: {:?}", result.error);
+    assert!(result.success, "file-tools_find failed: {:?}", result.error);
     assert!(result.output.is_some());
 
     let output = result.output.unwrap();
@@ -194,34 +194,34 @@ async fn test_file_tools_touch_and_rm() {
     let client = Client::new();
 
     // Check if tools are available before testing
-    if !is_tool_available(&client, "file_tools_touch").await {
-        eprintln!("WARNING️  file_tools_touch not available on server, skipping test");
+    if !is_tool_available(&client, "file-tools_touch").await {
+        eprintln!("WARNING️  file-tools_touch not available on server, skipping test");
         return;
     }
-    if !is_tool_available(&client, "file_tools_rm").await {
-        eprintln!("WARNING️  file_tools_rm not available on server, skipping test");
+    if !is_tool_available(&client, "file-tools_rm").await {
+        eprintln!("WARNING️  file-tools_rm not available on server, skipping test");
         return;
     }
-    if !is_tool_available(&client, "file_tools_ls").await {
-        eprintln!("WARNING️  file_tools_ls not available on server, skipping test");
+    if !is_tool_available(&client, "file-tools_ls").await {
+        eprintln!("WARNING️  file-tools_ls not available on server, skipping test");
         return;
     }
 
     let temp_file = format!("test_integration_{}.tmp", std::process::id());
 
     // Touch (create) the file
-    let touch_result = call_tool(&client, "file_tools_touch", json!({"files": [&temp_file]})).await;
+    let touch_result = call_tool(&client, "file-tools_touch", json!({"files": [&temp_file]})).await;
 
     if !touch_result.success {
         eprintln!(
-            "WARNING️  file_tools_touch failed (may be outside sandbox): {:?}",
+            "WARNING️  file-tools_touch failed (may be outside sandbox): {:?}",
             touch_result.error
         );
         return;
     }
 
     // Verify it exists
-    let ls_result = call_tool(&client, "file_tools_ls", json!({"path": "."})).await;
+    let ls_result = call_tool(&client, "file-tools_ls", json!({"path": "."})).await;
 
     assert!(ls_result.success);
     let output = ls_result.output.unwrap_or_default();
@@ -231,16 +231,16 @@ async fn test_file_tools_touch_and_rm() {
     );
 
     // Remove the file
-    let rm_result = call_tool(&client, "file_tools_rm", json!({"paths": [&temp_file]})).await;
+    let rm_result = call_tool(&client, "file-tools_rm", json!({"paths": [&temp_file]})).await;
 
     assert!(
         rm_result.success,
-        "file_tools_rm failed: {:?}",
+        "file-tools_rm failed: {:?}",
         rm_result.error
     );
 
     // Verify it's gone
-    let ls_after = call_tool(&client, "file_tools_ls", json!({"path": "."})).await;
+    let ls_after = call_tool(&client, "file-tools_ls", json!({"path": "."})).await;
 
     assert!(ls_after.success);
     let output_after = ls_after.output.unwrap_or_default();
@@ -256,12 +256,12 @@ async fn test_file_tools_cp_and_mv() {
     let client = Client::new();
 
     // Check if tools are available before testing
-    if !is_tool_available(&client, "file_tools_cp").await {
-        eprintln!("WARNING️  file_tools_cp not available on server, skipping test");
+    if !is_tool_available(&client, "file-tools_cp").await {
+        eprintln!("WARNING️  file-tools_cp not available on server, skipping test");
         return;
     }
-    if !is_tool_available(&client, "file_tools_mv").await {
-        eprintln!("WARNING️  file_tools_mv not available on server, skipping test");
+    if !is_tool_available(&client, "file-tools_mv").await {
+        eprintln!("WARNING️  file-tools_mv not available on server, skipping test");
         return;
     }
 
@@ -289,7 +289,7 @@ async fn test_file_tools_cp_and_mv() {
     // Copy the file
     let cp_result = call_tool(
         &client,
-        "file_tools_cp",
+        "file-tools_cp",
         json!({
             "source": &src_file,
             "destination": &dst_file
@@ -299,14 +299,14 @@ async fn test_file_tools_cp_and_mv() {
 
     assert!(
         cp_result.success,
-        "file_tools_cp failed: {:?}",
+        "file-tools_cp failed: {:?}",
         cp_result.error
     );
 
     // Move the copied file
     let mv_result = call_tool(
         &client,
-        "file_tools_mv",
+        "file-tools_mv",
         json!({
             "source": &dst_file,
             "destination": &mv_file
@@ -316,14 +316,14 @@ async fn test_file_tools_cp_and_mv() {
 
     assert!(
         mv_result.success,
-        "file_tools_mv failed: {:?}",
+        "file-tools_mv failed: {:?}",
         mv_result.error
     );
 
     // Cleanup
     let _ = call_tool(
         &client,
-        "file_tools_rm",
+        "file-tools_rm",
         json!({"paths": [&src_file, &mv_file]}),
     )
     .await;
@@ -334,7 +334,7 @@ async fn test_file_tools_diff() {
     let _server = ensure_server_available().await;
     let client = Client::new();
 
-    skip_if_unavailable!(&client, "file_tools_diff");
+    skip_if_unavailable!(&client, "file-tools_diff");
 
     let pid = std::process::id();
     let file1 = format!("test_diff1_{}.tmp", pid);
@@ -358,7 +358,7 @@ async fn test_file_tools_diff() {
     // Diff the files
     let diff_result = call_tool(
         &client,
-        "file_tools_diff",
+        "file-tools_diff",
         json!({
             "file1": &file1,
             "file2": &file2,
@@ -374,7 +374,7 @@ async fn test_file_tools_diff() {
     );
 
     // Cleanup
-    let _ = call_tool(&client, "file_tools_rm", json!({"paths": [&file1, &file2]})).await;
+    let _ = call_tool(&client, "file-tools_rm", json!({"paths": [&file1, &file2]})).await;
 }
 
 #[tokio::test]

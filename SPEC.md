@@ -324,7 +324,7 @@ ahma_mcp --mode stdio --tools-dir .ahma/tools
 
 Alternatively, standard tool configurations are bundled directly inside the binary. Enable them using CLI flags to activate built-in fallback definitions:
 ```bash
-ahma_mcp --mode stdio --rust --python --git --github --file --simplify --gradle
+ahma_mcp --mode stdio --rust --python --git --github --file-tools --simplify --gradle
 ```
 
 Note: Core tools (`sandboxed_shell`, `await`, `status`, `cancel`) are always available without any flags.

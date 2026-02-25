@@ -149,7 +149,7 @@ async fn test_each_bundled_flag_works_without_tools_dir() {
         ("--python", "python"),
         ("--git", "git"),
         ("--github", "gh"),
-        ("--file", "file_tools"),
+        ("--file-tools", "file-tools"),
     ];
 
     for &(flag, expected_tool) in flag_and_expected {
