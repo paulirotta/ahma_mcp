@@ -1,3 +1,9 @@
+[net]
+git-fetch-with-cli = true
+
+[git]
+fetch-recurse-submodules = false
+
 [target.aarch64-unknown-linux-gnu]
 # Use mold - far lower RAM usage than GNU ld, and much faster.
 # gcc 12+ supports -fuse-ld=mold natively; no clang needed.
