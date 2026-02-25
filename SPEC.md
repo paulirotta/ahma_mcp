@@ -54,45 +54,7 @@ _"Create agents from your command line tools with one JSON file, then watch them
 
 ## 2. Architecture
 
-### 2.1 Project Structure
-
-```bash
-ahma_mcp/
-├── Cargo.toml              # Workspace definition
-├── SPEC.md                 # THIS FILE - single source of truth
-├── AGENTS.md               # Guardrails for AI contributors
-├── README.md               # User-facing documentation
-├── docs/
-│   ├── CONSTITUTION.md     # Development principles
-│   ├── USAGE_GUIDE.md      # Workflow patterns
-│   └── mtdf-schema.json    # Tool definition schema
-├── ahma_mcp/              # Core library crate
-│   ├── src/
-│   │   ├── lib.rs          # Module exports and architecture docs
-│   │   ├── adapter.rs      # Tool execution engine
-│   │   ├── mcp_service/    # MCP ServerHandler implementation
-│   │   ├── operation_monitor.rs  # Async operation tracking
-│   │   ├── shell_pool.rs   # Pre-warmed shell process pool
-│   │   ├── sandbox.rs      # Kernel-level sandboxing
-│   │   ├── config.rs       # MTDF configuration models
-│   │   ├── callback_system.rs  # Event notifications
-│   │   ├── path_security.rs    # Sandbox path validation
-│   │   └── shell/          # CLI entry points
-│   └── tests/              # 70+ test files
-├── ahma_http_bridge/       # HTTP-to-stdio bridge
-│   └── src/
-├── ahma_http_mcp_client/   # HTTP MCP client with OAuth
-│   └── src/
-├── ahma_validate/          # Tool config validator
-│   └── src/
-├── ahma_simplify/          # Code simplicity metrics aggregator
-│   └── src/
-├── generate_tool_schema/   # MTDF schema generator
-│   └── src/
-└── .ahma/tools/            # Tool JSON configurations
-```
-
-### 2.2 Core Modules
+### 2.1 Core Modules
 
 | Module | Purpose |
 |--------|---------|
@@ -105,7 +67,7 @@ ahma_mcp/
 | `callback_system` | Event notification system for async operations |
 | `path_security` | Path validation for sandbox enforcement |
 
-### 2.3 Built-in Internal Tools
+### 2.2 Built-in Internal Tools
 
 These tools are always available regardless of JSON configuration:
 
@@ -118,7 +80,7 @@ These tools are always available regardless of JSON configuration:
 
 **Note**: These internal tools are hardcoded into the `AhmaMcpService` and are guaranteed to be available even when no `.ahma` directory exists or when all external tool configurations fail to load.
 
-### 2.4 Async-First Architecture
+### 2.3 Async-First Architecture
 
 ```text
 ┌─────────────────┐         ┌──────────────────┐
@@ -144,7 +106,7 @@ These tools are always available regardless of JSON configuration:
 3. On completion, result pushed via MCP `notifications/progress`
 4. AI processes notification when it arrives (non-blocking)
 
-### 2.5 Synchronous Setting Inheritance
+### 2.4 Synchronous Setting Inheritance
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐

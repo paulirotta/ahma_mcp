@@ -104,6 +104,10 @@ cargo clippy --fix --allow-dirty   # Auto-fix lints
 
 ## Code Style and Conventions
 
+### Documentation Style
+- **No File Lists**: Do not maintain hardcoded directory trees or file lists in markdown files (like `SPEC.md` or `CLAUDE.md`). AI agents can explore the workspace directly. Hardcoded lists waste context window and become outdated quickly.
+- **Single Source of Truth**: Keep architectural decisions in `SPEC.md` and AI instructions in `AGENTS.md`.
+
 ### Rust Style
 - **Formatting**: Use `rustfmt` (enforced by `cargo fmt`)
 - **Linting**: Pass `clippy` with no warnings
