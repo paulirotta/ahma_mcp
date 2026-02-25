@@ -98,19 +98,39 @@ fn pattern_matches_path(pattern: &str, path: &Path) -> bool {
 }
 
 const DEFAULT_EXCLUDES: &[&str] = &[
-    "**/target/**",      "**/node_modules/**", "**/dist/**",
-    "**/build/**",       "**/out/**",          "**/bin/**",
-    "**/obj/**",         "**/venv/**",         "**/.venv/**",
-    "**/env/**",         "**/.env/**",         "**/__pycache__/**",
-    "**/.tox/**",        "**/.pytest_cache/**", "**/.mypy_cache/**",
-    "**/.next/**",       "**/.nuxt/**",        "**/cmake-build-*/**",
-    "**/analysis_results/**", "**/.git/**",    "**/.svn/**",
-    "**/.hg/**",         "**/.idea/**",        "**/.vscode/**",
+    "**/target/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/out/**",
+    "**/bin/**",
+    "**/obj/**",
+    "**/venv/**",
+    "**/.venv/**",
+    "**/env/**",
+    "**/.env/**",
+    "**/__pycache__/**",
+    "**/.tox/**",
+    "**/.pytest_cache/**",
+    "**/.mypy_cache/**",
+    "**/.next/**",
+    "**/.nuxt/**",
+    "**/cmake-build-*/**",
+    "**/analysis_results/**",
+    "**/.git/**",
+    "**/.svn/**",
+    "**/.hg/**",
+    "**/.idea/**",
+    "**/.vscode/**",
 ];
 
 fn should_exclude(path: &Path, custom_excludes: &[String]) -> bool {
-    DEFAULT_EXCLUDES.iter().any(|p| pattern_matches_path(p, path))
-        || custom_excludes.iter().any(|p| pattern_matches_path(p, path))
+    DEFAULT_EXCLUDES
+        .iter()
+        .any(|p| pattern_matches_path(p, path))
+        || custom_excludes
+            .iter()
+            .any(|p| pattern_matches_path(p, path))
 }
 
 // ---------------------------------------------------------------------------
@@ -229,22 +249,32 @@ fn get_workspace_members(dir: &Path) -> Result<Vec<String>> {
         .ok()
         .and_then(|c| c.parse::<toml::Value>().ok())
         .and_then(|v| v.get("workspace")?.get("members")?.as_array().cloned())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(str::to_string)).collect::<Vec<_>>())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect::<Vec<_>>()
+        })
         .filter(|v: &Vec<String>| !v.is_empty());
     Ok(explicit.unwrap_or_else(|| discover_member_directories(dir)))
 }
 
 /// Fallback: discover subdirectories that contain a Cargo.toml.
 fn discover_member_directories(dir: &Path) -> Vec<String> {
-    let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
-    entries.flatten().filter_map(|entry| {
-        let path = entry.path();
-        let name = path.file_name()?.to_str()?;
-        let dominated = !path.is_dir()
-            || !path.join("Cargo.toml").exists()
-            || name == "target" || name.starts_with('.');
-        (!dominated).then(|| name.to_string())
-    }).collect()
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            let name = path.file_name()?.to_str()?;
+            let dominated = !path.is_dir()
+                || !path.join("Cargo.toml").exists()
+                || name == "target"
+                || name.starts_with('.');
+            (!dominated).then(|| name.to_string())
+        })
+        .collect()
 }
 
 pub fn get_project_name(dir: &Path) -> String {

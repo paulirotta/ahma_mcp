@@ -67,6 +67,7 @@ jobs:
       - name: Configure deterministic tooling env
         run: |
           git config --global core.pager cat
+          git config --global fetch.recurseSubmodules false
           echo "PAGER=cat" >> $GITHUB_ENV
           echo "LC_ALL=C" >> $GITHUB_ENV
           echo "LANG=C" >> $GITHUB_ENV
@@ -202,6 +203,7 @@ jobs:
       - name: Configure deterministic tooling env
         run: |
           git config --global core.pager cat
+          git config --global fetch.recurseSubmodules false
           echo "PAGER=cat" >> $GITHUB_ENV
           echo "LC_ALL=C" >> $GITHUB_ENV
           echo "LANG=C" >> $GITHUB_ENV
@@ -337,6 +339,7 @@ jobs:
       - name: Configure deterministic tooling env
         run: |
           git config --global core.pager cat
+          git config --global fetch.recurseSubmodules false
           echo "PAGER=cat" >> $GITHUB_ENV
           echo "LC_ALL=C" >> $GITHUB_ENV
           echo "LANG=C" >> $GITHUB_ENV
@@ -597,6 +600,7 @@ jobs:
       - name: Configure deterministic tooling env
         run: |
           git config --global core.pager cat
+          git config --global fetch.recurseSubmodules false
           echo "PAGER=cat" >> $GITHUB_ENV
           echo "LC_ALL=C" >> $GITHUB_ENV
           echo "LANG=C" >> $GITHUB_ENV
@@ -750,6 +754,7 @@ jobs:
       - name: Configure deterministic tooling env
         run: |
           git config --global core.pager cat
+          git config --global fetch.recurseSubmodules false
           echo "PAGER=cat" >> $GITHUB_ENV
           echo "LC_ALL=C" >> $GITHUB_ENV
           echo "LANG=C" >> $GITHUB_ENV
