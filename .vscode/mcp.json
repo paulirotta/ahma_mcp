@@ -6,7 +6,7 @@
             "args": [
                 "--rust",
                 "--simplify",
-                "--file-tools"
+                "--fileutils"
             ]
         }
     }

@@ -25,7 +25,8 @@
 mod common;
 
 use common::{
-    SANDBOX_BYPASS_ENV_VARS, SandboxTestEnv, encode_file_uri, malformed_uris, parse_file_uri,
+    SANDBOX_BYPASS_ENV_VARS, SandboxTestEnv, ServerGuard, encode_file_uri, malformed_uris,
+    parse_file_uri,
 };
 use futures::StreamExt;
 use reqwest::Client;
@@ -67,7 +68,7 @@ fn get_ahma_mcp_binary() -> PathBuf {
 }
 
 /// Start an HTTP bridge server with deferred sandbox (for roots/list testing)
-async fn start_deferred_sandbox_server(tools_dir: &std::path::Path) -> (std::process::Child, u16) {
+async fn start_deferred_sandbox_server(tools_dir: &std::path::Path) -> ServerGuard {
     let binary = get_ahma_mcp_binary();
 
     let mut cmd = Command::new(&binary);
@@ -143,7 +144,7 @@ async fn start_deferred_sandbox_server(tools_dir: &std::path::Path) -> (std::pro
         if let Ok(resp) = client.get(&health_url).send().await
             && resp.status().is_success()
         {
-            return (child, port);
+            return ServerGuard::new(child, port);
         }
     }
 
@@ -372,8 +373,8 @@ async fn test_empty_roots_rejection() {
     )
     .expect("Failed to write tool config");
 
-    let (mut server, port) = start_deferred_sandbox_server(&tools_dir).await;
-    let base_url = format!("http://127.0.0.1:{}", port);
+    let server = start_deferred_sandbox_server(&tools_dir).await;
+    let base_url = format!("http://127.0.0.1:{}", server.port());
     let client = Client::new();
 
     // Complete handshake
@@ -445,8 +446,6 @@ async fn test_empty_roots_rejection() {
             );
         }
     }
-
-    server.kill().expect("Failed to kill server");
 }
 
 // =============================================================================
@@ -519,8 +518,8 @@ async fn test_session_with_only_malformed_uris() {
     )
     .expect("Failed to write tool config");
 
-    let (mut server, port) = start_deferred_sandbox_server(&tools_dir).await;
-    let base_url = format!("http://127.0.0.1:{}", port);
+    let server = start_deferred_sandbox_server(&tools_dir).await;
+    let base_url = format!("http://127.0.0.1:{}", server.port());
     let client = Client::new();
 
     let session_id = complete_handshake(&client, &base_url)
@@ -571,8 +570,6 @@ async fn test_session_with_only_malformed_uris() {
             eprintln!("Got HTTP error (acceptable for malformed URIs): {}", e);
         }
     }
-
-    server.kill().expect("Failed to kill server");
 }
 
 // =============================================================================
@@ -604,8 +601,8 @@ async fn test_multi_root_workspace_scoping() {
     )
     .expect("Failed to write tool config");
 
-    let (mut server, port) = start_deferred_sandbox_server(&tools_dir).await;
-    let base_url = format!("http://127.0.0.1:{}", port);
+    let server = start_deferred_sandbox_server(&tools_dir).await;
+    let base_url = format!("http://127.0.0.1:{}", server.port());
     let client = Client::new();
 
     let session_id = complete_handshake(&client, &base_url)
@@ -680,8 +677,6 @@ async fn test_multi_root_workspace_scoping() {
         "Tool call in root2 should succeed: {:?}",
         response2
     );
-
-    server.kill().expect("Failed to kill server");
 }
 
 // =============================================================================
@@ -712,8 +707,8 @@ async fn test_url_encoded_path_in_roots() {
     )
     .expect("Failed to write tool config");
 
-    let (mut server, port) = start_deferred_sandbox_server(&tools_dir).await;
-    let base_url = format!("http://127.0.0.1:{}", port);
+    let server = start_deferred_sandbox_server(&tools_dir).await;
+    let base_url = format!("http://127.0.0.1:{}", server.port());
     let client = Client::new();
 
     let session_id = complete_handshake(&client, &base_url)
@@ -783,8 +778,6 @@ async fn test_url_encoded_path_in_roots() {
         "Output should contain 'my project': {}",
         output
     );
-
-    server.kill().expect("Failed to kill server");
 }
 
 // =============================================================================
@@ -875,8 +868,8 @@ async fn test_handshake_ordering_sse_first() {
     )
     .expect("Failed to write tool config");
 
-    let (mut server, port) = start_deferred_sandbox_server(&tools_dir).await;
-    let base_url = format!("http://127.0.0.1:{}", port);
+    let server = start_deferred_sandbox_server(&tools_dir).await;
+    let base_url = format!("http://127.0.0.1:{}", server.port());
     let client = Client::new();
 
     // VSCode Copilot style: Initialize, then SSE connects and answers roots/list
@@ -946,8 +939,6 @@ async fn test_handshake_ordering_sse_first() {
         "Tool call should succeed after VSCode-style handshake: {:?}",
         response
     );
-
-    server.kill().expect("Failed to kill server");
 }
 
 // =============================================================================
@@ -975,8 +966,8 @@ async fn test_mixed_valid_invalid_uris() {
     )
     .expect("Failed to write tool config");
 
-    let (mut server, port) = start_deferred_sandbox_server(&tools_dir).await;
-    let base_url = format!("http://127.0.0.1:{}", port);
+    let server = start_deferred_sandbox_server(&tools_dir).await;
+    let base_url = format!("http://127.0.0.1:{}", server.port());
     let client = Client::new();
 
     let session_id = complete_handshake(&client, &base_url)
@@ -1030,8 +1021,6 @@ async fn test_mixed_valid_invalid_uris() {
         "Tool call should succeed with at least one valid root: {:?}",
         response
     );
-
-    server.kill().expect("Failed to kill server");
 }
 
 // =============================================================================
@@ -1067,8 +1056,8 @@ async fn test_post_lock_roots_change_rejected() {
     )
     .expect("Failed to write tool config");
 
-    let (mut server, port) = start_deferred_sandbox_server(&tools_dir).await;
-    let base_url = format!("http://127.0.0.1:{}", port);
+    let server = start_deferred_sandbox_server(&tools_dir).await;
+    let base_url = format!("http://127.0.0.1:{}", server.port());
     let client = Client::new();
 
     // Complete handshake with initial root
@@ -1174,8 +1163,6 @@ async fn test_post_lock_roots_change_rejected() {
             }
         }
     }
-
-    server.kill().expect("Failed to kill server");
 }
 
 /// Test that working_directory outside locked sandbox roots is rejected.
@@ -1200,8 +1187,8 @@ async fn test_working_directory_outside_sandbox_rejected() {
     )
     .expect("Failed to write tool config");
 
-    let (mut server, port) = start_deferred_sandbox_server(&tools_dir).await;
-    let base_url = format!("http://127.0.0.1:{}", port);
+    let server = start_deferred_sandbox_server(&tools_dir).await;
+    let base_url = format!("http://127.0.0.1:{}", server.port());
     let client = Client::new();
 
     let session_id = complete_handshake(&client, &base_url)
@@ -1286,6 +1273,4 @@ async fn test_working_directory_outside_sandbox_rejected() {
         "Error should mention sandbox violation: {}",
         error_msg
     );
-
-    server.kill().expect("Failed to kill server");
 }

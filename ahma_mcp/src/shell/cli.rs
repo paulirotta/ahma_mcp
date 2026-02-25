@@ -71,7 +71,7 @@ pub struct Cli {
 
     /// Bundle and enable the file tools (file-tools.json)
     #[arg(long)]
-    pub file_tools: bool,
+    pub fileutils: bool,
 
     /// Bundle and enable the github toolset (gh.json)
     #[arg(long)]
@@ -112,6 +112,10 @@ pub struct Cli {
     /// Disable sandbox (for testing only - UNSAFE)
     #[arg(long)]
     pub no_sandbox: bool,
+
+    /// Skip tool availability probes at startup (faster startup for testing)
+    #[arg(long)]
+    pub skip_availability_probes: bool,
 
     /// Block writes to /tmp and other temp directories (higher security, breaks tools needing temp access)
     #[arg(long)]

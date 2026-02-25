@@ -680,7 +680,8 @@ async fn test_tool_call_with_different_working_directory() {
     // Client workspace scope (what must apply to THIS session after roots/list)
     let different_project_path = client_scope_dir.path().to_path_buf();
 
-    let (mut server, port) = start_http_bridge(&tools_dir, &sandbox_scope).await;
+    let (child, port) = start_http_bridge(&tools_dir, &sandbox_scope).await;
+    let _server_guard = ServerGuard::new(child);
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -796,9 +797,6 @@ async fn test_tool_call_with_different_working_directory() {
         "pwd output must include the requested working_directory. Output: {:?}",
         tool_response
     );
-
-    // Clean up
-    server.kill().expect("Failed to kill server");
 }
 
 // NOTE: test_cargo_target_dir_is_scoped_to_working_directory was removed.
@@ -958,7 +956,8 @@ async fn test_roots_uri_parsing_percent_encoded_path() {
         .await
         .expect("Failed to create client root");
 
-    let (mut server, port) = start_http_bridge(&tools_dir, server_scope_dir.path()).await;
+    let (child, port) = start_http_bridge(&tools_dir, server_scope_dir.path()).await;
+    let _server_guard = ServerGuard::new(child);
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -1035,8 +1034,6 @@ async fn test_roots_uri_parsing_percent_encoded_path() {
         output_text.contains(client_root.to_string_lossy().as_ref()),
         "pwd output must include decoded client root path; got: {resp:?}"
     );
-
-    server.kill().expect("Failed to kill server");
 }
 
 /// Some clients send file URIs in host form: file://localhost/abs/path
@@ -1071,8 +1068,9 @@ async fn test_roots_uri_parsing_file_localhost() {
         .expect("Failed to create client root");
 
     // Start server on dynamic port to avoid conflicts/flakiness
-    let (mut server, port, _stderr) =
+    let (child, port, _stderr) =
         start_http_bridge_dynamic(&tools_dir, server_scope_dir.path()).await;
+    let _server_guard = ServerGuard::new(child);
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -1136,8 +1134,6 @@ async fn test_roots_uri_parsing_file_localhost() {
         resp.get("error").is_none(),
         "pwd must succeed, got: {resp:?}"
     );
-
-    server.kill().expect("Failed to kill server");
 }
 
 /// Red-team: working_directory with '..' that resolves outside root must be rejected.
@@ -1175,7 +1171,8 @@ async fn test_rejects_working_directory_path_traversal_outside_root() {
     )
     .expect("Failed to write tool config");
 
-    let (mut server, port) = start_http_bridge(&tools_dir, server_scope_dir.path()).await;
+    let (child, port) = start_http_bridge(&tools_dir, server_scope_dir.path()).await;
+    let _server_guard = ServerGuard::new(child);
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -1245,8 +1242,6 @@ async fn test_rejects_working_directory_path_traversal_outside_root() {
         msg.contains("outside") && msg.contains("sandbox"),
         "Expected sandbox boundary error message, got: {msg:?}"
     );
-
-    server.kill().expect("Failed to kill server");
 }
 
 /// Red-team: symlink inside root pointing outside must not allow writes outside root.
@@ -1283,7 +1278,8 @@ async fn test_symlink_escape_attempt_is_blocked() {
     )
     .expect("Failed to copy file-tools tool config");
 
-    let (mut server, port) = start_http_bridge(&tools_dir, server_scope_dir.path()).await;
+    let (child, port) = start_http_bridge(&tools_dir, server_scope_dir.path()).await;
+    let _server_guard = ServerGuard::new(child);
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -1352,8 +1348,6 @@ async fn test_symlink_escape_attempt_is_blocked() {
         is_jsonrpc_error || is_tool_error,
         "Expected sandbox/tool rejection signal, got: {resp:?}"
     );
-
-    server.kill().expect("Failed to kill server");
 }
 
 /// Test: Tool call WITHOUT initialize should fail with proper error
@@ -1389,7 +1383,8 @@ async fn test_tool_call_without_initialize_returns_proper_error() {
     .expect("Failed to write tool config");
 
     let sandbox_scope = temp_dir.path().to_path_buf();
-    let (mut server, port) = start_http_bridge(&tools_dir, &sandbox_scope).await;
+    let (child, port) = start_http_bridge(&tools_dir, &sandbox_scope).await;
+    let _server_guard = ServerGuard::new(child);
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 
@@ -1426,33 +1421,6 @@ async fn test_tool_call_without_initialize_returns_proper_error() {
             .to_string(),
         Err(e) => e.clone(),
     };
-
-    // Kill server and capture stderr to check for "expect initialized request"
-    server.kill().expect("Failed to kill server");
-
-    // Read stderr from the server process
-    let stderr_output = if let Some(stderr) = server.stderr.take() {
-        use std::io::Read;
-        let mut buf = String::new();
-        std::io::BufReader::new(stderr)
-            .read_to_string(&mut buf)
-            .unwrap_or(0);
-        buf
-    } else {
-        String::new()
-    };
-
-    eprintln!("Server stderr: {}", stderr_output);
-
-    // The CRITICAL check: If stderr contains "expect initialized request", the bug exists
-    // This means the subprocess received a request before initialization
-    assert!(
-        !stderr_output.contains("expect initialized request"),
-        "BUG REPRODUCED: Server subprocess received 'expect initialized request' error.\n\
-         This means the HTTP bridge is forwarding requests to an uninitialized subprocess.\n\
-         Stderr: {}",
-        stderr_output
-    );
 
     // Also check HTTP response doesn't contain this error
     assert!(

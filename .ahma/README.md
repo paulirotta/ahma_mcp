@@ -20,14 +20,14 @@ Standard tool configurations are compiled into the `ahma_mcp` binary. They are o
 | Flag | Tool Name | Description |
 |------|-----------|-------------|
 | `--rust` | `cargo` | Rust build, test, clippy, fmt, etc. |
-| `--file-tools` | `file-tools` | Unix file operations (ls, cp, mv, rm, grep, etc.) |
+| `--fileutils` | `file-tools` | Unix file operations (ls, cp, mv, rm, grep, etc.) |
 | `--git` | `git` | Git version control |
 | `--github` | `gh` | GitHub CLI (PRs, issues, releases) |
 | `--python` | `python` | Python interpreter and pip |
 | `--gradle` | `gradlew` | Android Gradle wrapper |
 | `--simplify` | `simplify` | Code complexity metrics |
 
-Example: `ahma_mcp --mode stdio --rust --git --file-tools`
+Example: `ahma_mcp --mode stdio --rust --git --fileutils`
 
 ### 3. Local `.ahma/` Overrides (automatic)
 If a `.ahma/` directory exists in the current working directory, all `*.json` files in it are loaded automatically — no CLI flag needed.

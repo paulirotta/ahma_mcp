@@ -422,7 +422,7 @@ pub async fn load_tool_configs(
     if cli.rust {
         builtin_tools.push(("rust", include_str!("../../.ahma/rust.json")));
     }
-    if cli.file_tools {
+    if cli.fileutils {
         builtin_tools.push(("file-tools", include_str!("../../.ahma/file-tools.json")));
     }
     if cli.github {

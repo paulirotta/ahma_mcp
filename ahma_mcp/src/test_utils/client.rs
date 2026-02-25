@@ -80,12 +80,14 @@ pub struct ClientBuilder {
     extra_env: Vec<(String, String)>,
     working_dir: Option<PathBuf>,
     no_sandbox: bool,
+    skip_availability_probes: bool,
 }
 
 impl ClientBuilder {
     pub fn new() -> Self {
         Self {
-            no_sandbox: true, // Default to permissive for tests (legacy behavior)
+            no_sandbox: true,               // Default to permissive for tests (legacy behavior)
+            skip_availability_probes: true, // Skip slow availability probes in tests by default
             ..Default::default()
         }
     }
@@ -134,6 +136,14 @@ impl ClientBuilder {
         self
     }
 
+    /// Control whether availability probes are skipped during server startup.
+    /// Default: true (skipped) for fast test startup.
+    #[allow(dead_code)]
+    pub fn skip_availability_probes(mut self, skip: bool) -> Self {
+        self.skip_availability_probes = skip;
+        self
+    }
+
     pub async fn build(self) -> Result<RunningService<RoleClient, ()>> {
         let workspace_dir = get_workspace_dir();
         let working_dir = self
@@ -141,10 +151,9 @@ impl ClientBuilder {
             .clone()
             .unwrap_or_else(|| workspace_dir.clone());
 
-        if use_prebuilt_binary() {
+        let fut = if use_prebuilt_binary() {
             let binary_path = get_test_binary_path();
             self.run_command(Command::new(&binary_path), &working_dir)
-                .await
         } else {
             eprintln!(
                 "Warning: Using slow 'cargo run' path. Run 'cargo build' first for faster tests."
@@ -158,8 +167,14 @@ impl ClientBuilder {
                 .arg("--bin")
                 .arg("ahma_mcp")
                 .arg("--");
-            self.run_command(cmd, &working_dir).await
-        }
+            self.run_command(cmd, &working_dir)
+        };
+
+        // Safety-net timeout: fail fast with a clear message instead of being
+        // killed by nextest after 60s with no context.
+        tokio::time::timeout(Duration::from_secs(30), fut)
+            .await
+            .context("Server failed to start within 30s (child process startup timed out)")?
     }
 
     async fn run_command(
@@ -172,6 +187,9 @@ impl ClientBuilder {
                 cmd.arg("--no-sandbox");
             } else {
                 cmd.arg("--sandbox-scope").arg(working_dir);
+            }
+            if self.skip_availability_probes {
+                cmd.arg("--skip-availability-probes");
             }
             cmd.current_dir(working_dir).kill_on_drop(true);
 

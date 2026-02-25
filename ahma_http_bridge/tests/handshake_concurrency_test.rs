@@ -12,35 +12,16 @@
 
 mod common;
 
-use common::{McpTestClient, SandboxTestEnv};
+use common::{McpTestClient, SandboxTestEnv, ServerGuard};
 use futures::StreamExt;
 use reqwest::Client;
 use serde_json::{Value, json};
 use std::net::TcpListener;
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::time::sleep;
-
-struct ServerGuard {
-    child: Option<Child>,
-}
-
-impl ServerGuard {
-    fn new(child: Child) -> Self {
-        Self { child: Some(child) }
-    }
-}
-
-impl Drop for ServerGuard {
-    fn drop(&mut self) {
-        if let Some(mut child) = self.child.take() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
-    }
-}
 
 #[cfg(target_os = "macos")]
 fn should_skip_in_nested_sandbox() -> bool {
@@ -244,7 +225,7 @@ async fn test_tool_call_before_roots_handshake() {
     .expect("Failed to write tool config");
 
     let port = find_available_port();
-    let _server = ServerGuard::new(start_deferred_sandbox_server(port, &tools_dir).await);
+    let _server = ServerGuard::new(start_deferred_sandbox_server(port, &tools_dir).await, port);
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
     let mut mcp_client = McpTestClient::with_url(&base_url);
@@ -344,7 +325,7 @@ async fn test_slow_client_handshake() {
     .expect("Failed to write tool config");
 
     let port = find_available_port();
-    let _server = ServerGuard::new(start_deferred_sandbox_server(port, &tools_dir).await);
+    let _server = ServerGuard::new(start_deferred_sandbox_server(port, &tools_dir).await, port);
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
     let mut mcp_client = McpTestClient::with_url(&base_url);
@@ -518,7 +499,7 @@ async fn test_rapid_connect_disconnect() {
     .expect("Failed to write tool config");
 
     let port = find_available_port();
-    let _server = ServerGuard::new(start_deferred_sandbox_server(port, &tools_dir).await);
+    let _server = ServerGuard::new(start_deferred_sandbox_server(port, &tools_dir).await, port);
     let base_url = format!("http://127.0.0.1:{}", port);
     let client = Client::new();
 

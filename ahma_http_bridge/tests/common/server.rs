@@ -39,6 +39,44 @@ impl Drop for TestServerInstance {
     }
 }
 
+/// RAII guard for a raw `Child` server process.
+///
+/// Kills the child and reaps it on drop to prevent leaked (zombie) processes
+/// when test assertions panic before manual cleanup.
+pub struct ServerGuard {
+    child: Option<Child>,
+    port: u16,
+}
+
+impl ServerGuard {
+    /// Wrap a raw child process and its port in an RAII guard.
+    pub fn new(child: Child, port: u16) -> Self {
+        Self {
+            child: Some(child),
+            port,
+        }
+    }
+
+    /// Get the port this server is listening on.
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    /// Get the base URL for this server.
+    pub fn base_url(&self) -> String {
+        format!("http://127.0.0.1:{}", self.port)
+    }
+}
+
+impl Drop for ServerGuard {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
 fn workspace_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()

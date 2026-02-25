@@ -113,68 +113,73 @@ pub async fn run_server_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result
         .await
         .context("Failed to load tool configurations")?;
 
-    let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let availability_summary = evaluate_tool_availability(
-        shell_pool_manager.clone(),
-        raw_configs,
-        working_dir.as_path(),
-        sandbox.as_ref(),
-    )
-    .await?;
+    let configs = if cli.skip_availability_probes {
+        tracing::info!("Skipping tool availability probes (--skip-availability-probes)");
+        Arc::new(raw_configs)
+    } else {
+        let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let availability_summary = evaluate_tool_availability(
+            shell_pool_manager.clone(),
+            raw_configs,
+            working_dir.as_path(),
+            sandbox.as_ref(),
+        )
+        .await?;
 
-    if !availability_summary.disabled_tools.is_empty() {
-        let current_path = std::env::var("PATH").unwrap_or_else(|_| "<not set>".to_string());
-        tracing::warn!(
-            "{} tool(s) disabled by availability probes. PATH={}",
-            availability_summary.disabled_tools.len(),
-            current_path
-        );
-        for disabled in &availability_summary.disabled_tools {
+        if !availability_summary.disabled_tools.is_empty() {
+            let current_path = std::env::var("PATH").unwrap_or_else(|_| "<not set>".to_string());
             tracing::warn!(
-                "Tool '{}' disabled at startup. {}",
-                disabled.name,
-                disabled.message
+                "{} tool(s) disabled by availability probes. PATH={}",
+                availability_summary.disabled_tools.len(),
+                current_path
             );
-            if let Some(instructions) = &disabled.install_instructions {
-                tracing::info!(
-                    "Install instructions for '{}': {}",
+            for disabled in &availability_summary.disabled_tools {
+                tracing::warn!(
+                    "Tool '{}' disabled at startup. {}",
                     disabled.name,
-                    instructions
+                    disabled.message
                 );
+                if let Some(instructions) = &disabled.install_instructions {
+                    tracing::info!(
+                        "Install instructions for '{}': {}",
+                        disabled.name,
+                        instructions
+                    );
+                }
             }
         }
-    }
 
-    if !availability_summary.disabled_subcommands.is_empty() {
-        for disabled in &availability_summary.disabled_subcommands {
-            tracing::warn!(
-                "Tool subcommand '{}::{}' disabled at startup. {}",
-                disabled.tool,
-                disabled.subcommand_path,
-                disabled.message
-            );
-            if let Some(instructions) = &disabled.install_instructions {
-                tracing::info!(
-                    "Install instructions for '{}::{}': {}",
+        if !availability_summary.disabled_subcommands.is_empty() {
+            for disabled in &availability_summary.disabled_subcommands {
+                tracing::warn!(
+                    "Tool subcommand '{}::{}' disabled at startup. {}",
                     disabled.tool,
                     disabled.subcommand_path,
-                    instructions
+                    disabled.message
                 );
+                if let Some(instructions) = &disabled.install_instructions {
+                    tracing::info!(
+                        "Install instructions for '{}::{}': {}",
+                        disabled.tool,
+                        disabled.subcommand_path,
+                        instructions
+                    );
+                }
             }
         }
-    }
 
-    if !availability_summary.disabled_tools.is_empty()
-        || !availability_summary.disabled_subcommands.is_empty()
-    {
-        let install_guidance = format_install_guidance(&availability_summary);
-        tracing::warn!(
-            "Startup tool guidance (share with users who need to install prerequisites):\n{}",
-            install_guidance
-        );
-    }
+        if !availability_summary.disabled_tools.is_empty()
+            || !availability_summary.disabled_subcommands.is_empty()
+        {
+            let install_guidance = format_install_guidance(&availability_summary);
+            tracing::warn!(
+                "Startup tool guidance (share with users who need to install prerequisites):\n{}",
+                install_guidance
+            );
+        }
 
-    let configs = Arc::new(availability_summary.filtered_configs);
+        Arc::new(availability_summary.filtered_configs)
+    };
     if configs.is_empty() {
         tracing::error!("No valid tool configurations available after availability checks");
         if let Some(ref tools_dir) = cli.tools_dir {
@@ -186,9 +191,8 @@ pub async fn run_server_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result
     } else {
         let tool_names: Vec<String> = configs.keys().cloned().collect();
         tracing::info!(
-            "Loaded {} tool configurations ({} disabled): {}",
+            "Loaded {} tool configurations: {}",
             configs.len(),
-            availability_summary.disabled_tools.len(),
             tool_names.join(", ")
         );
     }

@@ -10,10 +10,31 @@ use reqwest::Client;
 use serde_json::{Value, json};
 use std::net::TcpListener;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::time::sleep;
+
+/// RAII guard for a raw `Child` server process.
+/// Kills the child on drop to prevent leaky tests when assertions panic.
+struct ServerGuard {
+    child: Option<Child>,
+}
+
+impl ServerGuard {
+    fn new(child: Child) -> Self {
+        Self { child: Some(child) }
+    }
+}
+
+impl Drop for ServerGuard {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
 
 #[cfg(target_os = "macos")]
 fn should_skip_in_nested_sandbox() -> bool {
@@ -183,7 +204,8 @@ async fn test_delete_session_terminates_subprocess() {
         .to_path_buf();
     let tools_dir = workspace_dir.join(".ahma");
 
-    let mut child = start_http_bridge(port, &tools_dir, temp_dir.path()).await;
+    let child = start_http_bridge(port, &tools_dir, temp_dir.path()).await;
+    let _guard = ServerGuard::new(child);
     let client = Client::new();
 
     // Step 1: Initialize a session
@@ -258,10 +280,6 @@ async fn test_delete_session_terminates_subprocess() {
         "Requests to deleted session should return 403 Forbidden or 404 Not Found, got {}",
         status
     );
-
-    // Cleanup
-    let _ = child.kill();
-    let _ = child.wait();
 }
 
 /// Test that DELETE without session ID returns 400 Bad Request
@@ -282,7 +300,8 @@ async fn test_delete_without_session_id_returns_400() {
         .to_path_buf();
     let tools_dir = workspace_dir.join(".ahma");
 
-    let mut child = start_http_bridge(port, &tools_dir, temp_dir.path()).await;
+    let child = start_http_bridge(port, &tools_dir, temp_dir.path()).await;
+    let _guard = ServerGuard::new(child);
     let client = Client::new();
 
     // Send DELETE without session ID
@@ -302,10 +321,6 @@ async fn test_delete_without_session_id_returns_400() {
         400,
         "DELETE without session ID should return 400 Bad Request"
     );
-
-    // Cleanup
-    let _ = child.kill();
-    let _ = child.wait();
 }
 
 /// Test that DELETE with non-existent session ID returns 404 Not Found
@@ -326,7 +341,8 @@ async fn test_delete_nonexistent_session_returns_404() {
         .to_path_buf();
     let tools_dir = workspace_dir.join(".ahma");
 
-    let mut child = start_http_bridge(port, &tools_dir, temp_dir.path()).await;
+    let child = start_http_bridge(port, &tools_dir, temp_dir.path()).await;
+    let _guard = ServerGuard::new(child);
     let client = Client::new();
 
     // Send DELETE with a fake session ID
@@ -347,8 +363,4 @@ async fn test_delete_nonexistent_session_returns_404() {
         404,
         "DELETE with non-existent session should return 404 Not Found"
     );
-
-    // Cleanup
-    let _ = child.kill();
-    let _ = child.wait();
 }
