@@ -48,6 +48,7 @@ env:
   RUSTFLAGS: -C debuginfo=0 # Do not produce debug symbols to keep memory usage down
   RUST_BACKTRACE: 1
   IS_DEV_BUILD: "true" # Set "true" to speed up builds for CI testing
+  SCCACHE_CACHE_SIZE: 1G # Limit sccache size to prevent GitHub Actions cache eviction
 
 jobs:
   job-cargo-build:
@@ -107,9 +108,9 @@ jobs:
             ~/.cargo/git
             ~/.cargo/.package-cache
             ~/.cargo/bin
-          key: cargo-build-target-${{ runner.os }}-${{ runner.arch }}-day${{ steps.day-number.outputs.day }}
+          key: cargo-registry-${{ runner.os }}-${{ runner.arch }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
-            cargo-build-target-${{ runner.os }}-${{ runner.arch }}-
+            cargo-registry-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Cache sccache artifacts
         uses: actions/cache@v5
@@ -117,9 +118,9 @@ jobs:
           path: |
             ~/.cache/sccache
             ~/Library/Caches/Mozilla.sccache
-          key: sccache-build-${{ runner.os }}-${{ runner.arch }}-day${{ steps.day-number.outputs.day }}
+          key: sccache-${{ runner.os }}-${{ runner.arch }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
-            sccache-build-${{ runner.os }}-${{ runner.arch }}-
+            sccache-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Setup Cargo Binstall
         uses: cargo-bins/cargo-binstall@main
@@ -186,142 +187,7 @@ jobs:
 
   #######################################
 
-  job-nextest:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 2
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-
-      - name: Configure deterministic tooling env
-        run: |
-          git config --global core.pager cat
-          git config --global fetch.recurseSubmodules false
-          echo "PAGER=cat" >> $GITHUB_ENV
-          echo "LC_ALL=C" >> $GITHUB_ENV
-          echo "LANG=C" >> $GITHUB_ENV
-
-      - name: Preflight workspace crate roots
-        run: |
-          set -euo pipefail
-          missing=0
-          while IFS= read -r manifest; do
-            crate_dir="$(dirname "$manifest")"
-            # Workspace root manifests may not define a package.
-            if ! grep -q "^\[package\]" "$manifest"; then
-              continue
-            fi
-            if [ ! -f "$crate_dir/src/lib.rs" ] && [ ! -f "$crate_dir/src/main.rs" ]; then
-              echo "Missing crate root in $crate_dir (expected src/lib.rs or src/main.rs)"
-              missing=1
-            fi
-          done < <(find . -name Cargo.toml -not -path "./target/*")
-
-          if [ "$missing" -ne 0 ]; then
-            echo ""
-            echo "Preflight failed: one or more crates are missing source roots."
-            echo "This often happens when required files exist locally but are untracked."
-            exit 1
-          fi
-
-      - name: Get current day number
-        id: day-number
-        run: echo "day=$(date +%j)" >> $GITHUB_OUTPUT
-
-      - name: Cache Cargo build artifacts
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/.package-cache
-            ~/.cargo/bin
-          key: cargo-nextest-target-${{ runner.os }}-${{ runner.arch }}-day${{ steps.day-number.outputs.day }}
-          restore-keys: |
-            cargo-nextest-target-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Cache sccache artifacts
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cache/sccache
-            ~/Library/Caches/Mozilla.sccache
-          key: sccache-nextest-${{ runner.os }}-${{ runner.arch }}-day${{ steps.day-number.outputs.day }}
-          restore-keys: |
-            sccache-nextest-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Setup Cargo Binstall
-        uses: cargo-bins/cargo-binstall@main
-
-      - name: Add Cargo Bin to PATH
-        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-      - name: Install cargo-audit
-        run: |
-          if ! command -v cargo-audit &> /dev/null; then
-            echo "cargo-audit not found, installing..."
-            cargo binstall cargo-audit --no-confirm || cargo install cargo-audit
-          else
-            echo "cargo-audit is already installed"
-          fi
-
-      - name: Install cargo-edit
-        run: |
-          if ! command -v cargo-upgrade &> /dev/null; then
-            echo "cargo-edit (cargo-upgrade) not found, installing..."
-            cargo binstall cargo-edit --no-confirm || cargo install cargo-edit
-          else
-            echo "cargo-edit is already installed"
-          fi
-
-      - name: Install sccache
-        run: |
-          if ! command -v sccache &> /dev/null; then
-            echo "sccache not found, installing..."
-            cargo binstall sccache --no-confirm || cargo install sccache
-          else
-            echo "sccache is already installed"
-          fi
-          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-          sccache --show-stats
-
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: nextest
-
-      - name: Ensure cargo-nextest is installed (fallback)
-        run: |
-          if ! command -v cargo-nextest &> /dev/null; then
-            echo "cargo-nextest not found, installing..."
-            cargo binstall cargo-nextest --no-confirm || cargo install cargo-nextest --locked
-          else
-            echo "cargo-nextest already installed"
-          fi
-
-      - name: Cargo Nextest (excluding Android/Gradle tests)
-        run: |
-          echo "--- cargo --version" && cargo --version
-          echo "--- cargo --help (first 40 lines)" && cargo --help | head -n 40 || true
-          echo "--- cargo --list (first 40 lines)" && cargo --list | head -n 40 || true
-          # Exclude gradle/android tests - they run in job-android only
-          # Use CI profile for longer timeouts and retry on flaky tests
-          cargo nextest run --locked --no-default-features --profile ci -E 'not test(gradlew) & not test(android)'
-
-      - name: Show sccache stats
-        run: sccache --show-stats
-
-  #######################################
-
-  # Alternative test runner using cargo test instead of nextest
-  # This job runs in parallel with job-nextest for comparison
-  # Useful for diagnosing issues that may be specific to one test runner
   job-cargo-test:
     strategy:
       matrix:
@@ -379,10 +245,9 @@ jobs:
             ~/.cargo/git
             ~/.cargo/.package-cache
             ~/.cargo/bin
-          key: cargo-test-target-${{ runner.os }}-${{ runner.arch }}-day${{ steps.day-number.outputs.day }}
+          key: cargo-registry-${{ runner.os }}-${{ runner.arch }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
-            cargo-test-target-${{ runner.os }}-${{ runner.arch }}-
-            cargo-nextest-target-${{ runner.os }}-${{ runner.arch }}-
+            cargo-registry-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Cache sccache artifacts
         uses: actions/cache@v5
@@ -390,10 +255,9 @@ jobs:
           path: |
             ~/.cache/sccache
             ~/Library/Caches/Mozilla.sccache
-          key: sccache-test-${{ runner.os }}-${{ runner.arch }}-day${{ steps.day-number.outputs.day }}
+          key: sccache-${{ runner.os }}-${{ runner.arch }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
-            sccache-test-${{ runner.os }}-${{ runner.arch }}-
-            sccache-nextest-${{ runner.os }}-${{ runner.arch }}-
+            sccache-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Setup Cargo Binstall
         uses: cargo-bins/cargo-binstall@main
@@ -498,11 +362,9 @@ jobs:
             ~/.cargo/git
             ~/.cargo/.package-cache
             ~/.cargo/bin
-          key: cargo-android-target-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
+          key: cargo-registry-${{ runner.os }}-${{ runner.arch }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
-            cargo-android-target-${{ runner.os }}-
-            cargo-nextest-target-${{ runner.os }}-
-            cargo-build-target-${{ runner.os }}-
+            cargo-registry-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Cache sccache artifacts
         uses: actions/cache@v5
@@ -510,11 +372,9 @@ jobs:
           path: |
             ~/.cache/sccache
             ~/Library/Caches/Mozilla.sccache
-          key: sccache-android-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
+          key: sccache-${{ runner.os }}-${{ runner.arch }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
-            sccache-android-${{ runner.os }}-
-            sccache-nextest-${{ runner.os }}-
-            sccache-build-${{ runner.os }}-
+            sccache-${{ runner.os }}-${{ runner.arch }}-
 
       - uses: cargo-bins/cargo-binstall@main
 
@@ -558,23 +418,10 @@ jobs:
           restore-keys: |
             gradle-android-${{ runner.os }}-
 
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: nextest
-
-      - name: Ensure cargo-nextest is installed (fallback)
-        run: |
-          if ! command -v cargo-nextest &> /dev/null; then
-            echo "cargo-nextest not found, installing..."
-            cargo binstall cargo-nextest --no-confirm || cargo install cargo-nextest --locked
-          else
-            echo "cargo-nextest already installed"
-          fi
-
       - name: Run Android/Gradle tests only
         run: |
           # Run ONLY gradle/android tests (feature-gated and name-filtered for clarity)
-          cargo nextest run --locked -p ahma_mcp --features android -E 'test(gradlew) | test(android)'
+          cargo test --locked -p ahma_mcp --features android -- gradlew android
 
       - name: Show sccache stats
         run: sccache --show-stats
@@ -617,11 +464,9 @@ jobs:
             ~/.cargo/git
             ~/.cargo/.package-cache
             ~/.cargo/bin
-          key: cargo-coverage-target-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
+          key: cargo-registry-${{ runner.os }}-${{ runner.arch }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
-            cargo-coverage-target-${{ runner.os }}-
-            cargo-nextest-target-${{ runner.os }}-
-            cargo-build-target-${{ runner.os }}-
+            cargo-registry-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Cache AGP and more Gradle directories
         uses: actions/cache@v5
@@ -647,11 +492,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.cache/sccache
-          key: sccache-coverage-${{ runner.os }}-day${{ steps.day-number.outputs.day }}
+          key: sccache-${{ runner.os }}-${{ runner.arch }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
-            sccache-coverage-${{ runner.os }}-
-            sccache-nextest-${{ runner.os }}-
-            sccache-build-${{ runner.os }}-
+            sccache-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Setup Cargo Binstall
         uses: cargo-bins/cargo-binstall@main
@@ -689,22 +532,9 @@ jobs:
             echo "cargo-llvm-cov is already installed"
           fi
 
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: nextest
-
-      - name: Ensure cargo-nextest is installed (fallback)
-        run: |
-          if ! command -v cargo-nextest &> /dev/null; then
-            echo "cargo-nextest not found, installing..."
-            cargo binstall cargo-nextest --no-confirm || cargo install cargo-nextest --locked
-          else
-            echo "cargo-nextest already installed"
-          fi
-
       - name: Generate coverage report
         run: |
-          cargo llvm-cov nextest --profile coverage --locked --no-default-features --html --output-dir ./coverage -E 'not test(gradlew) & not test(android)'
+          cargo llvm-cov --profile coverage --locked --no-default-features --html --output-dir ./coverage -- --skip gradlew --skip android
 
       - name: Generate code simplicity report
         run: |
@@ -794,9 +624,9 @@ jobs:
             ~/.cargo/git
             ~/.cargo/.package-cache
             ~/.cargo/bin
-          key: cargo-release-target-${{ runner.os }}-${{ runner.arch }}-day${{ steps.day-number.outputs.day }}
+          key: cargo-registry-${{ runner.os }}-${{ runner.arch }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
-            cargo-release-target-${{ runner.os }}-${{ runner.arch }}-
+            cargo-registry-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Cache sccache artifacts
         uses: actions/cache@v5
@@ -804,9 +634,9 @@ jobs:
           path: |
             ~/.cache/sccache
             ~/Library/Caches/Mozilla.sccache
-          key: sccache-release-${{ runner.os }}-${{ runner.arch }}-day${{ steps.day-number.outputs.day }}
+          key: sccache-${{ runner.os }}-${{ runner.arch }}-day${{ steps.day-number.outputs.day }}
           restore-keys: |
-            sccache-release-${{ runner.os }}-${{ runner.arch }}-
+            sccache-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Setup Cargo Binstall
         uses: cargo-bins/cargo-binstall@main
