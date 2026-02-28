@@ -25,6 +25,7 @@
 //! The `start_server()` method provides a convenient way to launch the service, wiring it
 //! up to a standard I/O transport (`stdio`) and running it until completion.
 
+pub mod bundle_registry;
 mod config_watcher;
 mod handlers;
 mod schema;
@@ -44,7 +45,7 @@ use rmcp::{
     },
     service::{NotificationContext, Peer, RequestContext, RoleServer},
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{
     Arc, RwLock,
     atomic::{AtomicU64, Ordering},
@@ -76,6 +77,11 @@ pub struct AhmaMcpService {
     pub peer: Arc<RwLock<Option<Peer<RoleServer>>>>,
     /// Minimum seconds between successive log monitoring alerts (default: 60).
     pub monitor_rate_limit_seconds: u64,
+    /// When true, only built-in tools and `discover_tools` are shown initially.
+    /// Bundled tools are revealed on demand via `discover_tools reveal <bundle>`.
+    pub progressive_disclosure: bool,
+    /// Set of bundle names whose tools have been disclosed to the client.
+    pub disclosed_bundles: Arc<RwLock<HashSet<String>>>,
 }
 
 impl AhmaMcpService {
@@ -92,6 +98,7 @@ impl AhmaMcpService {
     /// * `guidance` - Optional guidance configuration for AI usage hints.
     /// * `force_synchronous` - If true, overrides async defaults (e.g., for debugging).
     /// * `defer_sandbox` - If true, delays sandbox initialization (for HTTP bridge scenarios).
+    /// * `progressive_disclosure` - If true, only built-in + discover_tools shown initially.
     pub async fn new(
         adapter: Arc<Adapter>,
         operation_monitor: Arc<crate::operation_monitor::OperationMonitor>,
@@ -99,6 +106,7 @@ impl AhmaMcpService {
         guidance: Arc<Option<GuidanceConfig>>,
         force_synchronous: bool,
         defer_sandbox: bool,
+        progressive_disclosure: bool,
     ) -> Result<Self, anyhow::Error> {
         // Start the background monitor for operation timeouts
         crate::operation_monitor::OperationMonitor::start_background_monitor(
@@ -114,6 +122,8 @@ impl AhmaMcpService {
             defer_sandbox,
             peer: Arc::new(RwLock::new(None)),
             monitor_rate_limit_seconds: crate::log_monitor::DEFAULT_RATE_LIMIT_SECONDS,
+            progressive_disclosure,
+            disclosed_bundles: Arc::new(RwLock::new(HashSet::new())),
         })
     }
 
@@ -144,12 +154,56 @@ impl AhmaMcpService {
             meta: None,
         }
     }
+
+    /// Sends a `notifications/tools/list_changed` notification to the connected client.
+    ///
+    /// Called after bundle disclosure state changes (e.g., via `discover_tools reveal`).
+    pub async fn notify_tools_changed(&self) {
+        let peer_opt = {
+            let peer_lock = self.peer.read().unwrap();
+            peer_lock.clone()
+        };
+
+        if let Some(peer) = peer_opt {
+            if let Err(e) = peer.notify_tool_list_changed().await {
+                tracing::error!("Failed to send tools/list_changed notification: {}", e);
+            } else {
+                tracing::info!("Sent tools/list_changed notification after bundle reveal");
+            }
+        } else {
+            tracing::debug!("No peer connected, skipping tools/list_changed notification");
+        }
+    }
+
+    /// Returns true if the given tool config name belongs to a known bundle.
+    fn is_bundle_tool(&self, config_name: &str) -> bool {
+        bundle_registry::BUNDLES
+            .iter()
+            .any(|b| b.config_tool_name == config_name)
+    }
+
+    /// Returns true if the tool's parent bundle has been disclosed.
+    fn is_tool_disclosed(&self, config_name: &str, disclosed: &HashSet<String>) -> bool {
+        bundle_registry::BUNDLES
+            .iter()
+            .find(|b| b.config_tool_name == config_name)
+            .is_some_and(|b| disclosed.contains(b.name))
+    }
 }
 
 #[async_trait::async_trait]
 #[allow(clippy::manual_async_fn)] // Required by rmcp ServerHandler trait
 impl ServerHandler for AhmaMcpService {
     fn get_info(&self) -> ServerInfo {
+        let instructions = if self.progressive_disclosure {
+            Some("CRITICAL: All shell/terminal commands MUST be routed through the `sandboxed_shell` tool. Do NOT use the native IDE terminal. \
+                  Tool bundles are progressively disclosed to minimize context usage. \
+                  Call `discover_tools` with action 'list' to see available tool bundles, \
+                  then 'reveal' to activate the ones you need.".to_string())
+        } else {
+            Some("CRITICAL: All shell/terminal commands MUST be routed through the `sandboxed_shell` tool. Do NOT use the native IDE terminal.".to_string())
+        };
+
         ServerInfo {
             protocol_version: ProtocolVersion::LATEST,
             capabilities: ServerCapabilities {
@@ -166,7 +220,7 @@ impl ServerHandler for AhmaMcpService {
                 icons: None,
                 website_url: None,
             },
-            instructions: None,
+            instructions,
         }
     }
 
@@ -377,10 +431,36 @@ impl ServerHandler for AhmaMcpService {
                 meta: None,
             });
 
+            // When progressive disclosure is enabled, expose the discover_tools meta-tool
+            if self.progressive_disclosure {
+                tools.push(Tool {
+                    name: "discover_tools".into(),
+                    title: Some("discover_tools".to_string()),
+                    icons: None,
+                    description: Some("Discover and activate tool bundles. Call with action 'list' to see available bundles and their status, or 'reveal' with a bundle name to activate its tools. Bundles are revealed progressively to minimize context usage.".into()),
+                    input_schema: self.generate_input_schema_for_discover_tools(),
+                    output_schema: None,
+                    annotations: None,
+                    execution: None,
+                    meta: None,
+                });
+            }
+
             {
                 // Reserved names are already hard-wired above; skip them from
                 // user/bundled configs to avoid duplicates in `tools/list`.
-                const HARDCODED_TOOLS: &[&str] = &["await", "status", "sandboxed_shell", "cancel"];
+                const HARDCODED_TOOLS: &[&str] = &[
+                    "await",
+                    "status",
+                    "sandboxed_shell",
+                    "cancel",
+                    "discover_tools",
+                ];
+                let disclosed = if self.progressive_disclosure {
+                    Some(self.disclosed_bundles.read().unwrap().clone())
+                } else {
+                    None
+                };
                 let configs_lock = self.configs.read().unwrap();
                 for config in configs_lock.values() {
                     if HARDCODED_TOOLS.contains(&config.name.as_str()) {
@@ -389,6 +469,18 @@ impl ServerHandler for AhmaMcpService {
                     if !config.enabled {
                         tracing::debug!(
                             "Skipping disabled tool '{}' during list_tools",
+                            config.name
+                        );
+                        continue;
+                    }
+
+                    // Progressive disclosure: only show tools whose bundle has been revealed
+                    if let Some(ref disclosed_set) = disclosed
+                        && self.is_bundle_tool(&config.name)
+                        && !self.is_tool_disclosed(&config.name, disclosed_set)
+                    {
+                        tracing::debug!(
+                            "Skipping undisclosed bundle tool '{}' during list_tools",
                             config.name
                         );
                         continue;
@@ -432,6 +524,12 @@ impl ServerHandler for AhmaMcpService {
             if tool_name == "cancel" {
                 return self
                     .handle_cancel(params.arguments.unwrap_or_default())
+                    .await;
+            }
+
+            if tool_name == "discover_tools" {
+                return self
+                    .handle_discover_tools(params.arguments.unwrap_or_default())
                     .await;
             }
 
@@ -755,6 +853,53 @@ impl ServerHandler for AhmaMcpService {
     }
 }
 
+impl AhmaMcpService {
+    /// Returns the list of tool names that `list_tools()` would return,
+    /// without requiring a `RequestContext`.
+    ///
+    /// This is useful for testing and introspection.
+    pub fn list_tool_names(&self) -> Vec<String> {
+        const HARDCODED_TOOLS: &[&str] = &[
+            "await",
+            "status",
+            "sandboxed_shell",
+            "cancel",
+            "discover_tools",
+        ];
+
+        let mut names: Vec<String> =
+            vec!["await".into(), "status".into(), "sandboxed_shell".into()];
+
+        if self.progressive_disclosure {
+            names.push("discover_tools".into());
+        }
+
+        let disclosed = if self.progressive_disclosure {
+            Some(self.disclosed_bundles.read().unwrap().clone())
+        } else {
+            None
+        };
+
+        let configs_lock = self.configs.read().unwrap();
+        for config in configs_lock.values() {
+            if HARDCODED_TOOLS.contains(&config.name.as_str()) {
+                continue;
+            }
+            if !config.enabled {
+                continue;
+            }
+            if let Some(ref disclosed_set) = disclosed
+                && self.is_bundle_tool(&config.name)
+                && !self.is_tool_disclosed(&config.name, disclosed_set)
+            {
+                continue;
+            }
+            names.push(config.name.clone());
+        }
+        names
+    }
+}
+
 #[cfg(test)]
 mod tests {
     // ==================== force_synchronous inheritance tests ====================
@@ -777,7 +922,7 @@ mod tests {
         let adapter =
             crate::test_utils::client::create_test_config(Path::new(".")).expect("adapter");
         let configs: Arc<HashMap<String, ToolConfig>> = Arc::new(HashMap::new());
-        AhmaMcpService::new(adapter, monitor, configs, guidance, false, false)
+        AhmaMcpService::new(adapter, monitor, configs, guidance, false, false, false)
             .await
             .expect("service")
     }

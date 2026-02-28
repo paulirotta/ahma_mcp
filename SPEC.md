@@ -140,6 +140,11 @@ These tools are always available regardless of JSON configuration:
 - **R1.2.2**: When `--tools-dir` is explicitly provided via CLI argument, that path **must** take precedence over auto-detection.
 - **R1.3**: The system **must not** be recompiled to add, remove, or modify a tool.
 - **R1.4**: **Hot-Reloading**: The system **must** watch the `tools/` directory and send `notifications/tools/list_changed` when files change.
+- **R1.5**: **Progressive Disclosure** (default enabled): When progressive disclosure is active, `tools/list` **must** return only built-in tools (`await`, `status`, `sandboxed_shell`, `cancel`) and the `discover_tools` meta-tool. Bundled tools are hidden until their bundle is explicitly revealed.
+- **R1.5.1**: The `discover_tools` meta-tool **must** support two actions: `list` (enumerate available bundles with name, description, tool count, and revealed status) and `reveal` (activate a named bundle).
+- **R1.5.2**: After a bundle is revealed via `discover_tools reveal`, the server **must** send `notifications/tools/list_changed` and include the bundle's tools in subsequent `tools/list` responses.
+- **R1.5.3**: The `--no-progressive-disclosure` CLI flag **must** restore legacy behavior where all enabled tools are listed immediately.
+- **R1.5.4**: The `instructions` field in the MCP `initialize` response **must** contain sandbox routing directives instructing the model to use `sandboxed_shell` for all command execution.
 
 ### R2: Async-First Architecture
 

@@ -94,6 +94,7 @@ mod tests {
             Arc::new(None),
             false,
             false,
+            false,
         )
         .await
         .unwrap();

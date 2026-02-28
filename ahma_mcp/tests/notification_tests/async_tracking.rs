@@ -267,6 +267,7 @@ async fn test_operation_completion_tracking() -> anyhow::Result<()> {
         Arc::new(None),
         false,
         false,
+        false,
     )
     .await
     .unwrap();

@@ -254,7 +254,7 @@ pub async fn setup_test_environment() -> (AhmaMcpService, TempDir) {
     let configs = Arc::new(HashMap::new());
     let guidance = Arc::new(None);
 
-    let service = AhmaMcpService::new(adapter, monitor, configs, guidance, false, false)
+    let service = AhmaMcpService::new(adapter, monitor, configs, guidance, false, false, false)
         .await
         .unwrap();
 
@@ -281,7 +281,7 @@ pub async fn setup_test_environment_with_io()
     let configs = Arc::new(HashMap::new());
     let guidance = Arc::new(None);
 
-    let service = AhmaMcpService::new(adapter, monitor, configs, guidance, false, false)
+    let service = AhmaMcpService::new(adapter, monitor, configs, guidance, false, false, false)
         .await
         .unwrap();
 

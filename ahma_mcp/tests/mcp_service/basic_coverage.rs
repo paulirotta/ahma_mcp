@@ -40,9 +40,17 @@ async fn create_test_service() -> (AhmaMcpService, TempDir) {
     let configs = Arc::new(tool_configs);
     let guidance = Arc::new(None::<GuidanceConfig>);
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false, false)
-        .await
-        .unwrap();
+    let service = AhmaMcpService::new(
+        adapter,
+        operation_monitor,
+        configs,
+        guidance,
+        false,
+        false,
+        false,
+    )
+    .await
+    .unwrap();
     (service, temp_dir)
 }
 
@@ -82,9 +90,17 @@ async fn test_service_creation_with_guidance_config() {
     };
     let guidance = Arc::new(Some(guidance_config));
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false, false)
-        .await
-        .unwrap();
+    let service = AhmaMcpService::new(
+        adapter,
+        operation_monitor,
+        configs,
+        guidance,
+        false,
+        false,
+        false,
+    )
+    .await
+    .unwrap();
 
     // Verify service was created successfully
     let info = service.get_info();
@@ -118,9 +134,17 @@ async fn test_service_creation_with_existing_tool_configs() {
     let configs = Arc::new(tool_configs);
     let guidance = Arc::new(None::<GuidanceConfig>);
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false, false)
-        .await
-        .unwrap();
+    let service = AhmaMcpService::new(
+        adapter,
+        operation_monitor,
+        configs,
+        guidance,
+        false,
+        false,
+        false,
+    )
+    .await
+    .unwrap();
 
     // Verify service was created successfully
     let info = service.get_info();
@@ -153,9 +177,17 @@ async fn test_service_creation_with_custom_shell_config() {
     let configs = Arc::new(tool_configs);
     let guidance = Arc::new(None::<GuidanceConfig>);
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false, false)
-        .await
-        .unwrap();
+    let service = AhmaMcpService::new(
+        adapter,
+        operation_monitor,
+        configs,
+        guidance,
+        false,
+        false,
+        false,
+    )
+    .await
+    .unwrap();
 
     // Verify service was created successfully with custom configuration
     let info = service.get_info();
@@ -277,9 +309,17 @@ async fn test_service_with_guidance_blocks() {
     };
     let guidance = Arc::new(Some(guidance_config));
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false, false)
-        .await
-        .unwrap();
+    let service = AhmaMcpService::new(
+        adapter,
+        operation_monitor,
+        configs,
+        guidance,
+        false,
+        false,
+        false,
+    )
+    .await
+    .unwrap();
 
     // Verify service was created successfully
     let info = service.get_info();
@@ -314,9 +354,17 @@ async fn test_service_disabled_shell_pool() {
     let configs = Arc::new(tool_configs);
     let guidance = Arc::new(None::<GuidanceConfig>);
 
-    let service = AhmaMcpService::new(adapter, operation_monitor, configs, guidance, false, false)
-        .await
-        .unwrap();
+    let service = AhmaMcpService::new(
+        adapter,
+        operation_monitor,
+        configs,
+        guidance,
+        false,
+        false,
+        false,
+    )
+    .await
+    .unwrap();
 
     // Should still work with disabled shell pool
     let info = service.get_info();

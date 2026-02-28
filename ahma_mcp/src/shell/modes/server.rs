@@ -208,6 +208,7 @@ pub async fn run_server_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result
         Arc::new(guidance_config),
         force_synchronous,
         cli.defer_sandbox,
+        !cli.no_progressive_disclosure,
     )
     .await?;
 

@@ -8,3 +8,4 @@ mod comprehensive;
 mod coverage;
 mod coverage_expansion;
 mod integration;
+mod progressive_disclosure;

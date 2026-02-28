@@ -133,6 +133,10 @@ pub struct Cli {
     #[arg(long, default_value_t = 60)]
     pub monitor_rate_limit: u64,
 
+    /// Disable progressive disclosure (expose all tools immediately instead of on demand)
+    #[arg(long)]
+    pub no_progressive_disclosure: bool,
+
     /// Working directories for sandbox scope when using --defer-sandbox.
     /// Required when MCP client may not provide workspace roots.
     /// Example: --working-directories "/path/to/project1,/path/to/project2"

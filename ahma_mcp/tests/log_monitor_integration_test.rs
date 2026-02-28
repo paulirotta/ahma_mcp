@@ -536,5 +536,8 @@ async fn streaming_final_result_is_bounded_and_marks_truncation() {
         output
     );
     assert!(!output.contains("line-1"), "oldest lines should be dropped");
-    assert!(output.contains("line-7000"), "latest line should be retained");
+    assert!(
+        output.contains("line-7000"),
+        "latest line should be retained"
+    );
 }
