@@ -232,7 +232,7 @@ async fn test_sandboxed_shell_builtin_without_json_file() -> anyhow::Result<()> 
         sandboxed_shell
             .description
             .as_ref()
-            .map(|d| d.contains("Execute shell commands") || d.contains("sandbox"))
+            .map(|d| d.contains("execution environment") || d.contains("execution pathway"))
             .unwrap_or(false),
         "sandboxed_shell should have proper description. Got: {:?}",
         sandboxed_shell.description
