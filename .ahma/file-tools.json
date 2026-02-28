@@ -339,7 +339,7 @@
                     "name": "in-place",
                     "alias": "i",
                     "type": "string",
-                    "description": "Edit files in place (optionally with backup suffix)"
+                    "description": "Edit files in place with backup suffix (on BSD/macOS pass empty string for no backup). Required by BSD sed."
                 },
                 {
                     "name": "quiet",
@@ -389,7 +389,7 @@
                     "name": "timestamp",
                     "alias": "t",
                     "type": "string",
-                    "description": "Use specified timestamp instead of current time (YYYY-MM-DD HH:MM:SS)"
+                    "description": "Use specified timestamp instead of current time (format: [[CC]YY]MMDDhhmm[.SS])"
                 }
             ],
             "synchronous": true
@@ -465,15 +465,15 @@
                 },
                 {
                     "name": "show-ends",
-                    "alias": "E",
+                    "alias": "e",
                     "type": "boolean",
-                    "description": "Display $ at end of each line"
+                    "description": "Display $ at end of each line (BSD/macOS compatible)"
                 },
                 {
                     "name": "show-tabs",
-                    "alias": "T",
+                    "alias": "t",
                     "type": "boolean",
-                    "description": "Display TAB characters as ^I"
+                    "description": "Display TAB characters as ^I (BSD/macOS compatible)"
                 }
             ],
             "synchronous": true

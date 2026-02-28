@@ -1,5 +1,6 @@
 use anyhow::Result;
 use serde_json::{Map, Value};
+use tracing::warn;
 
 use crate::path_security;
 
@@ -168,6 +169,19 @@ impl<'a> ArgProcessor<'a> {
             if is_reserved_runtime_key(key) {
                 continue;
             }
+
+            // When a schema is present, reject unknown argument keys rather than
+            // blindly emitting them as --{key} flags (which causes errors like --source
+            // being passed to grep).
+            if self.schema.has_schema() && !self.schema.is_known_arg(key) {
+                warn!(
+                    "Ignoring unknown argument '{}' — not defined in tool schema. \
+                     This prevents invalid flags from being passed to the command.",
+                    key
+                );
+                continue;
+            }
+
             self.process_named_arg(key, value).await?;
         }
         Ok(())

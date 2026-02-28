@@ -37,7 +37,7 @@
                     "description": "Number of top complexity issues to include in the report (default: 10)"
                 },
                 {
-                    "name": "heml",
+                    "name": "html",
                     "type": "boolean",
                     "description": "Generate HTML report and open it automatically (shorthand for --html and --open combined)"
                 },

@@ -355,3 +355,247 @@ async fn file_arg_uses_configured_flag_and_writes_content() {
         std::fs::read_to_string(&path).expect("failed to read generated temp file content");
     assert_eq!(contents, "line 1\nline 2");
 }
+
+/// Creates a SubcommandConfig mimicking the grep subcommand from file-tools.json.
+fn make_grep_subcommand() -> SubcommandConfig {
+    SubcommandConfig {
+        name: "grep".to_string(),
+        description: "Search text patterns in files".to_string(),
+        enabled: true,
+        positional_args_first: None,
+        positional_args: Some(vec![
+            make_option("pattern", "string"),
+            CommandOption {
+                name: "files".to_string(),
+                option_type: "array".to_string(),
+                format: Some("path".to_string()),
+                description: None,
+                required: None,
+                items: None,
+                file_arg: None,
+                file_flag: None,
+                alias: None,
+            },
+        ]),
+        options: Some(vec![
+            make_path_option("working_directory", "string"),
+            make_bool_option("recursive", "r"),
+            make_bool_option("ignore-case", "i"),
+            make_bool_option("line-number", "n"),
+            make_bool_option("count", "c"),
+            make_bool_option("files-with-matches", "l"),
+            make_bool_option("invert-match", "v"),
+            make_bool_option("word-regexp", "w"),
+            make_bool_option("extended-regexp", "E"),
+        ]),
+        subcommand: None,
+        timeout_seconds: None,
+        synchronous: None,
+        guidance_key: None,
+        sequence: None,
+        step_delay_ms: None,
+        availability_check: None,
+        install_instructions: None,
+    }
+}
+
+/// Creates a SubcommandConfig mimicking the cat subcommand with BSD-compatible aliases.
+fn make_cat_subcommand() -> SubcommandConfig {
+    SubcommandConfig {
+        name: "cat".to_string(),
+        description: "Display file contents".to_string(),
+        enabled: true,
+        positional_args_first: None,
+        positional_args: Some(vec![CommandOption {
+            name: "files".to_string(),
+            option_type: "array".to_string(),
+            format: Some("path".to_string()),
+            description: None,
+            required: None,
+            items: None,
+            file_arg: None,
+            file_flag: None,
+            alias: None,
+        }]),
+        options: Some(vec![
+            make_path_option("working_directory", "string"),
+            make_bool_option("number", "n"),
+            make_bool_option("show-ends", "e"),
+            make_bool_option("show-tabs", "t"),
+        ]),
+        subcommand: None,
+        timeout_seconds: None,
+        synchronous: None,
+        guidance_key: None,
+        sequence: None,
+        step_delay_ms: None,
+        availability_check: None,
+        install_instructions: None,
+    }
+}
+
+#[tokio::test]
+async fn unknown_args_are_skipped_when_schema_present() {
+    // This test catches the --source bug: when a schema is present, unknown keys
+    // like "source" should NOT be emitted as --source CLI flags.
+    let temp_manager = test_temp_manager();
+    let subcommand_config = make_grep_subcommand();
+
+    let mut args_map = Map::new();
+    args_map.insert("pattern".to_string(), json!("chrono"));
+    args_map.insert("source".to_string(), json!("Cargo.toml")); // NOT a valid grep option
+    args_map.insert("subcommand".to_string(), json!("grep")); // Also not a grep option
+
+    let (_, args_vec) = prepare_command_and_args(
+        "grep",
+        Some(&args_map),
+        Some(&subcommand_config),
+        Path::new("."),
+        &temp_manager,
+    )
+    .await
+    .expect("command");
+
+    assert!(
+        !args_vec.iter().any(|s| s == "--source"),
+        "Unknown arg 'source' should NOT be emitted as --source. Got: {:?}",
+        args_vec
+    );
+    assert!(
+        !args_vec.iter().any(|s| s == "--subcommand"),
+        "Unknown arg 'subcommand' should NOT be emitted as --subcommand. Got: {:?}",
+        args_vec
+    );
+    // The pattern positional arg should still be present
+    assert!(
+        args_vec.contains(&"chrono".to_string()),
+        "Pattern positional arg should be present. Got: {:?}",
+        args_vec
+    );
+}
+
+#[tokio::test]
+async fn unknown_args_passthrough_without_schema() {
+    // When no SubcommandConfig is provided (schema-less tool), unknown keys
+    // should still be emitted as --{key} flags for backwards compatibility.
+    let temp_manager = test_temp_manager();
+
+    let mut args_map = Map::new();
+    args_map.insert("custom-flag".to_string(), json!("value"));
+    args_map.insert("another".to_string(), json!("thing"));
+
+    let (_, args_vec) = prepare_command_and_args(
+        "mycmd",
+        Some(&args_map),
+        None, // No schema
+        Path::new("."),
+        &temp_manager,
+    )
+    .await
+    .expect("command");
+
+    assert!(
+        args_vec.contains(&"--custom-flag".to_string()),
+        "Without schema, unknown args should pass through. Got: {:?}",
+        args_vec
+    );
+    assert!(
+        args_vec.contains(&"--another".to_string()),
+        "Without schema, unknown args should pass through. Got: {:?}",
+        args_vec
+    );
+}
+
+#[tokio::test]
+async fn grep_options_emit_correct_alias_flags() {
+    // Verify that boolean options with aliases emit the short alias form (-i, -n, etc.)
+    let temp_manager = test_temp_manager();
+    let subcommand_config = make_grep_subcommand();
+
+    let mut args_map = Map::new();
+    args_map.insert("pattern".to_string(), json!("test"));
+    args_map.insert("ignore-case".to_string(), json!(true));
+    args_map.insert("line-number".to_string(), json!(true));
+    args_map.insert("recursive".to_string(), json!(true));
+
+    let (_, args_vec) = prepare_command_and_args(
+        "grep",
+        Some(&args_map),
+        Some(&subcommand_config),
+        Path::new("."),
+        &temp_manager,
+    )
+    .await
+    .expect("command");
+
+    assert!(
+        args_vec.contains(&"-i".to_string()),
+        "ignore-case should emit -i. Got: {:?}",
+        args_vec
+    );
+    assert!(
+        args_vec.contains(&"-n".to_string()),
+        "line-number should emit -n. Got: {:?}",
+        args_vec
+    );
+    assert!(
+        args_vec.contains(&"-r".to_string()),
+        "recursive should emit -r. Got: {:?}",
+        args_vec
+    );
+    // Should NOT contain long forms
+    assert!(
+        !args_vec.iter().any(|s| s == "--ignore-case"),
+        "Should use alias -i not --ignore-case. Got: {:?}",
+        args_vec
+    );
+}
+
+#[tokio::test]
+async fn cat_bsd_aliases_use_lowercase() {
+    // Verify that cat's show-ends and show-tabs use BSD-compatible lowercase aliases
+    let temp_manager = test_temp_manager();
+    let subcommand_config = make_cat_subcommand();
+
+    let mut args_map = Map::new();
+    args_map.insert("show-ends".to_string(), json!(true));
+    args_map.insert("show-tabs".to_string(), json!(true));
+    args_map.insert("number".to_string(), json!(true));
+
+    let (_, args_vec) = prepare_command_and_args(
+        "cat",
+        Some(&args_map),
+        Some(&subcommand_config),
+        Path::new("."),
+        &temp_manager,
+    )
+    .await
+    .expect("command");
+
+    assert!(
+        args_vec.contains(&"-e".to_string()),
+        "show-ends should use BSD-compatible -e alias. Got: {:?}",
+        args_vec
+    );
+    assert!(
+        args_vec.contains(&"-t".to_string()),
+        "show-tabs should use BSD-compatible -t alias. Got: {:?}",
+        args_vec
+    );
+    assert!(
+        args_vec.contains(&"-n".to_string()),
+        "number should use -n alias. Got: {:?}",
+        args_vec
+    );
+    // Should NOT contain GNU-only uppercase flags
+    assert!(
+        !args_vec.iter().any(|s| s == "-E"),
+        "Should NOT emit GNU-only -E for show-ends. Got: {:?}",
+        args_vec
+    );
+    assert!(
+        !args_vec.iter().any(|s| s == "-T"),
+        "Should NOT emit GNU-only -T for show-tabs. Got: {:?}",
+        args_vec
+    );
+}

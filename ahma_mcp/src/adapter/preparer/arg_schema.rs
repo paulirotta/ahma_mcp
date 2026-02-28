@@ -73,4 +73,15 @@ impl<'a> ArgSchemaIndex<'a> {
                 .map(|arg| arg.format.as_deref() == Some("path"))
                 .unwrap_or(false)
     }
+
+    /// Returns true if a schema was provided (i.e., there is a `SubcommandConfig`).
+    /// When no schema is present, all keys are passed through for backwards compatibility.
+    pub(super) fn has_schema(&self) -> bool {
+        !self.options_by_name.is_empty() || !self.positional_names.is_empty()
+    }
+
+    /// Returns true if the given key is a known option or positional arg in the schema.
+    pub(super) fn is_known_arg(&self, name: &str) -> bool {
+        self.options_by_name.contains_key(name) || self.positional_names.contains(name)
+    }
 }

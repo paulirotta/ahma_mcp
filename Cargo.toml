@@ -24,7 +24,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 rust-version = "1.93.1"
-version = "0.4.6"
+version = "0.4.7"
 
 [workspace.dependencies]
 anyhow = "1.0.102"
@@ -44,7 +44,7 @@ opentelemetry-otlp = { version = "0.31", features = [
 opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"] }
 regex = "1.12.3"
 reqwest = { version = "0.13.2", default-features = false }
-rmcp = { version = "0.16.0", features = [
+rmcp = { version = "0.17.0", features = [
     "server",
     "client",
     "macros",
