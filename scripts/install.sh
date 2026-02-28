@@ -46,7 +46,7 @@ mkdir -p "$INSTALL_DIR"
 
 # Fetch latest release data
 echo "Fetching latest release info..."
-RELEASES_URL="https://api.github.com/repos/paulirotta/ahma_mcp/releases/latest"
+RELEASES_URL="https://api.github.com/repos/paulirotta/ahma_mcp/releases/tags/latest"
 
 if command -v curl >/dev/null 2>&1; then
     RELEASE_JSON=$(curl -s "$RELEASES_URL")
@@ -62,7 +62,7 @@ fi
 ASSET_NAME="ahma-release-${PLATFORM}.tar.gz"
 
 # Use grep/cut to parse JSON (avoiding jq dependency for maximum portability)
-DOWNLOAD_URL=$(echo "$RELEASE_JSON" | grep "browser_download_url" | grep "$ASSET_NAME" | cut -d '"' -f 4)
+DOWNLOAD_URL=$(echo "$RELEASE_JSON" | grep "browser_download_url" | grep "$ASSET_NAME" | cut -d '"' -f 4 || true)
 
 if [ -z "$DOWNLOAD_URL" ]; then
     echo "Error: Could not find release asset '$ASSET_NAME'."
