@@ -140,19 +140,16 @@ fn assert_required_param_error<E: std::fmt::Debug>(
     result: Result<rmcp::model::CallToolResult, E>,
     keyword: &str,
 ) {
-    match result {
-        Err(e) => {
-            let msg = format!("{:?}", e);
-            assert!(
-                msg.contains(keyword) || msg.contains("missing"),
-                "Expected error validating '{}' or 'missing', got: {}",
-                keyword,
-                msg
-            );
-        }
-        Ok(r) => {
-            assert!(r.is_error.unwrap_or(false));
-        }
+    if let Err(e) = result {
+        let msg = format!("{:?}", e);
+        assert!(
+            msg.contains(keyword) || msg.contains("missing"),
+            "Expected error validating '{}' or 'missing', got: {}",
+            keyword,
+            msg
+        );
+    } else if let Ok(r) = result {
+        assert!(r.is_error.unwrap_or(false));
     }
 }
 
@@ -426,23 +423,18 @@ fn result_text(r: &rmcp::model::CallToolResult) -> String {
 }
 
 fn assert_timeout_error<E: std::fmt::Debug>(result: Result<rmcp::model::CallToolResult, E>) {
-    match result {
-        Err(e) => {
-            let msg = format!("{:?}", e);
-            assert!(msg.contains("timeout") || msg.contains("timed out"));
-        }
-        Ok(r) if !r.is_error.unwrap_or(false) => {
+    if let Err(e) = result {
+        let msg = format!("{:?}", e);
+        assert!(msg.contains("timeout") || msg.contains("timed out"));
+    } else if let Ok(r) = result {
+        if !r.is_error.unwrap_or(false) {
             panic!(
                 "Expected timeout failure, but shell command succeeded. Output: {}",
                 result_text(&r)
             );
         }
-        Ok(r) => {
-            let text = result_text(&r);
-            assert!(
-                text.contains("timeout") || text.contains("timed out") || text.contains("killed")
-            );
-        }
+        let text = result_text(&r);
+        assert!(text.contains("timeout") || text.contains("timed out") || text.contains("killed"));
     }
 }
 

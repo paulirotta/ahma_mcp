@@ -58,17 +58,16 @@ pub fn get_schema_for_options(sub_config: &SubcommandConfig) -> (Map<String, Val
     let mut properties = Map::new();
     let mut required = Vec::new();
 
-    if let Some(options) = sub_config.options.as_deref() {
-        for option in options {
-            process_option(option, &mut properties, &mut required);
-        }
-    }
-
-    if let Some(positional_args) = sub_config.positional_args.as_deref() {
-        for arg in positional_args {
-            process_positional_arg(arg, &mut properties, &mut required);
-        }
-    }
+    sub_config
+        .options
+        .iter()
+        .flatten()
+        .for_each(|opt| process_option(opt, &mut properties, &mut required));
+    sub_config
+        .positional_args
+        .iter()
+        .flatten()
+        .for_each(|arg| process_positional_arg(arg, &mut properties, &mut required));
 
     (properties, required)
 }
@@ -78,15 +77,14 @@ fn build_arg_schema(arg: &CommandOption) -> Map<String, Value> {
     let mut schema = Map::new();
     let param_type = normalize_option_type(&arg.option_type);
     schema.insert("type".to_string(), Value::String(param_type.to_string()));
-    if let Some(ref desc) = arg.description {
+    if let Some(desc) = &arg.description {
         schema.insert("description".to_string(), Value::String(desc.clone()));
     }
-    if let Some(ref format) = arg.format {
+    if let Some(format) = &arg.format {
         schema.insert("format".to_string(), Value::String(format.clone()));
     }
     if param_type == "array" {
-        let items_schema = build_items_schema(arg);
-        schema.insert("items".to_string(), Value::Object(items_schema));
+        schema.insert("items".to_string(), Value::Object(build_items_schema(arg)));
     }
     schema
 }
@@ -125,12 +123,10 @@ fn process_positional_arg(
 
 /// Builds the path for a subcommand given its prefix and name.
 fn subcommand_path(prefix: &str, name: &str) -> String {
-    if prefix.is_empty() {
-        name.to_string()
-    } else if name == "default" {
-        prefix.to_string()
-    } else {
-        format!("{}_{}", prefix, name)
+    match (prefix.is_empty(), name == "default") {
+        (true, _) => name.to_string(),
+        (_, true) => prefix.to_string(),
+        _ => format!("{}_{}", prefix, name),
     }
 }
 
@@ -153,12 +149,9 @@ pub fn collect_leaf_subcommands<'a>(
     prefix: &str,
     leaves: &mut Vec<(String, &'a SubcommandConfig)>,
 ) {
-    for sub in subcommands {
-        if sub.enabled {
-            let current_path = subcommand_path(prefix, &sub.name);
-            push_subcommand_or_recurse(sub, current_path, leaves);
-        }
-    }
+    subcommands.iter().filter(|s| s.enabled).for_each(|sub| {
+        push_subcommand_or_recurse(sub, subcommand_path(prefix, &sub.name), leaves);
+    });
 }
 
 /// Generates the JSON schema for a tool configuration file.
@@ -252,23 +245,15 @@ fn generate_multi_command_schema(
     leaf_subcommands: &[(String, &SubcommandConfig)],
 ) -> Map<String, Value> {
     let mut all_properties = Map::new();
-    let mut one_of = Vec::new();
-    let mut subcommand_enum = Vec::new();
-
-    for (path, sub_config) in leaf_subcommands {
-        let (enum_val, entry) = build_subcommand_entry(path, sub_config, &mut all_properties);
-        subcommand_enum.push(enum_val);
-        one_of.push(entry);
-    }
+    let (subcommand_enum, one_of): (Vec<_>, Vec<_>) = leaf_subcommands
+        .iter()
+        .map(|(path, sub_config)| build_subcommand_entry(path, sub_config, &mut all_properties))
+        .unzip();
 
     if !subcommand_enum.is_empty() {
         all_properties.insert(
             "subcommand".to_string(),
-            serde_json::json!({
-                "type": "string",
-                "description": "The subcommand to execute.",
-                "enum": subcommand_enum
-            }),
+            serde_json::json!({ "type": "string", "description": "The subcommand to execute.", "enum": subcommand_enum }),
         );
     }
 

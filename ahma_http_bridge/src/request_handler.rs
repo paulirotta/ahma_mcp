@@ -63,34 +63,22 @@ pub async fn handle_session_isolated_request(
     headers: HeaderMap,
     payload: Value,
 ) -> Response {
-    // Get session ID from header
     let session_id = headers
         .get(MCP_SESSION_ID_HEADER)
         .and_then(|v| v.to_str().ok())
         .map(String::from);
-
     let method = payload.get("method").and_then(|m| m.as_str());
 
-    // Trace all incoming requests for debugging
-    debug!(
-        method = ?method,
-        session_id = ?session_id,
-        has_id = payload.get("id").is_some(),
-        "Incoming MCP request"
-    );
+    debug!(method = ?method, session_id = ?session_id, has_id = payload.get("id").is_some(), "Incoming MCP request");
 
-    // 1. Handle "initialize" requests (session creation)
     if method == Some("initialize") && session_id.is_none() {
         return handle_initialize(&session_manager, &payload).await;
     }
-
-    // 2. Route to existing session
     if let Some(session_id) = session_id {
         return handle_existing_session_request(&session_manager, &session_id, method, &payload)
             .await;
     }
 
-    // 3. Handle incorrect requests (no session ID, not initialize)
     debug!(
         "Request without session ID for non-initialize method: {:?}",
         method
@@ -106,14 +94,12 @@ pub async fn handle_session_isolated_request(
 async fn handle_initialize(session_manager: &SessionManager, payload: &Value) -> Response {
     debug!("Processing initialize request (no session ID)");
 
-    // Fail fast on obviously invalid initialize requests.
-    let protocol_version_ok = payload
+    if !payload
         .get("params")
         .and_then(|p| p.get("protocolVersion"))
         .and_then(|v| v.as_str())
-        .is_some();
-
-    if !protocol_version_ok {
+        .is_some()
+    {
         return error_response(
             -32602,
             "Invalid initialize params: missing params.protocolVersion",
@@ -121,7 +107,6 @@ async fn handle_initialize(session_manager: &SessionManager, payload: &Value) ->
     }
 
     info!("Creating new session for initialize request");
-
     let new_session_id = match session_manager.create_session().await {
         Ok(id) => id,
         Err(e) => {
@@ -130,23 +115,18 @@ async fn handle_initialize(session_manager: &SessionManager, payload: &Value) ->
         }
     };
 
-    info!(
-        session_id = %new_session_id,
-        "Session created, forwarding initialize request"
-    );
-
-    let init_timeout = Duration::from_secs(request_timeout_secs());
+    info!(session_id = %new_session_id, "Session created, forwarding initialize request");
     match session_manager
-        .send_request(&new_session_id, payload, Some(init_timeout))
+        .send_request(
+            &new_session_id,
+            payload,
+            Some(Duration::from_secs(request_timeout_secs())),
+        )
         .await
     {
         Ok(response) => with_session_header(json_response(response), &new_session_id),
         Err(e) => {
-            error!(
-                session_id = %new_session_id,
-                "Failed to send initialize request: {}", e
-            );
-            // Clean up failed session
+            error!(session_id = %new_session_id, "Failed to send initialize request: {}", e);
             let _ = session_manager
                 .terminate_session(
                     &new_session_id,
@@ -166,10 +146,7 @@ async fn handle_existing_session_request(
     payload: &Value,
 ) -> Response {
     if !session_manager.session_exists(session_id) {
-        warn!(
-            session_id = %session_id,
-            "Request for non-existent or terminated session"
-        );
+        warn!(session_id = %session_id, "Request for non-existent or terminated session");
         return error_response_with_status(
             StatusCode::FORBIDDEN,
             -32600,
@@ -177,7 +154,6 @@ async fn handle_existing_session_request(
         );
     }
 
-    // Check for roots/list_changed notification
     if method == Some("notifications/roots/list_changed")
         && let Err(e) = session_manager.handle_roots_changed(session_id).await
     {
@@ -189,7 +165,6 @@ async fn handle_existing_session_request(
         );
     }
 
-    // Delay tool execution if needed
     if method == Some("tools/call")
         && let Some(response) = check_sandbox_lock(session_manager, session_id)
     {
@@ -198,16 +173,11 @@ async fn handle_existing_session_request(
 
     let is_initialized_notification = method == Some("notifications/initialized");
     if is_initialized_notification {
-        debug!(
-            session_id = %session_id,
-            "Received notifications/initialized"
-        );
+        debug!(session_id = %session_id, "Received notifications/initialized");
     }
 
-    // Check if this is a CLIENT RESPONSE (has id + result/error, no method)
     let is_client_response = is_client_response(method, payload);
 
-    // Wait for initialization if needed
     if let Some(response) = check_initialization_required(
         session_manager,
         session_id,
@@ -223,8 +193,6 @@ async fn handle_existing_session_request(
     if is_client_response {
         return handle_client_response(session_manager, session_id, payload).await;
     }
-
-    // Forward request to session
     forward_request(
         session_manager,
         session_id,
@@ -270,16 +238,9 @@ fn check_sandbox_lock(session_manager: &SessionManager, session_id: &str) -> Opt
         return None;
     }
 
-    let sse_connected = session.is_sse_connected();
-    let mcp_initialized = session.is_mcp_initialized();
-
-    debug!(
-        session_id = %session_id,
-        sse_connected = sse_connected,
-        mcp_initialized = mcp_initialized,
-        sandbox_locked = false,
-        "tools/call blocked - sandbox not yet locked"
-    );
+    let (sse_connected, mcp_initialized) =
+        (session.is_sse_connected(), session.is_mcp_initialized());
+    debug!(session_id = %session_id, sse_connected, mcp_initialized, sandbox_locked = false, "tools/call blocked - sandbox not yet locked");
 
     if let Some(elapsed_secs) = session.is_handshake_timed_out() {
         let error_msg = handshake_timeout_message(
@@ -288,14 +249,7 @@ fn check_sandbox_lock(session_manager: &SessionManager, session_id: &str) -> Opt
             mcp_initialized,
             session_manager.requires_client_roots(),
         );
-
-        error!(
-            session_id = %session_id,
-            "Handshake timeout: SSE={}, initialized={}",
-            sse_connected,
-            mcp_initialized
-        );
-
+        error!(session_id = %session_id, "Handshake timeout: SSE={}, initialized={}", sse_connected, mcp_initialized);
         return Some(with_session_header(
             error_response_with_status(StatusCode::GATEWAY_TIMEOUT, -32002, &error_msg),
             session_id,

@@ -80,11 +80,11 @@ fn analyze_file(path: &Path) -> Option<MetricsResults> {
 // ---------------------------------------------------------------------------
 
 fn segment_matches(pattern_segment: &str, component: &str) -> bool {
-    if let Some(prefix) = pattern_segment.strip_suffix('*') {
-        component.starts_with(prefix)
-    } else {
-        component == pattern_segment
-    }
+    pattern_segment
+        .strip_suffix('*')
+        .map_or(component == pattern_segment, |prefix| {
+            component.starts_with(prefix)
+        })
 }
 
 /// Returns true if `path` should be excluded based on glob-style patterns.
@@ -174,13 +174,14 @@ fn is_matching_source_file(
     allowed_exts: &std::collections::HashSet<&str>,
     custom_excludes: &[String],
 ) -> bool {
-    let has_allowed_ext = path
-        .extension()
+    if should_exclude(path, custom_excludes) {
+        return false;
+    }
+    path.extension()
         .and_then(|e| e.to_str())
         .is_some_and(|ext| {
             allowed_exts.is_empty() || allowed_exts.contains(ext.to_lowercase().as_str())
-        });
-    has_allowed_ext && !should_exclude(path, custom_excludes)
+        })
 }
 
 /// Iterate source files in `dir` matching extension and exclusion filters.
@@ -236,18 +237,17 @@ pub fn perform_analysis(
 
 /// Resolve which directories to analyse: workspace members or just the root.
 fn workspace_analysis_dirs(directory: &Path, is_workspace: bool) -> Result<Vec<PathBuf>> {
-    if !is_workspace {
-        return Ok(vec![directory.to_path_buf()]);
+    if is_workspace {
+        let dirs: Vec<_> = get_workspace_members(directory)?
+            .into_iter()
+            .map(|m| directory.join(m))
+            .filter(|p| p.is_dir())
+            .collect();
+        if !dirs.is_empty() {
+            return Ok(dirs);
+        }
     }
-    let member_dirs: Vec<PathBuf> = get_workspace_members(directory)?
-        .into_iter()
-        .map(|m| directory.join(m))
-        .filter(|p| p.is_dir())
-        .collect();
-    if member_dirs.is_empty() {
-        return Ok(vec![directory.to_path_buf()]);
-    }
-    Ok(member_dirs)
+    Ok(vec![directory.to_path_buf()])
 }
 
 /// Parse `[workspace] members` from a Cargo.toml string.
@@ -318,12 +318,14 @@ pub fn get_relative_path(path: &Path, base_dir: &Path) -> PathBuf {
 }
 
 pub fn get_package_name(path: &Path, base_dir: &Path) -> String {
-    let relative = get_relative_path(path, base_dir);
-    relative
+    get_relative_path(path, base_dir)
         .components()
-        .find_map(|c| match c {
-            std::path::Component::Normal(s) => Some(s.to_string_lossy().to_string()),
-            _ => None,
+        .find_map(|c| {
+            if let std::path::Component::Normal(s) = c {
+                Some(s.to_string_lossy().to_string())
+            } else {
+                None
+            }
         })
         .unwrap_or_else(|| "unknown".to_string())
 }
