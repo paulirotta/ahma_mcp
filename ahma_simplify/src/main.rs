@@ -135,10 +135,10 @@ fn main() -> Result<()> {
         )?;
     }
 
-    if cli.open {
-        if let Err(e) = open_report(&report_output_dir, cli.html) {
-            eprintln!("Warning: Failed to open report: {}", e);
-        }
+    if cli.open
+        && let Err(e) = open_report(&report_output_dir, cli.html)
+    {
+        eprintln!("Warning: Failed to open report: {}", e);
     }
 
     Ok(())

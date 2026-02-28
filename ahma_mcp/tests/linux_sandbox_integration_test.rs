@@ -184,7 +184,9 @@ fn apply_landlock_rules(sandbox_scope: &str) -> std::io::Result<()> {
 
     // Also allow /tmp for temporary files during execution
     if let Ok(fd) = PathFd::new(Path::new("/tmp")) {
-        let _ = ruleset.add_rule(PathBeneath::new(fd, AccessFs::from_all(abi)));
+        ruleset = ruleset
+            .add_rule(PathBeneath::new(fd, AccessFs::from_all(abi)))
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
     }
 
     ruleset
