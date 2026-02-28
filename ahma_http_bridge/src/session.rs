@@ -51,7 +51,7 @@ use std::{
     process::Stdio,
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -167,6 +167,10 @@ pub struct Session {
     created_at: Instant,
     /// Per-session handshake timeout duration
     handshake_timeout: Duration,
+
+    /// Cumulative count of SSE events lost due to broadcast channel lag.
+    /// Incremented in the SSE stream handler when `BroadcastStreamRecvError::Lagged(n)` is received.
+    lagged_events: AtomicU64,
 }
 
 impl Session {
@@ -274,6 +278,24 @@ impl Session {
     /// Subscribe to SSE events
     pub fn subscribe(&self) -> broadcast::Receiver<String> {
         self.broadcast_tx.subscribe()
+    }
+
+    /// Record `n` events lost due to broadcast receiver lag.
+    pub fn record_lagged_events(&self, n: u64) {
+        self.lagged_events.fetch_add(n, Ordering::Relaxed);
+    }
+
+    /// Total number of SSE events lost due to broadcast receiver lag (cumulative).
+    pub fn total_lagged_events(&self) -> u64 {
+        self.lagged_events.load(Ordering::Relaxed)
+    }
+
+    /// Broadcast a message to all SSE subscribers. Primarily for testing.
+    pub fn broadcast(
+        &self,
+        message: String,
+    ) -> std::result::Result<usize, broadcast::error::SendError<String>> {
+        self.broadcast_tx.send(message)
     }
 
     /// Helper to transitions state and return necessary action
@@ -565,6 +587,7 @@ impl SessionManager {
             sandbox_state_machine: Arc::new(SandboxStateMachine::new()),
             created_at: Instant::now(),
             handshake_timeout,
+            lagged_events: AtomicU64::new(0),
         });
 
         // Spawn the I/O handler task

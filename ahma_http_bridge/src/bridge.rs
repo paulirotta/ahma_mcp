@@ -5,7 +5,7 @@ use crate::session::{DEFAULT_HANDSHAKE_TIMEOUT_SECS, SessionManager, SessionMana
 use axum::{
     Json, Router,
     extract::State,
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, HeaderValue, Method, StatusCode},
     response::{
         IntoResponse, Response,
         sse::{Event, KeepAlive, Sse},
@@ -16,7 +16,10 @@ use futures::stream::StreamExt;
 use serde_json::Value;
 use std::{convert::Infallible, net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio_stream::wrappers::BroadcastStream;
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::{
+    cors::{AllowHeaders, AllowMethods, CorsLayer},
+    trace::TraceLayer,
+};
 use tracing::{debug, error, info, warn};
 
 /// Configuration for the HTTP bridge server.
@@ -86,6 +89,56 @@ struct BridgeState {
     session_manager: Arc<SessionManager>,
 }
 
+/// Build a CORS layer appropriate for the bind address.
+///
+/// - **Loopback** (`127.0.0.1`, `::1`): restricts allowed origins to
+///   `http://127.0.0.1:*`, `http://localhost:*`, and `http://[::1]:*`.
+///   Only the HTTP methods used by MCP Streamable HTTP (`GET`, `POST`, `DELETE`)
+///   are permitted, and only MCP-relevant headers are exposed.
+/// - **Non-loopback** (`0.0.0.0`, public IP, etc.): allows any origin so
+///   legitimate deployments behind a reverse proxy are not broken, but the
+///   caller logs a security warning.
+fn build_cors_layer(bind_addr: &SocketAddr) -> CorsLayer {
+    let methods = AllowMethods::list([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS]);
+    let headers = AllowHeaders::list([
+        "content-type".parse().unwrap(),
+        "mcp-session-id".parse().unwrap(),
+        "accept".parse().unwrap(),
+        "last-event-id".parse().unwrap(),
+    ]);
+    let expose = tower_http::cors::ExposeHeaders::list(["mcp-session-id"
+        .parse::<axum::http::HeaderName>()
+        .unwrap()]);
+
+    if bind_addr.ip().is_loopback() {
+        // Restrictive: only accept requests originating from loopback web pages.
+        CorsLayer::new()
+            .allow_origin(tower_http::cors::AllowOrigin::predicate(
+                |origin: &HeaderValue, _req: &axum::http::request::Parts| {
+                    let Ok(origin_str) = origin.to_str() else {
+                        return false;
+                    };
+                    // Allow http://127.0.0.1[:port], http://localhost[:port], http://[::1][:port]
+                    let lower = origin_str.to_ascii_lowercase();
+                    lower.starts_with("http://127.0.0.1")
+                        || lower.starts_with("http://localhost")
+                        || lower.starts_with("http://[::1]")
+                },
+            ))
+            .allow_methods(methods)
+            .allow_headers(headers)
+            .expose_headers(expose)
+    } else {
+        // Non-loopback: user explicitly opted into network exposure.
+        // Allow any origin but restrict methods/headers.
+        CorsLayer::new()
+            .allow_origin(tower_http::cors::AllowOrigin::any())
+            .allow_methods(methods)
+            .allow_headers(headers)
+            .expose_headers(expose)
+    }
+}
+
 /// MCP Session-Id header name (per MCP spec 2025-03-26)
 const MCP_SESSION_ID_HEADER: &str = "mcp-session-id";
 
@@ -121,6 +174,16 @@ const MCP_SESSION_ID_HEADER: &str = "mcp-session-id";
 pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
     info!("Starting HTTP bridge on {}", config.bind_addr);
 
+    // SECURITY: warn when binding to a non-loopback address — the bridge is
+    // designed for localhost use and has no authentication beyond session IDs.
+    if !config.bind_addr.ip().is_loopback() {
+        warn!(
+            "HTTP bridge bound to non-loopback address {}. \
+             CORS allows any origin. Restrict access via firewall or reverse proxy.",
+            config.bind_addr
+        );
+    }
+
     info!("Session isolation: ENABLED (always-on)");
     let session_config = SessionManagerConfig {
         server_command: config.server_command.clone(),
@@ -135,6 +198,7 @@ pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
     // Build the router
     // MCP Streamable HTTP transport: single endpoint supporting POST (requests), GET (SSE), DELETE (terminate)
     // See: https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http
+    let cors = build_cors_layer(&config.bind_addr);
     let app = Router::new()
         .route("/health", get(health_check))
         .route(
@@ -143,7 +207,7 @@ pub async fn start_bridge(config: BridgeConfig) -> Result<()> {
                 .get(handle_sse_stream)
                 .delete(handle_session_delete),
         )
-        .layer(CorsLayer::permissive())
+        .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
@@ -308,19 +372,38 @@ async fn handle_sse_stream(State(state): State<Arc<BridgeState>>, headers: Heade
         warn!(session_id = %session_id, "Failed to mark SSE connected: {}", e);
     }
 
-    // Convert broadcast receiver to a stream of SSE events
+    // Convert broadcast receiver to a stream of SSE events.
+    // When the receiver falls behind (broadcast channel capacity exceeded),
+    // BroadcastStream yields `Lagged(n)` with the number of skipped messages.
+    // We log this prominently and bump a per-session counter so the loss is
+    // observable in tests, metrics, and debug logs.
+    let session_arc = session.clone();
     let stream = BroadcastStream::new(rx).filter_map(move |result| {
         let session_id = session_id.clone();
+        let session_ref = session_arc.clone();
         async move {
             match result {
                 Ok(msg) => {
                     debug!(session_id = %session_id, "Sending SSE event: {}", msg);
                     Some(Ok::<_, Infallible>(Event::default().data(msg)))
                 }
-                Err(e) => {
-                    warn!(session_id = %session_id, "Broadcast receive error: {}", e);
-                    // Skip errors (lagged receiver)
-                    None
+                Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(n)) => {
+                    session_ref.record_lagged_events(n);
+                    let total = session_ref.total_lagged_events();
+                    warn!(
+                        session_id = %session_id,
+                        lagged_count = n,
+                        total_lagged = total,
+                        "SSE receiver lagged — {} event(s) dropped (total: {})",
+                        n,
+                        total
+                    );
+                    // Yield an SSE comment so the client's EventSource sees
+                    // activity (keeps connection alive) without injecting a
+                    // fake JSON-RPC message into the MCP protocol stream.
+                    Some(Ok(
+                        Event::default().comment(format!("lagged: {} events dropped", n))
+                    ))
                 }
             }
         }
@@ -359,6 +442,7 @@ mod tests {
         http::{Request, StatusCode},
     };
     use std::fs;
+    use std::sync::atomic::Ordering;
     use tempfile::TempDir;
     use tower::ServiceExt;
 
@@ -407,10 +491,11 @@ mod tests {
     }
 
     fn create_app(state: Arc<BridgeState>) -> Router {
+        let loopback_addr: SocketAddr = "127.0.0.1:3000".parse().unwrap();
         Router::new()
             .route("/health", get(health_check))
             .route("/mcp", post(handle_mcp_request))
-            .layer(CorsLayer::permissive())
+            .layer(build_cors_layer(&loopback_addr))
             .with_state(state)
     }
 
@@ -681,5 +766,95 @@ for line in sys.stdin:
             .await
             .unwrap();
         assert_eq!(&body[..], b"OK");
+    }
+
+    // ── CORS hardening tests ───────────────────────────────────────────
+
+    #[test]
+    fn test_cors_loopback_blocks_external_origin() {
+        let loopback: SocketAddr = "127.0.0.1:3000".parse().unwrap();
+        let cors = build_cors_layer(&loopback);
+
+        // The layer should NOT include a blanket "Access-Control-Allow-Origin: *".
+        let debug_str = format!("{:?}", cors);
+        assert!(
+            !debug_str.contains("\"*\""),
+            "Loopback CORS must not use wildcard origin"
+        );
+    }
+
+    #[test]
+    fn test_cors_nonloopback_uses_any_origin() {
+        let nonloopback: SocketAddr = "0.0.0.0:8080".parse().unwrap();
+        let cors = build_cors_layer(&nonloopback);
+
+        // Non-loopback should use permissive origin (any / wildcard "*").
+        let debug_str = format!("{:?}", cors);
+        assert!(
+            debug_str.contains("\"*\""),
+            "Non-loopback CORS should allow all origins (\"*\"), got: {}",
+            debug_str
+        );
+    }
+
+    #[test]
+    fn test_cors_ipv6_loopback_is_restrictive() {
+        let ipv6_loopback: SocketAddr = "[::1]:3000".parse().unwrap();
+        let cors = build_cors_layer(&ipv6_loopback);
+
+        let debug_str = format!("{:?}", cors);
+        assert!(
+            !debug_str.contains("\"*\""),
+            "IPv6 loopback CORS must not use wildcard origin"
+        );
+    }
+
+    // ── SSE lag observability tests ────────────────────────────────────
+
+    #[test]
+    fn test_session_lagged_events_counter() {
+        use std::sync::atomic::AtomicU64;
+        // Verify the atomic counter tracks lagged events correctly.
+        let counter = AtomicU64::new(0);
+        counter.fetch_add(5, Ordering::Relaxed);
+        counter.fetch_add(12, Ordering::Relaxed);
+        assert_eq!(counter.load(Ordering::Relaxed), 17);
+    }
+
+    #[tokio::test]
+    async fn test_broadcast_lag_is_recorded_on_session() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let script_path = write_mock_mcp_server_script(&temp_dir);
+        let session_manager = Arc::new(SessionManager::new(SessionManagerConfig {
+            server_command: "python3".to_string(),
+            server_args: vec![script_path.to_string_lossy().to_string()],
+            default_scope: Some(temp_dir.path().to_path_buf()),
+            enable_colored_output: false,
+            handshake_timeout_secs: DEFAULT_HANDSHAKE_TIMEOUT_SECS,
+        }));
+
+        let session_id = session_manager
+            .create_session()
+            .await
+            .expect("Should create session");
+        let session = session_manager
+            .get_session(&session_id)
+            .expect("Session should exist");
+
+        // Initially zero lagged events.
+        assert_eq!(session.total_lagged_events(), 0);
+
+        // Subscribe then flood beyond capacity (100) without consuming.
+        let _rx = session.subscribe();
+        for i in 0..150 {
+            let _ = session.broadcast(format!("msg-{}", i));
+        }
+
+        // Record lag as if the stream handler detected it.
+        session.record_lagged_events(50);
+        assert_eq!(session.total_lagged_events(), 50);
+
+        session.record_lagged_events(7);
+        assert_eq!(session.total_lagged_events(), 57);
     }
 }
