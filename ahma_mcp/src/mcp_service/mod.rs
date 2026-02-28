@@ -74,6 +74,8 @@ pub struct AhmaMcpService {
     /// The peer handle for sending notifications to the client.
     /// This is populated by capturing it from the first request context.
     pub peer: Arc<RwLock<Option<Peer<RoleServer>>>>,
+    /// Minimum seconds between successive log monitoring alerts (default: 60).
+    pub monitor_rate_limit_seconds: u64,
 }
 
 impl AhmaMcpService {
@@ -111,6 +113,7 @@ impl AhmaMcpService {
             force_synchronous,
             defer_sandbox,
             peer: Arc::new(RwLock::new(None)),
+            monitor_rate_limit_seconds: crate::log_monitor::DEFAULT_RATE_LIMIT_SECONDS,
         })
     }
 
@@ -697,6 +700,23 @@ impl ServerHandler for AhmaMcpService {
                         )) as Box<dyn CallbackSender>
                     });
 
+                    // Build log monitor config from MTDF tool-level settings
+                    let log_monitor_config = config.monitor_level.as_deref().map(|level_str| {
+                        let level = level_str
+                            .parse::<crate::log_monitor::LogLevel>()
+                            .unwrap_or(crate::log_monitor::LogLevel::Error);
+                        let stream = config
+                            .monitor_stream
+                            .as_deref()
+                            .and_then(|s| s.parse::<crate::log_monitor::MonitorStream>().ok())
+                            .unwrap_or(crate::log_monitor::MonitorStream::Stderr);
+                        crate::log_monitor::LogMonitorConfig {
+                            monitor_level: level,
+                            monitor_stream: stream,
+                            rate_limit_seconds: self.monitor_rate_limit_seconds,
+                        }
+                    });
+
                     let job_id = self
                         .adapter
                         .execute_async_in_dir_with_options(
@@ -709,6 +729,7 @@ impl ServerHandler for AhmaMcpService {
                                 timeout,
                                 callback,
                                 subcommand_config: Some(subcommand_config),
+                                log_monitor_config,
                             },
                         )
                         .await;
@@ -1116,6 +1137,8 @@ mod tests {
             step_delay_ms: None,
             availability_check: None,
             install_instructions: None,
+            monitor_level: None,
+            monitor_stream: None,
         };
 
         let tool = service.create_tool_from_config(&tool_config);

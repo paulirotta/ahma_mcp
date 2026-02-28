@@ -211,6 +211,10 @@ pub async fn run_server_mode(cli: Cli, sandbox: Arc<sandbox::Sandbox>) -> Result
     )
     .await?;
 
+    // Apply log monitor rate limit from CLI
+    let mut service_handler = service_handler;
+    service_handler.monitor_rate_limit_seconds = cli.monitor_rate_limit;
+
     // Start the config watcher to support hot-reloading of tools (if tools_dir exists)
     if let Some(tools_dir) = cli.tools_dir.clone() {
         service_handler.start_config_watcher(tools_dir, cli.clone());

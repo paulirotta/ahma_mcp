@@ -234,6 +234,25 @@ impl CallbackSender for McpCallbackSender {
                     message: Some(final_message),
                 }
             }
+            ProgressUpdate::LogAlert {
+                operation_id,
+                trigger_level,
+                context_snapshot,
+            } => {
+                tracing::info!(
+                    "Log alert ({}) for operation {}: sending context snapshot",
+                    trigger_level,
+                    operation_id
+                );
+
+                ProgressNotificationParam {
+                    progress_token: progress_token.clone(),
+                    // Use a distinctive progress value to signal this is an alert, not a completion
+                    progress: 50.0,
+                    total: Some(100.0),
+                    message: Some(context_snapshot),
+                }
+            }
         };
 
         // Pre-serialize the params for debugging output before moving `params` into

@@ -289,6 +289,7 @@ async fn test_execute_async_with_options() {
                 timeout: Some(30),
                 callback: None,
                 subcommand_config: None,
+                log_monitor_config: None,
             },
         )
         .await;

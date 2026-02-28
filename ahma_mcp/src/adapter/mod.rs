@@ -402,6 +402,7 @@ impl Adapter {
                 timeout,
                 callback,
                 subcommand_config: None,
+                log_monitor_config: None,
             },
         )
         .await
@@ -421,6 +422,7 @@ impl Adapter {
             timeout,
             callback,
             subcommand_config,
+            log_monitor_config,
         } = options;
 
         // Validate working directory against sandbox scope.
@@ -559,140 +561,38 @@ impl Adapter {
                 .map(|t| t * 1000)
                 .unwrap_or_else(|| shell_pool.config().command_timeout.as_millis() as u64);
 
-            // Execute with timeout
-            let proc_result =
-                tokio::time::timeout(Duration::from_millis(timeout_ms), proc_cmd.output()).await;
-
-            let duration_ms = start_time.elapsed().as_millis() as u64;
-
-            // Check for cancellation after command execution
-            if cancellation_token.is_cancelled() {
-                tracing::info!("Operation {} was cancelled after shell execution", op_id);
-                monitor
-                    .update_status(
-                        &op_id,
-                        OperationStatus::Cancelled,
-                        Some(Value::String("Operation was cancelled".to_string())),
-                    )
-                    .await;
-                if let Some(callback) = &callback {
-                    let reason_owned = match monitor.get_operation(&op_id).await {
-                        Some(op) => {
-                            let val = op.result.clone();
-                            val.and_then(|v| v.get("reason").cloned())
-                                .and_then(|v| v.as_str().map(|s| s.to_string()))
-                                .unwrap_or_else(|| "Operation was cancelled".to_string())
-                        }
-                        None => "Operation was cancelled".to_string(),
-                    };
-                    let _ = callback
-                        .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
-                            operation_id: op_id.clone(),
-                            message: reason_owned,
-                            duration_ms,
-                        })
-                        .await;
-                }
-                return;
+            // Branch: streaming execution for log monitoring vs. batch execution
+            if let Some(monitor_config) = log_monitor_config {
+                // === STREAMING PATH: line-by-line output with log monitoring ===
+                execute_with_streaming(
+                    &mut proc_cmd,
+                    timeout_ms,
+                    monitor_config,
+                    &cancellation_token,
+                    &callback,
+                    &op_id,
+                    &program_with_subcommand,
+                    &wd_clone,
+                    start_time,
+                    &monitor,
+                )
+                .await;
+            } else {
+                // === BATCH PATH: existing behavior, collect all output at once ===
+                execute_batch(
+                    &mut proc_cmd,
+                    timeout_ms,
+                    &cancellation_token,
+                    &callback,
+                    &op_id,
+                    &program_with_subcommand,
+                    &wd_clone,
+                    start_time,
+                    &monitor,
+                )
+                .await;
             }
 
-            match proc_result {
-                Ok(Ok(output)) => {
-                    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-                    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-                    let final_output = json!({
-                        "stdout": stdout,
-                        "stderr": stderr,
-                        "exit_code": output.status.code().unwrap_or(-1),
-                    });
-                    let success = output.status.success();
-                    let status = if success {
-                        OperationStatus::Completed
-                    } else {
-                        OperationStatus::Failed
-                    };
-                    monitor
-                        .update_status(&op_id, status, Some(final_output.clone()))
-                        .await;
-
-                    // Send completion notification if callback is provided
-                    if let Some(callback) = &callback {
-                        let completion_update =
-                            crate::callback_system::ProgressUpdate::FinalResult {
-                                operation_id: op_id.clone(),
-                                command: program_with_subcommand.clone(),
-                                description: format!(
-                                    "Execute {} in {}",
-                                    program_with_subcommand, wd_clone
-                                ),
-                                working_directory: wd_clone.clone(),
-                                success,
-                                duration_ms,
-                                full_output: format!(
-                                    "Exit code: {}\nStdout:\n{}\nStderr:\n{}",
-                                    final_output["exit_code"],
-                                    final_output["stdout"],
-                                    final_output["stderr"]
-                                ),
-                            };
-                        if let Err(e) = callback.send_progress(completion_update).await {
-                            tracing::error!("Failed to send completion notification: {:?}", e);
-                        } else {
-                            tracing::info!("Sent completion notification for operation: {}", op_id);
-                        }
-                    }
-                }
-                Ok(Err(e)) => {
-                    let error_message = e.to_string();
-                    monitor
-                        .update_status(
-                            &op_id,
-                            OperationStatus::Failed,
-                            Some(Value::String(error_message.clone())),
-                        )
-                        .await;
-
-                    if let Some(callback) = &callback {
-                        let failure_update = crate::callback_system::ProgressUpdate::FinalResult {
-                            operation_id: op_id.clone(),
-                            command: program_with_subcommand.clone(),
-                            description: format!(
-                                "Execute {} in {}",
-                                program_with_subcommand, wd_clone
-                            ),
-                            working_directory: wd_clone.clone(),
-                            success: false,
-                            duration_ms,
-                            full_output: format!("Error: {}", error_message),
-                        };
-                        let _ = callback.send_progress(failure_update).await;
-                    }
-                }
-                Err(_) => {
-                    // Timeout
-                    let timeout_reason = format!(
-                        "Operation timed out after {}ms (exceeded timeout limit)",
-                        duration_ms
-                    );
-                    monitor
-                        .update_status(
-                            &op_id,
-                            OperationStatus::Cancelled,
-                            Some(Value::String(timeout_reason.clone())),
-                        )
-                        .await;
-
-                    if let Some(callback) = &callback {
-                        let _ = callback
-                            .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
-                                operation_id: op_id.clone(),
-                                message: timeout_reason,
-                                duration_ms,
-                            })
-                            .await;
-                    }
-                }
-            }
             // Remove the task handle from the map once it's complete
             task_handles.lock().await.remove(&op_id);
         });
@@ -728,5 +628,408 @@ impl Adapter {
             &self.temp_file_manager,
         )
         .await
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Extracted execution helpers (batch vs streaming)
+// ---------------------------------------------------------------------------
+
+/// Execute a command in batch mode (existing behavior): collect all output at once.
+#[allow(clippy::too_many_arguments)]
+async fn execute_batch(
+    proc_cmd: &mut tokio::process::Command,
+    timeout_ms: u64,
+    cancellation_token: &tokio_util::sync::CancellationToken,
+    callback: &Option<Box<dyn crate::callback_system::CallbackSender>>,
+    op_id: &str,
+    program: &str,
+    working_dir: &str,
+    start_time: Instant,
+    monitor: &Arc<OperationMonitor>,
+) {
+    let proc_result =
+        tokio::time::timeout(Duration::from_millis(timeout_ms), proc_cmd.output()).await;
+
+    let duration_ms = start_time.elapsed().as_millis() as u64;
+
+    // Check for cancellation after command execution
+    if cancellation_token.is_cancelled() {
+        tracing::info!("Operation {} was cancelled after shell execution", op_id);
+        handle_cancellation(monitor, callback, op_id, duration_ms).await;
+        return;
+    }
+
+    match proc_result {
+        Ok(Ok(output)) => {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            let final_output = json!({
+                "stdout": stdout,
+                "stderr": stderr,
+                "exit_code": output.status.code().unwrap_or(-1),
+            });
+            let success = output.status.success();
+            let status = if success {
+                OperationStatus::Completed
+            } else {
+                OperationStatus::Failed
+            };
+            monitor
+                .update_status(op_id, status, Some(final_output.clone()))
+                .await;
+
+            if let Some(callback) = callback {
+                let completion_update = crate::callback_system::ProgressUpdate::FinalResult {
+                    operation_id: op_id.to_string(),
+                    command: program.to_string(),
+                    description: format!("Execute {} in {}", program, working_dir),
+                    working_directory: working_dir.to_string(),
+                    success,
+                    duration_ms,
+                    full_output: format!(
+                        "Exit code: {}\nStdout:\n{}\nStderr:\n{}",
+                        final_output["exit_code"], final_output["stdout"], final_output["stderr"]
+                    ),
+                };
+                if let Err(e) = callback.send_progress(completion_update).await {
+                    tracing::error!("Failed to send completion notification: {:?}", e);
+                } else {
+                    tracing::info!("Sent completion notification for operation: {}", op_id);
+                }
+            }
+        }
+        Ok(Err(e)) => {
+            let error_message = e.to_string();
+            monitor
+                .update_status(
+                    op_id,
+                    OperationStatus::Failed,
+                    Some(Value::String(error_message.clone())),
+                )
+                .await;
+
+            if let Some(callback) = callback {
+                let failure_update = crate::callback_system::ProgressUpdate::FinalResult {
+                    operation_id: op_id.to_string(),
+                    command: program.to_string(),
+                    description: format!("Execute {} in {}", program, working_dir),
+                    working_directory: working_dir.to_string(),
+                    success: false,
+                    duration_ms,
+                    full_output: format!("Error: {}", error_message),
+                };
+                let _ = callback.send_progress(failure_update).await;
+            }
+        }
+        Err(_) => {
+            let timeout_reason = format!(
+                "Operation timed out after {}ms (exceeded timeout limit)",
+                duration_ms
+            );
+            monitor
+                .update_status(
+                    op_id,
+                    OperationStatus::Cancelled,
+                    Some(Value::String(timeout_reason.clone())),
+                )
+                .await;
+
+            if let Some(callback) = callback {
+                let _ = callback
+                    .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
+                        operation_id: op_id.to_string(),
+                        message: timeout_reason,
+                        duration_ms,
+                    })
+                    .await;
+            }
+        }
+    }
+}
+
+/// Execute a command with line-by-line streaming and log monitoring.
+///
+/// Instead of buffering all output, this spawns the process and reads stdout/stderr
+/// concurrently via `BufReader::lines()`. Each line is fed through a `LogMonitor`
+/// which checks for error/warning patterns and fires alerts via the callback.
+#[allow(clippy::too_many_arguments)]
+async fn execute_with_streaming(
+    proc_cmd: &mut tokio::process::Command,
+    timeout_ms: u64,
+    monitor_config: crate::log_monitor::LogMonitorConfig,
+    cancellation_token: &tokio_util::sync::CancellationToken,
+    callback: &Option<Box<dyn crate::callback_system::CallbackSender>>,
+    op_id: &str,
+    program: &str,
+    working_dir: &str,
+    start_time: Instant,
+    op_monitor: &Arc<OperationMonitor>,
+) {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+
+    // Ensure stdout/stderr are piped (should already be set by sandbox)
+    proc_cmd.stdout(std::process::Stdio::piped());
+    proc_cmd.stderr(std::process::Stdio::piped());
+
+    let spawn_result = proc_cmd.spawn();
+    let mut child = match spawn_result {
+        Ok(child) => child,
+        Err(e) => {
+            let error_message = format!("Failed to spawn process: {}", e);
+            tracing::error!("{}", error_message);
+            op_monitor
+                .update_status(
+                    op_id,
+                    OperationStatus::Failed,
+                    Some(Value::String(error_message.clone())),
+                )
+                .await;
+            if let Some(callback) = callback {
+                let _ = callback
+                    .send_progress(crate::callback_system::ProgressUpdate::FinalResult {
+                        operation_id: op_id.to_string(),
+                        command: program.to_string(),
+                        description: format!("Execute {} in {}", program, working_dir),
+                        working_directory: working_dir.to_string(),
+                        success: false,
+                        duration_ms: 0,
+                        full_output: format!("Error: {}", error_message),
+                    })
+                    .await;
+            }
+            return;
+        }
+    };
+
+    let stdout = child.stdout.take().expect("stdout piped");
+    let stderr = child.stderr.take().expect("stderr piped");
+
+    let mut stdout_reader = BufReader::new(stdout).lines();
+    let mut stderr_reader = BufReader::new(stderr).lines();
+
+    let mut log_monitor = crate::log_monitor::LogMonitor::new(monitor_config);
+
+    // Collected output for the final result
+    let mut collected_stdout = Vec::new();
+    let mut collected_stderr = Vec::new();
+
+    let timeout_deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
+
+    loop {
+        tokio::select! {
+            // Bias stderr to prioritize error-related output
+            biased;
+
+            // Check cancellation
+            _ = cancellation_token.cancelled() => {
+                tracing::info!("Operation {} cancelled during streaming", op_id);
+                let _ = child.kill().await;
+                let duration_ms = start_time.elapsed().as_millis() as u64;
+                handle_cancellation(op_monitor, callback, op_id, duration_ms).await;
+                return;
+            }
+
+            // Timeout
+            _ = tokio::time::sleep_until(timeout_deadline) => {
+                tracing::warn!("Operation {} timed out during streaming", op_id);
+                let _ = child.kill().await;
+                let duration_ms = start_time.elapsed().as_millis() as u64;
+                let timeout_reason = format!(
+                    "Operation timed out after {}ms (exceeded timeout limit)", duration_ms
+                );
+                op_monitor
+                    .update_status(
+                        op_id,
+                        OperationStatus::Cancelled,
+                        Some(Value::String(timeout_reason.clone())),
+                    )
+                    .await;
+                if let Some(callback) = callback {
+                    let _ = callback
+                        .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
+                            operation_id: op_id.to_string(),
+                            message: timeout_reason,
+                            duration_ms,
+                        })
+                        .await;
+                }
+                return;
+            }
+
+            // Read stderr line
+            result = stderr_reader.next_line() => {
+                match result {
+                    Ok(Some(line)) => {
+                        collected_stderr.push(line.clone());
+                        if let Some(snapshot) = log_monitor.process_line(&line, true)
+                            && let Some(callback) = callback {
+                                let alert = crate::callback_system::ProgressUpdate::LogAlert {
+                                    operation_id: op_id.to_string(),
+                                    trigger_level: snapshot.trigger_level.to_string(),
+                                    context_snapshot: snapshot.format_for_notification(),
+                                };
+                                let _ = callback.send_progress(alert).await;
+                            }
+                    }
+                    Ok(None) => {
+                        // stderr stream closed — wait for process to exit
+                        // stdout may still be open, continue the loop to drain it
+                    }
+                    Err(e) => {
+                        tracing::warn!("Error reading stderr for {}: {}", op_id, e);
+                    }
+                }
+            }
+
+            // Read stdout line
+            result = stdout_reader.next_line() => {
+                match result {
+                    Ok(Some(line)) => {
+                        collected_stdout.push(line.clone());
+                        if let Some(snapshot) = log_monitor.process_line(&line, false)
+                            && let Some(callback) = callback {
+                                let alert = crate::callback_system::ProgressUpdate::LogAlert {
+                                    operation_id: op_id.to_string(),
+                                    trigger_level: snapshot.trigger_level.to_string(),
+                                    context_snapshot: snapshot.format_for_notification(),
+                                };
+                                let _ = callback.send_progress(alert).await;
+                            }
+                    }
+                    Ok(None) => {
+                        // stdout stream closed
+                    }
+                    Err(e) => {
+                        tracing::warn!("Error reading stdout for {}: {}", op_id, e);
+                    }
+                }
+            }
+        }
+
+        // Check if the child process has exited
+        // We use try_wait() to avoid blocking — if streams are closed the process may
+        // have already exited.
+        match child.try_wait() {
+            Ok(Some(_status)) => {
+                // Process exited. Drain remaining lines from both streams.
+                while let Ok(Some(line)) = stderr_reader.next_line().await {
+                    collected_stderr.push(line.clone());
+                    if let Some(snapshot) = log_monitor.process_line(&line, true)
+                        && let Some(callback) = callback
+                    {
+                        let alert = crate::callback_system::ProgressUpdate::LogAlert {
+                            operation_id: op_id.to_string(),
+                            trigger_level: snapshot.trigger_level.to_string(),
+                            context_snapshot: snapshot.format_for_notification(),
+                        };
+                        let _ = callback.send_progress(alert).await;
+                    }
+                }
+                while let Ok(Some(line)) = stdout_reader.next_line().await {
+                    collected_stdout.push(line.clone());
+                    if let Some(snapshot) = log_monitor.process_line(&line, false)
+                        && let Some(callback) = callback
+                    {
+                        let alert = crate::callback_system::ProgressUpdate::LogAlert {
+                            operation_id: op_id.to_string(),
+                            trigger_level: snapshot.trigger_level.to_string(),
+                            context_snapshot: snapshot.format_for_notification(),
+                        };
+                        let _ = callback.send_progress(alert).await;
+                    }
+                }
+                break;
+            }
+            Ok(None) => {
+                // Process still running, continue loop
+            }
+            Err(e) => {
+                tracing::warn!("Error checking child status for {}: {}", op_id, e);
+                break;
+            }
+        }
+    }
+
+    // Wait for the process to finish and get the exit status
+    let exit_status = child.wait().await;
+    let duration_ms = start_time.elapsed().as_millis() as u64;
+
+    let exit_code = match &exit_status {
+        Ok(status) => status.code().unwrap_or(-1),
+        Err(_) => -1,
+    };
+    let success = exit_status.as_ref().map(|s| s.success()).unwrap_or(false);
+
+    let stdout_str = collected_stdout.join("\n");
+    let stderr_str = collected_stderr.join("\n");
+
+    let final_output = json!({
+        "stdout": stdout_str,
+        "stderr": stderr_str,
+        "exit_code": exit_code,
+    });
+
+    let status = if success {
+        OperationStatus::Completed
+    } else {
+        OperationStatus::Failed
+    };
+    op_monitor
+        .update_status(op_id, status, Some(final_output.clone()))
+        .await;
+
+    if let Some(callback) = callback {
+        let completion_update = crate::callback_system::ProgressUpdate::FinalResult {
+            operation_id: op_id.to_string(),
+            command: program.to_string(),
+            description: format!("Execute {} in {}", program, working_dir),
+            working_directory: working_dir.to_string(),
+            success,
+            duration_ms,
+            full_output: format!(
+                "Exit code: {}\nStdout:\n{}\nStderr:\n{}",
+                exit_code, stdout_str, stderr_str
+            ),
+        };
+        if let Err(e) = callback.send_progress(completion_update).await {
+            tracing::error!("Failed to send completion notification: {:?}", e);
+        } else {
+            tracing::info!("Sent completion notification for operation: {}", op_id);
+        }
+    }
+}
+
+/// Handle cancellation of an operation — shared logic for both execution paths.
+async fn handle_cancellation(
+    monitor: &Arc<OperationMonitor>,
+    callback: &Option<Box<dyn crate::callback_system::CallbackSender>>,
+    op_id: &str,
+    duration_ms: u64,
+) {
+    monitor
+        .update_status(
+            op_id,
+            OperationStatus::Cancelled,
+            Some(Value::String("Operation was cancelled".to_string())),
+        )
+        .await;
+    if let Some(callback) = callback {
+        let reason_owned = match monitor.get_operation(op_id).await {
+            Some(op) => {
+                let val = op.result.clone();
+                val.and_then(|v| v.get("reason").cloned())
+                    .and_then(|v| v.as_str().map(|s| s.to_string()))
+                    .unwrap_or_else(|| "Operation was cancelled".to_string())
+            }
+            None => "Operation was cancelled".to_string(),
+        };
+        let _ = callback
+            .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
+                operation_id: op_id.to_string(),
+                message: reason_owned,
+                duration_ms,
+            })
+            .await;
     }
 }

@@ -290,6 +290,7 @@ async fn handle_sequence_tool_async(
                     timeout: None,
                     callback,
                     subcommand_config: Some(subcommand_config),
+                    log_monitor_config: None,
                 },
             )
             .await;
@@ -361,6 +362,7 @@ pub async fn handle_subcommand_sequence(
                     timeout: None,
                     callback,
                     subcommand_config: Some(step_config),
+                    log_monitor_config: None,
                 },
             )
             .await;
@@ -506,6 +508,8 @@ mod tests {
             step_delay_ms: None,
             availability_check: None,
             install_instructions: None,
+            monitor_level: None,
+            monitor_stream: None,
         }
     }
 

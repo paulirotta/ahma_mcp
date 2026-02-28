@@ -27,6 +27,8 @@ fn create_test_tool_config(name: &str, command: &str) -> ToolConfig {
         step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
+        monitor_level: None,
+        monitor_stream: None,
     }
 }
 
@@ -50,6 +52,8 @@ fn create_tool_config_with_subcommands(
         step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
+        monitor_level: None,
+        monitor_stream: None,
     }
 }
 

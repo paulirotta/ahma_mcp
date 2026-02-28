@@ -129,6 +129,10 @@ pub struct Cli {
     #[arg(long)]
     pub defer_sandbox: bool,
 
+    /// Minimum seconds between successive log monitoring alerts (default: 60)
+    #[arg(long, default_value_t = 60)]
+    pub monitor_rate_limit: u64,
+
     /// Working directories for sandbox scope when using --defer-sandbox.
     /// Required when MCP client may not provide workspace roots.
     /// Example: --working-directories "/path/to/project1,/path/to/project2"

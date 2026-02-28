@@ -31,6 +31,23 @@ impl AhmaMcpService {
                 "format": "path"
             }),
         );
+        properties.insert(
+            "monitor_level".to_string(),
+            serde_json::json!({
+                "type": "string",
+                "description": "Enable live log monitoring at this severity level. When set, stderr/stdout is streamed line-by-line and alerts are pushed when error/warning patterns are detected. Values: error, warn, info, debug, trace",
+                "enum": ["error", "warn", "info", "debug", "trace"]
+            }),
+        );
+        properties.insert(
+            "monitor_stream".to_string(),
+            serde_json::json!({
+                "type": "string",
+                "description": "Which stream to monitor for log patterns (default: stderr). Use 'stdout' for tools like adb logcat that write logs to stdout.",
+                "enum": ["stderr", "stdout", "both"],
+                "default": "stderr"
+            }),
+        );
 
         let mut schema = Map::new();
         schema.insert("type".to_string(), Value::String("object".to_string()));
@@ -87,6 +104,26 @@ impl AhmaMcpService {
 
         let timeout = args.get("timeout_seconds").and_then(|v| v.as_u64());
 
+        // Extract optional log monitoring parameters
+        let log_monitor_config =
+            args.get("monitor_level")
+                .and_then(|v| v.as_str())
+                .map(|level_str| {
+                    let monitor_level: crate::log_monitor::LogLevel = level_str
+                        .parse()
+                        .unwrap_or(crate::log_monitor::LogLevel::Error);
+                    let monitor_stream: crate::log_monitor::MonitorStream = args
+                        .get("monitor_stream")
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or_default();
+                    crate::log_monitor::LogMonitorConfig {
+                        monitor_level,
+                        monitor_stream,
+                        rate_limit_seconds: self.monitor_rate_limit_seconds,
+                    }
+                });
+
         // Determine execution mode
         let execution_mode = if self.force_synchronous {
             crate::adapter::ExecutionMode::Synchronous
@@ -129,6 +166,7 @@ impl AhmaMcpService {
                     timeout,
                     &subcommand_config,
                     &context,
+                    log_monitor_config,
                 )
                 .await
             }
@@ -261,6 +299,7 @@ impl AhmaMcpService {
         timeout: Option<u64>,
         subcommand_config: &crate::config::SubcommandConfig,
         context: &RequestContext<RoleServer>,
+        log_monitor_config: Option<crate::log_monitor::LogMonitorConfig>,
     ) -> Result<CallToolResult, McpError> {
         let operation_id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
         let progress_token = context.meta.get_progress_token();
@@ -286,6 +325,7 @@ impl AhmaMcpService {
                     timeout,
                     callback,
                     subcommand_config: Some(subcommand_config),
+                    log_monitor_config,
                 },
             )
             .await;

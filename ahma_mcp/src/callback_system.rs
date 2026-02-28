@@ -64,13 +64,29 @@ impl CancellationKind {
 fn detect_cancellation_kind(raw_message: &str) -> Option<CancellationKind> {
     let lower = raw_message.to_lowercase();
 
-    if lower.contains("canceled: canceled") || lower == "canceled" {
-        Some(CancellationKind::UnknownSource)
-    } else if lower.contains("task cancelled for reason") {
-        Some(CancellationKind::McpCancellation)
-    } else if lower.contains("timeout") {
-        Some(CancellationKind::Timeout)
-    } else if lower.contains("user") || lower.contains("request") {
+    // Order matters: more specific patterns first
+    const PATTERNS: &[(&str, CancellationKind)] = &[
+        ("canceled: canceled", CancellationKind::UnknownSource),
+        (
+            "task cancelled for reason",
+            CancellationKind::McpCancellation,
+        ),
+        ("timeout", CancellationKind::Timeout),
+    ];
+
+    // Check exact match first
+    if lower == "canceled" {
+        return Some(CancellationKind::UnknownSource);
+    }
+
+    for &(pattern, kind) in PATTERNS {
+        if lower.contains(pattern) {
+            return Some(kind);
+        }
+    }
+
+    // Broader patterns last
+    if lower.contains("user") || lower.contains("request") {
         Some(CancellationKind::UserInitiated)
     } else if lower.contains("cancel") {
         Some(CancellationKind::Generic)
@@ -80,17 +96,13 @@ fn detect_cancellation_kind(raw_message: &str) -> Option<CancellationKind> {
 }
 
 fn format_cancellation_context(tool_name: Option<&str>, operation_id: Option<&str>) -> Vec<String> {
-    let mut parts = Vec::new();
-
-    if let Some(tool) = tool_name {
-        parts.push(format!("Tool: {tool}"));
-    }
-
-    if let Some(op_id) = operation_id {
-        parts.push(format!("Operation: {op_id}"));
-    }
-
-    parts
+    [
+        tool_name.map(|t| format!("Tool: {t}")),
+        operation_id.map(|o| format!("Operation: {o}")),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 /// Represents different types of progress updates during cargo operations
@@ -144,6 +156,15 @@ pub enum ProgressUpdate {
         duration_ms: u64,
         full_output: String,
     },
+    /// Log alert triggered by live monitoring when an error/warning pattern is detected.
+    /// Contains the trigger line plus recent stdout/stderr context for AI analysis.
+    LogAlert {
+        operation_id: String,
+        /// The detected severity of the trigger line.
+        trigger_level: String,
+        /// Pre-formatted context snapshot (trigger + recent stdout + stderr).
+        context_snapshot: String,
+    },
 }
 
 impl fmt::Display for ProgressUpdate {
@@ -162,14 +183,10 @@ impl fmt::Display for ProgressUpdate {
                 percentage,
                 current_step,
             } => {
-                let progress_str = match percentage {
-                    Some(p) => format!(" ({p:.1}%)"),
-                    None => String::new(),
-                };
-                let step_str = match current_step {
-                    Some(s) => format!(" [{s}]"),
-                    None => String::new(),
-                };
+                let progress_str = percentage.map_or(String::new(), |p| format!(" ({p:.1}%)"));
+                let step_str = current_step
+                    .as_deref()
+                    .map_or(String::new(), |s| format!(" [{s}]"));
                 write!(
                     f,
                     "[{operation_id}] Progress{progress_str}: {message}{step_str}"
@@ -219,6 +236,16 @@ impl fmt::Display for ProgressUpdate {
             } => {
                 let status = if *success { "COMPLETED" } else { "FAILED" };
                 write!(f, "[{operation_id}] {status}: {command}\n{full_output}")
+            }
+            ProgressUpdate::LogAlert {
+                operation_id,
+                trigger_level,
+                context_snapshot,
+            } => {
+                write!(
+                    f,
+                    "[{operation_id}] LOG_ALERT ({trigger_level}):\n{context_snapshot}"
+                )
             }
         }
     }

@@ -408,6 +408,7 @@ async fn test_execute_async_with_empty_options() {
         timeout: None,
         callback: None,
         subcommand_config: None,
+        log_monitor_config: None,
     };
 
     let result = adapter
@@ -525,6 +526,7 @@ async fn test_async_execution_with_custom_operation_id() {
         timeout: Some(10),
         callback: None,
         subcommand_config: None,
+        log_monitor_config: None,
     };
 
     let result = adapter

@@ -303,6 +303,8 @@ mod main_tests {
                 step_delay_ms: None,
                 availability_check: None,
                 install_instructions: None,
+                monitor_level: None,
+                monitor_stream: None,
             },
         );
 

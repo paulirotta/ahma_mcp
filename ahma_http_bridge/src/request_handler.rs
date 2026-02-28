@@ -122,38 +122,38 @@ async fn handle_initialize(session_manager: &SessionManager, payload: &Value) ->
 
     info!("Creating new session for initialize request");
 
-    match session_manager.create_session().await {
-        Ok(new_session_id) => {
-            info!(
-                session_id = %new_session_id,
-                "Session created, forwarding initialize request"
-            );
-
-            let init_timeout = Duration::from_secs(request_timeout_secs());
-            match session_manager
-                .send_request(&new_session_id, payload, Some(init_timeout))
-                .await
-            {
-                Ok(response) => with_session_header(json_response(response), &new_session_id),
-                Err(e) => {
-                    error!(
-                        session_id = %new_session_id,
-                        "Failed to send initialize request: {}", e
-                    );
-                    // Clean up failed session
-                    let _ = session_manager
-                        .terminate_session(
-                            &new_session_id,
-                            crate::session::SessionTerminationReason::ProcessCrashed,
-                        )
-                        .await;
-                    error_response(-32603, &format!("Failed to initialize session: {}", e))
-                }
-            }
-        }
+    let new_session_id = match session_manager.create_session().await {
+        Ok(id) => id,
         Err(e) => {
             error!("Failed to create session: {}", e);
-            error_response(-32603, &format!("Failed to create session: {}", e))
+            return error_response(-32603, &format!("Failed to create session: {}", e));
+        }
+    };
+
+    info!(
+        session_id = %new_session_id,
+        "Session created, forwarding initialize request"
+    );
+
+    let init_timeout = Duration::from_secs(request_timeout_secs());
+    match session_manager
+        .send_request(&new_session_id, payload, Some(init_timeout))
+        .await
+    {
+        Ok(response) => with_session_header(json_response(response), &new_session_id),
+        Err(e) => {
+            error!(
+                session_id = %new_session_id,
+                "Failed to send initialize request: {}", e
+            );
+            // Clean up failed session
+            let _ = session_manager
+                .terminate_session(
+                    &new_session_id,
+                    crate::session::SessionTerminationReason::ProcessCrashed,
+                )
+                .await;
+            error_response(-32603, &format!("Failed to initialize session: {}", e))
         }
     }
 }
@@ -208,11 +208,14 @@ async fn handle_existing_session_request(
     let is_client_response = is_client_response(method, payload);
 
     // Wait for initialization if needed
-    if !is_initialized_notification
-        && !is_client_response
-        && let Some(session) = session_manager.get_session(session_id)
-        && !session.is_mcp_initialized()
-        && let Some(response) = wait_for_initialization(&session, session_id, method).await
+    if let Some(response) = check_initialization_required(
+        session_manager,
+        session_id,
+        method,
+        is_initialized_notification,
+        is_client_response,
+    )
+    .await
     {
         return response;
     }
@@ -230,6 +233,28 @@ async fn handle_existing_session_request(
         is_initialized_notification,
     )
     .await
+}
+
+/// Checks whether MCP initialization is required and waits for it if so.
+///
+/// Returns `Some(Response)` if initialization timed out, `None` to proceed.
+async fn check_initialization_required(
+    session_manager: &SessionManager,
+    session_id: &str,
+    method: Option<&str>,
+    is_initialized_notification: bool,
+    is_client_response: bool,
+) -> Option<Response> {
+    if is_initialized_notification || is_client_response {
+        return None;
+    }
+
+    let session = session_manager.get_session(session_id)?;
+    if session.is_mcp_initialized() {
+        return None;
+    }
+
+    wait_for_initialization(&session, session_id, method).await
 }
 
 fn is_client_response(method: Option<&str>, payload: &Value) -> bool {
@@ -257,20 +282,11 @@ fn check_sandbox_lock(session_manager: &SessionManager, session_id: &str) -> Opt
     );
 
     if let Some(elapsed_secs) = session.is_handshake_timed_out() {
-        let roots_requirement = if session_manager.requires_client_roots() {
-            "No explicit server sandbox scope is configured; client roots/list is required."
-        } else {
-            "Server has explicit fallback sandbox scope configured for no-roots clients."
-        };
-
-        let error_msg = format!(
-            "Handshake timeout after {}s - sandbox not locked. \
-                SSE connected: {}, MCP initialized: {}. \
-                Ensure client: 1) opens SSE stream (GET /mcp with session header), \
-                2) sends notifications/initialized, \
-                3) responds to roots/list request over SSE. {} \
-                Use --handshake-timeout-secs to adjust timeout.",
-            elapsed_secs, sse_connected, mcp_initialized, roots_requirement
+        let error_msg = handshake_timeout_message(
+            elapsed_secs,
+            sse_connected,
+            mcp_initialized,
+            session_manager.requires_client_roots(),
         );
 
         error!(
@@ -296,6 +312,30 @@ fn check_sandbox_lock(session_manager: &SessionManager, session_id: &str) -> Opt
         error_response_with_status(StatusCode::CONFLICT, -32001, conflict_message),
         session_id,
     ))
+}
+
+/// Build the detailed error message for a handshake timeout.
+fn handshake_timeout_message(
+    elapsed_secs: u64,
+    sse_connected: bool,
+    mcp_initialized: bool,
+    requires_roots: bool,
+) -> String {
+    let roots_requirement = if requires_roots {
+        "No explicit server sandbox scope is configured; client roots/list is required."
+    } else {
+        "Server has explicit fallback sandbox scope configured for no-roots clients."
+    };
+
+    format!(
+        "Handshake timeout after {}s - sandbox not locked. \
+            SSE connected: {}, MCP initialized: {}. \
+            Ensure client: 1) opens SSE stream (GET /mcp with session header), \
+            2) sends notifications/initialized, \
+            3) responds to roots/list request over SSE. {} \
+            Use --handshake-timeout-secs to adjust timeout.",
+        elapsed_secs, sse_connected, mcp_initialized, roots_requirement
+    )
 }
 
 /// Waits for MCP initialization before forwarding a request.

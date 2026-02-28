@@ -165,6 +165,7 @@ async fn test_multiline_argument_with_echo() {
                 timeout: Some(10),
                 callback: None,
                 subcommand_config: Some(&echo_config),
+                log_monitor_config: None,
             },
         )
         .await;
@@ -288,6 +289,7 @@ async fn test_multiline_git_commit_with_real_tool() {
                 timeout: Some(30),
                 callback: None,
                 subcommand_config: Some(commit_subcommand),
+                log_monitor_config: None,
             },
         )
         .await;
@@ -466,6 +468,7 @@ async fn test_multiline_git_commit_message() {
                 timeout: Some(30),
                 callback: None,
                 subcommand_config: Some(&commit_config),
+                log_monitor_config: None,
             },
         )
         .await;
@@ -605,6 +608,7 @@ async fn test_special_characters_in_arguments() {
                 timeout: Some(10),
                 callback: None,
                 subcommand_config: Some(&echo_config),
+                log_monitor_config: None,
             },
         )
         .await;

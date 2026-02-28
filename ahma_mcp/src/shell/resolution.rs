@@ -299,6 +299,8 @@ mod tests {
             step_delay_ms: None,
             availability_check: None,
             install_instructions: None,
+            monitor_level: None,
+            monitor_stream: None,
         }
     }
 
@@ -323,6 +325,8 @@ mod tests {
             step_delay_ms: None,
             availability_check: None,
             install_instructions: None,
+            monitor_level: None,
+            monitor_stream: None,
         }
     }
 

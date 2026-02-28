@@ -24,6 +24,8 @@ fn test_tool_config_defaults() {
         step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
+        monitor_level: None,
+        monitor_stream: None,
     };
 
     assert_eq!(config.name, "test_tool");
@@ -171,6 +173,8 @@ fn test_tool_config_serialization() {
         step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
+        monitor_level: None,
+        monitor_stream: None,
     };
 
     let json = serde_json::to_string_pretty(&config).unwrap();
@@ -587,6 +591,8 @@ fn test_sequence_tool_config() {
         step_delay_ms: Some(100),
         availability_check: None,
         install_instructions: None,
+        monitor_level: None,
+        monitor_stream: None,
     };
 
     assert_eq!(config.name, "example_sequence");

@@ -76,6 +76,8 @@ fn base_tool(command: &str) -> ToolConfig {
         guidance_key: None,
         availability_check: None,
         install_instructions: None,
+        monitor_level: None,
+        monitor_stream: None,
     }
 }
 
@@ -561,7 +563,6 @@ fn test_disabled_subcommand_struct() {
         install_instructions: None,
     };
 
-    // Test Clone trait
     let cloned = sub.clone();
     assert_eq!(cloned.tool, "parent_tool");
     assert_eq!(cloned.subcommand_path, "sub_a_sub_b");

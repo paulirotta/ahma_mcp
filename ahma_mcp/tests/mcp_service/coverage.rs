@@ -121,6 +121,8 @@ fn test_tool_config_creation() {
         step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
+        monitor_level: None,
+        monitor_stream: None,
     };
 
     assert_eq!(tool_config.name, "cargo");
@@ -278,6 +280,8 @@ async fn test_service_with_configs() {
         step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
+        monitor_level: None,
+        monitor_stream: None,
     };
     configs.insert("test_tool".to_string(), tool_config);
 
@@ -383,6 +387,8 @@ fn test_tool_config_with_nested_subcommands() {
         step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
+        monitor_level: None,
+        monitor_stream: None,
     };
 
     assert_eq!(tool_config.name, "cargo");
@@ -440,6 +446,8 @@ async fn test_service_with_tool_configs() {
         step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
+        monitor_level: None,
+        monitor_stream: None,
     };
     configs.insert("cargo".to_string(), tool_config);
 

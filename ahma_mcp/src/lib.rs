@@ -77,6 +77,8 @@ pub mod client_type;
 pub mod config;
 /// Constants used for guidance and tool hints.
 pub mod constants;
+/// Live log monitoring for streaming processes.
+pub mod log_monitor;
 /// Logging helpers for the core crate.
 pub mod logging;
 /// MCP callback sender integration.

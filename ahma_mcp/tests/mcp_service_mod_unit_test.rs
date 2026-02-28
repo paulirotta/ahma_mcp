@@ -373,6 +373,8 @@ async fn test_update_tools_replaces_configs() {
                 step_delay_ms: None,
                 availability_check: None,
                 install_instructions: None,
+                monitor_level: None,
+                monitor_stream: None,
             },
         );
     }
@@ -398,6 +400,8 @@ async fn test_update_tools_replaces_configs() {
             step_delay_ms: None,
             availability_check: None,
             install_instructions: None,
+            monitor_level: None,
+            monitor_stream: None,
         },
     );
     new_configs.insert(
@@ -417,6 +421,8 @@ async fn test_update_tools_replaces_configs() {
             step_delay_ms: None,
             availability_check: None,
             install_instructions: None,
+            monitor_level: None,
+            monitor_stream: None,
         },
     );
 

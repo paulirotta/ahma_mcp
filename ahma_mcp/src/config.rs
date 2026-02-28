@@ -88,6 +88,15 @@ pub struct ToolConfig {
     /// Installation guidance displayed when the tool is unavailable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub install_instructions: Option<String>,
+    /// Default log monitor level for this tool. When set, all invocations of this tool
+    /// will have live log monitoring enabled at this severity.
+    /// Values: "error", "warn", "info", "debug", "trace"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub monitor_level: Option<String>,
+    /// Which stream to monitor for log patterns (default: "stderr").
+    /// Values: "stderr", "stdout", "both"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub monitor_stream: Option<String>,
 }
 
 /// Configuration for a subcommand, allowing for nested commands.

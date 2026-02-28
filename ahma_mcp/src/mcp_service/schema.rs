@@ -23,27 +23,24 @@ pub fn normalize_option_type(option_type: &str) -> &'static str {
 
 /// Builds the items schema for array-type options.
 pub fn build_items_schema(option: &CommandOption) -> Map<String, Value> {
-    let mut items_schema = Map::new();
+    let mut schema = Map::new();
 
     if let Some(spec) = option.items.as_ref() {
-        items_schema.insert("type".to_string(), Value::String(spec.item_type.clone()));
-        if let Some(format) = &spec.format {
-            items_schema.insert("format".to_string(), Value::String(format.clone()));
+        schema.insert("type".into(), Value::String(spec.item_type.clone()));
+        if let Some(f) = &spec.format {
+            schema.insert("format".into(), Value::String(f.clone()));
         }
-        if let Some(description) = &spec.description {
-            items_schema.insert(
-                "description".to_string(),
-                Value::String(description.clone()),
-            );
+        if let Some(d) = &spec.description {
+            schema.insert("description".into(), Value::String(d.clone()));
         }
-    } else {
-        items_schema.insert("type".to_string(), Value::String("string".to_string()));
-        if let Some(format) = &option.format {
-            items_schema.insert("format".to_string(), Value::String(format.clone()));
-        }
+        return schema;
     }
 
-    items_schema
+    schema.insert("type".into(), Value::String("string".into()));
+    if let Some(f) = &option.format {
+        schema.insert("format".into(), Value::String(f.clone()));
+    }
+    schema
 }
 
 /// Generates the JSON schema for a subcommand's options.
@@ -66,28 +63,43 @@ pub fn get_schema_for_options(sub_config: &SubcommandConfig) -> (Map<String, Val
     (properties, required)
 }
 
+/// Builds a JSON schema map for a single argument or option.
+fn build_arg_schema(arg: &CommandOption) -> Map<String, Value> {
+    let mut schema = Map::new();
+    let param_type = normalize_option_type(&arg.option_type);
+    schema.insert("type".to_string(), Value::String(param_type.to_string()));
+    if let Some(ref desc) = arg.description {
+        schema.insert("description".to_string(), Value::String(desc.clone()));
+    }
+    if let Some(ref format) = arg.format {
+        schema.insert("format".to_string(), Value::String(format.clone()));
+    }
+    if param_type == "array" {
+        let items_schema = build_items_schema(arg);
+        schema.insert("items".to_string(), Value::Object(items_schema));
+    }
+    schema
+}
+
+fn insert_arg(arg: &CommandOption, properties: &mut Map<String, Value>, required: &mut Vec<Value>) {
+    let schema = build_arg_schema(arg);
+    properties.insert(arg.name.clone(), Value::Object(schema));
+    if arg.required.unwrap_or(false) {
+        required.push(Value::String(arg.name.clone()));
+    }
+}
+
 fn process_option(
     option: &CommandOption,
     properties: &mut Map<String, Value>,
     required: &mut Vec<Value>,
 ) {
-    let mut option_schema = Map::new();
-    let param_type = normalize_option_type(&option.option_type);
-    option_schema.insert("type".to_string(), Value::String(param_type.to_string()));
-    if param_type == "array" {
-        let items_schema = build_items_schema(option);
-        option_schema.insert("items".to_string(), Value::Object(items_schema));
-    }
-    option_schema.insert(
-        "description".to_string(),
-        Value::String(option.description.clone().unwrap_or_default()),
-    );
-    if let Some(format) = &option.format {
-        option_schema.insert("format".to_string(), Value::String(format.clone()));
-    }
-
-    properties.insert(option.name.clone(), Value::Object(option_schema));
-
+    // Options always emit a description (defaulting to empty string)
+    let mut schema = build_arg_schema(option);
+    schema
+        .entry("description")
+        .or_insert_with(|| Value::String(String::new()));
+    properties.insert(option.name.clone(), Value::Object(schema));
     if option.required.unwrap_or(false) {
         required.push(Value::String(option.name.clone()));
     }
@@ -98,22 +110,17 @@ fn process_positional_arg(
     properties: &mut Map<String, Value>,
     required: &mut Vec<Value>,
 ) {
-    let mut arg_schema = Map::new();
-    let param_type = normalize_option_type(&arg.option_type);
-    arg_schema.insert("type".to_string(), Value::String(param_type.to_string()));
-    if let Some(ref desc) = arg.description {
-        arg_schema.insert("description".to_string(), Value::String(desc.clone()));
-    }
-    if let Some(ref format) = arg.format {
-        arg_schema.insert("format".to_string(), Value::String(format.clone()));
-    }
-    if param_type == "array" {
-        let items_schema = build_items_schema(arg);
-        arg_schema.insert("items".to_string(), Value::Object(items_schema));
-    }
-    properties.insert(arg.name.clone(), Value::Object(arg_schema));
-    if arg.required.unwrap_or(false) {
-        required.push(Value::String(arg.name.clone()));
+    insert_arg(arg, properties, required);
+}
+
+/// Builds the path for a subcommand given its prefix and name.
+fn subcommand_path(prefix: &str, name: &str) -> String {
+    if prefix.is_empty() {
+        name.to_string()
+    } else if name == "default" {
+        prefix.to_string()
+    } else {
+        format!("{}_{}", prefix, name)
     }
 }
 
@@ -128,13 +135,7 @@ pub fn collect_leaf_subcommands<'a>(
             continue;
         }
 
-        let current_path = if prefix.is_empty() {
-            sub.name.clone()
-        } else if sub.name == "default" {
-            prefix.to_string()
-        } else {
-            format!("{}_{}", prefix, sub.name)
-        };
+        let current_path = subcommand_path(prefix, &sub.name);
 
         if let Some(nested_subcommands) = &sub.subcommand {
             collect_leaf_subcommands(nested_subcommands, &current_path, leaves);
@@ -203,6 +204,33 @@ fn generate_single_command_schema(
     schema
 }
 
+/// Processes a single subcommand entry for multi-command schema generation.
+///
+/// Returns the enum value and an optional `oneOf` entry (with if/then clause).
+fn build_subcommand_entry(
+    path: &str,
+    sub_config: &SubcommandConfig,
+    all_properties: &mut Map<String, Value>,
+) -> (Value, Value) {
+    let (sub_properties, sub_required) = get_schema_for_options(sub_config);
+    all_properties.extend(sub_properties);
+
+    let if_clause = serde_json::json!({
+        "properties": { "subcommand": { "const": path } }
+    });
+
+    let mut one_of_entry = Map::new();
+    one_of_entry.insert("if".to_string(), if_clause);
+    if !sub_required.is_empty() {
+        one_of_entry.insert(
+            "then".to_string(),
+            serde_json::json!({ "required": sub_required }),
+        );
+    }
+
+    (Value::String(path.to_string()), Value::Object(one_of_entry))
+}
+
 fn generate_multi_command_schema(
     tool_config: &ToolConfig,
     leaf_subcommands: &[(String, &SubcommandConfig)],
@@ -212,27 +240,9 @@ fn generate_multi_command_schema(
     let mut subcommand_enum = Vec::new();
 
     for (path, sub_config) in leaf_subcommands {
-        subcommand_enum.push(Value::String(path.clone()));
-        let (sub_properties, sub_required) = get_schema_for_options(sub_config);
-
-        // Merge properties into the main properties map
-        all_properties.extend(sub_properties);
-
-        let mut then_clause = Map::new();
-        if !sub_required.is_empty() {
-            then_clause.insert("required".to_string(), Value::Array(sub_required));
-        }
-
-        let if_clause = serde_json::json!({
-            "properties": { "subcommand": { "const": path } }
-        });
-
-        let mut one_of_entry = Map::new();
-        one_of_entry.insert("if".to_string(), if_clause);
-        if !then_clause.is_empty() {
-            one_of_entry.insert("then".to_string(), Value::Object(then_clause));
-        }
-        one_of.push(Value::Object(one_of_entry));
+        let (enum_val, entry) = build_subcommand_entry(path, sub_config, &mut all_properties);
+        subcommand_enum.push(enum_val);
+        one_of.push(entry);
     }
 
     if !subcommand_enum.is_empty() {

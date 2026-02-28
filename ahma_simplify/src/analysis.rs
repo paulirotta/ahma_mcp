@@ -171,14 +171,13 @@ fn is_matching_source_file(
     allowed_exts: &std::collections::HashSet<&str>,
     custom_excludes: &[String],
 ) -> bool {
-    let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
-        return false;
-    };
-    let ext_lower = ext.to_lowercase();
-    if !allowed_exts.is_empty() && !allowed_exts.contains(ext_lower.as_str()) {
-        return false;
-    }
-    !should_exclude(path, custom_excludes)
+    let has_allowed_ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|ext| {
+            allowed_exts.is_empty() || allowed_exts.contains(ext.to_lowercase().as_str())
+        });
+    has_allowed_ext && !should_exclude(path, custom_excludes)
 }
 
 /// Iterate source files in `dir` matching extension and exclusion filters.
@@ -242,19 +241,23 @@ fn workspace_analysis_dirs(directory: &Path, is_workspace: bool) -> Result<Vec<P
     Ok(member_dirs)
 }
 
+/// Parse `[workspace] members` from a Cargo.toml string.
+fn parse_workspace_members(content: &str) -> Option<Vec<String>> {
+    let value: toml::Value = content.parse().ok()?;
+    let members = value.get("workspace")?.get("members")?.as_array()?;
+    let names: Vec<String> = members
+        .iter()
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect();
+    (!names.is_empty()).then_some(names)
+}
+
 /// Detect workspace members from Cargo.toml `[workspace] members`, or fall
 /// back to discovering subdirectories that contain a Cargo.toml.
 fn get_workspace_members(dir: &Path) -> Result<Vec<String>> {
     let explicit = fs::read_to_string(dir.join("Cargo.toml"))
         .ok()
-        .and_then(|c| c.parse::<toml::Value>().ok())
-        .and_then(|v| v.get("workspace")?.get("members")?.as_array().cloned())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(str::to_string))
-                .collect::<Vec<_>>()
-        })
-        .filter(|v: &Vec<String>| !v.is_empty());
+        .and_then(|c| parse_workspace_members(&c));
     Ok(explicit.unwrap_or_else(|| discover_member_directories(dir)))
 }
 
@@ -268,11 +271,11 @@ fn discover_member_directories(dir: &Path) -> Vec<String> {
         .filter_map(|entry| {
             let path = entry.path();
             let name = path.file_name()?.to_str()?;
-            let dominated = !path.is_dir()
-                || !path.join("Cargo.toml").exists()
-                || name == "target"
-                || name.starts_with('.');
-            (!dominated).then(|| name.to_string())
+            let is_member = path.is_dir()
+                && path.join("Cargo.toml").exists()
+                && name != "target"
+                && !name.starts_with('.');
+            is_member.then(|| name.to_string())
         })
         .collect()
 }
@@ -316,12 +319,7 @@ pub fn get_package_name(path: &Path, base_dir: &Path) -> String {
 }
 
 pub fn is_cargo_workspace(dir: &Path) -> bool {
-    let cargo_toml = dir.join("Cargo.toml");
-    if !cargo_toml.exists() {
-        return false;
-    }
-
-    fs::read_to_string(cargo_toml)
+    fs::read_to_string(dir.join("Cargo.toml"))
         .map(|content| content.contains("[workspace]"))
         .unwrap_or(false)
 }

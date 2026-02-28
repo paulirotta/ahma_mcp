@@ -46,6 +46,20 @@
         "null"
       ]
     },
+    "monitor_level": {
+      "description": "Default log monitor level for this tool. When set, all invocations of this tool\nwill have live log monitoring enabled at this severity.\nValues: \"error\", \"warn\", \"info\", \"debug\", \"trace\"",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "monitor_stream": {
+      "description": "Which stream to monitor for log patterns (default: \"stderr\").\nValues: \"stderr\", \"stdout\", \"both\"",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "name": {
       "type": "string"
     },

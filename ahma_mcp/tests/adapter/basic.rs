@@ -214,6 +214,7 @@ async fn test_execute_async_with_options() {
         timeout: Some(10),
         callback: None,
         subcommand_config: None,
+        log_monitor_config: None,
     };
 
     let result = adapter
@@ -376,6 +377,7 @@ async fn test_async_exec_options_creation() {
         timeout: Some(30),
         callback: None,
         subcommand_config: None,
+        log_monitor_config: None,
     };
 
     assert_eq!(options.operation_id, Some("test_op".to_string()));

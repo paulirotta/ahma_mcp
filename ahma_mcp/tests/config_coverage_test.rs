@@ -147,6 +147,8 @@ fn test_tool_config_serialization_roundtrip() {
         step_delay_ms: None,
         availability_check: None,
         install_instructions: None,
+        monitor_level: None,
+        monitor_stream: None,
     };
 
     let serialized = serde_json::to_string(&config).unwrap();

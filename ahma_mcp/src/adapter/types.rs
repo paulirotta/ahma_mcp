@@ -27,4 +27,7 @@ pub struct AsyncExecOptions<'a> {
     pub callback: Option<Box<dyn crate::callback_system::CallbackSender>>,
     /// Subcommand configuration for handling positional arguments and aliases.
     pub subcommand_config: Option<&'a crate::config::SubcommandConfig>,
+    /// Optional log monitor configuration for live stderr/stdout monitoring.
+    /// When set, the adapter streams output line-by-line instead of collecting it all at once.
+    pub log_monitor_config: Option<crate::log_monitor::LogMonitorConfig>,
 }

@@ -121,6 +121,8 @@ mod mcp_service_tests {
             input_schema: None,
             availability_check: None,
             install_instructions: None,
+            monitor_level: None,
+            monitor_stream: None,
             subcommand: Some(vec![SubcommandConfig {
                 name: "build".to_string(),
                 description: "Build the project".to_string(),

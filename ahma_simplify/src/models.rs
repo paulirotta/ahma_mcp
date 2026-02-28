@@ -79,23 +79,25 @@ impl FunctionHotspot {
 
     fn collect_functions(spaces: &[SpaceEntry], hotspots: &mut Vec<FunctionHotspot>) {
         for entry in spaces {
-            if entry.kind == "function" && entry.name != "<anonymous>" {
-                let cognitive = entry.metrics.cognitive.sum;
-                let cyclomatic = entry.metrics.cyclomatic.sum;
-                let sloc = entry.metrics.loc.sloc;
-                if cognitive > 0.0 || cyclomatic > 1.0 {
-                    hotspots.push(FunctionHotspot {
-                        name: entry.name.clone(),
-                        start_line: entry.start_line,
-                        end_line: entry.end_line,
-                        cognitive,
-                        cyclomatic,
-                        sloc,
-                    });
-                }
-            }
             Self::collect_functions(&entry.spaces, hotspots);
+            if !Self::is_nontrivial_function(entry) {
+                continue;
+            }
+            hotspots.push(FunctionHotspot {
+                name: entry.name.clone(),
+                start_line: entry.start_line,
+                end_line: entry.end_line,
+                cognitive: entry.metrics.cognitive.sum,
+                cyclomatic: entry.metrics.cyclomatic.sum,
+                sloc: entry.metrics.loc.sloc,
+            });
         }
+    }
+
+    fn is_nontrivial_function(entry: &SpaceEntry) -> bool {
+        entry.kind == "function"
+            && entry.name != "<anonymous>"
+            && (entry.metrics.cognitive.sum > 0.0 || entry.metrics.cyclomatic.sum > 1.0)
     }
 }
 
@@ -117,20 +119,25 @@ pub enum Language {
 
 impl Language {
     pub fn from_path(path: &std::path::Path) -> Self {
-        match path.extension().and_then(|ext| ext.to_str()) {
-            Some("rs") => Language::Rust,
-            Some("py") => Language::Python,
-            Some("js") | Some("jsx") => Language::JavaScript,
-            Some("ts") | Some("tsx") => Language::TypeScript,
-            Some("cpp") | Some("cc") | Some("cxx") | Some("hpp") | Some("hxx") | Some("hh") => {
-                Language::Cpp
-            }
-            Some("c") | Some("h") => Language::C,
-            Some("java") => Language::Java,
-            Some("cs") => Language::CSharp,
-            Some("go") => Language::Go,
-            Some("html") | Some("htm") => Language::Html,
-            Some("css") => Language::Css,
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .map(Self::from_extension)
+            .unwrap_or(Language::Unknown)
+    }
+
+    fn from_extension(ext: &str) -> Language {
+        match ext {
+            "rs" => Language::Rust,
+            "py" => Language::Python,
+            "js" | "jsx" => Language::JavaScript,
+            "ts" | "tsx" => Language::TypeScript,
+            "cpp" | "cc" | "cxx" | "hpp" | "hxx" | "hh" => Language::Cpp,
+            "c" | "h" => Language::C,
+            "java" => Language::Java,
+            "cs" => Language::CSharp,
+            "go" => Language::Go,
+            "html" | "htm" => Language::Html,
+            "css" => Language::Css,
             _ => Language::Unknown,
         }
     }
@@ -190,41 +197,18 @@ impl FileSimplicity {
     /// Complexity is normalized by SLOC to calculate "complexity density" per 100 lines.
     /// A file with 1 complexity point per line (density = 100 per 100 lines) receives a 0 component score.
     pub fn calculate(results: &MetricsResults, normalized: bool) -> Self {
-        let file_mi = results.metrics.mi.mi_visual_studio;
         let cognitive = results.metrics.cognitive.sum;
         let cyclomatic = results.metrics.cyclomatic.sum;
         let sloc = results.metrics.loc.sloc;
-
-        // File-level MI from rust-code-analysis is often 0 because the raw
-        // mi_original goes negative for large files and the Visual Studio
-        // variant clamps to 0. Individual functions have accurate MI values,
-        // so compute a SLOC-weighted average of function-level MIs as fallback.
-        let mi = if file_mi == 0.0 && !results.spaces.is_empty() {
-            Self::weighted_function_mi(&results.spaces).unwrap_or(file_mi)
-        } else {
-            file_mi
-        };
+        let mi = Self::resolve_mi(results.metrics.mi.mi_visual_studio, &results.spaces);
 
         let score = if mi == 0.0 && cognitive == 0.0 && cyclomatic <= 1.0 {
             // Trivial/empty files get perfect score
             100.0
         } else {
             let mi_score = mi.clamp(0.0, 100.0);
-
-            let (cog_score, cyc_score) = if normalized {
-                // Normalize complexity by SLOC (points per 100 lines)
-                let sloc_factor = sloc.max(1.0);
-                let cog_density = (cognitive / sloc_factor) * 100.0;
-                let cyc_density = (cyclomatic / sloc_factor) * 100.0;
-
-                (
-                    (100.0 - cog_density).max(0.0),
-                    (100.0 - cyc_density).max(0.0),
-                )
-            } else {
-                ((100.0 - cognitive).max(0.0), (100.0 - cyclomatic).max(0.0))
-            };
-
+            let (cog_score, cyc_score) =
+                Self::complexity_scores(cognitive, cyclomatic, sloc, normalized);
             0.6 * mi_score + 0.2 * cog_score + 0.2 * cyc_score
         };
 
@@ -239,6 +223,40 @@ impl FileSimplicity {
             sloc,
             mi,
             hotspots,
+        }
+    }
+
+    /// Resolves the effective MI value for a file.
+    ///
+    /// File-level MI from rust-code-analysis is often 0 because the raw
+    /// mi_original goes negative for large files and the Visual Studio
+    /// variant clamps to 0. Individual functions have accurate MI values,
+    /// so compute a SLOC-weighted average of function-level MIs as fallback.
+    fn resolve_mi(file_mi: f64, spaces: &[SpaceEntry]) -> f64 {
+        if file_mi == 0.0 && !spaces.is_empty() {
+            Self::weighted_function_mi(spaces).unwrap_or(file_mi)
+        } else {
+            file_mi
+        }
+    }
+
+    /// Computes cognitive and cyclomatic component scores.
+    fn complexity_scores(
+        cognitive: f64,
+        cyclomatic: f64,
+        sloc: f64,
+        normalized: bool,
+    ) -> (f64, f64) {
+        if normalized {
+            let sloc_factor = sloc.max(1.0);
+            let cog_density = (cognitive / sloc_factor) * 100.0;
+            let cyc_density = (cyclomatic / sloc_factor) * 100.0;
+            (
+                (100.0 - cog_density).max(0.0),
+                (100.0 - cyc_density).max(0.0),
+            )
+        } else {
+            ((100.0 - cognitive).max(0.0), (100.0 - cyclomatic).max(0.0))
         }
     }
 
@@ -261,15 +279,15 @@ impl FileSimplicity {
         total_weight: &mut f64,
     ) {
         for entry in spaces {
-            if entry.kind == "function" && entry.name != "<anonymous>" {
-                let fn_sloc = entry.metrics.loc.sloc;
-                let fn_mi = entry.metrics.mi.mi_visual_studio;
-                if fn_sloc > 0.0 {
-                    *weighted_sum += fn_mi * fn_sloc;
-                    *total_weight += fn_sloc;
-                }
-            }
             Self::accumulate_function_mi(&entry.spaces, weighted_sum, total_weight);
+            if entry.kind != "function"
+                || entry.name == "<anonymous>"
+                || entry.metrics.loc.sloc <= 0.0
+            {
+                continue;
+            }
+            *weighted_sum += entry.metrics.mi.mi_visual_studio * entry.metrics.loc.sloc;
+            *total_weight += entry.metrics.loc.sloc;
         }
     }
 }

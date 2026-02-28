@@ -779,6 +779,7 @@ async fn test_complex_async_exec_options() -> Result<()> {
         timeout: Some(15),
         callback: Some(Box::new(callback.clone())),
         subcommand_config: Some(&subcommand_config),
+        log_monitor_config: None,
     };
 
     let operation_id = adapter
