@@ -138,50 +138,58 @@ fn run_sandboxed_command(
     }
 }
 
-/// Apply Landlock rules to the current process.
-/// This restricts file system access to the sandbox scope.
-fn apply_landlock_rules(sandbox_scope: &str) -> std::io::Result<()> {
-    let sandbox_path = Path::new(sandbox_scope);
-    let abi = ABI::V3;
-
+/// Create a Landlock ruleset allowing full access to `sandbox_scope`.
+fn create_ruleset_with_scope(
+    sandbox_path: &Path,
+    abi: ABI,
+) -> std::io::Result<landlock::RulesetCreated> {
     let access_all = AccessFs::from_all(abi);
-    let access_read = AccessFs::from_read(abi);
-
     let mut ruleset = Ruleset::default()
         .handle_access(access_all)
         .map_err(|e| std::io::Error::other(e.to_string()))?
         .create()
         .map_err(|e| std::io::Error::other(e.to_string()))?;
-
-    // Allow full access to sandbox scope
     ruleset = ruleset
         .add_rule(PathBeneath::new(
             PathFd::new(sandbox_path).map_err(|e| std::io::Error::other(e.to_string()))?,
             access_all,
         ))
         .map_err(|e| std::io::Error::other(e.to_string()))?;
+    Ok(ruleset)
+}
 
-    // Allow read access to system directories needed for execution
-    let system_paths = ["/usr", "/bin", "/etc", "/lib", "/lib64", "/proc", "/dev"];
+const SYSTEM_PATHS: &[&str] = &["/usr", "/bin", "/etc", "/lib", "/lib64", "/proc", "/dev"];
 
-    for path in &system_paths {
+/// Add read-only access rules for standard system directories.
+fn add_system_read_rules(ruleset: &mut landlock::RulesetCreated, abi: ABI) {
+    let access_read = AccessFs::from_read(abi);
+    for path in SYSTEM_PATHS {
         let path_obj = Path::new(path);
         if path_obj.exists()
             && let Ok(fd) = PathFd::new(path_obj)
         {
-            let _ = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read));
+            let _ = ruleset.add_rule(PathBeneath::new(fd, access_read));
         }
     }
+}
+
+/// Apply Landlock rules to the current process.
+/// This restricts file system access to the sandbox scope.
+fn apply_landlock_rules(sandbox_scope: &str) -> std::io::Result<()> {
+    let sandbox_path = Path::new(sandbox_scope);
+    let abi = ABI::V3;
+
+    let mut ruleset = create_ruleset_with_scope(sandbox_path, abi)?;
+    add_system_read_rules(&mut ruleset, abi);
 
     // Also allow /tmp for temporary files during execution
     if let Ok(fd) = PathFd::new(Path::new("/tmp")) {
-        let _ = (&mut ruleset).add_rule(PathBeneath::new(fd, access_all));
+        let _ = ruleset.add_rule(PathBeneath::new(fd, AccessFs::from_all(abi)));
     }
 
     ruleset
         .restrict_self()
         .map_err(|e| std::io::Error::other(e.to_string()))?;
-
     Ok(())
 }
 
@@ -192,41 +200,13 @@ fn apply_landlock_rules_strict(sandbox_scope: &str) -> std::io::Result<()> {
     let sandbox_path = Path::new(sandbox_scope);
     let abi = ABI::V3;
 
-    let access_all = AccessFs::from_all(abi);
-    let access_read = AccessFs::from_read(abi);
-
-    let mut ruleset = Ruleset::default()
-        .handle_access(access_all)
-        .map_err(|e| std::io::Error::other(e.to_string()))?
-        .create()
-        .map_err(|e| std::io::Error::other(e.to_string()))?;
-
-    // Allow full access ONLY to the exact sandbox scope
-    ruleset = ruleset
-        .add_rule(PathBeneath::new(
-            PathFd::new(sandbox_path).map_err(|e| std::io::Error::other(e.to_string()))?,
-            access_all,
-        ))
-        .map_err(|e| std::io::Error::other(e.to_string()))?;
-
-    // Allow read access to system directories needed for execution
-    let system_paths = ["/usr", "/bin", "/etc", "/lib", "/lib64", "/proc", "/dev"];
-
-    for path in &system_paths {
-        let path_obj = Path::new(path);
-        if path_obj.exists()
-            && let Ok(fd) = PathFd::new(path_obj)
-        {
-            let _ = (&mut ruleset).add_rule(PathBeneath::new(fd, access_read));
-        }
-    }
-
+    let mut ruleset = create_ruleset_with_scope(sandbox_path, abi)?;
+    add_system_read_rules(&mut ruleset, abi);
     // NOTE: Intentionally NOT allowing /tmp here - this is the strict version
 
     ruleset
         .restrict_self()
         .map_err(|e| std::io::Error::other(e.to_string()))?;
-
     Ok(())
 }
 

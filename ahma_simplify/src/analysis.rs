@@ -29,8 +29,8 @@ fn code_metrics_to_metrics(cm: &rust_code_analysis::CodeMetrics) -> Metrics {
     }
 }
 
-fn func_space_to_space_entry(space: &FuncSpace) -> SpaceEntry {
-    let kind_str = match space.kind {
+fn space_kind_str(kind: SpaceKind) -> &'static str {
+    match kind {
         SpaceKind::Function => "function",
         SpaceKind::Class => "class",
         SpaceKind::Struct => "struct",
@@ -41,7 +41,10 @@ fn func_space_to_space_entry(space: &FuncSpace) -> SpaceEntry {
         SpaceKind::Interface => "interface",
         SpaceKind::Unknown => "unknown",
     }
-    .to_string();
+}
+
+fn func_space_to_space_entry(space: &FuncSpace) -> SpaceEntry {
+    let kind_str = space_kind_str(space.kind).to_string();
 
     SpaceEntry {
         name: space.name.clone().unwrap_or_default(),
@@ -194,6 +197,15 @@ fn source_files<'a>(
         .filter(move |path| is_matching_source_file(path, allowed_exts, custom_excludes))
 }
 
+/// Ensure the parent directory of `path` exists.
+fn ensure_parent_dir(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create {}", parent.display()))?;
+    }
+    Ok(())
+}
+
 /// Analyse a single file and write its metrics as TOML into `output_dir`.
 fn write_metrics_toml(path: &Path, dir: &Path, output_dir: &Path) -> Result<()> {
     let Some(results) = analyze_file(path) else {
@@ -202,10 +214,7 @@ fn write_metrics_toml(path: &Path, dir: &Path, output_dir: &Path) -> Result<()> 
     let toml_content = toml::to_string(&results).context("Failed to serialize metrics to TOML")?;
     let relative = path.strip_prefix(dir).unwrap_or(path);
     let toml_path = output_dir.join(relative.with_extension("toml"));
-    if let Some(parent) = toml_path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("Failed to create {}", parent.display()))?;
-    }
+    ensure_parent_dir(&toml_path)?;
     fs::write(&toml_path, toml_content)
         .with_context(|| format!("Failed to write {}", toml_path.display()))?;
     Ok(())
@@ -261,6 +270,11 @@ fn get_workspace_members(dir: &Path) -> Result<Vec<String>> {
     Ok(explicit.unwrap_or_else(|| discover_member_directories(dir)))
 }
 
+/// Returns true if `path` looks like a Cargo workspace member directory.
+fn is_workspace_member(path: &std::path::Path, name: &str) -> bool {
+    path.is_dir() && path.join("Cargo.toml").exists() && name != "target" && !name.starts_with('.')
+}
+
 /// Fallback: discover subdirectories that contain a Cargo.toml.
 fn discover_member_directories(dir: &Path) -> Vec<String> {
     let Ok(entries) = fs::read_dir(dir) else {
@@ -271,11 +285,7 @@ fn discover_member_directories(dir: &Path) -> Vec<String> {
         .filter_map(|entry| {
             let path = entry.path();
             let name = path.file_name()?.to_str()?;
-            let is_member = path.is_dir()
-                && path.join("Cargo.toml").exists()
-                && name != "target"
-                && !name.starts_with('.');
-            is_member.then(|| name.to_string())
+            is_workspace_member(&path, name).then(|| name.to_string())
         })
         .collect()
 }

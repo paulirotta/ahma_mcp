@@ -21,26 +21,36 @@ pub fn normalize_option_type(option_type: &str) -> &'static str {
     }
 }
 
-/// Builds the items schema for array-type options.
-pub fn build_items_schema(option: &CommandOption) -> Map<String, Value> {
+/// Builds the items schema using an explicit ItemsSpec.
+fn items_schema_from_spec(spec: &crate::config::ItemsSpec) -> Map<String, Value> {
     let mut schema = Map::new();
-
-    if let Some(spec) = option.items.as_ref() {
-        schema.insert("type".into(), Value::String(spec.item_type.clone()));
-        if let Some(f) = &spec.format {
-            schema.insert("format".into(), Value::String(f.clone()));
-        }
-        if let Some(d) = &spec.description {
-            schema.insert("description".into(), Value::String(d.clone()));
-        }
-        return schema;
+    schema.insert("type".into(), Value::String(spec.item_type.clone()));
+    if let Some(f) = &spec.format {
+        schema.insert("format".into(), Value::String(f.clone()));
     }
+    if let Some(d) = &spec.description {
+        schema.insert("description".into(), Value::String(d.clone()));
+    }
+    schema
+}
 
+/// Builds the items schema falling back to the parent option's attributes.
+fn items_schema_from_option(option: &CommandOption) -> Map<String, Value> {
+    let mut schema = Map::new();
     schema.insert("type".into(), Value::String("string".into()));
     if let Some(f) = &option.format {
         schema.insert("format".into(), Value::String(f.clone()));
     }
     schema
+}
+
+/// Builds the items schema for array-type options.
+pub fn build_items_schema(option: &CommandOption) -> Map<String, Value> {
+    option
+        .items
+        .as_ref()
+        .map(items_schema_from_spec)
+        .unwrap_or_else(|| items_schema_from_option(option))
 }
 
 /// Generates the JSON schema for a subcommand's options.
@@ -124,6 +134,19 @@ fn subcommand_path(prefix: &str, name: &str) -> String {
     }
 }
 
+/// Pushes a leaf subcommand or recurses into nested subcommands.
+fn push_subcommand_or_recurse<'a>(
+    sub: &'a SubcommandConfig,
+    current_path: String,
+    leaves: &mut Vec<(String, &'a SubcommandConfig)>,
+) {
+    if let Some(nested_subcommands) = &sub.subcommand {
+        collect_leaf_subcommands(nested_subcommands, &current_path, leaves);
+    } else {
+        leaves.push((current_path, sub));
+    }
+}
+
 /// Recursively collects all leaf subcommands from a tool's configuration.
 pub fn collect_leaf_subcommands<'a>(
     subcommands: &'a [SubcommandConfig],
@@ -131,16 +154,9 @@ pub fn collect_leaf_subcommands<'a>(
     leaves: &mut Vec<(String, &'a SubcommandConfig)>,
 ) {
     for sub in subcommands {
-        if !sub.enabled {
-            continue;
-        }
-
-        let current_path = subcommand_path(prefix, &sub.name);
-
-        if let Some(nested_subcommands) = &sub.subcommand {
-            collect_leaf_subcommands(nested_subcommands, &current_path, leaves);
-        } else {
-            leaves.push((current_path, sub));
+        if sub.enabled {
+            let current_path = subcommand_path(prefix, &sub.name);
+            push_subcommand_or_recurse(sub, current_path, leaves);
         }
     }
 }

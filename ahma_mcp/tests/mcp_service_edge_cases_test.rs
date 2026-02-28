@@ -418,35 +418,30 @@ async fn test_shell_timeout() -> Result<()> {
     Ok(())
 }
 
+fn result_text(r: &rmcp::model::CallToolResult) -> String {
+    r.content
+        .iter()
+        .filter_map(|c| c.as_text().map(|t| t.text.clone()))
+        .collect()
+}
+
 fn assert_timeout_error<E: std::fmt::Debug>(result: Result<rmcp::model::CallToolResult, E>) {
     match result {
         Err(e) => {
             let msg = format!("{:?}", e);
             assert!(msg.contains("timeout") || msg.contains("timed out"));
         }
+        Ok(r) if !r.is_error.unwrap_or(false) => {
+            panic!(
+                "Expected timeout failure, but shell command succeeded. Output: {}",
+                result_text(&r)
+            );
+        }
         Ok(r) => {
-            if !r.is_error.unwrap_or(false) {
-                let text: String = r
-                    .content
-                    .iter()
-                    .filter_map(|c| c.as_text().map(|t| t.text.clone()))
-                    .collect();
-                panic!(
-                    "Expected timeout failure, but shell command succeeded. Output: {}",
-                    text
-                );
-            } else {
-                let text: String = r
-                    .content
-                    .iter()
-                    .filter_map(|c| c.as_text().map(|t| t.text.clone()))
-                    .collect();
-                assert!(
-                    text.contains("timeout")
-                        || text.contains("timed out")
-                        || text.contains("killed")
-                );
-            }
+            let text = result_text(&r);
+            assert!(
+                text.contains("timeout") || text.contains("timed out") || text.contains("killed")
+            );
         }
     }
 }

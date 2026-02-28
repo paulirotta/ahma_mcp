@@ -421,6 +421,18 @@ async fn handle_client_response(
     )
 }
 
+/// Returns true if the sandbox should be locked based on roots and SSE state.
+fn should_lock_sandbox(
+    mcp_roots: &[McpRoot],
+    session_manager: &SessionManager,
+    session_id: &str,
+) -> bool {
+    !mcp_roots.is_empty()
+        || session_manager
+            .get_session(session_id)
+            .is_some_and(|s| s.is_sse_connected())
+}
+
 /// Attempt to lock sandbox from a `roots/list` style result payload.
 async fn try_lock_sandbox_from_roots(
     session_manager: &SessionManager,
@@ -436,12 +448,7 @@ async fn try_lock_sandbox_from_roots(
         .filter_map(|r| serde_json::from_value(r.clone()).ok())
         .collect();
 
-    let should_lock = !mcp_roots.is_empty()
-        || session_manager
-            .get_session(session_id)
-            .is_some_and(|s| s.is_sse_connected());
-
-    if !should_lock {
+    if !should_lock_sandbox(&mcp_roots, session_manager, session_id) {
         debug!(
             session_id = %session_id,
             "Skipping sandbox lock from empty roots/list response (SSE not connected yet)"
@@ -472,6 +479,39 @@ async fn try_lock_sandbox_from_roots(
     }
 }
 
+/// Handle roots/list response side-effect: lock sandbox.
+async fn handle_roots_list_response(
+    session_manager: &SessionManager,
+    session_id: &str,
+    method: Option<&str>,
+    response: &Value,
+) {
+    if method == Some("roots/list") {
+        if let Some(result) = response.get("result") {
+            try_lock_sandbox_from_roots(session_manager, session_id, result).await;
+        }
+    }
+}
+
+/// Mark the session as MCP-initialized if applicable.
+async fn mark_session_initialized(
+    session_manager: &SessionManager,
+    session_id: &str,
+    is_initialized_notification: bool,
+) {
+    if !is_initialized_notification {
+        return;
+    }
+    if let Some(session) = session_manager.get_session(session_id) {
+        if let Err(e) = session.mark_mcp_initialized().await {
+            warn!(
+                session_id = %session_id,
+                "Failed to mark MCP initialized: {}", e
+            );
+        }
+    }
+}
+
 /// Forwards a request to the session manager.
 async fn forward_request(
     session_manager: &SessionManager,
@@ -486,33 +526,14 @@ async fn forward_request(
         Duration::from_secs(request_timeout_secs())
     };
 
-    // NOTE: We previously waited here for subprocess sandbox-applied notification,
-    // but this caused CI timeouts on slow Linux runners. The subprocess handles
-    // race conditions by rejecting premature tool calls, and the test retry loop
-    // handles retries. Removed per fix for test_roots_uri_parsing_percent_encoded_path.
-
     match session_manager
         .send_request(session_id, payload, Some(request_timeout))
         .await
     {
         Ok(response) => {
-            if method == Some("roots/list")
-                && let Some(result) = response.get("result")
-            {
-                try_lock_sandbox_from_roots(session_manager, session_id, result).await;
-            }
-
-            // Mark MCP as initialized BEFORE constructing response to prevent race conditions
-            if is_initialized_notification
-                && let Some(session) = session_manager.get_session(session_id)
-                && let Err(e) = session.mark_mcp_initialized().await
-            {
-                warn!(
-                    session_id = %session_id,
-                    "Failed to mark MCP initialized: {}", e
-                );
-            }
-
+            handle_roots_list_response(session_manager, session_id, method, &response).await;
+            mark_session_initialized(session_manager, session_id, is_initialized_notification)
+                .await;
             with_session_header(json_response(response), session_id)
         }
         Err(e) => {
