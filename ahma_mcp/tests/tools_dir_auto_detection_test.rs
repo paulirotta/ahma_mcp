@@ -181,8 +181,8 @@ async fn test_no_ahma_fallback_to_builtin_tools() -> anyhow::Result<()> {
     // Verify only built-in tools are present
     assert_eq!(
         tools.len(),
-        3,
-        "Should have exactly 3 built-in tools when no .ahma exists. Got: {:?}",
+        4,
+        "Should have exactly 4 built-in tools when no .ahma exists. Got: {:?}",
         tools.iter().map(|t| &t.name).collect::<Vec<_>>()
     );
 
@@ -197,6 +197,10 @@ async fn test_no_ahma_fallback_to_builtin_tools() -> anyhow::Result<()> {
     assert!(
         tools.iter().any(|t| t.name == "sandboxed_shell"),
         "Built-in 'sandboxed_shell' tool should be present"
+    );
+    assert!(
+        tools.iter().any(|t| t.name == "discover_tools"),
+        "Built-in 'discover_tools' tool should be present"
     );
 
     Ok(())

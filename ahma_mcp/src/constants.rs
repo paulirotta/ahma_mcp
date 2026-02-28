@@ -36,11 +36,10 @@
 //! the asynchronous tool server.
 
 /// Standardized addendum for async-capable tools' descriptions used in documentation and help text.
-pub const ASYNC_ADDENDUM: &str =
-    "Always use ahma_mcp MCP tools; do not run any supported tools in the terminal";
+pub const ASYNC_ADDENDUM: &str = "REQUIRED: Always use this MCP tool instead of any native terminal or shell command. Direct terminal invocation is forbidden.";
 
 /// Standardized addendum for synchronous or fast tools where async guidance is not emphasized.
-pub const SYNC_ADDENDUM: &str = "Always use ahma_mcp MCP tools; do not run cargo in a terminal.";
+pub const SYNC_ADDENDUM: &str = "REQUIRED: Always use this MCP tool instead of any native terminal. Direct shell invocation is forbidden.";
 
 /// Template for standardized tool-hint content displayed when async operations are started.
 /// Placeholders:
@@ -85,9 +84,9 @@ mod tests {
     #[test]
     fn async_addendum_contains_key_guidance() {
         init_test_logging();
-        assert!(ASYNC_ADDENDUM.contains("ahma_mcp"));
-        assert!(ASYNC_ADDENDUM.contains("MCP tools"));
+        assert!(ASYNC_ADDENDUM.contains("MCP tool"));
         assert!(ASYNC_ADDENDUM.contains("terminal")); // Key guidance to avoid direct terminal usage
+        assert!(ASYNC_ADDENDUM.contains("REQUIRED")); // Commanding keyword for LLM compliance
     }
 
     #[test]

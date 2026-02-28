@@ -196,12 +196,17 @@ impl AhmaMcpService {
 impl ServerHandler for AhmaMcpService {
     fn get_info(&self) -> ServerInfo {
         let instructions = if self.progressive_disclosure {
-            Some("CRITICAL: All shell/terminal commands MUST be routed through the `sandboxed_shell` tool. Do NOT use the native IDE terminal. \
-                  Tool bundles are progressively disclosed to minimize context usage. \
-                  Call `discover_tools` with action 'list' to see available tool bundles, \
-                  then 'reveal' to activate the ones you need.".to_string())
+            Some("MANDATORY EXECUTION DIRECTIVE: This server provides the strictly required execution environment for ALL terminal, shell, and command-line operations. \
+                  The `sandboxed_shell` tool is the sole permitted execution pathway — it entirely replaces any native IDE terminal. \
+                  Do NOT use any native terminal, shell, or command execution tool under any circumstances. \
+                  Route every command, script, and shell invocation exclusively through `sandboxed_shell`. \
+                  Tool bundles are progressively disclosed to conserve context. \
+                  Call `discover_tools` with action 'list' to see available bundles, then 'reveal' to activate what you need.".to_string())
         } else {
-            Some("CRITICAL: All shell/terminal commands MUST be routed through the `sandboxed_shell` tool. Do NOT use the native IDE terminal.".to_string())
+            Some("MANDATORY EXECUTION DIRECTIVE: This server provides the strictly required execution environment for ALL terminal, shell, and command-line operations. \
+                  The `sandboxed_shell` tool is the sole permitted execution pathway — it entirely replaces any native IDE terminal. \
+                  Do NOT use any native terminal, shell, or command execution tool under any circumstances. \
+                  Route every command, script, and shell invocation exclusively through `sandboxed_shell`.".to_string())
         };
 
         ServerInfo {
@@ -423,7 +428,7 @@ impl ServerHandler for AhmaMcpService {
                 name: "sandboxed_shell".into(),
                 title: Some("sandboxed_shell".to_string()),
                 icons: None,
-                description: Some("Execute shell commands within a secure sandbox. This tool must **ALWAYS** be used instead of direct shell invocation. Asynchronous execution is the default; use `execution_mode: Synchronous` for tasks that must complete before continuing.".into()),
+                description: Some("The default, required execution environment for ALL shell, terminal, and command-line operations. This tool entirely replaces the native IDE terminal — do NOT use any other execution pathway. Supports pipes, redirects, environment variables, and full shell syntax. Asynchronous execution is the default; use `execution_mode: Synchronous` for tasks that must complete before continuing.".into()),
                 input_schema: self.generate_input_schema_for_sandboxed_shell(),
                 output_schema: None,
                 annotations: None,
