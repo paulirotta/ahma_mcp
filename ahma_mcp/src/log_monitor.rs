@@ -36,9 +36,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt;
+use std::sync::OnceLock;
 use std::time::Instant;
 
-use regex::RegexSet;
+use regex::{Regex, RegexSet};
 
 /// Number of recent lines retained per stream for context snapshots.
 /// This is a fixed constant, not user-configurable.
@@ -46,6 +47,62 @@ pub const LOG_CONTEXT_LINES: usize = 100;
 
 /// Default rate limit between successive log alerts (seconds).
 pub const DEFAULT_RATE_LIMIT_SECONDS: u64 = 60;
+
+const REDACTION_PLACEHOLDER: &str = "[REDACTED]";
+
+fn redaction_rules() -> &'static Vec<(Regex, &'static str)> {
+    static RULES: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();
+    RULES.get_or_init(|| {
+        vec![
+            (
+                Regex::new(r"(?i)\bAuthorization\b\s*:\s*\S+\s+\S+")
+                    .expect("authorization header redaction regex must compile"),
+                "Authorization: [REDACTED]",
+            ),
+            (
+                Regex::new(r"(?i)\bBearer\s+[A-Za-z0-9._+/=-]{8,}")
+                    .expect("bearer redaction regex must compile"),
+                "Bearer [REDACTED]",
+            ),
+            (
+                Regex::new(r"(?i)\b(password|passwd|token|secret|api[_-]?key)\b\s*[:=]\s*(\S+)")
+                    .expect("key-value secret redaction regex must compile"),
+                "$1=[REDACTED]",
+            ),
+            (
+                Regex::new(r"\bAKIA[0-9A-Z]{16}\b").expect("aws key redaction regex must compile"),
+                REDACTION_PLACEHOLDER,
+            ),
+            (
+                Regex::new(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b")
+                    .expect("github token redaction regex must compile"),
+                REDACTION_PLACEHOLDER,
+            ),
+            (
+                Regex::new(r"\bsk-[A-Za-z0-9]{16,}\b")
+                    .expect("api token redaction regex must compile"),
+                REDACTION_PLACEHOLDER,
+            ),
+        ]
+    })
+}
+
+/// Redact common secret/token patterns from a single output line.
+pub fn redact_sensitive_line(line: &str) -> String {
+    let mut redacted = line.to_owned();
+    for (pattern, replacement) in redaction_rules() {
+        redacted = pattern.replace_all(&redacted, *replacement).into_owned();
+    }
+    redacted
+}
+
+/// Redact common secret/token patterns from multi-line output.
+pub fn redact_sensitive_text(text: &str) -> String {
+    text.split('\n')
+        .map(redact_sensitive_line)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
 
 // ---------------------------------------------------------------------------
 // LogLevel
@@ -211,14 +268,23 @@ impl LogSnapshot {
             "=== LOG ALERT ({}: {}) ===",
             self.trigger_level, source
         ));
-        sections.push(format!("Trigger: {}", self.trigger_line));
+        sections.push(format!(
+            "Trigger: {}",
+            redact_sensitive_line(&self.trigger_line)
+        ));
 
         if !self.stderr_context.is_empty() {
             sections.push(format!(
                 "\n--- stderr (last {} lines) ---",
                 self.stderr_context.len()
             ));
-            sections.push(self.stderr_context.join("\n"));
+            sections.push(
+                self.stderr_context
+                    .iter()
+                    .map(|line| redact_sensitive_line(line))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            );
         }
 
         if !self.stdout_context.is_empty() {
@@ -226,7 +292,13 @@ impl LogSnapshot {
                 "\n--- stdout (last {} lines) ---",
                 self.stdout_context.len()
             ));
-            sections.push(self.stdout_context.join("\n"));
+            sections.push(
+                self.stdout_context
+                    .iter()
+                    .map(|line| redact_sensitive_line(line))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            );
         }
 
         sections.join("\n")
@@ -1039,5 +1111,33 @@ mod tests {
         assert!(formatted.contains("Trigger: error: test failure"));
         assert!(formatted.contains("stderr (last 1 lines)"));
         assert!(formatted.contains("stdout (last 2 lines)"));
+    }
+
+    #[test]
+    fn test_redact_sensitive_line() {
+        let line = "Authorization: Bearer abcdef1234567890 token=supersecret sk-1234567890ABCDEF";
+        let redacted = redact_sensitive_line(line);
+        assert!(!redacted.contains("abcdef1234567890"));
+        assert!(!redacted.contains("supersecret"));
+        assert!(!redacted.contains("sk-1234567890ABCDEF"));
+        assert!(redacted.contains("Authorization: [REDACTED]"));
+        assert!(redacted.contains("token=[REDACTED]"));
+    }
+
+    #[test]
+    fn test_snapshot_format_redacts_secrets() {
+        let snap = LogSnapshot {
+            trigger_line: "error: token=abc123def456".into(),
+            trigger_level: LogLevel::Error,
+            trigger_is_stderr: true,
+            stdout_context: vec!["api_key: my-real-key".into()],
+            stderr_context: vec!["Authorization: Bearer secret-token-value".into()],
+        };
+
+        let formatted = snap.format_for_notification();
+        assert!(!formatted.contains("abc123def456"));
+        assert!(!formatted.contains("my-real-key"));
+        assert!(!formatted.contains("secret-token-value"));
+        assert!(formatted.contains("[REDACTED]"));
     }
 }

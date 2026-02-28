@@ -84,6 +84,16 @@ fn write_script(temp_dir: &std::path::Path, name: &str, content: &str) -> String
     format!("bash {}", script_path.display())
 }
 
+fn final_result_output(updates: &[ProgressUpdate]) -> Option<String> {
+    updates.iter().find_map(|update| {
+        if let ProgressUpdate::FinalResult { full_output, .. } = update {
+            Some(full_output.clone())
+        } else {
+            None
+        }
+    })
+}
+
 #[tokio::test]
 async fn streaming_stderr_error_triggers_log_alert() {
     let adapter = create_test_adapter().await;
@@ -449,4 +459,82 @@ async fn streaming_stderr_only_ignores_stdout_patterns() {
         "Stderr-only should ignore stdout: {:?}",
         *guard
     );
+}
+
+#[tokio::test]
+async fn streaming_final_result_redacts_sensitive_output() {
+    let adapter = create_test_adapter().await;
+    let temp_dir = tempdir().unwrap();
+    let working_dir = temp_dir.path().to_str().unwrap();
+    let (callback, updates) = TestCallback::new();
+    let cmd = write_script(
+        temp_dir.path(),
+        "secret_output.sh",
+        "#!/bin/bash\necho 'token=supersecret123'\necho 'Authorization: Bearer abcdefghijklmnop' >&2\n",
+    );
+
+    let result = adapter
+        .execute_async_in_dir_with_options(
+            "test_redaction",
+            &cmd,
+            working_dir,
+            AsyncExecOptions {
+                operation_id: Some("test_op_10".to_string()),
+                args: Some(Map::new()),
+                timeout: Some(10),
+                callback: Some(Box::new(callback)),
+                subcommand_config: None,
+                log_monitor_config: monitor_config(LogLevel::Error, MonitorStream::Both),
+            },
+        )
+        .await;
+    assert!(result.is_ok());
+
+    wait_for_completion(&updates).await;
+    let guard = updates.lock().await;
+    let output = final_result_output(&guard).expect("missing final result output");
+    assert!(!output.contains("supersecret123"), "output: {}", output);
+    assert!(!output.contains("abcdefghijklmnop"), "output: {}", output);
+    assert!(output.contains("[REDACTED]"), "output: {}", output);
+}
+
+#[tokio::test]
+async fn streaming_final_result_is_bounded_and_marks_truncation() {
+    let adapter = create_test_adapter().await;
+    let temp_dir = tempdir().unwrap();
+    let working_dir = temp_dir.path().to_str().unwrap();
+    let (callback, updates) = TestCallback::new();
+    let cmd = write_script(
+        temp_dir.path(),
+        "many_lines.sh",
+        "#!/bin/bash\nfor i in $(seq 1 7000); do echo \"line-$i\"; done\n",
+    );
+
+    let result = adapter
+        .execute_async_in_dir_with_options(
+            "test_truncation",
+            &cmd,
+            working_dir,
+            AsyncExecOptions {
+                operation_id: Some("test_op_11".to_string()),
+                args: Some(Map::new()),
+                timeout: Some(20),
+                callback: Some(Box::new(callback)),
+                subcommand_config: None,
+                log_monitor_config: monitor_config(LogLevel::Error, MonitorStream::Both),
+            },
+        )
+        .await;
+    assert!(result.is_ok());
+
+    wait_for_completion(&updates).await;
+    let guard = updates.lock().await;
+    let output = final_result_output(&guard).expect("missing final result output");
+    assert!(
+        output.contains("[output truncated: dropped"),
+        "output: {}",
+        output
+    );
+    assert!(!output.contains("line-1"), "oldest lines should be dropped");
+    assert!(output.contains("line-7000"), "latest line should be retained");
 }

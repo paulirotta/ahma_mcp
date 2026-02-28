@@ -54,7 +54,7 @@ use crate::shell_pool::ShellPoolManager;
 use anyhow::Result;
 use serde_json::{Map, Value, json};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
@@ -68,6 +68,64 @@ static OPERATION_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 fn generate_operation_id() -> String {
     let id = OPERATION_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("op_{}", id)
+}
+
+const MAX_STREAM_COLLECTED_LINES: usize = 5_000;
+const MAX_STREAM_COLLECTED_BYTES: usize = 1_000_000;
+
+#[derive(Debug, Default)]
+struct BoundedLineCollector {
+    lines: VecDeque<String>,
+    bytes: usize,
+    dropped_lines: usize,
+    dropped_bytes: usize,
+}
+
+impl BoundedLineCollector {
+    fn push(&mut self, line: String) {
+        self.bytes = self.bytes.saturating_add(line.len());
+        self.lines.push_back(line);
+
+        while self.lines.len() > MAX_STREAM_COLLECTED_LINES
+            || self.bytes > MAX_STREAM_COLLECTED_BYTES
+        {
+            let Some(evicted) = self.lines.pop_front() else {
+                break;
+            };
+            self.bytes = self.bytes.saturating_sub(evicted.len());
+            self.dropped_lines = self.dropped_lines.saturating_add(1);
+            self.dropped_bytes = self.dropped_bytes.saturating_add(evicted.len());
+        }
+    }
+
+    fn dropped_lines(&self) -> usize {
+        self.dropped_lines
+    }
+
+    fn dropped_bytes(&self) -> usize {
+        self.dropped_bytes
+    }
+
+    fn rendered_output(&self) -> String {
+        let mut output = String::new();
+        if self.dropped_lines > 0 {
+            output.push_str(&format!(
+                "[output truncated: dropped {} earlier lines ({} bytes)]\n",
+                self.dropped_lines, self.dropped_bytes
+            ));
+        }
+
+        output.push_str(
+            &self
+                .lines
+                .iter()
+                .map(std::string::String::as_str)
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+
+        output
+    }
 }
 
 /// The core execution engine for external tools.
@@ -810,9 +868,9 @@ async fn execute_with_streaming(
 
     let mut log_monitor = crate::log_monitor::LogMonitor::new(monitor_config);
 
-    // Collected output for the final result
-    let mut collected_stdout = Vec::new();
-    let mut collected_stderr = Vec::new();
+    // Collected output for the final result (bounded to prevent unbounded memory growth).
+    let mut collected_stdout = BoundedLineCollector::default();
+    let mut collected_stderr = BoundedLineCollector::default();
 
     let timeout_deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
 
@@ -861,7 +919,8 @@ async fn execute_with_streaming(
             result = stderr_reader.next_line() => {
                 match result {
                     Ok(Some(line)) => {
-                        collected_stderr.push(line.clone());
+                        let safe_line = crate::log_monitor::redact_sensitive_line(&line);
+                        collected_stderr.push(safe_line);
                         if let Some(snapshot) = log_monitor.process_line(&line, true)
                             && let Some(callback) = callback {
                                 let alert = crate::callback_system::ProgressUpdate::LogAlert {
@@ -886,7 +945,8 @@ async fn execute_with_streaming(
             result = stdout_reader.next_line() => {
                 match result {
                     Ok(Some(line)) => {
-                        collected_stdout.push(line.clone());
+                        let safe_line = crate::log_monitor::redact_sensitive_line(&line);
+                        collected_stdout.push(safe_line);
                         if let Some(snapshot) = log_monitor.process_line(&line, false)
                             && let Some(callback) = callback {
                                 let alert = crate::callback_system::ProgressUpdate::LogAlert {
@@ -914,7 +974,8 @@ async fn execute_with_streaming(
             Ok(Some(_status)) => {
                 // Process exited. Drain remaining lines from both streams.
                 while let Ok(Some(line)) = stderr_reader.next_line().await {
-                    collected_stderr.push(line.clone());
+                    let safe_line = crate::log_monitor::redact_sensitive_line(&line);
+                    collected_stderr.push(safe_line);
                     if let Some(snapshot) = log_monitor.process_line(&line, true)
                         && let Some(callback) = callback
                     {
@@ -927,7 +988,8 @@ async fn execute_with_streaming(
                     }
                 }
                 while let Ok(Some(line)) = stdout_reader.next_line().await {
-                    collected_stdout.push(line.clone());
+                    let safe_line = crate::log_monitor::redact_sensitive_line(&line);
+                    collected_stdout.push(safe_line);
                     if let Some(snapshot) = log_monitor.process_line(&line, false)
                         && let Some(callback) = callback
                     {
@@ -961,13 +1023,17 @@ async fn execute_with_streaming(
     };
     let success = exit_status.as_ref().map(|s| s.success()).unwrap_or(false);
 
-    let stdout_str = collected_stdout.join("\n");
-    let stderr_str = collected_stderr.join("\n");
+    let stdout_str = collected_stdout.rendered_output();
+    let stderr_str = collected_stderr.rendered_output();
 
     let final_output = json!({
         "stdout": stdout_str,
         "stderr": stderr_str,
         "exit_code": exit_code,
+        "stdout_truncated_lines": collected_stdout.dropped_lines(),
+        "stderr_truncated_lines": collected_stderr.dropped_lines(),
+        "stdout_truncated_bytes": collected_stdout.dropped_bytes(),
+        "stderr_truncated_bytes": collected_stderr.dropped_bytes(),
     });
 
     let status = if success {
