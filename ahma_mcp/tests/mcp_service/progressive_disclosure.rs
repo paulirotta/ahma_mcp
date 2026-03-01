@@ -1,9 +1,9 @@
 //! Tests for progressive disclosure of tool bundles.
 //!
 //! Validates that:
-//! - With progressive disclosure enabled, only built-in + discover_tools are listed initially
-//! - `discover_tools list` returns available bundles
-//! - `discover_tools reveal <bundle>` makes bundle tools visible
+//! - With progressive disclosure enabled, only built-in + activate_tools are listed initially
+//! - `activate_tools list` returns available bundles
+//! - `activate_tools reveal <bundle>` makes bundle tools visible
 //! - With progressive disclosure disabled, all tools are listed immediately (legacy)
 //! - The `instructions` field in get_info() is populated
 
@@ -101,8 +101,8 @@ async fn test_progressive_disclosure_initial_tools() {
         "sandboxed_shell should be listed"
     );
     assert!(
-        tool_names.contains(&"discover_tools".to_string()),
-        "discover_tools should be listed"
+        tool_names.contains(&"activate_tools".to_string()),
+        "activate_tools should be listed"
     );
 
     // Bundle tools should NOT be listed yet
@@ -115,7 +115,7 @@ async fn test_progressive_disclosure_initial_tools() {
         "git should be hidden before reveal"
     );
 
-    // Exactly 4 tools: await, status, sandboxed_shell, discover_tools
+    // Exactly 4 tools: await, status, sandboxed_shell, activate_tools
     assert_eq!(
         tool_names.len(),
         4,
@@ -136,10 +136,10 @@ async fn test_progressive_disclosure_legacy_shows_all() {
     assert!(tool_names.contains(&"status".to_string()));
     assert!(tool_names.contains(&"sandboxed_shell".to_string()));
 
-    // discover_tools should NOT be present when PD is off
+    // activate_tools should NOT be present when PD is off
     assert!(
-        !tool_names.contains(&"discover_tools".to_string()),
-        "discover_tools should not appear when progressive disclosure is disabled"
+        !tool_names.contains(&"activate_tools".to_string()),
+        "activate_tools should not appear when progressive disclosure is disabled"
     );
 
     // Bundle tools should be listed immediately
@@ -154,7 +154,7 @@ async fn test_progressive_disclosure_legacy_shows_all() {
 }
 
 #[tokio::test]
-async fn test_discover_tools_list_action() {
+async fn test_activate_tools_list_action() {
     init_test_logging();
     let service = create_pd_service().await;
 
@@ -177,7 +177,7 @@ async fn test_discover_tools_list_action() {
 }
 
 #[tokio::test]
-async fn test_discover_tools_reveal_single_bundle() {
+async fn test_activate_tools_reveal_single_bundle() {
     init_test_logging();
     let service = create_pd_service().await;
 
@@ -211,7 +211,7 @@ async fn test_discover_tools_reveal_single_bundle() {
 }
 
 #[tokio::test]
-async fn test_discover_tools_reveal_multiple_bundles() {
+async fn test_activate_tools_reveal_multiple_bundles() {
     init_test_logging();
     let service = create_pd_service().await;
 
@@ -239,7 +239,7 @@ async fn test_discover_tools_reveal_multiple_bundles() {
 }
 
 #[tokio::test]
-async fn test_discover_tools_reveal_already_revealed() {
+async fn test_activate_tools_reveal_already_revealed() {
     init_test_logging();
     let service = create_pd_service().await;
 
@@ -272,7 +272,7 @@ async fn test_discover_tools_reveal_already_revealed() {
 }
 
 #[tokio::test]
-async fn test_discover_tools_reveal_unknown_bundle() {
+async fn test_activate_tools_reveal_unknown_bundle() {
     init_test_logging();
     let service = create_pd_service().await;
 
@@ -296,7 +296,7 @@ async fn test_discover_tools_reveal_unknown_bundle() {
 }
 
 #[tokio::test]
-async fn test_discover_tools_invalid_action() {
+async fn test_activate_tools_invalid_action() {
     init_test_logging();
     let service = create_pd_service().await;
 
@@ -307,7 +307,7 @@ async fn test_discover_tools_invalid_action() {
 }
 
 #[tokio::test]
-async fn test_discover_tools_reveal_missing_bundle_param() {
+async fn test_activate_tools_reveal_missing_bundle_param() {
     init_test_logging();
     let service = create_pd_service().await;
 
@@ -336,8 +336,8 @@ async fn test_instructions_populated_with_pd() {
         "instructions should mention sandboxed_shell"
     );
     assert!(
-        instructions.contains("discover_tools"),
-        "instructions should mention discover_tools when PD is enabled"
+        instructions.contains("activate_tools"),
+        "instructions should mention activate_tools when PD is enabled"
     );
 }
 
@@ -357,8 +357,8 @@ async fn test_instructions_populated_without_pd() {
         "instructions should mention sandboxed_shell"
     );
     assert!(
-        !instructions.contains("discover_tools"),
-        "instructions should NOT mention discover_tools when PD is disabled"
+        !instructions.contains("activate_tools"),
+        "instructions should NOT mention activate_tools when PD is disabled"
     );
 }
 

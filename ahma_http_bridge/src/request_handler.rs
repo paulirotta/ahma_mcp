@@ -97,7 +97,8 @@ async fn handle_initialize(session_manager: &SessionManager, payload: &Value) ->
     if payload
         .get("params")
         .and_then(|p| p.get("protocolVersion"))
-        .and_then(|v| v.as_str()).is_none()
+        .and_then(|v| v.as_str())
+        .is_none()
     {
         return error_response(
             -32602,
@@ -440,9 +441,10 @@ async fn handle_roots_list_response(
     response: &Value,
 ) {
     if method == Some("roots/list")
-        && let Some(result) = response.get("result") {
-            try_lock_sandbox_from_roots(session_manager, session_id, result).await;
-        }
+        && let Some(result) = response.get("result")
+    {
+        try_lock_sandbox_from_roots(session_manager, session_id, result).await;
+    }
 }
 
 /// Mark the session as MCP-initialized if applicable.
@@ -455,12 +457,13 @@ async fn mark_session_initialized(
         return;
     }
     if let Some(session) = session_manager.get_session(session_id)
-        && let Err(e) = session.mark_mcp_initialized().await {
-            warn!(
-                session_id = %session_id,
-                "Failed to mark MCP initialized: {}", e
-            );
-        }
+        && let Err(e) = session.mark_mcp_initialized().await
+    {
+        warn!(
+            session_id = %session_id,
+            "Failed to mark MCP initialized: {}", e
+        );
+    }
 }
 
 /// Forwards a request to the session manager.

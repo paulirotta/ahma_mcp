@@ -4,53 +4,47 @@ _Create agents from your command line tools with one JSON file, then watch them 
 
 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |                                     |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------: |
-| [![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml) [![Coverage Report](https://img.shields.io/badge/Coverage-Report-blue)](https://paulirotta.github.io/ahma_mcp/html/) [![Code Simplicity](https://img.shields.io/badge/Code-Simplicity-green)](https://paulirotta.github.io/ahma_mcp/CODE_SIMPLICITY.html) [![Prebuilt Binaries](https://img.shields.io/badge/Prebuilt-Binaries-blueviolet)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml?query=branch%3Amain+event%3Apush+is%3Asuccess) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0) [![Rust](https://img.shields.io/badge/Rust-1.93%2B-B7410E.svg)](https://www.rust-lang.org/) | ![Ahma MCP Logo](./assets/ahma.png) |
+| [![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml) [![Coverage Report](https://img.shields.io/badge/Coverage-Report-blue)](https://paulirotta.github.io/ahma_mcp/html/) [![Code Simplicity](https://img.shields.io/badge/Code-Simplicity-green)](https://paulirotta.github.io/ahma_mcp/CODE_SIMPLICITY.html) [![Prebuilt Binaries](https://img.shields.io/badge/Prebuilt-Binaries-blueviolet)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml?query=branch%3Amain+event%3Apush+is%3Asuccess) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2020) [![Rust](https://img.shields.io/badge/Rust-1.93%2B-B7410E.svg)](https://www.rust-lang.org/) | ![Ahma MCP Logo](./assets/ahma.png) |
 
-`ahma_mcp` is a toolbox for safely wrapping command line tools for AI use. This is done by creating (use AI) a `.ahma/tools/somenewtool.json`.
+`ahma_mcp` is
+- **secure by default**: toolbox for AI to use command line tools safely, a way to move past the  'do you trust this tool/author?' prompts. Trust is not a security model.
+- **fast by default**: command line tool calls become *deterministic and asynchronous subagents*. This saves time by allowing AI agents to continue thinking and planning while awaiting one or more long-running command line tasks.
+- **principle of least privilege (PoLP)**: You may specify the allowed arguments to a command line tool by creating a `.ahma/mynewtool.json` file.
+- **batteries included**: Bundled tools can be selectively enabled, e.g. `--simplify` in your `mcp.json` for vibe code complexity reduction to improve maintainability.
+- **flexible**: Supporting agentic development workflows or powering business agents are just two use cases. The rest is up to your creative imagination.
+- **actively developed**: We are currently adding features like progressive tool disclosure and live log monitoring to proactively inform AI agents of issues as they occur.
 
-## Installation
+Linux and MacOS are supported. Windows is not supported at this time. Raspberry Pi is supported with `--no-sandbox` until the kernel is updated to support Landlock (kernel ≥ 5.13).
 
-Install the latest prebuilt binaries for macOS and Linux with one command:
+## Installation Script
 
-```bash
-curl -sSf https://raw.githubusercontent.com/paulirotta/ahma_mcp/main/scripts/install.sh | bash
-```
-
-This script:
+The installation script will:
 1. Detects your OS and architecture
 2. Downloads the latest release from GitHub
 3. Installs `ahma_mcp` and `ahma_simplify` to `~/.local/bin`
 
 Ensure `~/.local/bin` is in your `PATH`.
 
-### Supported Platforms
+```bash
+curl -sSf https://raw.githubusercontent.com/paulirotta/ahma_mcp/main/scripts/install.sh | bash
+```
 
-Prebuilt binaries are provided for the following platforms:
+## Source Installation
 
-| Platform | Architecture | Prebuilt Binary | Sandbox |
-|---|---|---|---|
-| Linux | x86_64 | ✅ | Landlock (kernel ≥ 5.13) |
-| Linux | arm64 / aarch64 (Raspberry Pi 5, AWS Graviton, etc.) | ✅ | Landlock (kernel ≥ 5.13) |
-| macOS | Apple Silicon (M1/M2/M3+) | ✅ | Seatbelt / `sandbox-exec` |
+```bash
+git clone https://github.com/paulirotta/ahma_mcp.git
+cd ahma_mcp
+cargo build --release
+mv target/release/ahma_mcp /usr/local/bin/
+mv target/release/ahma_simplify /usr/local/bin/
+```
 
-> **Raspberry Pi note**: Raspberry Pi 4 and older models running kernels earlier than 5.13 (e.g., many Raspberry Pi OS releases) cannot use the Landlock sandbox. You must pass `--no-sandbox` or set `AHMA_NO_SANDBOX=1`. See the [Raspberry Pi and Older Kernels](#raspberry-pi-and-older-kernels) section below for details.
-
-For any other platform, [build from source](#installation-building-from-source) using `cargo build --release`.
-
-## Documentation Strategy
-
-Ahma MCP follows a **code-first documentation** approach. Architectural details and technical guides are embedded directly in the source code using Rust doc comments (`//!`). This ensures documentation stays in sync with implementation.
-
-- **[Ahma Core API & Architecture](https://paulirotta.github.io/ahma_mcp/doc/ahma_mcp/index.html)**: Main engine, sandboxing, and SDD philosophy.
-- **[Ahma HTTP Bridge](https://paulirotta.github.io/ahma_mcp/doc/ahma_http_bridge/index.html)**: Session isolation and HTTP protocol bridge details.
-- **[USAGE_GUIDE.md](docs/USAGE_GUIDE.md)**: Productive workflows and CLI flag inheritance.
-
-## AI Agent Context
+## Concepts
 
 If you are an AI agent interacting with this repository:
 - **Sandbox Boundary**: You have full access within `${workspaceFolder}` but zero access outside it. Use `sandboxed_shell` for multi-step tasks.
 - **Async Concurrency**: Most tools are async by default. Use `status` to monitor progress and continue with other tasks.
-- **MTDF Schema**: Reference [docs/mtdf-schema.json](docs/mtdf-schema.json) when creating or modifying tool configurations (.ahma/tools/*.json).
+- **MTDF Schema**: Reference [docs/mtdf-schema.json](docs/mtdf-schema.json) defines the schema for creating or modifying tool configurations in `.ahma/*.json`.
 
 ## Key Features
 
@@ -153,113 +147,39 @@ export AHMA_NO_SANDBOX=1
 ahma_mcp
 ```
 
-In `mcp.json` for Cursor/VS Code:
+Example `mcp.json` for Cursor/VS Code:
 
 ```json
 {
   "servers": {
     "Ahma": {
       "type": "stdio",
-      "cwd": "${workspaceFolder}",
-      "command": "/path/to/ahma_mcp",
+      "command": "ahma_mcp",
       "args": ["--tools-dir", ".ahma/tools"]
     }
   }
 }
 ```
 
-**Note**: When `--no-sandbox` is used, Ahma relies on the outer sandbox for security. Only use this in environments that provide their own sandboxing.
+Antigravity does not send the working directory in 'roots' so sandbox scoping must be manual or '--disable-sandbox'
 
-### Example async tool use: AI-driven workflow
+Example `mcp.json` for Antigravity:
 
-Synchronous is simpler when the turns are fast. Async can be helpful for long-running tool calls.
+```json
+{
+  "mcpServers": {
+    "Ahma": {
+      "command": "bash",
+      "args": [
+        "-c",
+        "ahma_mcp --simplify --rust --sandbox-scope $HOME/github"
+      ]
+    }
+  }
+}
+```
 
-Here's an example of Claude Sonnet 4.5's workflow. Notice both the tool and the AI are working at the same time:
-
-> Now let me run the tests again using the MCP server:
->
-> _Ran cargo_test ahma_mcp (MCP Server)_
->
-> While the tests run, let me continue with updating the requirements document:
->
-> _Read SPEC.md_
->
-> Let me add the JSON schema requirements to the product requirements:
->
-> _SPEC.md+21-6_
->
-> Now let me check on the test results:
->
-> _Ran status ahma_mcp (MCP Server)_
->
-> I can see the issue...
-
-## Getting Started
-
-### Project Structure
-
-`ahma_mcp` is organized as a Cargo workspace with several crates:
-
-- **`ahma_mcp`**: Library crate containing all core functionality (tool execution, configuration, async orchestration, MCP service)
-- **`ahma_shell`**: Binary crate providing the CLI interface and server startup logic (includes `--list-tools` functionality)
-- **`ahma_validate`**: Binary crate for validating tool configuration files against the MTDF schema
-- **`ahma_simplify`**: Binary crate for code simplicity metrics aggregation using the `rust-code-analysis` library
-
-This modular architecture ensures clean separation of concerns and enables future extensions (e.g., web interface, authentication).
-
-### Installation (Building from Source)
-
-If you prefer to build from source or are on a platform without prebuilt binaries:
-
-1. **Clone and build the repository**:
-
-   ```bash
-   git clone https://github.com/paulirotta/ahma_mcp.git
-   cd ahma_mcp
-   cargo build --release
-   ```
-
-2. **Add the MCP definition**:
-
-   In your global `mcp.json` file add the following (e.g., Mac: `~/Library/Application Support/Code/User/mcp.json` or `~/Library/Application Support/Cursor/User/mcp.json`, or Linux: `~/.config/Code/User/mcp.json` or `~/.config/Cursor/User/mcp.json`).
-
-  Update paths as needed. Use absolute paths (do not rely on `~` expansion). Use `--sync` if you want synchronous execution by default.
-
-   ```json
-   {
-     "servers": {
-       "Ahma": {
-         "type": "stdio",
-         "cwd": "/Users/yourname/workspace/project",
-         "command": "/Users/yourname/github/ahma_mcp/target/release/ahma_mcp",
-         "args": ["--tools-dir", "/Users/yourname/github/ahma_mcp/.ahma/tools"]
-       },
-       "chrome-devtools": {
-         "type": "stdio",
-         "command": "npx",
-         "args": [
-           "-y",
-           "chrome-devtools-mcp@latest",
-           "--no-performance-crux",
-           "--no-usage-statistics"
-         ]
-       }
-     }
-   }
-   ```
-
-  Note: each server must be nested under its own key in `servers`.
-  Also use the binary path directly for `command` (do not wrap it with `bash` unless you intentionally run a shell script).
-
-4. **Run tests to verify installation**:
-
-   ```bash
-   cargo test
-   ```
-
-The compiled binary will be at `target/release/ahma_mcp`.
-
-## Usage Modes
+## MCP Server Connection Modes
 
 `ahma_mcp` supports three modes of operation:
 
@@ -280,7 +200,7 @@ HTTP server that proxies requests to the stdio MCP server:
 # Clients that provide roots/list can lock sandbox from roots
 ahma_mcp --mode http
 
-# Explicit sandbox scope (required for clients that do not send roots/list)
+# Explicit sandbox scope for clients like Antigravity and LM Studio that do not send roots/list
 ahma_mcp --mode http --sandbox-scope /path/to/your/project
 
 # Or via environment variable
@@ -296,7 +216,7 @@ If a client does not provide roots/list, you **must** configure an explicit scop
 
 **Security Note**: HTTP mode is for local development only. Do not expose to untrusted networks.
 
-Then send JSON-RPC requests to `http://localhost:3000/mcp`:
+Send JSON-RPC requests to `http://localhost:3000/mcp`:
 
 ```bash
 curl -X POST http://localhost:3000/mcp \
@@ -304,102 +224,12 @@ curl -X POST http://localhost:3000/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
 ```
 
-### 3. CLI Mode
+## Contributing
 
-Execute a single tool command:
+Issues and pull requests are welcome. This project is AI friendly and provides the following:
 
-```bash
-ahma_mcp cargo_build --working-directory . -- --release
-```
-
-### 4. List Tools Mode
-
-List all available tools from an MCP server for testing and development:
-
-```bash
-# List tools from a stdio MCP server (command after --)
-ahma_mcp --list-tools -- /path/to/ahma_mcp --tools-dir ./tools
-
-# List tools from an HTTP MCP server
-ahma_mcp --list-tools --http http://localhost:3000
-
-# List tools from mcp.json configuration
-ahma_mcp --list-tools --mcp-config /path/to/mcp.json --server Ahma
-
-# Output as JSON instead of text
-ahma_mcp --list-tools --format json -- /path/to/ahma_mcp --tools-dir ./tools
-```
-
-## VS Code MCP Integration
-
-To use `ahma_mcp` with GitHub Copilot in VS Code:
-
-1. **Enable MCP in VS Code Settings**:
-
-   ```json
-   "chat.mcp.enabled": true
-   ```
-
-2. **Configure the MCP Server** in your global `mcp.json` file (e.g., `~/Library/Application Support/Code/User/mcp.json` on macOS).
-
-   ```jsonc
-   {
-     "servers": {
-       "ahma_mcp": {
-         "type": "stdio",
-         "cwd": "${workspaceFolder}",
-         "command": "/path/to/your/ahma_mcp/target/release/ahma_mcp", // Use absolute path
-         "args": ["--mode", "stdio", "--tools-dir", "tools"]
-       }
-     }
-   }
-   ```
-
-   **Important:** Replace `/path/to/your/ahma_mcp` with the absolute path to the cloned repository.
-
-3. **Restart VS Code** and start a chat with GitHub Copilot. You can now ask it to use `ahma_mcp` tools (e.g., "Use ahma_mcp to show the git status").
-
-## Google Antigravity Integration
-
-To use `ahma_mcp` with Google Antigravity, add the following to your configuration:
-
-```json
-{
-    "mcpServers": {
-        "Ahma": {
-            "command": "ahma_mcp",
-            "args": [
-                "--log-to-stderr"
-            ],
-            "env": {
-                "RUST_LOG": "debug"
-            }
-        }
-    }
-}
-```
-
-> [!IMPORTANT]
-> **Raspberry Pi Users**: On Raspberry Pi, `ahma_mcp` needs the `--no-sandbox` flag in the `args` array until the kernel is new enough to support the Landlock sandbox (Kernel 5.13+).
-
-## Project Philosophy and Requirements
-
-This project is guided by a clear set of principles and requirements.
-
-- **`SPEC.md`**: This is the **single source of truth** for the project. It details the core mission, architecture, and the workflow an AI maintainer must follow. All new tasks and changes are driven by this document.
-- **`docs/CONSTITUTION.md`**: This document outlines the core development principles for human contributors, ensuring consistency and quality.
-
-For a list of available tools and instructions on how to add your own, please refer to the `SPEC.md` file and the examples in the `tools/` directory.
-
-## Developer Scripts
-
-- **`scripts/ahma-inspector.sh`**: Builds ahma_mcp and launches the MCP Inspector web interface (`npx @modelcontextprotocol/inspector`) for interactive debugging and testing of your tool definitions.
-
-## Troubleshooting
-
-- **MCP tools not working?** Ensure the `command` path in `mcp.json` is an absolute path to the compiled `ahma_mcp` binary.
-- **"execution_failed" errors?** Verify file permissions (`chmod +x /path/to/binary`) and ensure you have run `cargo build --release`.
-- **Operations timing out?** The default timeout is 4 minutes. Use the `status` tool to check on long-running operations.
+- **`AGENTS.md`/`CLAUDE.md`**: Instructions for AI agents to use the MCP server to contribute to the project.
+- **`SPEC.md`**: This is the **single source of truth** for the project requirements. AI keeps it up to date as you work on the project.
 
 ## License
 

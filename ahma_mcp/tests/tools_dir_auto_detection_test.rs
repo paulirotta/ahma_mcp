@@ -199,8 +199,8 @@ async fn test_no_ahma_fallback_to_builtin_tools() -> anyhow::Result<()> {
         "Built-in 'sandboxed_shell' tool should be present"
     );
     assert!(
-        tools.iter().any(|t| t.name == "discover_tools"),
-        "Built-in 'discover_tools' tool should be present"
+        tools.iter().any(|t| t.name == "activate_tools"),
+        "Built-in 'activate_tools' tool should be present"
     );
 
     Ok(())

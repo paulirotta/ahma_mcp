@@ -5,7 +5,7 @@ use serde_json::{Map, Value};
 use std::sync::Arc;
 
 impl AhmaMcpService {
-    /// Generates the specific input schema for the `discover_tools` tool.
+    /// Generates the specific input schema for the `activate_tools` tool.
     pub fn generate_input_schema_for_discover_tools(&self) -> Arc<Map<String, Value>> {
         let mut properties = Map::new();
         properties.insert(
@@ -31,7 +31,7 @@ impl AhmaMcpService {
         Arc::new(schema)
     }
 
-    /// Handles the `discover_tools` tool call.
+    /// Handles the `activate_tools` tool call.
     ///
     /// **list**: Returns a compact summary of available tool bundles.
     /// **reveal**: Activates one or more bundles so their tools appear in `tools/list`.
@@ -102,7 +102,7 @@ impl AhmaMcpService {
 
         let summary = serde_json::to_string_pretty(&entries).unwrap_or_default();
         Ok(CallToolResult::success(vec![Content::text(format!(
-            "Available tool bundles (use `discover_tools reveal <bundle>` to activate):\n{}",
+            "Available tool bundles (use `activate_tools reveal <bundle>` to activate):\n{}",
             summary
         ))]))
     }

@@ -77,8 +77,8 @@ pub struct AhmaMcpService {
     pub peer: Arc<RwLock<Option<Peer<RoleServer>>>>,
     /// Minimum seconds between successive log monitoring alerts (default: 60).
     pub monitor_rate_limit_seconds: u64,
-    /// When true, only built-in tools and `discover_tools` are shown initially.
-    /// Bundled tools are revealed on demand via `discover_tools reveal <bundle>`.
+    /// When true, only built-in tools and `activate_tools` are shown initially.
+    /// Bundled tools are revealed on demand via `activate_tools reveal <bundle>`.
     pub progressive_disclosure: bool,
     /// Set of bundle names whose tools have been disclosed to the client.
     pub disclosed_bundles: Arc<RwLock<HashSet<String>>>,
@@ -98,7 +98,7 @@ impl AhmaMcpService {
     /// * `guidance` - Optional guidance configuration for AI usage hints.
     /// * `force_synchronous` - If true, overrides async defaults (e.g., for debugging).
     /// * `defer_sandbox` - If true, delays sandbox initialization (for HTTP bridge scenarios).
-    /// * `progressive_disclosure` - If true, only built-in + discover_tools shown initially.
+    /// * `progressive_disclosure` - If true, only built-in + activate_tools shown initially.
     pub async fn new(
         adapter: Arc<Adapter>,
         operation_monitor: Arc<crate::operation_monitor::OperationMonitor>,
@@ -157,7 +157,7 @@ impl AhmaMcpService {
 
     /// Sends a `notifications/tools/list_changed` notification to the connected client.
     ///
-    /// Called after bundle disclosure state changes (e.g., via `discover_tools reveal`).
+    /// Called after bundle disclosure state changes (e.g., via `activate_tools reveal`).
     pub async fn notify_tools_changed(&self) {
         let peer_opt = {
             let peer_lock = self.peer.read().unwrap();
@@ -189,6 +189,38 @@ impl AhmaMcpService {
             .find(|b| b.config_tool_name == config_name)
             .is_some_and(|b| disclosed.contains(b.name))
     }
+
+    /// Generates a rich, action-oriented description for the `activate_tools` meta-tool.
+    ///
+    /// The description dynamically lists all loaded bundles with their `ai_hint` text,
+    /// giving the AI immediate awareness of what capabilities are available and when
+    /// to activate each one.
+    fn generate_activate_tools_description(&self) -> String {
+        let config_keys: std::collections::HashSet<String> = {
+            let configs_lock = self.configs.read().unwrap();
+            configs_lock.keys().cloned().collect()
+        };
+
+        let loaded = bundle_registry::loaded_bundle_names(&config_keys);
+
+        if loaded.is_empty() {
+            return "Discover and activate tool bundles. Call with action 'list' to see available bundles and their status, or 'reveal' with a bundle name to activate its tools. Bundles are revealed progressively to minimize context usage.".to_string();
+        }
+
+        let mut parts = Vec::new();
+        parts.push("Activate additional tool bundles to extend your capabilities. You MUST call this to use specialized tools. Available bundles:".to_string());
+
+        for bundle in &loaded {
+            parts.push(format!("- '{}': {}", bundle.name, bundle.ai_hint));
+        }
+
+        parts.push(
+            "Call with action 'list' for details, or 'reveal' with a bundle name to activate."
+                .to_string(),
+        );
+
+        parts.join("\n")
+    }
 }
 
 #[async_trait::async_trait]
@@ -201,7 +233,7 @@ impl ServerHandler for AhmaMcpService {
                   Do NOT use any native terminal, shell, or command execution tool under any circumstances. \
                   Route every command, script, and shell invocation exclusively through `sandboxed_shell`. \
                   Tool bundles are progressively disclosed to conserve context. \
-                  Call `discover_tools` with action 'list' to see available bundles, then 'reveal' to activate what you need.".to_string())
+                  Call `activate_tools` with action 'list' to see available bundles, then 'reveal' to activate what you need.".to_string())
         } else {
             Some("MANDATORY EXECUTION DIRECTIVE: This server provides the strictly required execution environment for ALL terminal, shell, and command-line operations. \
                   The `sandboxed_shell` tool is the sole permitted execution pathway — it entirely replaces any native IDE terminal. \
@@ -436,13 +468,15 @@ impl ServerHandler for AhmaMcpService {
                 meta: None,
             });
 
-            // When progressive disclosure is enabled, expose the discover_tools meta-tool
+            // When progressive disclosure is enabled, expose the activate_tools meta-tool
+            // with a dynamically generated description listing all loaded bundles
             if self.progressive_disclosure {
+                let description = self.generate_activate_tools_description();
                 tools.push(Tool {
-                    name: "discover_tools".into(),
-                    title: Some("discover_tools".to_string()),
+                    name: "activate_tools".into(),
+                    title: Some("activate_tools".to_string()),
                     icons: None,
-                    description: Some("Discover and activate tool bundles. Call with action 'list' to see available bundles and their status, or 'reveal' with a bundle name to activate its tools. Bundles are revealed progressively to minimize context usage.".into()),
+                    description: Some(description.into()),
                     input_schema: self.generate_input_schema_for_discover_tools(),
                     output_schema: None,
                     annotations: None,
@@ -459,7 +493,7 @@ impl ServerHandler for AhmaMcpService {
                     "status",
                     "sandboxed_shell",
                     "cancel",
-                    "discover_tools",
+                    "activate_tools",
                 ];
                 let disclosed = if self.progressive_disclosure {
                     Some(self.disclosed_bundles.read().unwrap().clone())
@@ -532,7 +566,7 @@ impl ServerHandler for AhmaMcpService {
                     .await;
             }
 
-            if tool_name == "discover_tools" {
+            if tool_name == "activate_tools" {
                 return self
                     .handle_discover_tools(params.arguments.unwrap_or_default())
                     .await;
@@ -869,14 +903,14 @@ impl AhmaMcpService {
             "status",
             "sandboxed_shell",
             "cancel",
-            "discover_tools",
+            "activate_tools",
         ];
 
         let mut names: Vec<String> =
             vec!["await".into(), "status".into(), "sandboxed_shell".into()];
 
         if self.progressive_disclosure {
-            names.push("discover_tools".into());
+            names.push("activate_tools".into());
         }
 
         let disclosed = if self.progressive_disclosure {
