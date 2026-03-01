@@ -729,7 +729,7 @@ fn test_validate_async_keyword_id() {
         "force_synchronous": true,
         "subcommand": [{
             "name": "sub",
-            "description": "This returns an id"
+            "description": "This runs async and returns immediately"
         }]
     })
     .to_string();
