@@ -33,11 +33,11 @@ pub fn serialize_operations_to_content(operations: &[Operation]) -> Vec<Content>
 pub fn operation_matches_filters(
     op: &Operation,
     tool_filters: &[String],
-    operation_id: Option<&str>,
+    id: Option<&str>,
 ) -> bool {
     let matches_filter =
         tool_filters.is_empty() || tool_filters.iter().any(|tn| op.tool_name.starts_with(tn));
-    let matches_id = operation_id.is_none_or(|id| op.id == id);
+    let matches_id = id.is_none_or(|id| op.id == id);
     matches_filter && matches_id
 }
 
@@ -45,8 +45,8 @@ pub fn parse_tool_filters(args: &Map<String, Value>) -> Vec<String> {
     parse_comma_separated_filter(args, "tools")
 }
 
-pub fn parse_operation_id(args: &Map<String, Value>) -> Option<String> {
-    args.get("operation_id")
+pub fn parse_id(args: &Map<String, Value>) -> Option<String> {
+    args.get("id")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
 }

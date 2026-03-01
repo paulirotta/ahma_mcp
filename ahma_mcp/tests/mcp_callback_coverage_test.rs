@@ -63,12 +63,7 @@ async fn test_async_operation_triggers_callbacks() -> Result<()> {
         // Await completion - this triggers FinalResult callback
         let await_params = CallToolRequestParams {
             name: Cow::Borrowed("await"),
-            arguments: Some(
-                json!({ "operation_id": op_id })
-                    .as_object()
-                    .unwrap()
-                    .clone(),
-            ),
+            arguments: Some(json!({ "id": op_id }).as_object().unwrap().clone()),
             task: None,
             meta: None,
         };
@@ -107,12 +102,7 @@ async fn test_failed_operation_callback() -> Result<()> {
 
         let await_params = CallToolRequestParams {
             name: Cow::Borrowed("await"),
-            arguments: Some(
-                json!({ "operation_id": op_id })
-                    .as_object()
-                    .unwrap()
-                    .clone(),
-            ),
+            arguments: Some(json!({ "id": op_id }).as_object().unwrap().clone()),
             task: None,
             meta: None,
         };
@@ -156,12 +146,7 @@ async fn test_cancelled_operation_callback() -> Result<()> {
         // Cancel the operation - this should trigger Cancelled callback
         let cancel_params = CallToolRequestParams {
             name: Cow::Borrowed("cancel"),
-            arguments: Some(
-                json!({ "operation_id": op_id })
-                    .as_object()
-                    .unwrap()
-                    .clone(),
-            ),
+            arguments: Some(json!({ "id": op_id }).as_object().unwrap().clone()),
             task: None,
             meta: None,
         };
@@ -172,12 +157,7 @@ async fn test_cancelled_operation_callback() -> Result<()> {
         // Await the cancelled operation to ensure it completes and resources are cleaned up
         let await_params = CallToolRequestParams {
             name: Cow::Borrowed("await"),
-            arguments: Some(
-                json!({ "operation_id": op_id })
-                    .as_object()
-                    .unwrap()
-                    .clone(),
-            ),
+            arguments: Some(json!({ "id": op_id }).as_object().unwrap().clone()),
             task: None,
             meta: None,
         };
@@ -233,12 +213,7 @@ async fn test_stderr_output_callback() -> Result<()> {
 
         let await_params = CallToolRequestParams {
             name: Cow::Borrowed("await"),
-            arguments: Some(
-                json!({ "operation_id": op_id })
-                    .as_object()
-                    .unwrap()
-                    .clone(),
-            ),
+            arguments: Some(json!({ "id": op_id }).as_object().unwrap().clone()),
             task: None,
             meta: None,
         };
@@ -323,7 +298,7 @@ fn test_progress_update_variants() {
 
     // Test Started variant
     let started = ProgressUpdate::Started {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         command: "test command".to_string(),
         description: "Test description".to_string(),
     };
@@ -331,7 +306,7 @@ fn test_progress_update_variants() {
 
     // Test Progress variant
     let progress = ProgressUpdate::Progress {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         message: "Processing".to_string(),
         percentage: Some(50.0),
         current_step: Some("step1".to_string()),
@@ -340,7 +315,7 @@ fn test_progress_update_variants() {
 
     // Test Output variant
     let output = ProgressUpdate::Output {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         line: "Output line".to_string(),
         is_stderr: false,
     };
@@ -348,7 +323,7 @@ fn test_progress_update_variants() {
 
     // Test Completed variant
     let completed = ProgressUpdate::Completed {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         message: "Done".to_string(),
         duration_ms: 100,
     };
@@ -356,7 +331,7 @@ fn test_progress_update_variants() {
 
     // Test Failed variant
     let failed = ProgressUpdate::Failed {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         error: "Something went wrong".to_string(),
         duration_ms: 50,
     };
@@ -364,7 +339,7 @@ fn test_progress_update_variants() {
 
     // Test Cancelled variant
     let cancelled = ProgressUpdate::Cancelled {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         message: "User requested cancellation".to_string(),
         duration_ms: 25,
     };
@@ -372,7 +347,7 @@ fn test_progress_update_variants() {
 
     // Test FinalResult variant
     let final_result = ProgressUpdate::FinalResult {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         command: "echo test".to_string(),
         description: "Echo test".to_string(),
         working_directory: "/tmp".to_string(),

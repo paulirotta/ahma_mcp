@@ -247,10 +247,10 @@ async fn test_prepare_command_and_args_mixed_types() {
 }
 
 #[tokio::test]
-async fn test_operation_id_generation_uniqueness() {
+async fn test_id_generation_uniqueness() {
     init_test_logging();
     // Test that operation IDs are unique across multiple calls
-    // This tests the generate_operation_id function without actually executing commands
+    // This tests the generate_id function without actually executing commands
 
     let (adapter1, _temp_dir1) = create_simple_test_adapter().await;
     let (adapter2, _temp_dir2) = create_simple_test_adapter().await;
@@ -332,7 +332,7 @@ async fn test_shutdown_with_active_tasks() {
     let (adapter, _temp_dir) = create_simple_test_adapter().await;
 
     // Start multiple async operations
-    let mut operation_ids = Vec::new();
+    let mut ids = Vec::new();
     for i in 0..3 {
         let op_id = adapter
             .execute_async_in_dir(
@@ -348,7 +348,7 @@ async fn test_shutdown_with_active_tasks() {
             )
             .await
             .unwrap();
-        operation_ids.push(op_id);
+        ids.push(op_id);
     }
 
     // Yield to allow operations to start
@@ -358,7 +358,7 @@ async fn test_shutdown_with_active_tasks() {
     adapter.shutdown().await;
 
     // All operation IDs should be valid
-    for op_id in operation_ids {
+    for op_id in ids {
         assert!(op_id.starts_with("op_"));
     }
 }
@@ -403,7 +403,7 @@ async fn test_execute_async_with_empty_options() {
 
     // Test with minimal options
     let options = AsyncExecOptions {
-        operation_id: None,
+        id: None,
         args: None,
         timeout: None,
         callback: None,
@@ -511,13 +511,13 @@ async fn test_sync_execution_empty_stdout() {
 }
 
 #[tokio::test]
-async fn test_async_execution_with_custom_operation_id() {
+async fn test_async_execution_with_custom_id() {
     init_test_logging();
     let (adapter, temp_dir) = create_simple_test_adapter().await;
 
     let custom_id = "custom_operation_12345";
     let options = AsyncExecOptions {
-        operation_id: Some(custom_id.to_string()),
+        id: Some(custom_id.to_string()),
         args: Some({
             let mut args = Map::new();
             args.insert("message".to_string(), json!("custom id test"));

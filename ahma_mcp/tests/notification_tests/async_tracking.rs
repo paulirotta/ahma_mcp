@@ -35,7 +35,7 @@ async fn test_async_operations_complete_and_are_tracked() -> anyhow::Result<()> 
     );
 
     // Start a simple, fast operation that should complete quickly
-    let operation_id = adapter
+    let id = adapter
         .execute_async_in_dir(
             "test_callback",
             "echo",
@@ -57,7 +57,7 @@ async fn test_async_operations_complete_and_are_tracked() -> anyhow::Result<()> 
     let result = with_ci_timeout(
         "operation completion",
         CI_DEFAULT_TIMEOUT,
-        operation_monitor.wait_for_operation(&operation_id),
+        operation_monitor.wait_for_operation(&id),
     )
     .await?;
 
@@ -69,7 +69,7 @@ async fn test_async_operations_complete_and_are_tracked() -> anyhow::Result<()> 
     let completed_op = result.unwrap();
 
     // Verify the operation was tracked and has results
-    assert_eq!(completed_op.id, operation_id, "Operation ID should match");
+    assert_eq!(completed_op.id, id, "Operation ID should match");
     assert!(
         completed_op.result.is_some(),
         "Completed operation should have results"
@@ -107,7 +107,7 @@ async fn test_async_operations_complete_and_are_tracked() -> anyhow::Result<()> 
     // Test that the operation appears in completed operations
     let completed_ops = operation_monitor.get_completed_operations().await;
     assert!(
-        completed_ops.iter().any(|op| op.id == operation_id),
+        completed_ops.iter().any(|op| op.id == id),
         "Completed operation should appear in completed operations list"
     );
     Ok(())

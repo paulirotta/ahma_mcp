@@ -92,9 +92,7 @@ async fn test_async_notification_delivery() -> Result<()> {
         && let Some(text_content) = content.as_text()
     {
         // Should contain operation ID and status info
-        assert!(
-            text_content.text.contains("operation_id") || text_content.text.contains("started")
-        );
+        assert!(text_content.text.contains("id") || text_content.text.contains("started"));
     }
 
     // 2. Use the await tool to check that async operations can be tracked - no timeout parameter needed

@@ -9,7 +9,7 @@
 //!
 //! - **`ASYNC_ADDENDUM`**: A standard piece of text appended to the description of any tool
 //!   that supports asynchronous execution. It instructs the agent on the correct protocol
-//!   for handling async operations, emphasizing the use of `await` and `operation_ids`.
+//!   for handling async operations, emphasizing the use of `await` and `ids`.
 //!
 //! - **`SYNC_ADDENDUM`**: A simpler addendum for tools that are synchronous or very fast,
 //!   reminding the agent to use the provided MCP tools instead of raw shell commands.
@@ -44,8 +44,8 @@ pub const SYNC_ADDENDUM: &str = "REQUIRED: Always use this MCP tool instead of a
 /// Template for standardized tool-hint content displayed when async operations are started.
 /// Placeholders:
 /// - {operation_type}
-/// - {operation_id}
-pub const TOOL_HINT_TEMPLATE: &str = "\n\n### ASYNC AHMA OPERATION: {operation_type} (ID: {operation_id})\n\
+/// - {id}
+pub const TOOL_HINT_TEMPLATE: &str = "\n\n### ASYNC AHMA OPERATION: {operation_type} (ID: {id})\n\
 1. The operation is running in the background — do not assume it is complete.\n\
 2. What to do now (pick one):\n\
  - Update the plan with current achievements and list the next concrete steps.\n\
@@ -59,13 +59,13 @@ pub const TOOL_HINT_TEMPLATE: &str = "\n\n### ASYNC AHMA OPERATION: {operation_t
 IMPORTANT: Continue planning your next step now assuming this operation completely successfully. Summarize that next step for the user. If at that point you have not received the result of this action, call the `await` tool.\n\n";
 
 /// Template used when detecting premature waits that harm concurrency.
-/// Placeholders: {operation_id}, {gap_seconds}, {efficiency_percent}
-pub const CONCURRENCY_HINT_TEMPLATE: &str = "CONCURRENCY HINT: You waited for '{operation_id}' after only {gap_seconds:.1}s (efficiency: {efficiency_percent:.0}%). \
+/// Placeholders: {id}, {gap_seconds}, {efficiency_percent}
+pub const CONCURRENCY_HINT_TEMPLATE: &str = "CONCURRENCY HINT: You waited for '{id}' after only {gap_seconds:.1}s (efficiency: {efficiency_percent:.0}%). \
         Consider performing other tasks while operations run in the background.";
 
 /// Template for the status polling detection guidance.
-/// Placeholders: {count}, {operation_id}
-pub const STATUS_POLLING_HINT_TEMPLATE: &str = "**STATUS POLLING ANTI-PATTERN DETECTED:** You've called status {count} times for operation '{operation_id}'. \
+/// Placeholders: {count}, {id}
+pub const STATUS_POLLING_HINT_TEMPLATE: &str = "**STATUS POLLING ANTI-PATTERN DETECTED:** You've called status {count} times for operation '{id}'. \
   Instead, you **must** use 'await' with the operation ID to get automatic completion notifications.\n";
 
 /// Standard delay between sequential tool invocations to avoid file lock contention.
@@ -93,9 +93,9 @@ mod tests {
     fn templates_include_placeholders() {
         init_test_logging();
         assert!(TOOL_HINT_TEMPLATE.contains("{operation_type}"));
-        assert!(TOOL_HINT_TEMPLATE.contains("{operation_id}"));
-        assert!(CONCURRENCY_HINT_TEMPLATE.contains("{operation_id}"));
-        assert!(STATUS_POLLING_HINT_TEMPLATE.contains("{operation_id}"));
+        assert!(TOOL_HINT_TEMPLATE.contains("{id}"));
+        assert!(CONCURRENCY_HINT_TEMPLATE.contains("{id}"));
+        assert!(STATUS_POLLING_HINT_TEMPLATE.contains("{id}"));
     }
 
     #[test]

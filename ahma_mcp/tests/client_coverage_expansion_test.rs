@@ -1,7 +1,7 @@
 //! # Client Module Coverage Tests
 //!
 //! This file provides integration tests to improve coverage of `ahma_mcp/src/client.rs`.
-//! The module already has unit tests for helper functions (`extract_operation_id`,
+//! The module already has unit tests for helper functions (`extract_id`,
 //! `join_text_contents`, `first_text_content`). This file adds integration tests for:
 //!
 //! - `Client::start_process` and `start_process_with_args`
@@ -149,9 +149,9 @@ async fn test_client_status_no_operations() -> Result<()> {
     Ok(())
 }
 
-/// Test status tool with a specific operation_id filter
+/// Test status tool with a specific id filter
 #[tokio::test]
-async fn test_client_status_with_operation_id() -> Result<()> {
+async fn test_client_status_with_id() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
@@ -159,7 +159,7 @@ async fn test_client_status_with_operation_id() -> Result<()> {
     let params = CallToolRequestParams {
         name: Cow::Borrowed("status"),
         arguments: Some(
-            json!({ "operation_id": "nonexistent_op_12345" })
+            json!({ "id": "nonexistent_op_12345" })
                 .as_object()
                 .unwrap()
                 .clone(),
@@ -197,7 +197,7 @@ async fn test_client_await_no_pending() -> Result<()> {
     Ok(())
 }
 
-/// Test await tool with specific operation_id that doesn't exist
+/// Test await tool with specific id that doesn't exist
 #[tokio::test]
 async fn test_client_await_nonexistent_operation() -> Result<()> {
     init_test_logging();
@@ -206,7 +206,7 @@ async fn test_client_await_nonexistent_operation() -> Result<()> {
     let params = CallToolRequestParams {
         name: Cow::Borrowed("await"),
         arguments: Some(
-            json!({ "operation_id": "nonexistent_op_67890" })
+            json!({ "id": "nonexistent_op_67890" })
                 .as_object()
                 .unwrap()
                 .clone(),
@@ -259,12 +259,7 @@ async fn test_async_operation_lifecycle() -> Result<()> {
             // Check status while running
             let status_params = CallToolRequestParams {
                 name: Cow::Borrowed("status"),
-                arguments: Some(
-                    json!({ "operation_id": op_id.clone() })
-                        .as_object()
-                        .unwrap()
-                        .clone(),
-                ),
+                arguments: Some(json!({ "id": op_id.clone() }).as_object().unwrap().clone()),
                 task: None,
                 meta: None,
             };
@@ -274,12 +269,7 @@ async fn test_async_operation_lifecycle() -> Result<()> {
             // Await completion
             let await_params = CallToolRequestParams {
                 name: Cow::Borrowed("await"),
-                arguments: Some(
-                    json!({ "operation_id": op_id })
-                        .as_object()
-                        .unwrap()
-                        .clone(),
-                ),
+                arguments: Some(json!({ "id": op_id }).as_object().unwrap().clone()),
                 task: None,
                 meta: None,
             };

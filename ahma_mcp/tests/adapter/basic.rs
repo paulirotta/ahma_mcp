@@ -184,12 +184,12 @@ async fn test_execute_async_basic() {
     let mut args = Map::new();
     args.insert("text".to_string(), Value::String("async test".to_string()));
 
-    let operation_id = adapter
+    let id = adapter
         .execute_async_in_dir("echo", "echo", Some(args), working_dir, Some(5))
         .await;
 
-    assert!(operation_id.is_ok());
-    let op_id = operation_id.unwrap();
+    assert!(id.is_ok());
+    let op_id = id.unwrap();
     assert!(op_id.starts_with("op_"));
 
     // Yield to allow the async operation to make progress
@@ -209,7 +209,7 @@ async fn test_execute_async_with_options() {
     );
 
     let options = AsyncExecOptions {
-        operation_id: Some("custom_op_123".to_string()),
+        id: Some("custom_op_123".to_string()),
         args: Some(args),
         timeout: Some(10),
         callback: None,
@@ -372,7 +372,7 @@ async fn test_async_exec_options_creation() {
     args.insert("test".to_string(), Value::String("value".to_string()));
 
     let options = AsyncExecOptions {
-        operation_id: Some("test_op".to_string()),
+        id: Some("test_op".to_string()),
         args: Some(args.clone()),
         timeout: Some(30),
         callback: None,
@@ -380,7 +380,7 @@ async fn test_async_exec_options_creation() {
         log_monitor_config: None,
     };
 
-    assert_eq!(options.operation_id, Some("test_op".to_string()));
+    assert_eq!(options.id, Some("test_op".to_string()));
     assert!(options.args.is_some());
     assert_eq!(options.timeout, Some(30));
     assert!(options.callback.is_none());

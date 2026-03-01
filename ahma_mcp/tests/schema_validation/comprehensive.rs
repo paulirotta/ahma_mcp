@@ -57,7 +57,7 @@ async fn test_mtdf_compliance_edge_cases() -> Result<()> {
         "subcommand": [
             {
                 "name": "build",
-                "description": "Build project - async operation returns operation_id immediately, results pushed via notification when complete, continue with other tasks",
+                "description": "Build project - async operation returns id immediately, results pushed via notification when complete, continue with other tasks",
                 "enabled": true,
                 "force_synchronous": false,
                 "guidance_key": "build_guidance",
@@ -165,7 +165,7 @@ async fn test_recursive_subcommand_validation() -> Result<()> {
                 "subcommand": [
                     {
                         "name": "level2",
-                        "description": "Second level command - async operation returns operation_id immediately, results pushed via notification when complete, continue with other tasks",
+                        "description": "Second level command - async operation returns id immediately, results pushed via notification when complete, continue with other tasks",
                         "force_synchronous": false,
                         "subcommand": [
                             {
@@ -202,7 +202,7 @@ async fn test_recursive_subcommand_validation() -> Result<()> {
         "subcommand": [
             {
                 "name": "parent",
-                "description": "Parent command - async operation with proper guidance returns operation_id immediately, results pushed via notification when complete, continue with other tasks",
+                "description": "Parent command - async operation with proper guidance returns id immediately, results pushed via notification when complete, continue with other tasks",
                 "subcommand": [
                     {
                         // Intentionally empty to trigger validation on required fields
@@ -274,7 +274,7 @@ async fn test_performance_for_large_tool_sets() -> Result<()> {
 
         subcommands.push(json!({
             "name": format!("subcommand_{}", i),
-            "description": format!("Subcommand {} - {} operation", i, if i % 5 == 0 { "async returns operation_id immediately, results pushed via notification when complete, continue with other tasks" } else { "synchronous returns results immediately" }),
+            "description": format!("Subcommand {} - {} operation", i, if i % 5 == 0 { "async returns id immediately, results pushed via notification when complete, continue with other tasks" } else { "synchronous returns results immediately" }),
             "force_synchronous": (i % 5 != 0),  // Every 5th subcommand is synchronous (inverted)
             "options": options
         }));
@@ -490,7 +490,7 @@ async fn test_complex_configuration_validation_scenarios() -> Result<()> {
             },
             {
                 "name": "override_async", 
-                "description": "Overrides to async. Returns operation_id immediately. Results pushed via notification when complete. Continue with other tasks.",
+                "description": "Overrides to async. Returns id immediately. Results pushed via notification when complete. Continue with other tasks.",
                 "force_synchronous": false  // Explicitly override to async
             }
         ]
@@ -545,7 +545,7 @@ async fn test_complex_configuration_validation_scenarios() -> Result<()> {
         "subcommand": [
             {
                 "name": "with_guidance_key",
-                "description": "Asynchronous operation - returns operation_id immediately",  // Mentions async
+                "description": "Asynchronous operation - returns id immediately",  // Mentions async
                 "guidance_key": "shared_guidance",  // Has guidance_key for extended help
                 "force_synchronous": false
             }
@@ -569,7 +569,7 @@ async fn test_complex_configuration_validation_scenarios() -> Result<()> {
         "subcommand": [
             {
                 "name": "sync_with_async_desc",
-                "description": "This command returns an operation_id and sends notifications asynchronously",  // Async language
+                "description": "This command returns an id and sends notifications asynchronously",  // Async language
                 "force_synchronous": true  // But marked as sync - should trigger warning
             }
         ]
@@ -594,7 +594,7 @@ async fn test_complex_configuration_validation_scenarios() -> Result<()> {
         "subcommand": [
             {
                 "name": "valid_async",
-                "description": "Valid async subcommand - returns operation_id immediately, results pushed via notification when complete, continue with other tasks",
+                "description": "Valid async subcommand - returns id immediately, results pushed via notification when complete, continue with other tasks",
                 "force_synchronous": false,
                 "options": [
                     {
@@ -647,7 +647,7 @@ async fn test_validator_configuration_options() -> Result<()> {
         "subcommand": [
             {
                 "name": "test_sub",
-                "description": "Test subcommand - async returns operation_id immediately, results pushed via notification when complete, continue with other tasks",
+                "description": "Test subcommand - async returns id immediately, results pushed via notification when complete, continue with other tasks",
                 "unknown_sub_field": "value"
             }
         ]

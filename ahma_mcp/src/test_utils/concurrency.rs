@@ -42,20 +42,20 @@ where
 /// Wait for an operation to reach a terminal state, checking both active and completed history.
 pub async fn wait_for_operation_terminal(
     monitor: &crate::operation_monitor::OperationMonitor,
-    operation_id: &str,
+    id: &str,
     timeout: Duration,
     interval: Duration,
 ) -> bool {
     wait_for_condition(timeout, interval, || {
         let monitor = monitor.clone();
-        let operation_id = operation_id.to_string();
+        let id = id.to_string();
         async move {
-            if let Some(op) = monitor.get_operation(&operation_id).await {
+            if let Some(op) = monitor.get_operation(&id).await {
                 return op.state.is_terminal();
             }
 
             let completed = monitor.get_completed_operations().await;
-            completed.iter().any(|op| op.id == operation_id)
+            completed.iter().any(|op| op.id == id)
         }
     })
     .await

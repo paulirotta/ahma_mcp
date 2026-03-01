@@ -10,7 +10,7 @@ mod tests {
     /// This test verifies that if an operation ID is reused, the `OperationMonitor`
     /// correctly overwrites the entry in the completion history, preventing duplicates.
     #[tokio::test]
-    async fn test_duplicate_operation_id_scenario() {
+    async fn test_duplicate_id_scenario() {
         println!("🆔 Testing duplicate operation ID scenario...");
 
         let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(

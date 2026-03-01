@@ -115,7 +115,7 @@ impl Client {
         if let Some(content) = result.content.first() {
             if let Some(text_content) = content.as_text() {
                 let text = &text_content.text;
-                let job_id = extract_operation_id(text)?;
+                let job_id = extract_id(text)?;
                 Ok(ToolCallResult {
                     status: "started".to_string(),
                     job_id,
@@ -136,7 +136,7 @@ impl Client {
             name: Cow::Borrowed("await"),
             arguments: Some(
                 json!({
-                    "operation_id": op_id
+                    "id": op_id
                 })
                 .as_object()
                 .unwrap()
@@ -158,7 +158,7 @@ impl Client {
             name: Cow::Borrowed("status"),
             arguments: Some(
                 json!({
-                    "operation_id": op_id
+                    "id": op_id
                 })
                 .as_object()
                 .unwrap()
@@ -173,7 +173,7 @@ impl Client {
     }
 }
 
-fn extract_operation_id(text: &str) -> Result<String> {
+fn extract_id(text: &str) -> Result<String> {
     if let Some(id_start) = text.find("ID: ") {
         let id_text = &text[id_start + 4..];
         if let Some(job_id) = id_text.split_whitespace().next()
@@ -231,15 +231,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn extract_operation_id_parses_identifier() {
+    fn extract_id_parses_identifier() {
         let text = "Asynchronous operation started with ID: job_123 Follow-up";
-        let job_id = extract_operation_id(text).unwrap();
+        let job_id = extract_id(text).unwrap();
         assert_eq!(job_id, "job_123");
     }
 
     #[test]
-    fn extract_operation_id_errors_without_marker() {
-        let err = extract_operation_id("No identifier present").unwrap_err();
+    fn extract_id_errors_without_marker() {
+        let err = extract_id("No identifier present").unwrap_err();
         assert!(
             err.to_string()
                 .contains("Could not parse operation ID from response")

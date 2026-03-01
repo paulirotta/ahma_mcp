@@ -317,7 +317,7 @@ async fn test_mcp_call_tool_with_no_args() -> Result<()> {
 
 /// Test calling an asynchronous tool returns operation ID
 #[tokio::test]
-async fn test_mcp_call_async_tool_returns_operation_id() -> Result<()> {
+async fn test_mcp_call_async_tool_returns_id() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_mcp_service_test_tools().await?;
 

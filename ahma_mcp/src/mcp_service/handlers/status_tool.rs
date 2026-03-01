@@ -17,7 +17,7 @@ impl AhmaMcpService {
             }),
         );
         properties.insert(
-            "operation_id".to_string(),
+            "id".to_string(),
             serde_json::json!({
                 "type": "string",
                 "description": "Specific operation ID to query (optional; shows all if omitted)"
@@ -36,11 +36,11 @@ impl AhmaMcpService {
         args: Map<String, Value>,
     ) -> Result<CallToolResult, McpError> {
         let tool_filters = common::parse_tool_filters(&args);
-        let specific_operation_id = common::parse_operation_id(&args);
+        let specific_id = common::parse_id(&args);
 
         let mut contents = Vec::new();
 
-        let op_id_ref = specific_operation_id.as_deref();
+        let op_id_ref = specific_id.as_deref();
 
         let active_ops: Vec<Operation> = self
             .operation_monitor
@@ -63,7 +63,7 @@ impl AhmaMcpService {
         let completed_count = completed_ops.len();
         let total_count = active_count + completed_count;
 
-        let summary = if let Some(ref id) = specific_operation_id {
+        let summary = if let Some(ref id) = specific_id {
             if total_count == 0 {
                 format!("Operation '{}' not found", id)
             } else {

@@ -19,7 +19,7 @@ impl AhmaMcpService {
             }),
         );
         properties.insert(
-            "operation_id".to_string(),
+            "id".to_string(),
             serde_json::json!({
                 "type": "string",
                 "description": "Specific operation ID to await for (optional)"
@@ -39,11 +39,11 @@ impl AhmaMcpService {
     ) -> Result<CallToolResult, McpError> {
         let args = params.arguments.unwrap_or_default();
 
-        let operation_id_filter = common::parse_operation_id(&args);
+        let id_filter = common::parse_id(&args);
         let tool_filters = common::parse_tool_filters(&args);
 
-        // If operation_id is specified, wait for that specific operation
-        if let Some(op_id) = operation_id_filter {
+        // If id is specified, wait for that specific operation
+        if let Some(op_id) = id_filter {
             return self.handle_await_specific_operation(op_id).await;
         }
 

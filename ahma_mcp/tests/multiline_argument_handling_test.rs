@@ -160,7 +160,7 @@ async fn test_multiline_argument_with_echo() {
             "echo",
             "/tmp",
             AsyncExecOptions {
-                operation_id: Some("test_echo_multiline".to_string()),
+                id: Some("test_echo_multiline".to_string()),
                 args: args.as_object().cloned(),
                 timeout: Some(10),
                 callback: None,
@@ -284,7 +284,7 @@ async fn test_multiline_git_commit_with_real_tool() {
             "git commit", // Must include subcommand name
             repo_path.to_str().unwrap(),
             AsyncExecOptions {
-                operation_id: Some("test_multiline_commit_real".to_string()),
+                id: Some("test_multiline_commit_real".to_string()),
                 args: args.as_object().cloned(),
                 timeout: Some(30),
                 callback: None,
@@ -463,7 +463,7 @@ async fn test_multiline_git_commit_message() {
             "git commit", // Must include subcommand name
             repo_path.to_str().unwrap(),
             AsyncExecOptions {
-                operation_id: Some("test_multiline_commit".to_string()),
+                id: Some("test_multiline_commit".to_string()),
                 args: args.as_object().cloned(),
                 timeout: Some(30),
                 callback: None,
@@ -603,7 +603,7 @@ async fn test_special_characters_in_arguments() {
             "echo",
             "/tmp",
             AsyncExecOptions {
-                operation_id: Some("test_special_chars".to_string()),
+                id: Some("test_special_chars".to_string()),
                 args: args.as_object().cloned(),
                 timeout: Some(10),
                 callback: None,

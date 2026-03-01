@@ -1,7 +1,7 @@
 //! MCP Service Integration Coverage Tests
 //!
 //! Real integration tests for mcp_service/mod.rs targeting low-coverage areas:
-//! - handle_await (with operation_id filter, tool filters, timeout paths)
+//! - handle_await (with id filter, tool filters, timeout paths)
 //! - handle_status (with filters, concurrency analysis)
 //! - call_tool paths (sequence detection, disabled tools, cancel)
 //! - calculate_intelligent_timeout
@@ -113,16 +113,16 @@ async fn test_status_tool_with_tool_filter() -> Result<()> {
     Ok(())
 }
 
-/// Test status tool with specific operation_id filter
+/// Test status tool with specific id filter
 #[tokio::test]
-async fn test_status_tool_with_operation_id_filter() -> Result<()> {
+async fn test_status_tool_with_id_filter() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let result = client
         .call_tool(make_params(
             "status",
-            Some(json!({"operation_id": "nonexistent_op_12345"})),
+            Some(json!({"id": "nonexistent_op_12345"})),
         ))
         .await?;
 
@@ -162,16 +162,16 @@ async fn test_await_tool_no_pending_operations() -> Result<()> {
     Ok(())
 }
 
-/// Test await tool with specific operation_id that doesn't exist
+/// Test await tool with specific id that doesn't exist
 #[tokio::test]
-async fn test_await_tool_nonexistent_operation_id() -> Result<()> {
+async fn test_await_tool_nonexistent_id() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let result = client
         .call_tool(make_params(
             "await",
-            Some(json!({"operation_id": "fake_operation_xyz"})),
+            Some(json!({"id": "fake_operation_xyz"})),
         ))
         .await?;
 
@@ -226,11 +226,11 @@ async fn test_await_for_completed_async_operation() -> Result<()> {
         .await?;
 
     // Extract operation ID if available
-    let operation_id = extract_operation_id(&start_result);
+    let id = extract_id(&start_result);
 
-    // Build await args - use operation_id if found, otherwise filter by tool
-    let await_args = match operation_id {
-        Some(id) => json!({"operation_id": id}),
+    // Build await args - use id if found, otherwise filter by tool
+    let await_args = match id {
+        Some(id) => json!({"id": id}),
         None => json!({"tools": "sandboxed_shell"}),
     };
 
@@ -243,10 +243,10 @@ async fn test_await_for_completed_async_operation() -> Result<()> {
     Ok(())
 }
 
-/// Extracts operation_id from a tool result if present
-fn extract_operation_id(result: &rmcp::model::CallToolResult) -> Option<String> {
+/// Extracts id from a tool result if present
+fn extract_id(result: &rmcp::model::CallToolResult) -> Option<String> {
     let text = get_result_text(result)?;
-    let idx = text.find("operation_id")?;
+    let idx = text.find("id")?;
     let rest = &text[idx..];
 
     rest.split_whitespace()
@@ -259,9 +259,9 @@ fn extract_operation_id(result: &rmcp::model::CallToolResult) -> Option<String> 
 // Cancel Tool Coverage Tests
 // ============================================================================
 
-/// Test cancel tool with missing operation_id parameter
+/// Test cancel tool with missing id parameter
 #[tokio::test]
-async fn test_cancel_tool_missing_operation_id() -> Result<()> {
+async fn test_cancel_tool_missing_id() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
@@ -273,10 +273,7 @@ async fn test_cancel_tool_missing_operation_id() -> Result<()> {
     let result = client
         .call_tool(make_params("cancel", Some(json!({}))))
         .await;
-    assert!(
-        result.is_err(),
-        "Cancel without operation_id should fail with error"
-    );
+    assert!(result.is_err(), "Cancel without id should fail with error");
 
     client.cancel().await?;
     Ok(())
@@ -291,7 +288,7 @@ async fn client_has_tool(
     Ok(tools.iter().any(|t| t.name.as_ref() == name))
 }
 
-/// Test cancel tool with non-existent operation_id
+/// Test cancel tool with non-existent id
 #[tokio::test]
 async fn test_cancel_tool_nonexistent_operation() -> Result<()> {
     init_test_logging();
@@ -305,7 +302,7 @@ async fn test_cancel_tool_nonexistent_operation() -> Result<()> {
     let result = client
         .call_tool(make_params(
             "cancel",
-            Some(json!({"operation_id": "nonexistent_op_999"})),
+            Some(json!({"id": "nonexistent_op_999"})),
         ))
         .await?;
 
@@ -420,8 +417,8 @@ async fn test_list_tools_await_schema() -> Result<()> {
 
     let schema_str = serde_json::to_string(&await_tool.input_schema)?;
     assert!(
-        schema_str.contains("tools") || schema_str.contains("operation_id"),
-        "Await schema should have tools or operation_id properties"
+        schema_str.contains("tools") || schema_str.contains("id"),
+        "Await schema should have tools or id properties"
     );
 
     client.cancel().await?;

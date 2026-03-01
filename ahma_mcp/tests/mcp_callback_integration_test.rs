@@ -31,12 +31,12 @@ async fn test_mcp_callback_sender_flow() {
     // Start the client peer
     let _client_peer = serve_directly::<RoleClient, (), _, _, _>((), client_transport, None);
 
-    let operation_id = "test-op-123".to_string();
+    let id = "test-op-123".to_string();
     let progress_token = ProgressToken(NumberOrString::String(Arc::from("token-456")));
 
     let sender = McpCallbackSender::new(
         server_peer.peer().clone(),
-        operation_id.clone(),
+        id.clone(),
         Some(progress_token.clone()),
         McpClientType::Unknown,
     );
@@ -44,7 +44,7 @@ async fn test_mcp_callback_sender_flow() {
     // 1. Test Started
     sender
         .send_progress(ProgressUpdate::Started {
-            operation_id: operation_id.clone(),
+            id: id.clone(),
             command: "test-cmd".to_string(),
             description: "Testing...".to_string(),
         })
@@ -54,7 +54,7 @@ async fn test_mcp_callback_sender_flow() {
     // 2. Test Progress
     sender
         .send_progress(ProgressUpdate::Progress {
-            operation_id: operation_id.clone(),
+            id: id.clone(),
             message: "Working...".to_string(),
             percentage: Some(42.0),
             current_step: None,
@@ -65,7 +65,7 @@ async fn test_mcp_callback_sender_flow() {
     // 3. Test Completed
     sender
         .send_progress(ProgressUpdate::Completed {
-            operation_id: operation_id.clone(),
+            id: id.clone(),
             message: "Done!".to_string(),
             duration_ms: 100,
         })
@@ -99,7 +99,7 @@ async fn test_mcp_callback_sender_skips_cursor() {
     // This should return Ok(()) immediately without sending anything
     sender
         .send_progress(ProgressUpdate::Progress {
-            operation_id: "op-1".to_string(),
+            id: "op-1".to_string(),
             message: "Working...".to_string(),
             percentage: Some(50.0),
             current_step: None,
@@ -131,7 +131,7 @@ async fn test_mcp_callback_sender_no_token() {
     // This should return Ok(()) immediately without sending anything
     sender
         .send_progress(ProgressUpdate::Progress {
-            operation_id: "op-1".to_string(),
+            id: "op-1".to_string(),
             message: "Working...".to_string(),
             percentage: Some(50.0),
             current_step: None,

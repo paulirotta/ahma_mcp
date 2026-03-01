@@ -8,19 +8,19 @@ impl AhmaMcpService {
         &self,
         args: Map<String, Value>,
     ) -> Result<CallToolResult, McpError> {
-        let operation_id = args
-            .get("operation_id")
+        let id = args
+            .get("id")
             .ok_or_else(|| {
                 McpError::invalid_params(
-                    "operation_id parameter is required".to_string(),
-                    Some(serde_json::json!({ "missing_param": "operation_id" })),
+                    "id parameter is required".to_string(),
+                    Some(serde_json::json!({ "missing_param": "id" })),
                 )
             })?
             .as_str()
             .ok_or_else(|| {
                 McpError::invalid_params(
-                    "operation_id must be a string".to_string(),
-                    Some(serde_json::json!({ "operation_id": args.get("operation_id") })),
+                    "id must be a string".to_string(),
+                    Some(serde_json::json!({ "id": args.get("id") })),
                 )
             })?
             .to_string();
@@ -34,7 +34,7 @@ impl AhmaMcpService {
         // Attempt to cancel the operation
         let cancelled = self
             .operation_monitor
-            .cancel_operation_with_reason(&operation_id, reason.clone())
+            .cancel_operation_with_reason(&id, reason.clone())
             .await;
 
         let result_message = if cancelled {
@@ -43,14 +43,14 @@ impl AhmaMcpService {
                 .unwrap_or("No reason provided (default: user-initiated)");
             format!(
                 "OK Operation '{}' has been cancelled successfully.\nString: reason='{}'.\nHint: Consider restarting the operation if needed.",
-                operation_id, why
+                id, why
             )
         } else {
             // Check if operation exists but is already terminal
-            if let Some(operation) = self.operation_monitor.get_operation(&operation_id).await {
+            if let Some(operation) = self.operation_monitor.get_operation(&id).await {
                 format!(
                     "WARNING Operation '{}' is already {} and cannot be cancelled.",
-                    operation_id,
+                    id,
                     match operation.state {
                         crate::operation_monitor::OperationStatus::Completed => "completed",
                         crate::operation_monitor::OperationStatus::Failed => "failed",
@@ -62,7 +62,7 @@ impl AhmaMcpService {
             } else {
                 format!(
                     "FAIL Operation '{}' not found. It may have already completed or never existed.",
-                    operation_id
+                    id
                 )
             }
         };
@@ -73,7 +73,7 @@ impl AhmaMcpService {
                 "suggested_tool": "status",
                 "reason": "Operation cancelled; check status and consider restarting",
                 "next_steps": [
-                    {"tool": "status", "args": {"operation_id": operation_id}},
+                    {"tool": "status", "args": {"id": id}},
                     {"tool": "await", "args": {"tools": "", "timeout_seconds": 360}}
                 ]
             }

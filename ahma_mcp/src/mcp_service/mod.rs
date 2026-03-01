@@ -729,7 +729,7 @@ impl ServerHandler for AhmaMcpService {
 
             match execution_mode {
                 crate::adapter::ExecutionMode::Synchronous => {
-                    let operation_id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
+                    let id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
                     let progress_token = context.meta.get_progress_token();
                     let client_type = McpClientType::from_peer(&context.peer);
 
@@ -737,13 +737,13 @@ impl ServerHandler for AhmaMcpService {
                     if let Some(token) = progress_token.clone() {
                         let callback = McpCallbackSender::new(
                             context.peer.clone(),
-                            operation_id.clone(),
+                            id.clone(),
                             Some(token),
                             client_type,
                         );
                         let _ = callback
                             .send_progress(crate::callback_system::ProgressUpdate::Started {
-                                operation_id: operation_id.clone(),
+                                id: id.clone(),
                                 command: base_command.clone(),
                                 description: format!(
                                     "Execute {} in {}",
@@ -768,7 +768,7 @@ impl ServerHandler for AhmaMcpService {
                     if let Some(token) = progress_token {
                         let callback = McpCallbackSender::new(
                             context.peer.clone(),
-                            operation_id.clone(),
+                            id.clone(),
                             Some(token),
                             client_type,
                         );
@@ -777,7 +777,7 @@ impl ServerHandler for AhmaMcpService {
                                 let _ = callback
                                     .send_progress(
                                         crate::callback_system::ProgressUpdate::FinalResult {
-                                            operation_id: operation_id.clone(),
+                                            id: id.clone(),
                                             command: base_command.clone(),
                                             description: format!(
                                                 "Execute {} in {}",
@@ -795,7 +795,7 @@ impl ServerHandler for AhmaMcpService {
                                 let _ = callback
                                     .send_progress(
                                         crate::callback_system::ProgressUpdate::FinalResult {
-                                            operation_id: operation_id.clone(),
+                                            id: id.clone(),
                                             command: base_command.clone(),
                                             description: format!(
                                                 "Execute {} in {}",
@@ -822,7 +822,7 @@ impl ServerHandler for AhmaMcpService {
                     }
                 }
                 crate::adapter::ExecutionMode::AsyncResultPush => {
-                    let operation_id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
+                    let id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
                     // Only send progress notifications when the client provided a progressToken
                     // in request `_meta`. Additionally, skip progress for clients that don't
                     // handle them well (e.g., Cursor logs errors for valid tokens).
@@ -831,7 +831,7 @@ impl ServerHandler for AhmaMcpService {
                     let callback: Option<Box<dyn CallbackSender>> = progress_token.map(|token| {
                         Box::new(McpCallbackSender::new(
                             context.peer.clone(),
-                            operation_id.clone(),
+                            id.clone(),
                             Some(token),
                             client_type,
                         )) as Box<dyn CallbackSender>
@@ -861,7 +861,7 @@ impl ServerHandler for AhmaMcpService {
                             &base_command,
                             &working_directory,
                             crate::adapter::AsyncExecOptions {
-                                operation_id: Some(operation_id),
+                                id: Some(id),
                                 args: Some(arguments),
                                 timeout,
                                 callback,
@@ -1004,7 +1004,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn handle_status_filters_by_tools_and_operation_id() {
+    async fn handle_status_filters_by_tools_and_id() {
         let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
             Duration::from_secs(30),
         )));
@@ -1049,31 +1049,28 @@ mod tests {
         );
 
         // Filter by specific operation id
-        let args = json!({"operation_id": "op_active"})
-            .as_object()
-            .unwrap()
-            .clone();
+        let args = json!({"id": "op_active"}).as_object().unwrap().clone();
         let result = service.handle_status(args).await.expect("status");
         let text = first_text(&result);
         assert!(text.contains("Operation 'op_active' found"));
     }
 
     #[tokio::test]
-    async fn handle_cancel_requires_operation_id() {
+    async fn handle_cancel_requires_id() {
         let service = make_service().await;
         let err = service
             .handle_cancel(serde_json::Map::new())
             .await
             .unwrap_err();
-        assert!(format!("{err:?}").contains("operation_id parameter is required"));
+        assert!(format!("{err:?}").contains("id parameter is required"));
     }
 
     #[tokio::test]
-    async fn handle_cancel_rejects_non_string_operation_id() {
+    async fn handle_cancel_rejects_non_string_id() {
         let service = make_service().await;
-        let args = json!({"operation_id": 123}).as_object().unwrap().clone();
+        let args = json!({"id": 123}).as_object().unwrap().clone();
         let err = service.handle_cancel(args).await.unwrap_err();
-        assert!(format!("{err:?}").contains("operation_id must be a string"));
+        assert!(format!("{err:?}").contains("id must be a string"));
     }
 
     #[tokio::test]
@@ -1091,7 +1088,7 @@ mod tests {
         );
         monitor.add_operation(op).await;
 
-        let args = json!({"operation_id": "op_to_cancel", "reason": "because"})
+        let args = json!({"id": "op_to_cancel", "reason": "because"})
             .as_object()
             .unwrap()
             .clone();
@@ -1124,10 +1121,7 @@ mod tests {
         op.state = OperationStatus::Completed;
         monitor.add_operation(op).await;
 
-        let args = json!({"operation_id": "op_terminal"})
-            .as_object()
-            .unwrap()
-            .clone();
+        let args = json!({"id": "op_terminal"}).as_object().unwrap().clone();
         let result = service.handle_cancel(args).await.expect("cancel");
         let text = first_text(&result);
         assert!(text.contains("already completed"));
@@ -1156,15 +1150,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn handle_await_operation_id_not_found_reports_not_found() {
+    async fn handle_await_id_not_found_reports_not_found() {
         let service = make_service().await;
-        let params = call_tool_params("await", json!({"operation_id": "op_missing"}));
+        let params = call_tool_params("await", json!({"id": "op_missing"}));
         let result = service.handle_await(params).await.expect("await result");
         assert!(first_text(&result).contains("Operation op_missing not found"));
     }
 
     #[tokio::test]
-    async fn handle_await_operation_id_in_history_reports_already_completed() {
+    async fn handle_await_id_in_history_reports_already_completed() {
         let monitor = Arc::new(OperationMonitor::new(MonitorConfig::with_timeout(
             Duration::from_secs(30),
         )));
@@ -1186,7 +1180,7 @@ mod tests {
             )
             .await;
 
-        let params = call_tool_params("await", json!({"operation_id": op_id}));
+        let params = call_tool_params("await", json!({"id": op_id}));
         let result = service.handle_await(params).await.expect("await result");
         assert!(first_text(&result).contains("already completed"));
         // Completed op details should be included as a JSON block in content.
@@ -1341,14 +1335,14 @@ mod tests {
             .and_then(|v| v.as_object())
             .expect("await properties");
         assert!(await_props.contains_key("tools"));
-        assert!(await_props.contains_key("operation_id"));
+        assert!(await_props.contains_key("id"));
 
         let status_props = status_schema
             .get("properties")
             .and_then(|v| v.as_object())
             .expect("status properties");
         assert!(status_props.contains_key("tools"));
-        assert!(status_props.contains_key("operation_id"));
+        assert!(status_props.contains_key("id"));
     }
 
     #[test]

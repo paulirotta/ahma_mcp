@@ -252,7 +252,7 @@ fn test_input_schema_for_await_tool() {
         }),
     );
     properties.insert(
-        "operation_id".to_string(),
+        "id".to_string(),
         serde_json::json!({
             "type": "string",
             "description": "Specific operation ID to await for (optional)"
@@ -284,7 +284,7 @@ fn test_input_schema_for_status_tool() {
         }),
     );
     properties.insert(
-        "operation_id".to_string(),
+        "id".to_string(),
         serde_json::json!({
             "type": "string",
             "description": "Specific operation ID to query (optional; shows all if omitted)"
@@ -301,7 +301,7 @@ fn test_input_schema_for_status_tool() {
     );
     let props = schema.get("properties").unwrap().as_object().unwrap();
     assert!(props.contains_key("tools"));
-    assert!(props.contains_key("operation_id"));
+    assert!(props.contains_key("id"));
 }
 
 // ============= Config Watcher Debounce Tests =============

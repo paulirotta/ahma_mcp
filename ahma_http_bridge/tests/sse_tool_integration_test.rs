@@ -193,7 +193,7 @@ async fn test_cargo_check() {
 
     let result = call_tool(&client, "cargo_check", json!({})).await;
 
-    // cargo check is async, so it returns operation_id
+    // cargo check is async, so it returns id
     println!(
         "cargo_check result: success={}, error={:?}",
         result.success, result.error

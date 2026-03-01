@@ -218,9 +218,9 @@ impl OperationMonitor {
         tracing::debug!("Total operations in monitor after add: {}", ops.len());
     }
 
-    pub async fn get_operation(&self, operation_id: &str) -> Option<Operation> {
+    pub async fn get_operation(&self, id: &str) -> Option<Operation> {
         let ops = self.operations.read().await;
-        ops.get(operation_id).cloned()
+        ops.get(id).cloned()
     }
 
     /// Starts a background task that periodically checks for timed-out operations.
@@ -265,16 +265,16 @@ impl OperationMonitor {
         }
     }
 
-    async fn timeout_operation(&self, operation_id: &str, reason: String) {
+    async fn timeout_operation(&self, id: &str, reason: String) {
         let mut ops = self.operations.write().await;
-        let Some(op) = ops.get_mut(operation_id) else {
+        let Some(op) = ops.get_mut(id) else {
             return;
         };
         if op.state.is_terminal() {
             return;
         }
 
-        tracing::warn!("Timing out operation: {} - {}", operation_id, reason);
+        tracing::warn!("Timing out operation: {} - {}", id, reason);
 
         op.state = OperationStatus::TimedOut;
         op.end_time = Some(SystemTime::now());
@@ -284,19 +284,18 @@ impl OperationMonitor {
             "reason": reason
         }));
 
-        let timed_out_op = ops.remove(operation_id);
+        let timed_out_op = ops.remove(id);
         drop(ops);
 
-        self.move_to_history_and_notify(operation_id, timed_out_op)
-            .await;
+        self.move_to_history_and_notify(id, timed_out_op).await;
     }
 
     /// Move a completed operation to history and notify waiters.
     /// Must be called after releasing the operations write lock.
-    async fn move_to_history_and_notify(&self, operation_id: &str, operation: Option<Operation>) {
+    async fn move_to_history_and_notify(&self, id: &str, operation: Option<Operation>) {
         let Some(op) = operation else { return };
         let mut history = self.completion_history.write().await;
-        history.insert(operation_id.to_string(), op.clone());
+        history.insert(id.to_string(), op.clone());
         drop(history);
         op.completion_notifier.notify_waiters();
     }
@@ -308,19 +307,14 @@ impl OperationMonitor {
         self.get_active_operations().await
     }
 
-    pub async fn update_status(
-        &self,
-        operation_id: &str,
-        status: OperationStatus,
-        result: Option<Value>,
-    ) {
+    pub async fn update_status(&self, id: &str, status: OperationStatus, result: Option<Value>) {
         let mut ops = self.operations.write().await;
         let mut operation_to_move = None;
 
-        if let Some(op) = ops.get_mut(operation_id) {
+        if let Some(op) = ops.get_mut(id) {
             tracing::debug!(
                 "Updating operation {} from {:?} to {:?}",
-                operation_id,
+                id,
                 op.state,
                 status
             );
@@ -329,7 +323,7 @@ impl OperationMonitor {
 
             if status.is_terminal() {
                 op.end_time = Some(SystemTime::now());
-                operation_to_move = ops.remove(operation_id);
+                operation_to_move = ops.remove(id);
             }
         }
 
@@ -337,8 +331,8 @@ impl OperationMonitor {
 
         if let Some(op) = operation_to_move {
             let mut history = self.completion_history.write().await;
-            history.insert(operation_id.to_string(), op.clone());
-            tracing::debug!("Moved operation {} to completion history.", operation_id);
+            history.insert(id.to_string(), op.clone());
+            tracing::debug!("Moved operation {} to completion history.", id);
             drop(history);
 
             op.completion_notifier.notify_waiters();
@@ -347,33 +341,23 @@ impl OperationMonitor {
 
     /// Cancel an operation by ID with an optional reason string.
     /// Returns true if the operation was found and cancelled, false if not found.
-    pub async fn cancel_operation_with_reason(
-        &self,
-        operation_id: &str,
-        reason: Option<String>,
-    ) -> bool {
+    pub async fn cancel_operation_with_reason(&self, id: &str, reason: Option<String>) -> bool {
         let mut ops = self.operations.write().await;
 
-        let Some(op) = ops.get_mut(operation_id) else {
-            tracing::warn!(
-                "Attempted to cancel non-existent operation: {}",
-                operation_id
-            );
+        let Some(op) = ops.get_mut(id) else {
+            tracing::warn!("Attempted to cancel non-existent operation: {}", id);
             return false;
         };
 
         if op.state.is_terminal() {
-            tracing::warn!(
-                "Attempted to cancel already terminal operation: {}",
-                operation_id
-            );
+            tracing::warn!("Attempted to cancel already terminal operation: {}", id);
             return false;
         }
 
-        tracing::info!("Cancelling operation: {}", operation_id);
+        tracing::info!("Cancelling operation: {}", id);
         tracing::debug!(
-            "CANCEL_OPERATION_WITH_REASON: operation_id='{}', reason={:?}, current_state={:?}",
-            operation_id,
+            "CANCEL_OPERATION_WITH_REASON: id='{}', reason={:?}, current_state={:?}",
+            id,
             reason,
             op.state
         );
@@ -384,22 +368,19 @@ impl OperationMonitor {
         op.result = Some(build_cancellation_result(reason));
 
         let cancelled_op = op.clone();
-        ops.remove(operation_id);
+        ops.remove(id);
         drop(ops);
 
         let mut history = self.completion_history.write().await;
-        history.insert(operation_id.to_string(), cancelled_op);
-        tracing::debug!(
-            "Moved cancelled operation {} to completion history.",
-            operation_id
-        );
+        history.insert(id.to_string(), cancelled_op);
+        tracing::debug!("Moved cancelled operation {} to completion history.", id);
 
         true
     }
 
     /// Backward-compatible helper without explicit reason
-    pub async fn cancel_operation(&self, operation_id: &str) -> bool {
-        self.cancel_operation_with_reason(operation_id, None).await
+    pub async fn cancel_operation(&self, id: &str) -> bool {
+        self.cancel_operation_with_reason(id, None).await
     }
 
     pub async fn get_active_operations(&self) -> Vec<Operation> {
@@ -425,20 +406,17 @@ impl OperationMonitor {
     }
 
     /// Look up an operation in the completion history.
-    async fn check_completion_history(&self, operation_id: &str) -> Option<Operation> {
+    async fn check_completion_history(&self, id: &str) -> Option<Operation> {
         let history = self.completion_history.read().await;
-        history.get(operation_id).cloned()
+        history.get(id).cloned()
     }
 
     /// Get the notifier for an active operation, setting first_wait_time if needed.
     /// Returns `Some(notifier)` if the operation is active, `None` if it doesn't exist.
     /// Returns the operation directly via `Err(op)` if it's already terminal.
-    async fn get_notifier_or_terminal(
-        &self,
-        operation_id: &str,
-    ) -> Result<Option<Arc<Notify>>, Operation> {
+    async fn get_notifier_or_terminal(&self, id: &str) -> Result<Option<Arc<Notify>>, Operation> {
         let mut ops = self.operations.write().await;
-        let Some(op) = ops.get_mut(operation_id) else {
+        let Some(op) = ops.get_mut(id) else {
             return Ok(None);
         };
 
@@ -455,15 +433,15 @@ impl OperationMonitor {
 
     /// Retry checking completion history after notification, handling the small
     /// race window where the notifier fires before history is updated.
-    async fn wait_for_history_propagation(&self, operation_id: &str) -> Option<Operation> {
+    async fn wait_for_history_propagation(&self, id: &str) -> Option<Operation> {
         for attempt in 0..10 {
-            if let Some(op) = self.check_completion_history(operation_id).await {
+            if let Some(op) = self.check_completion_history(id).await {
                 return Some(op);
             }
             if attempt < 9 {
                 tracing::debug!(
                     "Operation {} not yet in completion history, retrying (attempt {}/10)",
-                    operation_id,
+                    id,
                     attempt + 1
                 );
                 tokio::time::sleep(Duration::from_millis(10)).await;
@@ -472,28 +450,28 @@ impl OperationMonitor {
 
         tracing::warn!(
             "Operation {} completed but not found in history after 10 retries",
-            operation_id
+            id
         );
         None
     }
 
-    pub async fn wait_for_operation(&self, operation_id: &str) -> Option<Operation> {
+    pub async fn wait_for_operation(&self, id: &str) -> Option<Operation> {
         let timeout = Duration::from_secs(300);
 
-        if let Some(op) = self.check_completion_history(operation_id).await {
+        if let Some(op) = self.check_completion_history(id).await {
             return Some(op);
         }
 
-        let notifier = match self.get_notifier_or_terminal(operation_id).await {
+        let notifier = match self.get_notifier_or_terminal(id).await {
             Err(terminal_op) => return Some(terminal_op),
             Ok(None) => return None,
             Ok(Some(n)) => n,
         };
 
         match tokio::time::timeout(timeout, notifier.notified()).await {
-            Ok(_) => self.wait_for_history_propagation(operation_id).await,
+            Ok(_) => self.wait_for_history_propagation(id).await,
             Err(_) => {
-                tracing::warn!("Wait for operation {} timed out.", operation_id);
+                tracing::warn!("Wait for operation {} timed out.", id);
                 None
             }
         }

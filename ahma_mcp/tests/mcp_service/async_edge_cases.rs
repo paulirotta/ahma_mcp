@@ -16,16 +16,16 @@ use std::borrow::Cow;
 
 /// Test async notification delivery with malformed operation IDs
 #[tokio::test]
-async fn test_async_notification_malformed_operation_ids() -> Result<()> {
+async fn test_async_notification_malformed_ids() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
-    // Test status tool with numeric operation_id (should be handled gracefully)
+    // Test status tool with numeric id (should be handled gracefully)
     let malformed_params = CallToolRequestParams {
         name: Cow::Borrowed("status"),
         arguments: Some(
             json!({
-                "operation_id": 12345  // numeric instead of string
+                "id": 12345  // numeric instead of string
             })
             .as_object()
             .unwrap()
@@ -144,7 +144,7 @@ async fn test_error_handling_malformed_call_tool_params() -> Result<()> {
         name: Cow::Borrowed("cancel"),
         arguments: Some(
             json!({
-                // Missing operation_id which is required
+                // Missing id which is required
             })
             .as_object()
             .unwrap()
@@ -155,10 +155,7 @@ async fn test_error_handling_malformed_call_tool_params() -> Result<()> {
     };
 
     let result = client.call_tool(missing_params).await;
-    assert!(
-        result.is_err(),
-        "Cancel tool should require operation_id parameter"
-    );
+    assert!(result.is_err(), "Cancel tool should require id parameter");
 
     // Test with invalid parameter types for await tool (no timeout_seconds accepted)
     let invalid_types_params = CallToolRequestParams {
@@ -218,7 +215,7 @@ async fn test_async_notification_concurrent_load() -> Result<()> {
                 name: Cow::Borrowed("status"),
                 arguments: Some(
                     json!({
-                        "operation_id": format!("test_concurrent_op_{}", i)
+                        "id": format!("test_concurrent_op_{}", i)
                     })
                     .as_object()
                     .unwrap()
@@ -279,12 +276,12 @@ async fn test_status_tool_filter_combinations() -> Result<()> {
         assert!(text.contains("cargo") || text.contains("Operations status"));
     }
 
-    // Test with both operation_id and tools filter
+    // Test with both id and tools filter
     let combined_filter_params = CallToolRequestParams {
         name: Cow::Borrowed("status"),
         arguments: Some(
             json!({
-                "operation_id": "test_123",
+                "id": "test_123",
                 "tools": "cargo"
             })
             .as_object()
@@ -333,7 +330,7 @@ async fn test_async_operation_with_real_execution() -> Result<()> {
     {
         let text = &text_content.text;
         assert!(
-            text.contains("operation_id") || text.contains("started") || text.contains("job_id"),
+            text.contains("id") || text.contains("started") || text.contains("job_id"),
             "Async operation should return operation tracking info, got: {}",
             text
         );

@@ -7,7 +7,7 @@
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Core Tool Execution | tests-pass | `ahma_mcp` adapter executes CLI tools via MTDF JSON |
-| Async-First Operations | tests-pass | Operations return `operation_id`, push results via MCP notifications |
+| Async-First Operations | tests-pass | Operations return `id`, push results via MCP notifications |
 | Shell Pool | tests-pass | Pre-warmed zsh shells for 5-20ms command startup latency |
 | Linux Sandbox (Landlock) | tests-pass | Kernel-level FS sandboxing on Linux 5.13+ |
 | macOS Sandbox (Seatbelt) | tests-pass | Kernel-level FS sandboxing via `sandbox-exec` |
@@ -101,7 +101,7 @@ These tools are always available regardless of JSON configuration:
 
 **Workflow:**
 
-1. AI invokes tool → Server immediately returns `operation_id`
+1. AI invokes tool → Server immediately returns `id`
 2. Command executes in background via shell pool
 3. On completion, result pushed via MCP `notifications/progress`
 4. AI processes notification when it arrives (non-blocking)
@@ -150,7 +150,7 @@ These tools are always available regardless of JSON configuration:
 
 ### R2: Async-First Architecture
 
-- **R2.1**: Operations **must** execute asynchronously by default, returning an `operation_id` immediately.
+- **R2.1**: Operations **must** execute asynchronously by default, returning an `id` immediately.
 - **R2.2**: On completion, the system **must** push results via MCP progress notifications.
 - **R2.3**: Commands that modify config files (e.g., `cargo add`) **should** use `"synchronous": true` to prevent race conditions.
 - **R2.4**: **Inheritance**: Subcommand-level `synchronous` overrides tool-level; tool-level overrides default (async).

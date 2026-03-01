@@ -359,7 +359,7 @@ When running inside another sandbox (Cursor, VS Code, Docker):
 ## Tool Usage Patterns
 
 ### Async-First Workflow
-**Default**: Tools run asynchronously and return immediately with an `operation_id`. The AI receives a notification when complete.
+**Default**: Tools run asynchronously and return immediately with an `id`. The AI receives a notification when complete.
 
 ```json
 {

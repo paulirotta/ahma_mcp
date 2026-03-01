@@ -735,7 +735,7 @@ async fn test_hardwired_tools_always_present() {
     // Verify await tool has proper parameters
     let await_schema = await_tool.unwrap().input_schema.as_ref();
     let await_props = await_schema.get("properties").unwrap().as_object().unwrap();
-    assert!(await_props.contains_key("operation_id"));
+    assert!(await_props.contains_key("id"));
     assert!(await_props.contains_key("tools"));
 
     // Verify status tool has proper parameters
@@ -745,7 +745,7 @@ async fn test_hardwired_tools_always_present() {
         .unwrap()
         .as_object()
         .unwrap();
-    assert!(status_props.contains_key("operation_id"));
+    assert!(status_props.contains_key("id"));
     assert!(status_props.contains_key("tools"));
 }
 

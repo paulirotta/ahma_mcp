@@ -98,20 +98,20 @@ fn find_step_subcommand<'a>(
 }
 
 /// Generates a new unique operation ID.
-fn next_operation_id() -> String {
+fn next_id() -> String {
     format!("op_{}", SEQUENCE_ID.fetch_add(1, Ordering::SeqCst))
 }
 
 /// Creates a callback sender if a progress token is available.
 fn create_callback(
     context: &RequestContext<RoleServer>,
-    operation_id: &str,
+    id: &str,
 ) -> Option<Box<dyn CallbackSender>> {
     let progress_token = context.meta.get_progress_token()?;
     let client_type = McpClientType::from_peer(&context.peer);
     Some(Box::new(McpCallbackSender::new(
         context.peer.clone(),
-        operation_id.to_string(),
+        id.to_string(),
         Some(progress_token),
         client_type,
     )) as Box<dyn CallbackSender>)
@@ -276,8 +276,8 @@ async fn handle_sequence_tool_async(
         let (subcommand_config, command_parts) =
             find_step_subcommand(&step_tool_config, &step.subcommand, &step.tool)?;
 
-        let operation_id = next_operation_id();
-        let callback = create_callback(&context, &operation_id);
+        let id = next_id();
+        let callback = create_callback(&context, &id);
 
         let step_result = adapter
             .execute_async_in_dir_with_options(
@@ -285,7 +285,7 @@ async fn handle_sequence_tool_async(
                 &command_parts.join(" "),
                 ".",
                 crate::adapter::AsyncExecOptions {
-                    operation_id: Some(operation_id),
+                    id: Some(id),
                     args: Some(merged_args),
                     timeout: None,
                     callback,
@@ -348,8 +348,8 @@ pub async fn handle_subcommand_sequence(
                 },
             )?;
 
-        let operation_id = next_operation_id();
-        let callback = create_callback(&context, &operation_id);
+        let id = next_id();
+        let callback = create_callback(&context, &id);
 
         let step_result = adapter
             .execute_async_in_dir_with_options(
@@ -357,7 +357,7 @@ pub async fn handle_subcommand_sequence(
                 &command_parts.join(" "),
                 ".",
                 crate::adapter::AsyncExecOptions {
-                    operation_id: Some(operation_id),
+                    id: Some(id),
                     args: params.arguments.clone(),
                     timeout: None,
                     callback,
@@ -391,26 +391,22 @@ pub async fn handle_subcommand_sequence(
 
 /// Formats a message for a sequence step that was started.
 /// Unified handler for both top-level and subcommand sequences.
-pub fn format_step_started_message(
-    kind: &SequenceKind,
-    step: &SequenceStep,
-    operation_id: &str,
-) -> String {
+pub fn format_step_started_message(kind: &SequenceKind, step: &SequenceStep, id: &str) -> String {
     let (step_name, prefix) = match kind {
         SequenceKind::TopLevel => (&step.tool, "Sequence step"),
         SequenceKind::Subcommand { .. } => (&step.subcommand, "Subcommand sequence step"),
     };
-    let hint = crate::tool_hints::preview(operation_id, step_name);
+    let hint = crate::tool_hints::preview(id, step_name);
     match step.description.as_deref() {
         Some(desc) if !desc.is_empty() => {
             format!(
                 "{} '{}' ({}) started with operation ID: {}{}",
-                prefix, step_name, desc, operation_id, hint
+                prefix, step_name, desc, id, hint
             )
         }
         _ => format!(
             "{} '{}' started with operation ID: {}{}",
-            prefix, step_name, operation_id, hint
+            prefix, step_name, id, hint
         ),
     }
 }

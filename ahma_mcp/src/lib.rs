@@ -13,7 +13,7 @@
 //! ## Key Functional Requirements
 //!
 //! - **Dynamic Tool Adaptation**: Adapt CLI tools via JSON files (MTDF). Hot-reload support.
-//! - **Async-First Execution**: Background operation management via `operation_id` and progress notifications.
+//! - **Async-First Execution**: Background operation management via `id` and progress notifications.
 //! - **Performance**: Pre-warmed shell pool (`zsh`) for 5-20ms command startup latency.
 //! - **Safe Scoping**: Kernel-level sandboxing (Landlock on Linux, Seatbelt on macOS).
 //! - **Selective Sync Override**: Support forcing operations to run synchronously when needed.

@@ -47,7 +47,7 @@ async fn test_operation_cancellation_functionality() {
     println!("🧪 Starting operation cancellation test...");
 
     // Start a long-running command using echo in a loop (more reliable than sleep)
-    let operation_id = adapter
+    let id = adapter
         .execute_async_in_dir(
             "test_slow_command",
             "sh",
@@ -69,15 +69,15 @@ async fn test_operation_cancellation_functionality() {
         .await
         .expect("Failed to start async operation");
 
-    println!("🚀 Started long-running operation: {}", operation_id);
+    println!("🚀 Started long-running operation: {}", id);
 
     // Wait until the operation is at least InProgress
     let _ = wait_for_condition(Duration::from_secs(5), Duration::from_millis(50), || {
         let operation_monitor = operation_monitor.clone();
-        let operation_id = operation_id.clone();
+        let id = id.clone();
         async move {
             operation_monitor
-                .get_operation(&operation_id)
+                .get_operation(&id)
                 .await
                 .map(|op| op.state != OperationStatus::Pending)
                 .unwrap_or(false)
@@ -86,24 +86,24 @@ async fn test_operation_cancellation_functionality() {
     .await;
 
     // Check if the operation is still running, or if it completed/failed immediately
-    let operation = operation_monitor.get_operation(&operation_id).await;
+    let operation = operation_monitor.get_operation(&id).await;
 
     if let Some(op) = operation {
         if op.state == OperationStatus::InProgress {
             println!("OK Confirmed operation is in progress");
 
             // Cancel the operation
-            let cancelled = operation_monitor.cancel_operation(&operation_id).await;
+            let cancelled = operation_monitor.cancel_operation(&id).await;
             assert!(cancelled, "Operation cancellation should succeed");
             println!("OK Operation cancellation succeeded");
 
             // Wait for cancellation to be processed
             let _ = wait_for_condition(Duration::from_secs(5), Duration::from_millis(50), || {
                 let operation_monitor = operation_monitor.clone();
-                let operation_id = operation_id.clone();
+                let id = id.clone();
                 async move {
                     operation_monitor
-                        .get_operation(&operation_id)
+                        .get_operation(&id)
                         .await
                         .map(|op| op.state == OperationStatus::Cancelled)
                         .unwrap_or(true)
@@ -112,7 +112,7 @@ async fn test_operation_cancellation_functionality() {
             .await;
 
             // Verify the operation was cancelled
-            let cancelled_operation = operation_monitor.get_operation(&operation_id).await;
+            let cancelled_operation = operation_monitor.get_operation(&id).await;
 
             // The operation might have been moved to completion history
             if let Some(op) = cancelled_operation {
@@ -121,7 +121,7 @@ async fn test_operation_cancellation_functionality() {
             } else {
                 // Check completion history
                 let completed_ops = operation_monitor.get_completed_operations().await;
-                let cancelled_op = completed_ops.iter().find(|op| op.id == operation_id);
+                let cancelled_op = completed_ops.iter().find(|op| op.id == id);
                 assert!(
                     cancelled_op.is_some(),
                     "Cancelled operation should be in completion history"
@@ -138,7 +138,7 @@ async fn test_operation_cancellation_functionality() {
                 println!("Operation result: {:?}", result);
             }
             // We can still test the cancellation logic, even if the operation completed
-            let cancelled = operation_monitor.cancel_operation(&operation_id).await;
+            let cancelled = operation_monitor.cancel_operation(&id).await;
             assert!(
                 !cancelled,
                 "Should not be able to cancel already completed operation"
@@ -148,7 +148,7 @@ async fn test_operation_cancellation_functionality() {
     } else {
         // Operation might have moved to completion history already
         let completed_ops = operation_monitor.get_completed_operations().await;
-        let completed_op = completed_ops.iter().find(|op| op.id == operation_id);
+        let completed_op = completed_ops.iter().find(|op| op.id == id);
         if let Some(op) = completed_op {
             println!(
                 "WARNING Operation completed too quickly, final state: {:?}",
@@ -158,12 +158,12 @@ async fn test_operation_cancellation_functionality() {
                 println!("Operation result: {:?}", result);
             }
         } else {
-            panic!("Operation {} disappeared completely", operation_id);
+            panic!("Operation {} disappeared completely", id);
         }
     }
 
     // Verify that attempting to cancel an already cancelled operation returns false
-    let second_cancel = operation_monitor.cancel_operation(&operation_id).await;
+    let second_cancel = operation_monitor.cancel_operation(&id).await;
     assert!(
         !second_cancel,
         "Second cancellation attempt should return false"

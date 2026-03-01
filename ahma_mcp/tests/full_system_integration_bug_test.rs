@@ -30,7 +30,7 @@ mod tests {
             self.notifications.lock().unwrap().clone()
         }
 
-        fn count_completed_notifications(&self, operation_id: &str) -> usize {
+        fn count_completed_notifications(&self, id: &str) -> usize {
             self.notifications
                 .lock()
                 .unwrap()
@@ -39,9 +39,9 @@ mod tests {
                     matches!(
                         update,
                         ProgressUpdate::Completed {
-                            operation_id: update_operation_id,
+                            id: update_id,
                             ..
-                        } if update_operation_id == operation_id
+                        } if update_id == id
                     )
                 })
                 .count()
@@ -105,14 +105,14 @@ mod tests {
         let current_dir_str = current_dir.to_str().unwrap();
 
         // Start an operation
-        let operation_id = adapter
+        let id = adapter
             .execute_async_in_dir("cargo", "version", None, current_dir_str, Some(30), None)
             .await
             .expect("Failed to execute async operation");
-        println!("🚀 Started operation: {}", operation_id);
+        println!("🚀 Started operation: {}", id);
 
         // Wait for the operation to complete
-        let completed_op = operation_monitor.wait_for_operation(&operation_id).await;
+        let completed_op = operation_monitor.wait_for_operation(&id).await;
         assert!(
             completed_op.is_some(),
             "Operation should have completed and been returned by wait_for_operation"
@@ -134,7 +134,7 @@ mod tests {
                     // A real notification system would check if a notification has already been sent.
                     if notified_operations.insert(op.id.clone()) {
                         let update = ProgressUpdate::Completed {
-                            operation_id: op.id.clone(),
+                            id: op.id.clone(),
                             message: "Operation finished".to_string(),
                             duration_ms: 1000,
                         };
@@ -147,9 +147,8 @@ mod tests {
         }
 
         // --- Analysis ---
-        let completed_notifications =
-            tracking_callback.count_completed_notifications(&operation_id);
-        println!("📈 Notification analysis for operation {}:", operation_id);
+        let completed_notifications = tracking_callback.count_completed_notifications(&id);
+        println!("📈 Notification analysis for operation {}:", id);
         println!(
             "   Total 'Completed' notifications sent: {}",
             completed_notifications

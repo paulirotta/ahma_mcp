@@ -47,12 +47,7 @@ pub struct TerminalOutput;
 
 impl TerminalOutput {
     /// Write a formatted result to terminal with proper headers and formatting
-    pub async fn display_result(
-        operation_id: &str,
-        command: &str,
-        description: &str,
-        content: &str,
-    ) {
+    pub async fn display_result(id: &str, command: &str, description: &str, content: &str) {
         if content.trim().is_empty() {
             return; // Skip whitespace-only content
         }
@@ -61,7 +56,7 @@ impl TerminalOutput {
         let mut stderr = stderr();
         let _ = stderr.write_all(b"\n").await;
         let _ = stderr
-            .write_all(format!("=== {} ===\n", operation_id.to_uppercase()).as_bytes())
+            .write_all(format!("=== {} ===\n", id.to_uppercase()).as_bytes())
             .await;
         let _ = stderr
             .write_all(format!("Command: {}\n", command).as_bytes())

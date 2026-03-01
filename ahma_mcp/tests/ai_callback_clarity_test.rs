@@ -9,12 +9,12 @@ async fn test_callback_messages_are_ai_actionable() {
     println!("🤖 Testing callback message clarity for AI decision-making...");
 
     // Test different types of progress updates that an AI might receive
-    let operation_id = "test_op_123".to_string();
+    let id = "test_op_123".to_string();
     let working_dir = "/tmp/test".to_string();
 
     // Test 1: Started message should clearly indicate what's beginning
     let started = ProgressUpdate::Started {
-        operation_id: operation_id.clone(),
+        id: id.clone(),
         command: "cargo nextest run".to_string(),
         description: "Running tests with nextest".to_string(),
     };
@@ -24,7 +24,7 @@ async fn test_callback_messages_are_ai_actionable() {
 
     // Test 2: Final result message should provide comprehensive outcome
     let final_result = ProgressUpdate::FinalResult {
-        operation_id: operation_id.clone(),
+        id: id.clone(),
         command: "cargo nextest run".to_string(),
         description: "Running tests with nextest".to_string(),
         working_directory: working_dir,
@@ -73,7 +73,7 @@ async fn test_callback_messages_are_ai_actionable() {
 
     // Test 3: Failed message should be actionable
     let failed = ProgressUpdate::Failed {
-        operation_id: operation_id.clone(),
+        id: id.clone(),
         error: "Process exited with non-zero status: exit code 101".to_string(),
         duration_ms: 1500,
     };
@@ -122,7 +122,7 @@ test result: FAILED. 15 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out;
 "#;
 
     let final_result = ProgressUpdate::FinalResult {
-        operation_id: "nextest_op_456".to_string(),
+        id: "nextest_op_456".to_string(),
         command: "cargo nextest run".to_string(),
         description: "Running comprehensive test suite".to_string(),
         working_directory: "/Users/paul/github/ahma_mcp".to_string(),

@@ -261,20 +261,17 @@ async fn test_async_sequence_tool_execution() -> Result<()> {
 
     // Should return immediately with operation IDs
     assert!(!result.content.is_empty());
-    let mut found_operation_id = false;
+    let mut found_id = false;
     for content in &result.content {
         if let Some(text_content) = content.as_text()
             && (text_content.text.contains("operation")
                 || text_content.text.contains("op_")
                 || text_content.text.contains("started"))
         {
-            found_operation_id = true;
+            found_id = true;
         }
     }
-    assert!(
-        found_operation_id,
-        "Async sequence should return operation IDs"
-    );
+    assert!(found_id, "Async sequence should return operation IDs");
 
     // Wait for operations to complete
     let _ = wait_for_condition(

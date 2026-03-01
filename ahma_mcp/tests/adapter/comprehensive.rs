@@ -257,7 +257,7 @@ async fn test_async_operation_lifecycle() -> Result<()> {
     let (adapter, temp_dir) = create_test_adapter().await?;
 
     // Test basic async operation
-    let operation_id = adapter
+    let id = adapter
         .execute_async_in_dir(
             "test_tool",
             "echo",
@@ -271,7 +271,7 @@ async fn test_async_operation_lifecycle() -> Result<()> {
         )
         .await?;
 
-    assert!(operation_id.starts_with("op_"));
+    assert!(id.starts_with("op_"));
 
     // Yield to allow operation to complete without timing sleeps
     for _ in 0..3 {
@@ -279,7 +279,7 @@ async fn test_async_operation_lifecycle() -> Result<()> {
     }
 
     // Test multiple concurrent async operations
-    let mut operation_ids = Vec::new();
+    let mut ids = Vec::new();
     for i in 0..5 {
         let op_id = adapter
             .execute_async_in_dir(
@@ -297,14 +297,14 @@ async fn test_async_operation_lifecycle() -> Result<()> {
                 Some(30),
             )
             .await?;
-        operation_ids.push(op_id);
+        ids.push(op_id);
     }
 
     // All operations should have unique IDs
-    assert_eq!(operation_ids.len(), 5);
-    for i in 0..operation_ids.len() {
-        for j in i + 1..operation_ids.len() {
-            assert_ne!(operation_ids[i], operation_ids[j]);
+    assert_eq!(ids.len(), 5);
+    for i in 0..ids.len() {
+        for j in i + 1..ids.len() {
+            assert_ne!(ids[i], ids[j]);
         }
     }
 
@@ -662,7 +662,7 @@ async fn test_async_operations_with_callbacks() -> Result<()> {
     let call_count = callback.call_count.clone();
 
     // Test async operation with callback
-    let operation_id = adapter
+    let id = adapter
         .execute_async_in_dir(
             "callback_test",
             "echo",
@@ -677,7 +677,7 @@ async fn test_async_operations_with_callbacks() -> Result<()> {
         )
         .await?;
 
-    assert!(operation_id.starts_with("op_"));
+    assert!(id.starts_with("op_"));
 
     // Wait for callback to be invoked
     let callback_received = wait_for_condition(

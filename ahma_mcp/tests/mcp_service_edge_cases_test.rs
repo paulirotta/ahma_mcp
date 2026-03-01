@@ -71,7 +71,7 @@ async fn test_status_filter_nonexistent_tool() -> Result<()> {
 
 /// Test status tool query for non-existent operation ID
 #[tokio::test]
-async fn test_status_nonexistent_operation_id() -> Result<()> {
+async fn test_status_nonexistent_id() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_test_env().await?;
     let client = ClientBuilder::new()
@@ -82,12 +82,7 @@ async fn test_status_nonexistent_operation_id() -> Result<()> {
 
     let params = CallToolRequestParams {
         name: Cow::Borrowed("status"),
-        arguments: Some(
-            json!({"operation_id": "op_999999"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        ),
+        arguments: Some(json!({"id": "op_999999"}).as_object().unwrap().clone()),
         task: None,
         meta: None,
     };
@@ -111,9 +106,9 @@ async fn test_status_nonexistent_operation_id() -> Result<()> {
 // Test: Cancel Tool Edge Cases
 // ============================================================================
 
-/// Test cancel missing operation_id
+/// Test cancel missing id
 #[tokio::test]
-async fn test_cancel_missing_operation_id() -> Result<()> {
+async fn test_cancel_missing_id() -> Result<()> {
     init_test_logging();
     let temp_dir = setup_test_env().await?;
     let client = ClientBuilder::new()
@@ -166,12 +161,7 @@ async fn test_cancel_nonexistent_operation() -> Result<()> {
 
     let params = CallToolRequestParams {
         name: Cow::Borrowed("cancel"),
-        arguments: Some(
-            json!({"operation_id": "op_999999"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        ),
+        arguments: Some(json!({"id": "op_999999"}).as_object().unwrap().clone()),
         task: None,
         meta: None,
     };
@@ -239,7 +229,7 @@ async fn test_cancel_with_reason() -> Result<()> {
         name: Cow::Borrowed("cancel"),
         arguments: Some(
             json!({
-                "operation_id": op_id,
+                "id": op_id,
                 "reason": "Test cancellation reason"
             })
             .as_object()

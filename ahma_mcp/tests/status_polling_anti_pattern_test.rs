@@ -18,7 +18,7 @@ async fn test_status_tool_includes_anti_pattern_guidance() {
     assert!(STATUS_POLLING_HINT_TEMPLATE.contains("POLLING"));
     assert!(STATUS_POLLING_HINT_TEMPLATE.contains("await"));
     assert!(STATUS_POLLING_HINT_TEMPLATE.contains("{count}"));
-    assert!(STATUS_POLLING_HINT_TEMPLATE.contains("{operation_id}"));
+    assert!(STATUS_POLLING_HINT_TEMPLATE.contains("{id}"));
 
     // Template should guide LLM away from polling behavior
     assert!(

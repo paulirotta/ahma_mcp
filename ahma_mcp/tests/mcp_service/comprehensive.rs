@@ -115,9 +115,9 @@ async fn test_status_tool_comprehensive() -> Result<()> {
         );
     }
 
-    // Test status with operation_id parameter
+    // Test status with id parameter
     let mut specific_params = Map::new();
-    specific_params.insert("operation_id".to_string(), json!("test_operation_123"));
+    specific_params.insert("id".to_string(), json!("test_operation_123"));
 
     let specific_call_param = CallToolRequestParams {
         name: Cow::Borrowed("status"),
@@ -186,10 +186,7 @@ async fn test_concurrent_tool_execution() -> Result<()> {
         let client_clone = ClientBuilder::new().tools_dir(".ahma").build().await?;
         let handle = tokio::spawn(async move {
             let mut params = Map::new();
-            params.insert(
-                "operation_id".to_string(),
-                json!(format!("concurrent_test_{}", i)),
-            );
+            params.insert("id".to_string(), json!(format!("concurrent_test_{}", i)));
 
             let call_param = CallToolRequestParams {
                 name: Cow::Borrowed("status"),
@@ -300,7 +297,7 @@ async fn test_service_resilience_stress() -> Result<()> {
         ("invalid_tool_123", json!({})),
         ("await", json!({})),
         ("another_invalid_tool", json!({"invalid": "args"})),
-        ("status", json!({"operation_id": "stress_test"})),
+        ("status", json!({"id": "stress_test"})),
     ];
 
     for (tool_name, args) in operations {

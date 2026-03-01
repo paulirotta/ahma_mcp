@@ -393,7 +393,7 @@ async fn test_advanced_cancellation_scenarios() -> Result<()> {
     // Test cancellation via timeout - this will exercise the cancellation detection paths
     let callback = ErrorTestCallback::new();
 
-    let _operation_id = adapter
+    let _id = adapter
         .execute_async_in_dir(
             "cancel_test",
             "sleep",
@@ -447,7 +447,7 @@ async fn test_callback_error_handling() -> Result<()> {
     let failing_callback = ErrorTestCallback::new();
     failing_callback.fail_after_calls(1);
 
-    let operation_id = adapter
+    let id = adapter
         .execute_async_in_dir(
             "callback_error_test",
             "echo",
@@ -474,7 +474,7 @@ async fn test_callback_error_handling() -> Result<()> {
     .await;
 
     // Operation should complete despite callback errors
-    assert!(operation_id.starts_with("op_"));
+    assert!(id.starts_with("op_"));
 
     // Should have attempted at least one callback
     assert!(
@@ -525,7 +525,7 @@ async fn test_timeout_error_classification() -> Result<()> {
     // Test asynchronous timeout with callback
     let timeout_callback = ErrorTestCallback::new();
 
-    let _async_operation_id = adapter
+    let _async_id = adapter
         .execute_async_in_dir(
             "async_timeout_test",
             "sleep",
@@ -774,7 +774,7 @@ async fn test_complex_async_exec_options() -> Result<()> {
     args.insert("verbose".to_string(), json!(true));
 
     let options = AsyncExecOptions {
-        operation_id: Some("custom_test_op_12345".to_string()),
+        id: Some("custom_test_op_12345".to_string()),
         args: Some(args),
         timeout: Some(15),
         callback: Some(Box::new(callback.clone())),
@@ -782,7 +782,7 @@ async fn test_complex_async_exec_options() -> Result<()> {
         log_monitor_config: None,
     };
 
-    let operation_id = adapter
+    let id = adapter
         .execute_async_in_dir_with_options(
             "custom_test_tool",
             "echo",
@@ -792,7 +792,7 @@ async fn test_complex_async_exec_options() -> Result<()> {
         .await?;
 
     // Should use the custom operation ID
-    assert_eq!(operation_id, "custom_test_op_12345");
+    assert_eq!(id, "custom_test_op_12345");
 
     // Wait for operation to complete
     let _ = wait_for_condition(
@@ -823,7 +823,7 @@ async fn test_graceful_shutdown_scenarios() -> Result<()> {
     let (adapter, temp_dir) = create_adapter_with_config(shell_config).await?;
 
     // Start multiple async operations
-    let mut operation_ids = Vec::new();
+    let mut ids = Vec::new();
     for i in 0..3 {
         let op_id = adapter
             .execute_async_in_dir(
@@ -838,7 +838,7 @@ async fn test_graceful_shutdown_scenarios() -> Result<()> {
                 Some(30),
             )
             .await?;
-        operation_ids.push(op_id);
+        ids.push(op_id);
     }
 
     // Yield to allow operations to start
@@ -857,7 +857,7 @@ async fn test_graceful_shutdown_scenarios() -> Result<()> {
     );
 
     // All operation IDs should be valid
-    for op_id in operation_ids {
+    for op_id in ids {
         assert!(op_id.starts_with("op_"));
     }
 

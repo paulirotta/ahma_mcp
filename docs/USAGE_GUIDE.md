@@ -124,7 +124,7 @@ status
 status --tools cargo
 
 # Check specific operation progress
-status --operation_id op_123
+status --id op_123
 ```
 
 ### 4. Strategic Waiting
@@ -134,7 +134,7 @@ Use the `await` tool only when results are critical for your next step.
 ```bash
 # OK Good use cases for await:
 await --tools cargo --timeout_seconds 120    # Before deployment
-await --operation_id op_build --timeout_seconds 60  # Before a dependent task
+await --id op_build --timeout_seconds 60  # Before a dependent task
 
 # FAIL Avoid waiting for:
 await --tools cargo                           # Routine builds

@@ -63,10 +63,10 @@ use std::{
 };
 use tokio::{sync::Mutex, task::JoinHandle};
 
-static OPERATION_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+static ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-fn generate_operation_id() -> String {
-    let id = OPERATION_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+fn generate_id() -> String {
+    let id = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("op_{}", id)
 }
 
@@ -439,7 +439,7 @@ impl Adapter {
     ///
     /// # Returns
     ///
-    /// Returns a `String` containing the `operation_id` (e.g., "op_123").
+    /// Returns a `String` containing the `id` (e.g., "op_123").
     /// The actual command result is not returned here.
     pub async fn execute_async_in_dir(
         &self,
@@ -455,7 +455,7 @@ impl Adapter {
             command,
             working_directory,
             AsyncExecOptions {
-                operation_id: None,
+                id: None,
                 args,
                 timeout,
                 callback,
@@ -475,7 +475,7 @@ impl Adapter {
         options: AsyncExecOptions<'_>,
     ) -> Result<String> {
         let AsyncExecOptions {
-            operation_id,
+            id,
             args,
             timeout,
             callback,
@@ -494,7 +494,7 @@ impl Adapter {
             .prepare_command_and_args(command, args.as_ref(), subcommand_config, &safe_wd)
             .await?;
 
-        let op_id = operation_id.unwrap_or_else(generate_operation_id);
+        let op_id = id.unwrap_or_else(generate_id);
         let op_id_clone = op_id.clone();
         let wd = safe_wd_str.clone();
 
@@ -536,7 +536,7 @@ impl Adapter {
             if let Some(callback) = &callback {
                 let _ = callback
                     .send_progress(crate::callback_system::ProgressUpdate::Started {
-                        operation_id: op_id.clone(),
+                        id: op_id.clone(),
                         command: command.clone(),
                         description: format!("Execute {} in {}", command, wd_clone),
                     })
@@ -567,7 +567,7 @@ impl Adapter {
                     };
                     let _ = callback
                         .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
-                            operation_id: op_id.clone(),
+                            id: op_id.clone(),
                             message: reason_owned,
                             duration_ms: 0,
                         })
@@ -597,7 +597,7 @@ impl Adapter {
                         .await;
                     if let Some(callback) = &callback {
                         let failure_update = crate::callback_system::ProgressUpdate::FinalResult {
-                            operation_id: op_id.clone(),
+                            id: op_id.clone(),
                             command: program_with_subcommand.clone(),
                             description: format!(
                                 "Execute {} in {}",
@@ -739,7 +739,7 @@ async fn execute_batch(
 
             if let Some(callback) = callback {
                 let completion_update = crate::callback_system::ProgressUpdate::FinalResult {
-                    operation_id: op_id.to_string(),
+                    id: op_id.to_string(),
                     command: program.to_string(),
                     description: format!("Execute {} in {}", program, working_dir),
                     working_directory: working_dir.to_string(),
@@ -769,7 +769,7 @@ async fn execute_batch(
 
             if let Some(callback) = callback {
                 let failure_update = crate::callback_system::ProgressUpdate::FinalResult {
-                    operation_id: op_id.to_string(),
+                    id: op_id.to_string(),
                     command: program.to_string(),
                     description: format!("Execute {} in {}", program, working_dir),
                     working_directory: working_dir.to_string(),
@@ -796,7 +796,7 @@ async fn execute_batch(
             if let Some(callback) = callback {
                 let _ = callback
                     .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
-                        operation_id: op_id.to_string(),
+                        id: op_id.to_string(),
                         message: timeout_reason,
                         duration_ms,
                     })
@@ -846,7 +846,7 @@ async fn execute_with_streaming(
             if let Some(callback) = callback {
                 let _ = callback
                     .send_progress(crate::callback_system::ProgressUpdate::FinalResult {
-                        operation_id: op_id.to_string(),
+                        id: op_id.to_string(),
                         command: program.to_string(),
                         description: format!("Execute {} in {}", program, working_dir),
                         working_directory: working_dir.to_string(),
@@ -906,7 +906,7 @@ async fn execute_with_streaming(
                 if let Some(callback) = callback {
                     let _ = callback
                         .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
-                            operation_id: op_id.to_string(),
+                            id: op_id.to_string(),
                             message: timeout_reason,
                             duration_ms,
                         })
@@ -924,7 +924,7 @@ async fn execute_with_streaming(
                         if let Some(snapshot) = log_monitor.process_line(&line, true)
                             && let Some(callback) = callback {
                                 let alert = crate::callback_system::ProgressUpdate::LogAlert {
-                                    operation_id: op_id.to_string(),
+                                    id: op_id.to_string(),
                                     trigger_level: snapshot.trigger_level.to_string(),
                                     context_snapshot: snapshot.format_for_notification(),
                                 };
@@ -950,7 +950,7 @@ async fn execute_with_streaming(
                         if let Some(snapshot) = log_monitor.process_line(&line, false)
                             && let Some(callback) = callback {
                                 let alert = crate::callback_system::ProgressUpdate::LogAlert {
-                                    operation_id: op_id.to_string(),
+                                    id: op_id.to_string(),
                                     trigger_level: snapshot.trigger_level.to_string(),
                                     context_snapshot: snapshot.format_for_notification(),
                                 };
@@ -980,7 +980,7 @@ async fn execute_with_streaming(
                         && let Some(callback) = callback
                     {
                         let alert = crate::callback_system::ProgressUpdate::LogAlert {
-                            operation_id: op_id.to_string(),
+                            id: op_id.to_string(),
                             trigger_level: snapshot.trigger_level.to_string(),
                             context_snapshot: snapshot.format_for_notification(),
                         };
@@ -994,7 +994,7 @@ async fn execute_with_streaming(
                         && let Some(callback) = callback
                     {
                         let alert = crate::callback_system::ProgressUpdate::LogAlert {
-                            operation_id: op_id.to_string(),
+                            id: op_id.to_string(),
                             trigger_level: snapshot.trigger_level.to_string(),
                             context_snapshot: snapshot.format_for_notification(),
                         };
@@ -1047,7 +1047,7 @@ async fn execute_with_streaming(
 
     if let Some(callback) = callback {
         let completion_update = crate::callback_system::ProgressUpdate::FinalResult {
-            operation_id: op_id.to_string(),
+            id: op_id.to_string(),
             command: program.to_string(),
             description: format!("Execute {} in {}", program, working_dir),
             working_directory: working_dir.to_string(),
@@ -1092,7 +1092,7 @@ async fn handle_cancellation(
         };
         let _ = callback
             .send_progress(crate::callback_system::ProgressUpdate::Cancelled {
-                operation_id: op_id.to_string(),
+                id: op_id.to_string(),
                 message: reason_owned,
                 duration_ms,
             })

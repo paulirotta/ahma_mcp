@@ -111,7 +111,7 @@ async fn streaming_stderr_error_triggers_log_alert() {
             &cmd,
             working_dir,
             AsyncExecOptions {
-                operation_id: Some("test_op_1".to_string()),
+                id: Some("test_op_1".to_string()),
                 args: Some(Map::new()),
                 timeout: Some(10),
                 callback: Some(Box::new(callback)),
@@ -160,7 +160,7 @@ async fn streaming_stdout_error_triggers_when_monitoring_both() {
             &cmd,
             working_dir,
             AsyncExecOptions {
-                operation_id: Some("test_op_2".to_string()),
+                id: Some("test_op_2".to_string()),
                 args: Some(Map::new()),
                 timeout: Some(10),
                 callback: Some(Box::new(callback)),
@@ -196,7 +196,7 @@ async fn streaming_no_alert_when_output_is_clean() {
             &cmd,
             working_dir,
             AsyncExecOptions {
-                operation_id: Some("test_op_3".to_string()),
+                id: Some("test_op_3".to_string()),
                 args: Some(Map::new()),
                 timeout: Some(10),
                 callback: Some(Box::new(callback)),
@@ -233,7 +233,7 @@ async fn streaming_warn_level_triggers_on_warning() {
             &cmd,
             working_dir,
             AsyncExecOptions {
-                operation_id: Some("test_op_4".to_string()),
+                id: Some("test_op_4".to_string()),
                 args: Some(Map::new()),
                 timeout: Some(10),
                 callback: Some(Box::new(callback)),
@@ -276,7 +276,7 @@ async fn streaming_error_level_ignores_warnings() {
             &cmd,
             working_dir,
             AsyncExecOptions {
-                operation_id: Some("test_op_5".to_string()),
+                id: Some("test_op_5".to_string()),
                 args: Some(Map::new()),
                 timeout: Some(10),
                 callback: Some(Box::new(callback)),
@@ -313,7 +313,7 @@ async fn streaming_no_monitor_uses_batch_path() {
             &cmd,
             working_dir,
             AsyncExecOptions {
-                operation_id: Some("test_op_6".to_string()),
+                id: Some("test_op_6".to_string()),
                 args: Some(Map::new()),
                 timeout: Some(10),
                 callback: Some(Box::new(callback)),
@@ -352,7 +352,7 @@ async fn streaming_alert_includes_context_lines() {
             &cmd,
             working_dir,
             AsyncExecOptions {
-                operation_id: Some("test_op_7".to_string()),
+                id: Some("test_op_7".to_string()),
                 args: Some(Map::new()),
                 timeout: Some(10),
                 callback: Some(Box::new(callback)),
@@ -400,7 +400,7 @@ async fn streaming_multiline_errors_with_rate_limit() {
             &cmd,
             working_dir,
             AsyncExecOptions {
-                operation_id: Some("test_op_8".to_string()),
+                id: Some("test_op_8".to_string()),
                 args: Some(Map::new()),
                 timeout: Some(10),
                 callback: Some(Box::new(callback)),
@@ -441,7 +441,7 @@ async fn streaming_stderr_only_ignores_stdout_patterns() {
             &cmd,
             working_dir,
             AsyncExecOptions {
-                operation_id: Some("test_op_9".to_string()),
+                id: Some("test_op_9".to_string()),
                 args: Some(Map::new()),
                 timeout: Some(10),
                 callback: Some(Box::new(callback)),
@@ -479,7 +479,7 @@ async fn streaming_final_result_redacts_sensitive_output() {
             &cmd,
             working_dir,
             AsyncExecOptions {
-                operation_id: Some("test_op_10".to_string()),
+                id: Some("test_op_10".to_string()),
                 args: Some(Map::new()),
                 timeout: Some(10),
                 callback: Some(Box::new(callback)),
@@ -516,7 +516,7 @@ async fn streaming_final_result_is_bounded_and_marks_truncation() {
             &cmd,
             working_dir,
             AsyncExecOptions {
-                operation_id: Some("test_op_11".to_string()),
+                id: Some("test_op_11".to_string()),
                 args: Some(Map::new()),
                 timeout: Some(20),
                 callback: Some(Box::new(callback)),

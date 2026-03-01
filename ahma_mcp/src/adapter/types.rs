@@ -18,7 +18,7 @@ pub enum ExecutionMode {
 /// Options for configuring asynchronous execution.
 pub struct AsyncExecOptions<'a> {
     /// Optional pre-defined operation ID to use; if None, a new one is generated.
-    pub operation_id: Option<String>,
+    pub id: Option<String>,
     /// Structured arguments for the command (positional and flags derived internally).
     pub args: Option<Map<String, serde_json::Value>>,
     /// Timeout in seconds for the command; falls back to shell pool default if None.

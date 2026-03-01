@@ -40,7 +40,7 @@
         },
         {
             "name": "add",
-            "description": "Add file contents to the index for the next commit. Runs asynchronously, returns an operation_id immediately, and pushes results when complete so you can continue other tasks.",
+            "description": "Add file contents to the index for the next commit. Runs asynchronously, returns an id immediately, and pushes results when complete so you can continue other tasks.",
             "options": [
                 {
                     "name": "all",
@@ -68,7 +68,7 @@
         },
         {
             "name": "commit",
-            "description": "Record changes to the repository with support for multi-line commit messages via temporary files when required. Runs asynchronously, returns an operation_id immediately, notifies when complete, and you should continue with other work instead of waiting.",
+            "description": "Record changes to the repository with support for multi-line commit messages via temporary files when required. Runs asynchronously, returns an id immediately, notifies when complete, and you should continue with other work instead of waiting.",
             "options": [
                 {
                     "name": "message",
@@ -95,7 +95,7 @@
         },
         {
             "name": "push",
-            "description": "Update remote refs along with associated objects. Runs asynchronously, returns an operation_id immediately, and completion is pushed via notification so do not wait idly.",
+            "description": "Update remote refs along with associated objects. Runs asynchronously, returns an id immediately, and completion is pushed via notification so do not wait idly.",
             "options": [
                 {
                     "name": "remote",
@@ -124,7 +124,7 @@
         },
         {
             "name": "log",
-            "description": "Show commit logs with common formatting options. Runs asynchronously, returns an operation_id immediately, and will notify you on completion so continue working while it processes.",
+            "description": "Show commit logs with common formatting options. Runs asynchronously, returns an id immediately, and will notify you on completion so continue working while it processes.",
             "options": [
                 {
                     "name": "oneline",

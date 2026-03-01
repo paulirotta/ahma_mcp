@@ -1,8 +1,8 @@
 //! call_tool_handlers tests
 //!
 //! Tests for the call_tool() method handlers in mcp_service.rs:
-//! - status tool: filtering by tool name, operation_id, efficiency analysis
-//! - await tool: waiting for specific operation_id, tool filters, timeout handling
+//! - status tool: filtering by tool name, id, efficiency analysis
+//! - await tool: waiting for specific id, tool filters, timeout handling
 //! - cancel tool: cancelling operations, error cases
 //!
 //! These tests target untested paths to improve coverage from 36.71% to 65%+.
@@ -53,15 +53,15 @@ async fn test_status_tool_with_tool_name_filter() -> Result<()> {
     Ok(())
 }
 
-/// Test status tool with specific operation_id parameter
+/// Test status tool with specific id parameter
 #[tokio::test]
-async fn test_status_tool_with_operation_id() -> Result<()> {
+async fn test_status_tool_with_id() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     // Query for a specific operation (non-existent)
     let mut params = Map::new();
-    params.insert("operation_id".to_string(), json!("op_nonexistent_12345"));
+    params.insert("id".to_string(), json!("op_nonexistent_12345"));
 
     let call_param = CallToolRequestParams {
         name: Cow::Borrowed("status"),
@@ -108,7 +108,7 @@ async fn test_status_tool_empty_filter() -> Result<()> {
     Ok(())
 }
 
-/// Test status tool with both tools and operation_id filters
+/// Test status tool with both tools and id filters
 #[tokio::test]
 async fn test_status_tool_combined_filters() -> Result<()> {
     init_test_logging();
@@ -116,7 +116,7 @@ async fn test_status_tool_combined_filters() -> Result<()> {
 
     let mut params = Map::new();
     params.insert("tools".to_string(), json!("cargo"));
-    params.insert("operation_id".to_string(), json!("op_123"));
+    params.insert("id".to_string(), json!("op_123"));
 
     let call_param = CallToolRequestParams {
         name: Cow::Borrowed("status"),
@@ -134,14 +134,14 @@ async fn test_status_tool_combined_filters() -> Result<()> {
 
 // ============= AWAIT TOOL TESTS =============
 
-/// Test await tool with specific operation_id (already completed)
+/// Test await tool with specific id (already completed)
 #[tokio::test]
-async fn test_await_tool_with_operation_id_not_found() -> Result<()> {
+async fn test_await_tool_with_id_not_found() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let mut params = Map::new();
-    params.insert("operation_id".to_string(), json!("op_does_not_exist"));
+    params.insert("id".to_string(), json!("op_does_not_exist"));
 
     let call_param = CallToolRequestParams {
         name: Cow::Borrowed("await"),
@@ -254,13 +254,13 @@ async fn test_await_tool_empty_params() -> Result<()> {
 
 // ============= CANCEL TOOL TESTS =============
 
-/// Test cancel tool with missing operation_id
+/// Test cancel tool with missing id
 #[tokio::test]
-async fn test_cancel_tool_missing_operation_id() -> Result<()> {
+async fn test_cancel_tool_missing_id() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
-    // Cancel requires operation_id
+    // Cancel requires id
     let call_param = CallToolRequestParams {
         name: Cow::Borrowed("cancel"),
         arguments: Some(Map::new()),
@@ -277,14 +277,14 @@ async fn test_cancel_tool_missing_operation_id() -> Result<()> {
     Ok(())
 }
 
-/// Test cancel tool with non-existent operation_id
+/// Test cancel tool with non-existent id
 #[tokio::test]
 async fn test_cancel_tool_nonexistent_operation() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let mut params = Map::new();
-    params.insert("operation_id".to_string(), json!("op_does_not_exist"));
+    params.insert("id".to_string(), json!("op_does_not_exist"));
 
     let call_param = CallToolRequestParams {
         name: Cow::Borrowed("cancel"),
@@ -318,7 +318,7 @@ async fn test_cancel_tool_with_reason() -> Result<()> {
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let mut params = Map::new();
-    params.insert("operation_id".to_string(), json!("op_test_cancel"));
+    params.insert("id".to_string(), json!("op_test_cancel"));
     params.insert("reason".to_string(), json!("User requested cancellation"));
 
     let call_param = CallToolRequestParams {
@@ -335,15 +335,15 @@ async fn test_cancel_tool_with_reason() -> Result<()> {
     Ok(())
 }
 
-/// Test cancel tool with invalid operation_id type
+/// Test cancel tool with invalid id type
 #[tokio::test]
-async fn test_cancel_tool_invalid_operation_id_type() -> Result<()> {
+async fn test_cancel_tool_invalid_id_type() -> Result<()> {
     init_test_logging();
     let client = ClientBuilder::new().tools_dir(".ahma").build().await?;
 
     let mut params = Map::new();
     // Pass number instead of string
-    params.insert("operation_id".to_string(), json!(12345));
+    params.insert("id".to_string(), json!(12345));
 
     let call_param = CallToolRequestParams {
         name: Cow::Borrowed("cancel"),

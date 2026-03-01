@@ -15,7 +15,7 @@ async fn test_progress_skipping_for_unsupported_clients() {
 fn test_progress_update_variants() {
     // This is a pure unit test for ProgressUpdate variants to ensure they have all fields
     let _ = ProgressUpdate::Progress {
-        operation_id: "op".to_string(),
+        id: "op".to_string(),
         message: "msg".to_string(),
         percentage: Some(50.0),
         current_step: Some("step".to_string()),

@@ -8,13 +8,13 @@
 //! ## Core Components
 //!
 //! - **`McpCallbackSender`**: A struct that holds a reference to the `rmcp` `Peer` and the
-//!   `operation_id` for the current task. The `Peer` is used to send notifications back
+//!   `id` for the current task. The `Peer` is used to send notifications back
 //!   to the client.
 //!
 //! ## How It Works
 //!
 //! 1. **Instantiation**: An `McpCallbackSender` is created with a `Peer` object (representing
-//!    the connection to the client) and the unique `operation_id` for the task that will be
+//!    the connection to the client) and the unique `id` for the task that will be
 //!    monitored.
 //!
 //! 2. **`send_progress` Implementation**: This is the core of the module. The `async` method
@@ -55,7 +55,7 @@ use tracing;
 pub struct McpCallbackSender {
     peer: Peer<RoleServer>,
     #[allow(dead_code)]
-    operation_id: String,
+    id: String,
     progress_token: Option<ProgressToken>,
     client_type: McpClientType,
 }
@@ -65,18 +65,18 @@ impl McpCallbackSender {
     ///
     /// # Arguments
     /// * `peer` - MCP peer used to emit progress notifications.
-    /// * `operation_id` - Internal operation identifier (used for logging).
+    /// * `id` - Internal operation identifier (used for logging).
     /// * `progress_token` - Client-provided progress token for MCP notifications.
     /// * `client_type` - Client flavor for compatibility behavior.
     pub fn new(
         peer: Peer<RoleServer>,
-        operation_id: String,
+        id: String,
         progress_token: Option<ProgressToken>,
         client_type: McpClientType,
     ) -> Self {
         Self {
             peer,
-            operation_id,
+            id,
             progress_token,
             client_type,
         }
@@ -103,26 +103,21 @@ impl CallbackSender for McpCallbackSender {
         };
 
         tracing::debug!(
-            operation_id = %self.operation_id,
+            id = %self.id,
             "Sending MCP progress notification: {:?}",
             update
         );
 
         // NOTE: progress_token must match the client-provided token, not our internal operation id.
-        // We keep operation_id for logging/debug and include it in messages where relevant.
+        // We keep id for logging/debug and include it in messages where relevant.
 
         let params = match update {
             ProgressUpdate::Started {
-                operation_id,
+                id,
                 command,
                 description,
             } => {
-                tracing::debug!(
-                    "Starting operation {}: {} - {}",
-                    operation_id,
-                    command,
-                    description
-                );
+                tracing::debug!("Starting operation {}: {} - {}", id, command, description);
                 ProgressNotificationParam {
                     progress_token: progress_token.clone(),
                     progress: 0.0,
@@ -157,12 +152,8 @@ impl CallbackSender for McpCallbackSender {
                     }),
                 }
             }
-            ProgressUpdate::Completed {
-                operation_id,
-                message,
-                ..
-            } => {
-                tracing::debug!("Completed operation {}: {}", operation_id, message);
+            ProgressUpdate::Completed { id, message, .. } => {
+                tracing::debug!("Completed operation {}: {}", id, message);
                 ProgressNotificationParam {
                     progress_token: progress_token.clone(),
                     progress: 100.0,
@@ -170,12 +161,8 @@ impl CallbackSender for McpCallbackSender {
                     message: Some(message.clone()),
                 }
             }
-            ProgressUpdate::Failed {
-                operation_id,
-                error,
-                ..
-            } => {
-                tracing::warn!("Failed operation {}: {}", operation_id, error);
+            ProgressUpdate::Failed { id, error, .. } => {
+                tracing::warn!("Failed operation {}: {}", id, error);
                 ProgressNotificationParam {
                     progress_token: progress_token.clone(),
                     progress: 100.0, // Mark as complete even on failure
@@ -183,18 +170,14 @@ impl CallbackSender for McpCallbackSender {
                     message: Some(format!("Failed: {error}")),
                 }
             }
-            ProgressUpdate::Cancelled {
-                operation_id,
-                message,
-                ..
-            } => {
-                tracing::warn!("Cancelled operation {}: {}", operation_id, message);
+            ProgressUpdate::Cancelled { id, message, .. } => {
+                tracing::warn!("Cancelled operation {}: {}", id, message);
 
                 // Use the centralized cancellation message formatter for clear, actionable messages
                 let formatted_message = crate::callback_system::format_cancellation_message(
                     &message,
                     None, // Tool name not available in this context
-                    Some(&operation_id),
+                    Some(&id),
                 );
 
                 ProgressNotificationParam {
@@ -205,7 +188,7 @@ impl CallbackSender for McpCallbackSender {
                 }
             }
             ProgressUpdate::FinalResult {
-                operation_id,
+                id,
                 command,
                 description,
                 working_directory,
@@ -214,17 +197,11 @@ impl CallbackSender for McpCallbackSender {
                 duration_ms,
             } => {
                 let status = if success { "COMPLETED" } else { "FAILED" };
-                tracing::debug!("{} operation {}: {}", status, operation_id, command);
+                tracing::debug!("{} operation {}: {}", status, id, command);
 
                 let final_message = format!(
                     "OPERATION {}: '{}'\nCommand: {}\nDescription: {}\nWorking Directory: {}\nDuration: {}ms\n\n=== FULL OUTPUT ===\n{}",
-                    status,
-                    operation_id,
-                    command,
-                    description,
-                    working_directory,
-                    duration_ms,
-                    full_output
+                    status, id, command, description, working_directory, duration_ms, full_output
                 );
 
                 ProgressNotificationParam {
@@ -235,14 +212,14 @@ impl CallbackSender for McpCallbackSender {
                 }
             }
             ProgressUpdate::LogAlert {
-                operation_id,
+                id,
                 trigger_level,
                 context_snapshot,
             } => {
                 tracing::info!(
                     "Log alert ({}) for operation {}: sending context snapshot",
                     trigger_level,
-                    operation_id
+                    id
                 );
 
                 ProgressNotificationParam {
@@ -293,13 +270,13 @@ impl CallbackSender for McpCallbackSender {
 /// Utility function to create an MCP callback sender.
 pub fn mcp_callback(
     peer: Peer<RoleServer>,
-    operation_id: String,
+    id: String,
     progress_token: Option<ProgressToken>,
     client_type: McpClientType,
 ) -> Box<dyn CallbackSender> {
     Box::new(McpCallbackSender::new(
         peer,
-        operation_id,
+        id,
         progress_token,
         client_type,
     ))

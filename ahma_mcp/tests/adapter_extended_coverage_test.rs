@@ -247,7 +247,7 @@ async fn test_execute_sync_timeout() {
 // === execute_async_in_dir Tests ===
 
 #[tokio::test]
-async fn test_execute_async_returns_operation_id() {
+async fn test_execute_async_returns_id() {
     let adapter = create_test_adapter().await;
     let temp = tempdir().unwrap();
 
@@ -284,7 +284,7 @@ async fn test_execute_async_with_options() {
             "echo",
             temp.path().to_str().unwrap(),
             AsyncExecOptions {
-                operation_id: Some("custom_op_id".to_string()),
+                id: Some("custom_op_id".to_string()),
                 args: Some(args),
                 timeout: Some(30),
                 callback: None,

@@ -331,7 +331,7 @@ fn test_validate_subcommand_async_keywords_in_sync_command() {
         "force_synchronous": true,
         "subcommand": [{
             "name": "build",
-            "description": "Build project - async operation returns operation_id immediately"
+            "description": "Build project - async operation returns id immediately"
         }]
     })
     .to_string();
@@ -381,7 +381,7 @@ fn test_validate_subcommand_override_tool_sync() {
         "force_synchronous": true,
         "subcommand": [{
             "name": "build",
-            "description": "Build project - async operation returns operation_id immediately",
+            "description": "Build project - async operation returns id immediately",
             "force_synchronous": false
         }]
     })
@@ -718,7 +718,7 @@ fn test_format_errors_multiple_errors() {
 // =============================================================================
 
 #[test]
-fn test_validate_async_keyword_operation_id() {
+fn test_validate_async_keyword_id() {
     init_test_logging();
 
     let validator = MtdfValidator::new();
@@ -729,7 +729,7 @@ fn test_validate_async_keyword_operation_id() {
         "force_synchronous": true,
         "subcommand": [{
             "name": "sub",
-            "description": "This returns an operation_id"
+            "description": "This returns an id"
         }]
     })
     .to_string();
@@ -875,7 +875,7 @@ fn test_validate_config_with_multiple_errors() {
         "force_synchronous": true,
         "subcommand": [{
             "name": "",  // Error: empty subcommand name
-            "description": "async operation returns operation_id",  // Error: async keywords
+            "description": "async operation returns id",  // Error: async keywords
             "options": [{
                 "name": "",  // Error: empty option name
                 "type": "bool",  // Error: invalid type

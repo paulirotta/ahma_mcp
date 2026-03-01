@@ -112,7 +112,7 @@ async fn test_mcp_cancellation_does_not_trigger_canceled_canceled_message() {
     println!("🔍 Test 2: MCP cancellation with mixed operation types");
 
     // Start a background operation (simulated)
-    let bg_operation_id = adapter
+    let bg_id = adapter
         .execute_async_in_dir(
             "test_background_op",
             "sh",
@@ -151,14 +151,14 @@ async fn test_mcp_cancellation_does_not_trigger_canceled_canceled_message() {
         "Should have exactly one background operation"
     );
     assert_eq!(
-        background_ops[0].id, bg_operation_id,
+        background_ops[0].id, bg_id,
         "Should identify the correct background operation"
     );
 
     println!("OK Test 2 passed: Correctly filters background vs synchronous operations");
 
     // Clean up: cancel the background operation
-    let cancelled = operation_monitor.cancel_operation(&bg_operation_id).await;
+    let cancelled = operation_monitor.cancel_operation(&bg_id).await;
     assert!(cancelled, "Should be able to cancel background operation");
 
     println!("OK All MCP cancellation bug tests passed!");

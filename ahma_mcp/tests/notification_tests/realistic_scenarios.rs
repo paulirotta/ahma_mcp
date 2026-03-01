@@ -4,10 +4,10 @@
 
 use ahma_mcp::adapter::Adapter;
 use ahma_mcp::config::load_tool_configs;
-use clap::Parser;
 use ahma_mcp::mcp_service::AhmaMcpService;
 use ahma_mcp::operation_monitor::{MonitorConfig, OperationMonitor};
 use ahma_mcp::shell_pool::{ShellPoolConfig, ShellPoolManager};
+use clap::Parser;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
@@ -54,7 +54,7 @@ async fn test_realistic_notification_scenario_with_history() -> anyhow::Result<(
     .unwrap();
 
     // Execute async operation
-    let operation_id = adapter
+    let id = adapter
         .execute_async_in_dir(
             "cargo",
             "version",
@@ -72,7 +72,7 @@ async fn test_realistic_notification_scenario_with_history() -> anyhow::Result<(
     let completed_op = with_ci_timeout(
         "operation completion",
         CI_DEFAULT_TIMEOUT,
-        operation_monitor.wait_for_operation(&operation_id),
+        operation_monitor.wait_for_operation(&id),
     )
     .await?;
 

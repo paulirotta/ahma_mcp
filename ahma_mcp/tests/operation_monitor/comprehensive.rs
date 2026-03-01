@@ -103,7 +103,7 @@ async fn test_memory_cleanup_validation() -> Result<()> {
     let monitor = OperationMonitor::new(MonitorConfig::with_timeout(Duration::from_secs(30)));
 
     let num_operations = 100;
-    let mut operation_ids = Vec::new();
+    let mut ids = Vec::new();
 
     // Create and complete many operations
     for i in 0..num_operations {
@@ -115,7 +115,7 @@ async fn test_memory_cleanup_validation() -> Result<()> {
             Some(json!({"batch": i})),
         );
 
-        operation_ids.push(op_id.clone());
+        ids.push(op_id.clone());
 
         // Add and immediately complete operations
         monitor.add_operation(operation).await;
@@ -138,7 +138,7 @@ async fn test_memory_cleanup_validation() -> Result<()> {
 
     // Test that all operations can be retrieved via wait_for_operation
     let mut retrieved_count = 0;
-    for op_id in &operation_ids {
+    for op_id in &ids {
         if let Some(op) = monitor.wait_for_operation(op_id).await {
             assert_eq!(op.state, OperationStatus::Completed);
             retrieved_count += 1;

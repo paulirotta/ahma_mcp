@@ -24,7 +24,7 @@
 //!     
 //!     // Send progress updates during a cargo operation
 //!     let update = ProgressUpdate::Started {
-//!         operation_id: "cargo_build_001".to_string(),
+//!         id: "cargo_build_001".to_string(),
 //!         command: "cargo build".to_string(),
 //!         description: "Building project dependencies".to_string(),
 //!     };
@@ -95,10 +95,10 @@ fn detect_cancellation_kind(raw_message: &str) -> Option<CancellationKind> {
     }
 }
 
-fn format_cancellation_context(tool_name: Option<&str>, operation_id: Option<&str>) -> Vec<String> {
+fn format_cancellation_context(tool_name: Option<&str>, id: Option<&str>) -> Vec<String> {
     [
         tool_name.map(|t| format!("Tool: {t}")),
-        operation_id.map(|o| format!("Operation: {o}")),
+        id.map(|o| format!("Operation: {o}")),
     ]
     .into_iter()
     .flatten()
@@ -111,44 +111,44 @@ fn format_cancellation_context(tool_name: Option<&str>, operation_id: Option<&st
 pub enum ProgressUpdate {
     /// Operation has started
     Started {
-        operation_id: String,
+        id: String,
         command: String,
         description: String,
     },
     /// Progress update with optional percentage and message
     Progress {
-        operation_id: String,
+        id: String,
         message: String,
         percentage: Option<f64>,
         current_step: Option<String>,
     },
     /// Output line from the cargo command
     Output {
-        operation_id: String,
+        id: String,
         line: String,
         is_stderr: bool,
     },
     /// Operation completed successfully
     Completed {
-        operation_id: String,
+        id: String,
         message: String,
         duration_ms: u64,
     },
     /// Operation failed with error
     Failed {
-        operation_id: String,
+        id: String,
         error: String,
         duration_ms: u64,
     },
     /// Operation was cancelled
     Cancelled {
-        operation_id: String,
+        id: String,
         message: String,
         duration_ms: u64,
     },
     /// Final comprehensive result with all details (like await command output)
     FinalResult {
-        operation_id: String,
+        id: String,
         command: String,
         description: String,
         working_directory: String,
@@ -159,7 +159,7 @@ pub enum ProgressUpdate {
     /// Log alert triggered by live monitoring when an error/warning pattern is detected.
     /// Contains the trigger line plus recent stdout/stderr context for AI analysis.
     LogAlert {
-        operation_id: String,
+        id: String,
         /// The detected severity of the trigger line.
         trigger_level: String,
         /// Pre-formatted context snapshot (trigger + recent stdout + stderr).
@@ -171,14 +171,14 @@ impl fmt::Display for ProgressUpdate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ProgressUpdate::Started {
-                operation_id,
+                id,
                 command,
                 description,
             } => {
-                write!(f, "[{operation_id}] Started: {command} - {description}")
+                write!(f, "[{id}] Started: {command} - {description}")
             }
             ProgressUpdate::Progress {
-                operation_id,
+                id,
                 message,
                 percentage,
                 current_step,
@@ -187,65 +187,53 @@ impl fmt::Display for ProgressUpdate {
                 let step_str = current_step
                     .as_deref()
                     .map_or(String::new(), |s| format!(" [{s}]"));
-                write!(
-                    f,
-                    "[{operation_id}] Progress{progress_str}: {message}{step_str}"
-                )
+                write!(f, "[{id}] Progress{progress_str}: {message}{step_str}")
             }
             ProgressUpdate::Output {
-                operation_id,
+                id,
                 line,
                 is_stderr,
             } => {
                 let stream = if *is_stderr { "stderr" } else { "stdout" };
-                write!(f, "[{operation_id}] {stream}: {line}")
+                write!(f, "[{id}] {stream}: {line}")
             }
             ProgressUpdate::Completed {
-                operation_id,
+                id,
                 message,
                 duration_ms,
             } => {
-                write!(
-                    f,
-                    "[{operation_id}] Completed in {duration_ms}ms: {message}"
-                )
+                write!(f, "[{id}] Completed in {duration_ms}ms: {message}")
             }
             ProgressUpdate::Failed {
-                operation_id,
+                id,
                 error,
                 duration_ms,
             } => {
-                write!(f, "[{operation_id}] Failed after {duration_ms}ms: {error}")
+                write!(f, "[{id}] Failed after {duration_ms}ms: {error}")
             }
             ProgressUpdate::Cancelled {
-                operation_id,
+                id,
                 message,
                 duration_ms,
             } => {
-                write!(
-                    f,
-                    "[{operation_id}] CANCELLED after {duration_ms}ms: {message}"
-                )
+                write!(f, "[{id}] CANCELLED after {duration_ms}ms: {message}")
             }
             ProgressUpdate::FinalResult {
-                operation_id,
+                id,
                 command,
                 success,
                 full_output,
                 ..
             } => {
                 let status = if *success { "COMPLETED" } else { "FAILED" };
-                write!(f, "[{operation_id}] {status}: {command}\n{full_output}")
+                write!(f, "[{id}] {status}: {command}\n{full_output}")
             }
             ProgressUpdate::LogAlert {
-                operation_id,
+                id,
                 trigger_level,
                 context_snapshot,
             } => {
-                write!(
-                    f,
-                    "[{operation_id}] LOG_ALERT ({trigger_level}):\n{context_snapshot}"
-                )
+                write!(f, "[{id}] LOG_ALERT ({trigger_level}):\n{context_snapshot}")
             }
         }
     }
@@ -291,21 +279,21 @@ pub enum CallbackError {
 /// # Arguments
 /// * `raw_message` - The raw error/cancellation message from rmcp or the MCP client
 /// * `tool_name` - Optional tool name that was being executed
-/// * `operation_id` - Optional operation ID for reference
+/// * `id` - Optional operation ID for reference
 ///
 /// # Returns
 /// A user-friendly cancellation message with context
 pub fn format_cancellation_message(
     raw_message: &str,
     tool_name: Option<&str>,
-    operation_id: Option<&str>,
+    id: Option<&str>,
 ) -> String {
     let Some(kind) = detect_cancellation_kind(raw_message) else {
         return raw_message.to_string();
     };
 
     let mut parts = vec![kind.as_message().to_string()];
-    parts.extend(format_cancellation_context(tool_name, operation_id));
+    parts.extend(format_cancellation_context(tool_name, id));
     parts.push(format!("Raw: {raw_message}"));
     parts.push(CANCELLATION_SUGGESTIONS.to_string());
 
@@ -423,7 +411,7 @@ mod tests {
         init_test_logging();
         let callback = no_callback();
         let update = ProgressUpdate::Started {
-            operation_id: "test".to_string(),
+            id: "test".to_string(),
             command: "cargo build".to_string(),
             description: "Building project".to_string(),
         };
@@ -439,7 +427,7 @@ mod tests {
         let (callback, mut receiver) = channel_callback(token.clone());
 
         let update = ProgressUpdate::Progress {
-            operation_id: "test".to_string(),
+            id: "test".to_string(),
             message: "Building...".to_string(),
             percentage: Some(50.0),
             current_step: Some("Compiling".to_string()),
@@ -454,12 +442,8 @@ mod tests {
 
         match (&update, &received) {
             (
-                ProgressUpdate::Progress {
-                    operation_id: id1, ..
-                },
-                ProgressUpdate::Progress {
-                    operation_id: id2, ..
-                },
+                ProgressUpdate::Progress { id: id1, .. },
+                ProgressUpdate::Progress { id: id2, .. },
             ) => {
                 assert_eq!(id1, id2);
             }

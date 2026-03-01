@@ -64,10 +64,10 @@ fn test_tool_hints_preview_includes_all_required_elements() {
         hint
     );
 
-    // Verify placeholders were replaced (not left as {operation_id})
+    // Verify placeholders were replaced (not left as {id})
     assert!(
-        !hint.contains("{operation_id}"),
-        "Placeholders must be replaced, found {{operation_id}} in: {}",
+        !hint.contains("{id}"),
+        "Placeholders must be replaced, found {{id}} in: {}",
         hint
     );
 

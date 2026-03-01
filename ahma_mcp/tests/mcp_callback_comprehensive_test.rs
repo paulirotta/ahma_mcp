@@ -75,7 +75,7 @@ async fn test_progress_update_started() {
     let callback = MockCallbackSender::new();
 
     let update = ProgressUpdate::Started {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         command: "cargo build".to_string(),
         description: "Building project".to_string(),
     };
@@ -87,11 +87,11 @@ async fn test_progress_update_started() {
 
     match &updates[0] {
         ProgressUpdate::Started {
-            operation_id,
+            id,
             command,
             description,
         } => {
-            assert_eq!(operation_id, "op_123");
+            assert_eq!(id, "op_123");
             assert_eq!(command, "cargo build");
             assert_eq!(description, "Building project");
         }
@@ -106,7 +106,7 @@ async fn test_progress_update_with_percentage() {
     let callback = MockCallbackSender::new();
 
     let update = ProgressUpdate::Progress {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         message: "Compiling crate".to_string(),
         percentage: Some(50.0),
         current_step: None,
@@ -135,7 +135,7 @@ async fn test_progress_update_without_percentage() {
     let callback = MockCallbackSender::new();
 
     let update = ProgressUpdate::Progress {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         message: "Processing...".to_string(),
         percentage: None,
         current_step: None,
@@ -159,7 +159,7 @@ async fn test_progress_update_stdout_output() {
     let callback = MockCallbackSender::new();
 
     let update = ProgressUpdate::Output {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         line: "Compiling ahma_mcp v0.4.0".to_string(),
         is_stderr: false,
     };
@@ -183,7 +183,7 @@ async fn test_progress_update_stderr_output() {
     let callback = MockCallbackSender::new();
 
     let update = ProgressUpdate::Output {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         line: "warning: unused variable".to_string(),
         is_stderr: true,
     };
@@ -209,7 +209,7 @@ async fn test_progress_update_completed() {
     let callback = MockCallbackSender::new();
 
     let update = ProgressUpdate::Completed {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         message: "Build succeeded".to_string(),
         duration_ms: 5000,
     };
@@ -219,11 +219,11 @@ async fn test_progress_update_completed() {
     let updates = callback.get_updates();
     match &updates[0] {
         ProgressUpdate::Completed {
-            operation_id,
+            id,
             message,
             duration_ms,
         } => {
-            assert_eq!(operation_id, "op_123");
+            assert_eq!(id, "op_123");
             assert_eq!(message, "Build succeeded");
             assert_eq!(*duration_ms, 5000);
         }
@@ -238,7 +238,7 @@ async fn test_progress_update_failed() {
     let callback = MockCallbackSender::new();
 
     let update = ProgressUpdate::Failed {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         error: "Compilation error: missing semicolon".to_string(),
         duration_ms: 2000,
     };
@@ -248,11 +248,11 @@ async fn test_progress_update_failed() {
     let updates = callback.get_updates();
     match &updates[0] {
         ProgressUpdate::Failed {
-            operation_id,
+            id,
             error,
             duration_ms,
         } => {
-            assert_eq!(operation_id, "op_123");
+            assert_eq!(id, "op_123");
             assert!(error.contains("Compilation error"));
             assert_eq!(*duration_ms, 2000);
         }
@@ -267,7 +267,7 @@ async fn test_progress_update_cancelled() {
     let callback = MockCallbackSender::new();
 
     let update = ProgressUpdate::Cancelled {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         message: "Operation cancelled by user".to_string(),
         duration_ms: 1000,
     };
@@ -277,11 +277,11 @@ async fn test_progress_update_cancelled() {
     let updates = callback.get_updates();
     match &updates[0] {
         ProgressUpdate::Cancelled {
-            operation_id,
+            id,
             message,
             duration_ms,
         } => {
-            assert_eq!(operation_id, "op_123");
+            assert_eq!(id, "op_123");
             assert!(message.contains("cancelled"));
             assert_eq!(*duration_ms, 1000);
         }
@@ -309,7 +309,7 @@ async fn test_progress_update_final_result_success() {
     let callback = MockCallbackSender::new();
 
     let update = ProgressUpdate::FinalResult {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         command: "cargo build --release".to_string(),
         description: "Building in release mode".to_string(),
         working_directory: "/home/user/project".to_string(),
@@ -323,7 +323,7 @@ async fn test_progress_update_final_result_success() {
     let updates = callback.get_updates();
     match &updates[0] {
         ProgressUpdate::FinalResult {
-            operation_id,
+            id,
             command,
             description,
             working_directory,
@@ -331,7 +331,7 @@ async fn test_progress_update_final_result_success() {
             full_output,
             duration_ms,
         } => {
-            assert_eq!(operation_id, "op_123");
+            assert_eq!(id, "op_123");
             assert_eq!(command, "cargo build --release");
             assert_eq!(description, "Building in release mode");
             assert_eq!(working_directory, "/home/user/project");
@@ -348,7 +348,7 @@ async fn test_progress_update_final_result_failure() {
     let callback = MockCallbackSender::new();
 
     let update = ProgressUpdate::FinalResult {
-        operation_id: "op_456".to_string(),
+        id: "op_456".to_string(),
         command: "cargo test".to_string(),
         description: "Running tests".to_string(),
         working_directory: ".".to_string(),
@@ -375,7 +375,7 @@ async fn test_cursor_client_skips_progress() {
     let callback = MockCallbackSender::new().with_client_type(McpClientType::Cursor);
 
     let update = ProgressUpdate::Progress {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         message: "Processing...".to_string(),
         percentage: Some(50.0),
         current_step: None,
@@ -396,7 +396,7 @@ async fn test_unknown_client_receives_progress() {
     let callback = MockCallbackSender::new().with_client_type(McpClientType::Unknown);
 
     let update = ProgressUpdate::Progress {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         message: "Processing...".to_string(),
         percentage: Some(50.0),
         current_step: None,
@@ -413,7 +413,7 @@ async fn test_vscode_client_receives_progress() {
     let callback = MockCallbackSender::new().with_client_type(McpClientType::VSCode);
 
     let update = ProgressUpdate::Progress {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         message: "Processing...".to_string(),
         percentage: Some(50.0),
         current_step: None,
@@ -432,7 +432,7 @@ async fn test_callback_send_failure() {
     let callback = MockCallbackSender::new().with_failure();
 
     let update = ProgressUpdate::Started {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         command: "echo test".to_string(),
         description: "Test".to_string(),
     };
@@ -457,29 +457,29 @@ async fn test_full_operation_lifecycle() {
     // Simulate full operation lifecycle
     let updates = vec![
         ProgressUpdate::Started {
-            operation_id: "op_lifecycle".to_string(),
+            id: "op_lifecycle".to_string(),
             command: "cargo build".to_string(),
             description: "Building".to_string(),
         },
         ProgressUpdate::Progress {
-            operation_id: "op_lifecycle".to_string(),
+            id: "op_lifecycle".to_string(),
             message: "Compiling dependencies".to_string(),
             percentage: Some(25.0),
             current_step: None,
         },
         ProgressUpdate::Output {
-            operation_id: "op_lifecycle".to_string(),
+            id: "op_lifecycle".to_string(),
             line: "Compiling serde v1.0".to_string(),
             is_stderr: false,
         },
         ProgressUpdate::Progress {
-            operation_id: "op_lifecycle".to_string(),
+            id: "op_lifecycle".to_string(),
             message: "Compiling main crate".to_string(),
             percentage: Some(75.0),
             current_step: None,
         },
         ProgressUpdate::Completed {
-            operation_id: "op_lifecycle".to_string(),
+            id: "op_lifecycle".to_string(),
             message: "Build complete".to_string(),
             duration_ms: 10000,
         },

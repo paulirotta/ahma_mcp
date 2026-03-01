@@ -6,7 +6,7 @@
 //!
 //! ## Core Functionality
 //!
-//! - **`preview()`**: This is the primary function of the module. It takes an `operation_id`
+//! - **`preview()`**: This is the primary function of the module. It takes an `id`
 //!   and an `operation_type` (e.g., "build", "test") and uses them to populate the
 //!   `TOOL_HINT_TEMPLATE` from the `constants` module.
 //!
@@ -35,11 +35,11 @@
 
 /// Public helper to preview the standardized tool hint content.
 /// This is a pure function (no async runtime needed) so tests can call it in #[test] contexts.
-pub fn preview(operation_id: &str, operation_type: &str) -> String {
+pub fn preview(id: &str, operation_type: &str) -> String {
     use crate::constants::TOOL_HINT_TEMPLATE;
     TOOL_HINT_TEMPLATE
         .replace("{operation_type}", operation_type)
-        .replace("{operation_id}", operation_id)
+        .replace("{id}", id)
 }
 
 #[cfg(test)]
@@ -53,7 +53,7 @@ mod tests {
         let out = preview("abc123", "build");
         assert!(out.contains("abc123"));
         assert!(out.contains("build"));
-        assert!(!out.contains("{operation_id}"));
+        assert!(!out.contains("{id}"));
         assert!(!out.contains("{operation_type}"));
     }
 }

@@ -34,7 +34,7 @@ impl Default for GuidanceConfig {
         let mut guidance_blocks = HashMap::new();
         guidance_blocks.insert(
             "async_behavior".to_string(),
-            "**IMPORTANT:** This tool operates asynchronously\n1. **Immediate Response:** Returns operation_id and status 'started'. This is NOT YET success\n2. **Final Result:** Result pushed automatically via MCP notification when complete\n\n**Your Instructions:**\n- DO NOT await for the final result unless you are at end of all tasks and have already updated the user with 'assume success but verify' results.\n- **DO** continue with other tasks that don't depend on this operation\n- You **MUST** process the future result notification to know if operation succeeded".to_string(),
+            "**IMPORTANT:** This tool operates asynchronously\n1. **Immediate Response:** Returns id and status 'started'. This is NOT YET success\n2. **Final Result:** Result pushed automatically via MCP notification when complete\n\n**Your Instructions:**\n- DO NOT await for the final result unless you are at end of all tasks and have already updated the user with 'assume success but verify' results.\n- **DO** continue with other tasks that don't depend on this operation\n- You **MUST** process the future result notification to know if operation succeeded".to_string(),
         );
         guidance_blocks.insert(
             "sync_behavior".to_string(),
@@ -46,7 +46,7 @@ impl Default for GuidanceConfig {
         );
         guidance_blocks.insert(
             "python_async".to_string(),
-            "**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns operation_id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- DO NOT await for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.".to_string(),
+            "**IMPORTANT:** This tool operates asynchronously.\n1. **Immediate Response:** Returns id and status 'started'. NOT success.\n2. **Final Result:** Result pushed automatically via MCP notification when complete.\n\n**Your Instructions:**\n- DO NOT await for the final result.\n- **DO** continue with other tasks that don't depend on this operation.\n- You **MUST** process the future result notification to know if operation succeeded.".to_string(),
         );
         guidance_blocks.insert(
             "python_sync".to_string(),
@@ -58,7 +58,7 @@ impl Default for GuidanceConfig {
         );
         guidance_blocks.insert(
             "cancellation_restart_hint".to_string(),
-            "An operation was cancelled. Include the cancellation reason back to the user, and suggest a tool hint to restart or check status: 1) Call 'status' with the operation_id to confirm state; 2) If appropriate, restart the tool with the same parameters; 3) Consider 'await' only when results are actually needed.".to_string(),
+            "An operation was cancelled. Include the cancellation reason back to the user, and suggest a tool hint to restart or check status: 1) Call 'status' with the id to confirm state; 2) If appropriate, restart the tool with the same parameters; 3) Consider 'await' only when results are actually needed.".to_string(),
         );
 
         let mut templates = HashMap::new();

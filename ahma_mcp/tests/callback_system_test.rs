@@ -9,7 +9,7 @@ use tokio_util::sync::CancellationToken;
 #[tokio::test]
 async fn test_progress_update_display() {
     let started = ProgressUpdate::Started {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         command: "cargo build".to_string(),
         description: "Building the project".to_string(),
     };
@@ -19,7 +19,7 @@ async fn test_progress_update_display() {
     );
 
     let progress = ProgressUpdate::Progress {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         message: "Compiling dependencies".to_string(),
         percentage: Some(75.5),
         current_step: Some("Stage 2".to_string()),
@@ -30,7 +30,7 @@ async fn test_progress_update_display() {
     );
 
     let progress_no_percentage = ProgressUpdate::Progress {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         message: "Processing".to_string(),
         percentage: None,
         current_step: None,
@@ -41,7 +41,7 @@ async fn test_progress_update_display() {
     );
 
     let output = ProgressUpdate::Output {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         line: "Finished release [optimized] target(s)".to_string(),
         is_stderr: false,
     };
@@ -51,7 +51,7 @@ async fn test_progress_update_display() {
     );
 
     let output_stderr = ProgressUpdate::Output {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         line: "warning: unused variable".to_string(),
         is_stderr: true,
     };
@@ -61,7 +61,7 @@ async fn test_progress_update_display() {
     );
 
     let completed = ProgressUpdate::Completed {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         message: "Build successful".to_string(),
         duration_ms: 5000,
     };
@@ -71,7 +71,7 @@ async fn test_progress_update_display() {
     );
 
     let failed = ProgressUpdate::Failed {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         error: "Compilation error".to_string(),
         duration_ms: 2500,
     };
@@ -81,7 +81,7 @@ async fn test_progress_update_display() {
     );
 
     let cancelled = ProgressUpdate::Cancelled {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         message: "User cancelled build".to_string(),
         duration_ms: 1500,
     };
@@ -91,7 +91,7 @@ async fn test_progress_update_display() {
     );
 
     let final_result = ProgressUpdate::FinalResult {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         command: "cargo test".to_string(),
         description: "Running tests".to_string(),
         working_directory: "/home/user/project".to_string(),
@@ -105,7 +105,7 @@ async fn test_progress_update_display() {
     );
 
     let final_result_failed = ProgressUpdate::FinalResult {
-        operation_id: "op_456".to_string(),
+        id: "op_456".to_string(),
         command: "cargo test".to_string(),
         description: "Running tests".to_string(),
         working_directory: "/home/user/project".to_string(),
@@ -124,7 +124,7 @@ async fn test_logging_callback_sender() {
     let callback = LoggingCallbackSender::new("test_operation".to_string());
 
     let update = ProgressUpdate::Started {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         command: "cargo build".to_string(),
         description: "Building".to_string(),
     };
@@ -139,7 +139,7 @@ async fn test_no_op_callback_sender() {
     let callback = NoOpCallbackSender;
 
     let update = ProgressUpdate::Progress {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         message: "Testing".to_string(),
         percentage: Some(100.0),
         current_step: None,
@@ -156,7 +156,7 @@ async fn test_channel_callback_sender_direct() {
     let callback = ChannelCallbackSender::new(sender, token.clone());
 
     let update = ProgressUpdate::Output {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         line: "Test output".to_string(),
         is_stderr: true,
     };
@@ -178,7 +178,7 @@ async fn test_channel_callback_disconnected() {
     drop(receiver);
 
     let update = ProgressUpdate::Completed {
-        operation_id: "op_123".to_string(),
+        id: "op_123".to_string(),
         message: "Done".to_string(),
         duration_ms: 1000,
     };
@@ -196,18 +196,18 @@ async fn test_callback_send_batch() {
 
     let updates = vec![
         ProgressUpdate::Started {
-            operation_id: "op_123".to_string(),
+            id: "op_123".to_string(),
             command: "cargo build".to_string(),
             description: "Building".to_string(),
         },
         ProgressUpdate::Progress {
-            operation_id: "op_123".to_string(),
+            id: "op_123".to_string(),
             message: "Compiling".to_string(),
             percentage: Some(50.0),
             current_step: None,
         },
         ProgressUpdate::Completed {
-            operation_id: "op_123".to_string(),
+            id: "op_123".to_string(),
             message: "Done".to_string(),
             duration_ms: 2000,
         },
@@ -230,7 +230,7 @@ async fn test_utility_functions() {
     // Test no_callback
     let callback = no_callback();
     let update = ProgressUpdate::Started {
-        operation_id: "test".to_string(),
+        id: "test".to_string(),
         command: "test".to_string(),
         description: "test".to_string(),
     };
@@ -239,7 +239,7 @@ async fn test_utility_functions() {
     // Test logging_callback
     let callback = logging_callback("test_op".to_string());
     let update = ProgressUpdate::Progress {
-        operation_id: "test".to_string(),
+        id: "test".to_string(),
         message: "test".to_string(),
         percentage: None,
         current_step: None,
@@ -250,7 +250,7 @@ async fn test_utility_functions() {
     let token = CancellationToken::new();
     let (callback, mut receiver) = channel_callback(token);
     let update = ProgressUpdate::Completed {
-        operation_id: "test".to_string(),
+        id: "test".to_string(),
         message: "test".to_string(),
         duration_ms: 1000,
     };
@@ -289,7 +289,7 @@ fn test_format_cancellation_message_canceled_canceled() {
     );
     assert!(
         result.contains("op_123"),
-        "Expected operation ID in message, got: {}",
+        "Expected id:\nID in message, got: {}",
         result
     );
     assert!(

@@ -226,21 +226,17 @@ impl AhmaMcpService {
         subcommand_config: &crate::config::SubcommandConfig,
         context: &RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        let operation_id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
+        let id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
         let progress_token = context.meta.get_progress_token();
         let client_type = McpClientType::from_peer(&context.peer);
         let description = format!("Execute /bin/bash in {}", working_directory);
 
         if let Some(token) = progress_token.clone() {
-            let callback = McpCallbackSender::new(
-                context.peer.clone(),
-                operation_id.clone(),
-                Some(token),
-                client_type,
-            );
+            let callback =
+                McpCallbackSender::new(context.peer.clone(), id.clone(), Some(token), client_type);
             let _ = callback
                 .send_progress(crate::callback_system::ProgressUpdate::Started {
-                    operation_id: operation_id.clone(),
+                    id: id.clone(),
                     command: "/bin/bash".to_string(),
                     description: description.clone(),
                 })
@@ -259,19 +255,15 @@ impl AhmaMcpService {
             .await;
 
         if let Some(token) = progress_token {
-            let callback = McpCallbackSender::new(
-                context.peer.clone(),
-                operation_id.clone(),
-                Some(token),
-                client_type,
-            );
+            let callback =
+                McpCallbackSender::new(context.peer.clone(), id.clone(), Some(token), client_type);
             let (success, full_output) = match &result {
                 Ok(output) => (true, output.clone()),
                 Err(e) => (false, format!("Error: {}", e)),
             };
             let _ = callback
                 .send_progress(crate::callback_system::ProgressUpdate::FinalResult {
-                    operation_id: operation_id.clone(),
+                    id: id.clone(),
                     command: "/bin/bash".to_string(),
                     description,
                     working_directory: working_directory.to_string(),
@@ -301,13 +293,13 @@ impl AhmaMcpService {
         context: &RequestContext<RoleServer>,
         log_monitor_config: Option<crate::log_monitor::LogMonitorConfig>,
     ) -> Result<CallToolResult, McpError> {
-        let operation_id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
+        let id = format!("op_{}", NEXT_ID.fetch_add(1, Ordering::SeqCst));
         let progress_token = context.meta.get_progress_token();
         let client_type = McpClientType::from_peer(&context.peer);
         let callback: Option<Box<dyn CallbackSender>> = progress_token.map(|token| {
             Box::new(McpCallbackSender::new(
                 context.peer.clone(),
-                operation_id.clone(),
+                id.clone(),
                 Some(token),
                 client_type,
             )) as Box<dyn CallbackSender>
@@ -320,7 +312,7 @@ impl AhmaMcpService {
                 "/bin/bash",
                 working_directory,
                 crate::adapter::AsyncExecOptions {
-                    operation_id: Some(operation_id),
+                    id: Some(id),
                     args: Some(adapter_args),
                     timeout,
                     callback,
