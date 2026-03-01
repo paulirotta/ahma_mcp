@@ -6,15 +6,31 @@ _Create agents from your command line tools with one JSON file, then watch them 
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------: |
 | [![CI](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml/badge.svg)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml) [![Coverage Report](https://img.shields.io/badge/Coverage-Report-blue)](https://paulirotta.github.io/ahma_mcp/html/) [![Code Simplicity](https://img.shields.io/badge/Code-Simplicity-green)](https://paulirotta.github.io/ahma_mcp/CODE_SIMPLICITY.html) [![Prebuilt Binaries](https://img.shields.io/badge/Prebuilt-Binaries-blueviolet)](https://github.com/paulirotta/ahma_mcp/actions/workflows/build.yml?query=branch%3Amain+event%3Apush+is%3Asuccess) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![License: Apache: 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2020) [![Rust](https://img.shields.io/badge/Rust-1.93%2B-B7410E.svg)](https://www.rust-lang.org/) | ![Ahma MCP Logo](./assets/ahma.png) |
 
-`ahma_mcp` is
+Ahma MCP is
 - **secure by default**: toolbox for AI to use command line tools safely, a way to move past the  'do you trust this tool/author?' prompts. Trust is not a security model.
 - **fast by default**: command line tool calls become *deterministic and asynchronous subagents*. This saves time by allowing AI agents to continue thinking and planning while awaiting one or more long-running command line tasks.
-- **principle of least privilege (PoLP)**: You may specify the allowed arguments to a command line tool by creating a `.ahma/mynewtool.json` file.
+- **principle of least privilege (PoLP)**: You may optionally disalbe direct calls to `sandboxed_shell` and instead specify the allowed arguments to each command line tool by creating a `.ahma/toolname.json` file.
 - **batteries included**: Bundled tools can be selectively enabled, e.g. `--simplify` in your `mcp.json` for vibe code complexity reduction to improve maintainability.
 - **flexible**: Supporting agentic development workflows or powering business agents are just two use cases. The rest is up to your creative imagination.
 - **actively developed**: We are currently adding features like progressive tool disclosure and live log monitoring to proactively inform AI agents of issues as they occur.
 
-Linux and MacOS are supported. Windows is not supported at this time. Raspberry Pi is supported with `--no-sandbox` until the kernel is updated to support Landlock (kernel ≥ 5.13).
+### What Ahma does
+
+MCP Clients such as developer IDEs and CLIs(Antigravity, Claude, Codex, Cursor, Open Code, Roo, VS Code, etc.) often have a built-in terminal that the AI can use. That terminal is powerful but often difficult or option to restrict for safe AI use with reduced blast radius. Business agent frameworks often do not offer a terminal. Ahma complements these tools by adding security and async execution:
+
+| Capability | Native IDE/CLI terminal | Ahma `sandboxed_shell` |
+|---|---|---|
+| **Write protection** | None — full filesystem access | Kernel-enforced to workspace only (Seatbelt on macOS, Landlock on Linux) |
+| **Async execution** | Synchronous — AI blocks until done | Async-first — AI continues working while commands run in background |
+| **Parallel operations** | Sequential tool calls | True concurrent operations with per-operation status tracking |
+| **Structured tool schema** | Raw shell strings | Typed parameters, validation, subcommands via `.ahma/*.json` |
+| **Progressive disclosure** | All tools always listed | Bundles revealed on demand — preserves AI context window |
+| **Live log monitoring** | Raw output only | Pattern-matched alerts streamed to AI (error/warn/info levels) |
+| **PoLP enforcement** | Any command, any argument | Optionally restrict to declared arguments per tool |
+
+## Supported OS
+
+Linux and MacOS are supported. Windows is not supported. Raspberry Pi is supported with `--no-sandbox` until the kernel is updated to support Landlock (kernel ≥ 5.13).
 
 ## Installation Script
 
